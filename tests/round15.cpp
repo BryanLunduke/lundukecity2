@@ -208,7 +208,7 @@ int main()
         const std::string rec = city_recovery::new_recovery_path();
         check(!rec.empty() && rec.compare(0, state.size(), state) == 0, "recovery path is under XDG_STATE_HOME");
         struct stat dst;
-        check(stat((state + "/lunduke-city").c_str(), &dst) == 0 && (dst.st_mode & 0777) == 0700,
+        check(stat((state + "/lunduke-city-2").c_str(), &dst) == 0 && (dst.st_mode & 0777) == 0700,
               "recovery folder is 0700");
         const std::string message_before = s.message();
         check(s.write_recovery(rec), "write_recovery");
@@ -259,7 +259,7 @@ int main()
         // A symlinked recovery folder is refused.
         const std::string evil_state = root + "/evil-state";
         mkdir(evil_state.c_str(), 0700);
-        symlink(real_dir.c_str(), (evil_state + "/lunduke-city").c_str());
+        symlink(real_dir.c_str(), (evil_state + "/lunduke-city-2").c_str());
         setenv("XDG_STATE_HOME", evil_state.c_str(), 1);
         check(city_recovery::dir(true).empty(), "a symlinked recovery folder is not used");
         setenv("XDG_STATE_HOME", state.c_str(), 1);

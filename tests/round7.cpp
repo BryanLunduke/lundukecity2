@@ -260,7 +260,7 @@ int main()
         std::cerr << "remembered '" << remembered_city_folder() << "'\n";
         return fail(12, "Save City did not remember the folder");
     }
-    const std::string flag = std::string(home) + "/.config/lunduke-city/last-folder";
+    const std::string flag = std::string(home) + "/.config/lunduke-city-2/last-folder";
     if (flag.find("/xfce") != std::string::npos) {
         return fail(13, "the remembered folder was stored under XFCE");
     }
@@ -279,30 +279,30 @@ int main()
     return fail(16, "the packaging files were not located");
 #else
     const std::string root = LUNDUKE_CITY_SOURCE_DIR;
-    const std::string desktop = read_file(root + "/data/lunduke-city.desktop");
-    const std::string mime = read_file(root + "/data/lunduke-city.xml");
-    const std::string triggers = read_file(root + "/debian/lunduke-city.triggers");
+    const std::string desktop = read_file(root + "/data/lunduke-city-2.desktop");
+    const std::string mime = read_file(root + "/data/lunduke-city-2.xml");
+    const std::string triggers = read_file(root + "/debian/lunduke-city-2.triggers");
     const std::string deb = read_file(root + "/packaging/build-deb.sh");
     const std::string changelog = read_file(root + "/debian/changelog");
-    if (desktop.find("Exec=lunduke-city %f") == std::string::npos ||
-        desktop.find("MimeType=application/x-lunduke-city;") == std::string::npos) {
+    if (desktop.find("Exec=lunduke-city-2 %f") == std::string::npos ||
+        desktop.find("MimeType=application/x-lunduke-city-2;") == std::string::npos) {
         return fail(17, "the desktop file does not open a .cty");
     }
-    if (mime.find("application/x-lunduke-city") == std::string::npos ||
+    if (mime.find("application/x-lunduke-city-2") == std::string::npos ||
         mime.find("*.cty") == std::string::npos) {
         return fail(18, "the shared-mime-info file does not describe .cty");
     }
     if (triggers.find("/usr/share/mime/packages") == std::string::npos) {
         return fail(19, "the MIME trigger is missing");
     }
-    if (deb.find("VERSION=\"0.9.5-2\"") == std::string::npos ||
+    if (deb.find("VERSION=\"2.0.0\"") == std::string::npos ||
         deb.find("shared-mime-info") == std::string::npos ||
-        deb.find("lunduke-city.triggers") == std::string::npos) {
-        return fail(20, "the package build does not ship 0.9.5-2 with the MIME trigger");
+        deb.find("lunduke-city-2.triggers") == std::string::npos) {
+        return fail(20, "the package build does not ship 2.0.0 with the MIME trigger");
     }
-    if (changelog.find("lunduke-city (0.9.5-2)") == std::string::npos ||
+    if (changelog.find("lunduke-city-2 (2.0.0)") == std::string::npos ||
         changelog.find("Phil <phil@brushpad.local>") == std::string::npos) {
-        return fail(21, "the changelog is not 0.9.5-2");
+        return fail(21, "the changelog is not 2.0.0");
     }
 #endif
     return 0;

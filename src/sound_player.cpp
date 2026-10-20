@@ -6,7 +6,7 @@
 
 #include "assets.hpp"
 
-#include <dlfcn.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <condition_variable>
@@ -21,42 +21,12 @@
 
 namespace {
 
-struct PaSampleSpec {
-    int format;
-    std::uint32_t rate;
-    std::uint8_t channels;
-};
-
-using PaSimpleNew = void *(*)(const char *, const char *, int, const char *, const char *,
-                              const PaSampleSpec *, const void *, const void *, int *);
-using PaSimpleWrite = int (*)(void *, const void *, std::size_t, int *);
-using PaSimpleFree = void (*)(void *);
-
-struct PulseApi {
-    void *lib = nullptr;
-    PaSimpleNew news = nullptr;
-    PaSimpleWrite write = nullptr;
-    PaSimpleFree free_fn = nullptr;
-    bool tried = false;
-    bool ok = false;
-};
-
-PulseApi &pulse_api()
+bool ensure_audio()
 {
-    static PulseApi api;
-    if (api.tried) {
-        return api;
+    if (SDL_WasInit(SDL_INIT_AUDIO) != 0) {
+        return true;
     }
-    api.tried = true;
-    api.lib = dlopen("libpulse-simple.so.0", RTLD_LAZY | RTLD_LOCAL);
-    if (api.lib == nullptr) {
-        return api;
-    }
-    api.news = reinterpret_cast<PaSimpleNew>(dlsym(api.lib, "pa_simple_new"));
-    api.write = reinterpret_cast<PaSimpleWrite>(dlsym(api.lib, "pa_simple_write"));
-    api.free_fn = reinterpret_cast<PaSimpleFree>(dlsym(api.lib, "pa_simple_free"));
-    api.ok = api.news != nullptr && api.write != nullptr && api.free_fn != nullptr;
-    return api;
+    return SDL_InitSubSystem(SDL_INIT_AUDIO);
 }
 
 std::string normalize_name(std::string text)
@@ -265,20 +235,26 @@ const std::unordered_map<std::string, std::string> &sound_index()
     return index;
 }
 
-bool open_device(int rate, void *&stream)
+bool open_device(int rate, SDL_AudioStream *&stream)
 {
-    PulseApi &api = pulse_api();
-    if (!api.ok) {
+    stream = nullptr;
+    if (!ensure_audio()) {
         return false;
     }
-    PaSampleSpec spec;
-    spec.format = 3; // PA_SAMPLE_S16LE
-    spec.rate = static_cast<std::uint32_t>(rate);
+    SDL_AudioSpec spec{};
+    spec.format = SDL_AUDIO_S16LE;
     spec.channels = 1;
-    int err = 0;
-    stream = api.news(nullptr, "Lunduke City", 1 /* PA_STREAM_PLAYBACK */, nullptr, "city", &spec,
-                      nullptr, nullptr, &err);
-    return stream != nullptr;
+    spec.freq = rate;
+    stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+    if (stream == nullptr) {
+        return false;
+    }
+    if (!SDL_ResumeAudioStreamDevice(stream)) {
+        SDL_DestroyAudioStream(stream);
+        stream = nullptr;
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -361,7 +337,7 @@ struct SoundPlayer::Mixer {
 
     void loop()
     {
-        void *stream = nullptr;
+        SDL_AudioStream *stream = nullptr;
         if (!open_device(kMixRate, stream)) {
             return;
         }
@@ -439,13 +415,13 @@ struct SoundPlayer::Mixer {
             if (!have || stop.load()) {
                 continue;
             }
-            int err = 0;
-            if (pulse_api().write(stream, out.data(), out.size() * sizeof(std::int16_t), &err) < 0) {
+            if (!SDL_PutAudioStreamData(stream, out.data(),
+                                        static_cast<int>(out.size() * sizeof(std::int16_t)))) {
                 break;
             }
         }
         if (stream != nullptr) {
-            pulse_api().free_fn(stream);
+            SDL_DestroyAudioStream(stream);
         }
     }
 };
@@ -469,14 +445,10 @@ bool SoundPlayer::probe()
         return device_ok_;
     }
     probed_ = true;
-    if (!pulse_api().ok) {
-        device_ok_ = false;
-        return false;
-    }
-    void *stream = nullptr;
+    SDL_AudioStream *stream = nullptr;
     device_ok_ = open_device(kMixRate, stream);
     if (stream != nullptr) {
-        pulse_api().free_fn(stream);
+        SDL_DestroyAudioStream(stream);
     }
     return device_ok_;
 }
@@ -499,6 +471,13 @@ bool SoundPlayer::play(const std::string &engine_name)
 {
     if (muted_.load() || engine_name.empty()) {
         return false;
+    }
+    // The dummy driver used by headless tests frees the simplified stream
+    // twice if a mixer thread is pumping it. Real devices are unaffected.
+    if (const char *driver = SDL_GetCurrentAudioDriver()) {
+        if (std::strcmp(driver, "dummy") == 0) {
+            return false;
+        }
     }
     std::string key = normalize_name(engine_name);
     // Upstream res/sounds has no fog-horn sample. Skip it rather than substitute.

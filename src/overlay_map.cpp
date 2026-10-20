@@ -2,10 +2,9 @@
 // Copyright (C) 2026 The Lunduke City authors
 // See COPYING and NOTICE.
 
-#include "overlay_window.hpp"
+#include "overlay_map.hpp"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 
 namespace {
@@ -13,44 +12,6 @@ namespace {
 struct Rgb {
     double r, g, b;
 };
-
-const char *layer_title(CitySession::MapLayer layer)
-{
-    switch (layer) {
-    case CitySession::MapLayer::Power:
-        return "Power";
-    case CitySession::MapLayer::Water:
-        return "Water";
-    case CitySession::MapLayer::Pollution:
-        return "Pollution";
-    case CitySession::MapLayer::Crime:
-        return "Crime";
-    case CitySession::MapLayer::LandValue:
-        return "Land value";
-    case CitySession::MapLayer::Traffic:
-        return "Traffic";
-    }
-    return "Map";
-}
-
-const char *layer_legend(CitySession::MapLayer layer)
-{
-    switch (layer) {
-    case CitySession::MapLayer::Power:
-        return "Yellow powered zones, red unpowered zones, orange lines, blue water.";
-    case CitySession::MapLayer::Water:
-        return "Blue is water and flood. The engine stores water as map tiles.";
-    case CitySession::MapLayer::Pollution:
-        return "Brighter gray means higher pollution on the engine's density map.";
-    case CitySession::MapLayer::Crime:
-        return "Brighter red means a higher crime rate on the engine's crime map.";
-    case CitySession::MapLayer::LandValue:
-        return "Brighter green means higher land value on the engine's land-value map.";
-    case CitySession::MapLayer::Traffic:
-        return "Brighter orange means heavier traffic on the engine's traffic map.";
-    }
-    return "";
-}
 
 Rgb heat(CitySession::MapLayer layer, double t)
 {
@@ -71,52 +32,66 @@ Rgb heat(CitySession::MapLayer layer, double t)
 
 } // namespace
 
-OverlayWindow::OverlayWindow(CitySession::MapLayer layer)
-    : layer_(layer)
+void OverlayMap::set_layer(CitySession::MapLayer layer)
 {
-    set_title(layer_title(layer));
-    set_border_width(8);
-    signal_delete_event().connect([this](GdkEventAny *) {
-        hide();
-        return true;
-    });
-
-    legend_.set_text(layer_legend(layer));
-    legend_.set_halign(Gtk::ALIGN_START);
-    legend_.set_line_wrap(true);
-    legend_.set_max_width_chars(48);
-
-    map_.set_size_request(CitySession::kWorldW * 4, CitySession::kWorldH * 4);
-    map_.add_events(Gdk::BUTTON_PRESS_MASK);
-    map_.signal_draw().connect(sigc::mem_fun(*this, &OverlayWindow::on_draw_map));
-    map_.signal_button_press_event().connect(sigc::mem_fun(*this, &OverlayWindow::on_map_button));
-
-    root_.pack_start(legend_, Gtk::PACK_SHRINK);
-    root_.pack_start(map_, Gtk::PACK_SHRINK);
-    add(root_);
+    if (layer_ != layer) {
+        layer_ = layer;
+        cells_.clear();
+        map_serial_ = 0;
+    }
 }
 
-void OverlayWindow::set_session(CitySession *session)
+void OverlayMap::set_session(CitySession *session)
 {
     session_ = session;
 }
 
-void OverlayWindow::present_map()
+const char *OverlayMap::title() const
 {
-    show_all();
-    present();
-    cells_.clear();
-    sync();
+    switch (layer_) {
+    case CitySession::MapLayer::Power:
+        return "Power";
+    case CitySession::MapLayer::Water:
+        return "Water";
+    case CitySession::MapLayer::Pollution:
+        return "Pollution";
+    case CitySession::MapLayer::Crime:
+        return "Crime";
+    case CitySession::MapLayer::LandValue:
+        return "Land value";
+    case CitySession::MapLayer::Traffic:
+        return "Traffic";
+    }
+    return "Map";
 }
 
-bool OverlayWindow::density_layer() const
+const char *OverlayMap::legend() const
+{
+    switch (layer_) {
+    case CitySession::MapLayer::Power:
+        return "Yellow powered zones, red unpowered zones, orange lines, blue water.";
+    case CitySession::MapLayer::Water:
+        return "Blue is water and flood. The engine stores water as map tiles.";
+    case CitySession::MapLayer::Pollution:
+        return "Brighter gray means higher pollution on the engine's density map.";
+    case CitySession::MapLayer::Crime:
+        return "Brighter red means a higher crime rate on the engine's crime map.";
+    case CitySession::MapLayer::LandValue:
+        return "Brighter green means higher land value on the engine's land-value map.";
+    case CitySession::MapLayer::Traffic:
+        return "Brighter orange means heavier traffic on the engine's traffic map.";
+    }
+    return "";
+}
+
+bool OverlayMap::density_layer() const
 {
     return layer_ != CitySession::MapLayer::Power && layer_ != CitySession::MapLayer::Water;
 }
 
-void OverlayWindow::sync()
+void OverlayMap::sync()
 {
-    if (session_ == nullptr || !get_visible()) {
+    if (session_ == nullptr) {
         return;
     }
     const bool density = density_layer();
@@ -158,10 +133,9 @@ void OverlayWindow::sync()
     peak_ = peak;
     map_serial_ = serial;
     rebuild();
-    map_.queue_draw();
 }
 
-void OverlayWindow::rebuild()
+void OverlayMap::rebuild()
 {
     const bool density = density_layer();
     const int cells_w = density ? CitySession::kWorldW / 2 : CitySession::kWorldW;
@@ -216,52 +190,28 @@ void OverlayWindow::rebuild()
     image_->mark_dirty();
 }
 
-void OverlayWindow::click_at(double x, double y)
-{
-    GdkEventButton event{};
-    event.button = 1;
-    event.x = x;
-    event.y = y;
-    on_map_button(&event);
-}
-
-bool OverlayWindow::on_map_button(GdkEventButton *event)
-{
-    if (event == nullptr || event->button != 1) {
-        return false;
-    }
-    double w = map_.get_allocated_width();
-    double h = map_.get_allocated_height();
-    // A click before the first allocation still maps onto the 4 px grid
-    // the picture is drawn at.
-    if (w < 2.0) {
-        w = CitySession::kWorldW * 4.0;
-    }
-    if (h < 2.0) {
-        h = CitySession::kWorldH * 4.0;
-    }
-    const double fx = std::max(0.0, std::min(1.0, event->x / w));
-    const double fy = std::max(0.0, std::min(1.0, event->y / h));
-    signal_jump.emit(fx, fy);
-    return true;
-}
-
-bool OverlayWindow::on_draw_map(const Cairo::RefPtr<Cairo::Context> &cr)
+void OverlayMap::draw(const Cairo::RefPtr<Cairo::Context> &cr, int width, int height)
 {
     if (!image_) {
         sync();
     }
-    if (!image_) {
-        return true;
+    if (!image_ || width < 2 || height < 2) {
+        return;
     }
-    const double w = std::max(1, map_.get_allocated_width());
-    const double h = std::max(1, map_.get_allocated_height());
-    cr->set_antialias(Cairo::ANTIALIAS_NONE);
     cr->save();
-    cr->scale(w / image_->get_width(), h / image_->get_height());
+    cr->scale(static_cast<double>(width) / image_->get_width(), static_cast<double>(height) / image_->get_height());
     cr->set_source(image_, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr->cobj()), CAIRO_FILTER_NEAREST);
     cr->paint();
     cr->restore();
+}
+
+bool OverlayMap::click(double x, double y, int width, int height, double &fx, double &fy) const
+{
+    if (width < 2 || height < 2) {
+        return false;
+    }
+    fx = std::max(0.0, std::min(1.0, x / width));
+    fy = std::max(0.0, std::min(1.0, y / height));
     return true;
 }

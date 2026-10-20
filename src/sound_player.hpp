@@ -22,10 +22,10 @@ std::unordered_map<std::string, std::string> index_sound_directory(const std::st
 bool preview_wav_file(const std::string &path);
 
 // Plays Micropolis wav assets when the engine asks for a sound by name.
-// Each clip is decoded once. A single worker mixes them into one Pulse
+// Each clip is decoded once. A single worker mixes them into one SDL audio
 // stream. Mute and destruction stop that worker without waiting for the
-// rest of a clip to drain. If PulseAudio is missing or no device can be
-// opened, play() returns without throwing.
+// rest of a clip to drain. If no device can be opened, play() returns
+// without throwing. The dummy SDL audio driver is skipped.
 class SoundPlayer {
 public:
     SoundPlayer();

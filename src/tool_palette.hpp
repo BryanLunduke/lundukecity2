@@ -4,34 +4,40 @@
 
 #pragma once
 
-#include <gtkmm/drawingarea.h>
+#include <cairomm/context.h>
+
+#include <functional>
 
 // Two-by-eight tool grid. Icons are original drawings, not imported artwork.
-class ToolPalette : public Gtk::DrawingArea {
+class ToolPalette {
 public:
     ToolPalette();
 
     int selected() const { return selected_; }
     void set_selected(int index);
+    int hover() const { return hover_; }
 
-    sigc::signal<void, int> signal_selected;
+    // Width and height of the grid for a given cell size.
+    static int width_for(int cell);
+    static int height_for(int cell);
+    void set_cell(int cell) { cell_ = cell; }
+    int cell() const { return cell_; }
 
-protected:
-    void on_realize() override;
-    bool on_draw(const Cairo::RefPtr<Cairo::Context> &cr) override;
-    bool on_button_press_event(GdkEventButton *event) override;
-    bool on_motion_notify_event(GdkEventMotion *event) override;
-    bool on_leave_notify_event(GdkEventCrossing *event) override;
+    int index_at(double x, double y) const;
+    const char *tooltip() const;
+
+    bool press(double x, double y);
+    void motion(double x, double y);
+    void leave();
+    void draw(const Cairo::RefPtr<Cairo::Context> &cr) const;
+
+    std::function<void(int)> on_selected;
 
 private:
-    bool on_query_tooltip(int x, int y, bool keyboard_tooltip,
-                          const Glib::RefPtr<Gtk::Tooltip> &tooltip);
-    int index_at(double x, double y) const;
-
     static constexpr int kCols = 2;
-    static constexpr int kCell = 36;
     static constexpr int kPad = 4;
 
+    int cell_ = 44;
     int selected_ = 0;
     int hover_ = -1;
 };

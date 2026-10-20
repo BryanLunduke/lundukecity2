@@ -1,16 +1,14 @@
 lunduke_city_src = files(
   'main.cpp',
-  'about_dialog.cpp',
-  'app_window.cpp',
   'assets.cpp',
-  'budget_window.cpp',
+  'chart.cpp',
   'city_session.cpp',
-  'evaluation_window.cpp',
-  'graphs_window.cpp',
   'map_view.cpp',
   'messages.cpp',
-  'new_city_dialog.cpp',
-  'overlay_window.cpp',
+  'overlay_map.cpp',
+  'shell.cpp',
+  'shell_actions.cpp',
+  'shell_draw.cpp',
   'side_widgets.cpp',
   'sound_player.cpp',
   'sprite_art.cpp',
@@ -20,9 +18,9 @@ lunduke_city_src = files(
 )
 
 lunduke_city_exe = executable(
-  'lunduke-city',
+  'lunduke-city-2',
   lunduke_city_src,
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
+  dependencies: [sdl3_dep, cairomm_dep, pangocairo_dep, micropolis_dep, thread_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
   ],

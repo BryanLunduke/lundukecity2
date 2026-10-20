@@ -6,8 +6,9 @@
 
 #include "assets.hpp"
 
-#include <gdkmm/pixbuf.h>
+#include <cairo.h>
 
+#include <cstdint>
 #include <iostream>
 #include <vector>
 
@@ -33,33 +34,39 @@ bool TileAtlas::ensure_loaded()
     if (count_ > 0 || pixels_ != nullptr) {
         return count_ > 0;
     }
-    // Sentinel so a missing file does not retry every tile.
     pixels_ = reinterpret_cast<const std::uint32_t *>(1);
 
     const std::string path = asset_file("images/micropolisEngine/tiles.png");
     if (path.empty()) {
-        std::cerr << "Lunduke City: map tiles not found (images/micropolisEngine/tiles.png)\n";
+        std::cerr << "Lunduke City 2: map tiles not found (images/micropolisEngine/tiles.png)\n";
         pixels_ = nullptr;
         return false;
     }
 
-    Glib::RefPtr<Gdk::Pixbuf> pix;
-    try {
-        pix = Gdk::Pixbuf::create_from_file(path);
-    } catch (const Glib::Error &err) {
-        std::cerr << "Lunduke City: could not read map tiles: " << err.what() << "\n";
+    cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
+    if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+        std::cerr << "Lunduke City 2: could not read map tiles\n";
+        if (surface != nullptr) {
+            cairo_surface_destroy(surface);
+        }
         pixels_ = nullptr;
         return false;
     }
-    if (!pix || pix->get_bits_per_sample() != 8 || pix->get_n_channels() < 3) {
-        std::cerr << "Lunduke City: map tiles are not 8-bit RGB\n";
+    cairo_surface_flush(surface);
+    if (cairo_image_surface_get_format(surface) != CAIRO_FORMAT_ARGB32 &&
+        cairo_image_surface_get_format(surface) != CAIRO_FORMAT_RGB24) {
+        std::cerr << "Lunduke City 2: map tiles are not 8-bit RGB\n";
+        cairo_surface_destroy(surface);
         pixels_ = nullptr;
         return false;
     }
 
-    columns_ = pix->get_width() / kSize;
-    const int rows = pix->get_height() / kSize;
+    const int width = cairo_image_surface_get_width(surface);
+    const int height = cairo_image_surface_get_height(surface);
+    columns_ = width / kSize;
+    const int rows = height / kSize;
     if (columns_ < 1 || rows < 1) {
+        cairo_surface_destroy(surface);
         pixels_ = nullptr;
         return false;
     }
@@ -70,9 +77,8 @@ bool TileAtlas::ensure_loaded()
     stored.assign(static_cast<std::size_t>(count_) * kSize * kSize, 0);
     averages.assign(static_cast<std::size_t>(count_) * 3, 0);
 
-    const int channels = pix->get_n_channels();
-    const int stride = pix->get_rowstride();
-    const unsigned char *src = pix->get_pixels();
+    const int stride = cairo_image_surface_get_stride(surface);
+    const unsigned char *src = cairo_image_surface_get_data(surface);
 
     for (int tile = 0; tile < count_; ++tile) {
         const int col = tile % columns_;
@@ -82,12 +88,18 @@ bool TileAtlas::ensure_loaded()
         unsigned long sum_b = 0;
         std::uint32_t *dst = stored.data() + static_cast<std::size_t>(tile) * kSize * kSize;
         for (int y = 0; y < kSize; ++y) {
-            const unsigned char *line =
-                src + (row * kSize + y) * stride + col * kSize * channels;
+            const unsigned char *line = src + (row * kSize + y) * stride + col * kSize * 4;
             for (int x = 0; x < kSize; ++x) {
-                const unsigned char r = line[x * channels];
-                const unsigned char g = line[x * channels + 1];
-                const unsigned char b = line[x * channels + 2];
+                // Cairo ARGB32 is native-endian 0xAARRGGBB. On little endian
+                // the bytes are B, G, R, A. Read the word and unpack.
+                const unsigned char *px = line + x * 4;
+                const std::uint32_t word = static_cast<std::uint32_t>(px[0]) |
+                                           (static_cast<std::uint32_t>(px[1]) << 8) |
+                                           (static_cast<std::uint32_t>(px[2]) << 16) |
+                                           (static_cast<std::uint32_t>(px[3]) << 24);
+                const unsigned char b = static_cast<unsigned char>(word & 0xffu);
+                const unsigned char g = static_cast<unsigned char>((word >> 8) & 0xffu);
+                const unsigned char r = static_cast<unsigned char>((word >> 16) & 0xffu);
                 dst[y * kSize + x] = pack(r, g, b);
                 sum_r += r;
                 sum_g += g;
@@ -100,6 +112,7 @@ bool TileAtlas::ensure_loaded()
         averages[static_cast<std::size_t>(tile) * 3 + 2] = static_cast<unsigned char>(sum_b / n);
     }
 
+    cairo_surface_destroy(surface);
     pixels_ = stored.data();
     average_ = averages.data();
     return true;

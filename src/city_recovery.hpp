@@ -5,8 +5,9 @@
 // C-1 (round 15): autosave and crash recovery.
 //
 // Each running City writes its own recovery file,
-// $XDG_STATE_HOME/lunduke-city/recovery-<time>-<pid>.cty (else
-// ~/.local/state/lunduke-city), with a small ".info" sidecar naming the city,
+// $XDG_STATE_HOME/lunduke-city-2/recovery-<time>-<pid>.cty (else
+// ~/.local/state/lunduke-city-2; on Windows, %LOCALAPPDATA%\lunduke-city-2),
+// with a small ".info" sidecar naming the city,
 // the file it came from, and when it was written. The city file is written
 // by the engine's atomic save, so a crash mid-write keeps the previous
 // autosave. A clean save, Discard, or a quit that answered the unsaved-city
@@ -22,13 +23,24 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <dirent.h>
-#include <fcntl.h>
 #include <fstream>
 #include <string>
+#include <vector>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <direct.h>
+#include <io.h>
+#include <process.h>
+#include <windows.h>
+#else
+#include <dirent.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <vector>
+#endif
 
 namespace city_recovery {
 
@@ -42,15 +54,35 @@ struct Entry {
 
 // A path is usable only when every existing component is a real directory
 // owned by this user (no symlinks), like Paint's recovery folder.
+// On Windows the folder just has to be a real directory (not a reparse point).
 inline bool owned_real_dir(const std::string &path)
 {
+#ifdef _WIN32
+    const DWORD attr = GetFileAttributesA(path.c_str());
+    if (attr == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0 && (attr & FILE_ATTRIBUTE_REPARSE_POINT) == 0;
+#else
     struct stat st;
     return lstat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode) &&
            st.st_uid == geteuid();
+#endif
 }
 
 inline std::string state_base()
 {
+#ifdef _WIN32
+    const char *local = std::getenv("LOCALAPPDATA");
+    if (local != nullptr && local[0] != '\0') {
+        return local;
+    }
+    const char *home = std::getenv("USERPROFILE");
+    if (home == nullptr || home[0] == '\0') {
+        return {};
+    }
+    return std::string(home) + "\\AppData\\Local";
+#else
     const char *xdg = std::getenv("XDG_STATE_HOME");
     if (xdg != nullptr && xdg[0] == '/') {
         return xdg;
@@ -60,6 +92,7 @@ inline std::string state_base()
         return {};
     }
     return std::string(home) + "/.local/state";
+#endif
 }
 
 // The recovery folder, created 0700 when missing. Empty when it cannot be
@@ -70,7 +103,7 @@ inline std::string dir(bool create = true)
     if (base.empty()) {
         return {};
     }
-    const std::string out = base + "/lunduke-city";
+    const std::string out = base + "/lunduke-city-2";
     struct stat st;
     if (lstat(out.c_str(), &st) != 0) {
         if (!create) {
@@ -79,21 +112,39 @@ inline std::string dir(bool create = true)
         // Create the parents with the usual 0700 for a state tree.
         std::string partial;
         for (std::string::size_type i = 1; i <= base.size(); ++i) {
-            if (i == base.size() || base[i] == '/') {
+            const bool boundary = i == base.size() || base[i] == '/' || base[i] == '\\';
+            if (boundary) {
                 partial = base.substr(0, i);
+#ifdef _WIN32
+                if (partial.size() == 2 && partial[1] == ':') {
+                    continue;
+                }
+                if (_mkdir(partial.c_str()) != 0 && errno != EEXIST) {
+                    return {};
+                }
+#else
                 if (::mkdir(partial.c_str(), 0700) != 0 && errno != EEXIST) {
                     return {};
                 }
+#endif
             }
         }
+#ifdef _WIN32
+        if (_mkdir(out.c_str()) != 0 && errno != EEXIST) {
+            return {};
+        }
+#else
         if (::mkdir(out.c_str(), 0700) != 0 && errno != EEXIST) {
             return {};
         }
+#endif
     }
     if (!owned_real_dir(out)) {
         return {};
     }
+#ifndef _WIN32
     ::chmod(out.c_str(), 0700);
+#endif
     return out;
 }
 
@@ -110,8 +161,13 @@ inline std::string new_recovery_path()
         return {};
     }
     char name[96];
+#ifdef _WIN32
+    std::snprintf(name, sizeof(name), "\\recovery-%lld-%d.cty", static_cast<long long>(std::time(nullptr)),
+                  static_cast<int>(_getpid()));
+#else
     std::snprintf(name, sizeof(name), "/recovery-%lld-%d.cty", static_cast<long long>(std::time(nullptr)),
                   static_cast<int>(::getpid()));
+#endif
     return d + name;
 }
 
@@ -145,13 +201,26 @@ inline bool write_info(const std::string &recovery, const std::string &city_name
 {
     const std::string path = info_path(recovery);
     const std::string tmp = path + ".tmp";
+    const std::string body = "name=" + clean_line(city_name) + "\norigin=" + clean_line(origin) +
+                             "\ndate=" + clean_line(date_text) + "\nwritten=" +
+                             std::to_string(static_cast<long long>(std::time(nullptr))) + "\n";
+#ifdef _WIN32
+    FILE *out = std::fopen(tmp.c_str(), "wb");
+    if (out == nullptr) {
+        return false;
+    }
+    const bool ok = std::fwrite(body.data(), 1, body.size(), out) == body.size();
+    std::fclose(out);
+    if (!ok || std::rename(tmp.c_str(), path.c_str()) != 0) {
+        std::remove(tmp.c_str());
+        return false;
+    }
+    return true;
+#else
     const int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (fd < 0) {
         return false;
     }
-    const std::string body = "name=" + clean_line(city_name) + "\norigin=" + clean_line(origin) +
-                             "\ndate=" + clean_line(date_text) + "\nwritten=" +
-                             std::to_string(static_cast<long long>(std::time(nullptr))) + "\n";
     const bool ok = ::write(fd, body.data(), body.size()) == static_cast<ssize_t>(body.size());
     ::close(fd);
     if (!ok || ::rename(tmp.c_str(), path.c_str()) != 0) {
@@ -159,12 +228,27 @@ inline bool write_info(const std::string &recovery, const std::string &city_name
         return false;
     }
     return true;
+#endif
 }
 
 inline Entry read_entry(const std::string &recovery)
 {
     Entry e;
     e.path = recovery;
+#ifdef _WIN32
+    const std::string info = info_path(recovery);
+    WIN32_FILE_ATTRIBUTE_DATA info_attr;
+    if (!GetFileAttributesExA(info.c_str(), GetFileExInfoStandard, &info_attr) ||
+        (info_attr.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 ||
+        (info_attr.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+        return e;
+    }
+    const unsigned long long info_size =
+        (static_cast<unsigned long long>(info_attr.nFileSizeHigh) << 32) | info_attr.nFileSizeLow;
+    if (info_size > 16384) {
+        return e;
+    }
+#else
     struct stat st;
     if (lstat(recovery.c_str(), &st) == 0) {
         e.written = static_cast<long long>(st.st_mtime);
@@ -174,6 +258,7 @@ inline Entry read_entry(const std::string &recovery)
     if (lstat(info.c_str(), &ist) != 0 || !S_ISREG(ist.st_mode) || ist.st_size > 16384) {
         return e;
     }
+#endif
     std::ifstream in(info);
     std::string line;
     while (std::getline(in, line)) {
@@ -205,6 +290,30 @@ inline std::vector<Entry> list(const std::string &own_path = std::string())
     if (d.empty()) {
         return out;
     }
+#ifdef _WIN32
+    const std::string pattern = d + "\\*";
+    WIN32_FIND_DATAA found;
+    HANDLE handle = FindFirstFileA(pattern.c_str(), &found);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return out;
+    }
+    do {
+        const std::string name = found.cFileName;
+        if (!is_recovery_name(name)) {
+            continue;
+        }
+        if ((found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 ||
+            (found.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+            continue;
+        }
+        const std::string path = d + "\\" + name;
+        if (path == own_path) {
+            continue;
+        }
+        out.push_back(read_entry(path));
+    } while (FindNextFileA(handle, &found));
+    FindClose(handle);
+#else
     DIR *dp = ::opendir(d.c_str());
     if (dp == nullptr) {
         return out;
@@ -225,6 +334,7 @@ inline std::vector<Entry> list(const std::string &own_path = std::string())
         out.push_back(read_entry(path));
     }
     ::closedir(dp);
+#endif
     std::sort(out.begin(), out.end(), [](const Entry &a, const Entry &b) {
         if (a.written != b.written) {
             return a.written > b.written;
@@ -239,8 +349,13 @@ inline void remove(const std::string &recovery)
     if (recovery.empty()) {
         return;
     }
+#ifdef _WIN32
+    DeleteFileA(recovery.c_str());
+    DeleteFileA(info_path(recovery).c_str());
+#else
     ::unlink(recovery.c_str());
     ::unlink(info_path(recovery).c_str());
+#endif
 }
 
 // "Harbor Town (Harbor.cty), Mar 1923 - autosaved Fri 16 Oct 14:05"
@@ -248,7 +363,7 @@ inline std::string describe(const Entry &e)
 {
     std::string text = e.city_name.empty() ? std::string("Unnamed city") : e.city_name;
     if (!e.origin.empty()) {
-        const auto slash = e.origin.find_last_of('/');
+        const auto slash = e.origin.find_last_of("/\\");
         text += " (" + (slash == std::string::npos ? e.origin : e.origin.substr(slash + 1)) + ")";
     } else {
         text += " (never saved)";
@@ -259,7 +374,12 @@ inline std::string describe(const Entry &e)
     if (e.written > 0) {
         const std::time_t t = static_cast<std::time_t>(e.written);
         struct tm tmv;
-        if (localtime_r(&t, &tmv) != nullptr) {
+#ifdef _WIN32
+        const bool have_tm = localtime_s(&tmv, &t) == 0;
+#else
+        const bool have_tm = localtime_r(&t, &tmv) != nullptr;
+#endif
+        if (have_tm) {
             char buf[64];
             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
                 std::string when = buf;

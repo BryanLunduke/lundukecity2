@@ -6,66 +6,61 @@
 
 #include "city_session.hpp"
 
+#include <cairomm/context.h>
 #include <cairomm/surface.h>
-#include <gtkmm/drawingarea.h>
 
 #include <chrono>
+#include <functional>
 #include <vector>
 
 class TileAtlas;
 
 // Top-down city viewport. Tiles are drawn from the Micropolis 16-pixel atlas.
-// The ARGB buffer is kept. A draw copies only tiles whose map word changed,
-// plus unpowered zones the lightning blink toggles.
-class MapView : public Gtk::DrawingArea {
+// The ARGB buffer is kept. A sync copies only tiles whose map word changed,
+// plus unpowered zones the lightning blink toggles. The shell scrolls and
+// composites this surface; there is no toolkit widget.
+class MapView {
 public:
     MapView();
-    ~MapView() override;
+    ~MapView();
 
     void set_session(CitySession *session);
     void set_tool(int engine_tool);
 
-    // Copy changed tiles into the retained buffer and invalidate those
-    // rectangles. Hover outlines do not call this.
     void sync();
-    // C-1 (round 12): forget what was blitted so the next sync() redraws
-    // every tile (used when the tile images become available and when the
-    // view is first mapped).
     void invalidate_all();
-    // Tiles re-blitted by the last sync(); for tests.
     int last_sync_blits() const { return last_sync_blits_; }
 
-    // Tile under the pointer, used to outline a placeable tool's footprint.
-    // Cleared when the pointer leaves the map.
     void set_hover_tile(int tx, int ty);
     void clear_hover();
 
     void set_tile_size(int pixels);
-    // Pixel offset applied while an earthquake is shaking the map.
     void set_shake(int dx, int dy);
     int tile_size() const { return tile_size_; }
     int pixel_width() const;
     int pixel_height() const;
 
-    sigc::signal<void, int, int> signal_tool_down;
-    sigc::signal<void, int, int, int, int> signal_tool_drag;
-    // Ctrl+= / Ctrl+- while the map itself has keyboard focus.
-    sigc::signal<void, int> signal_zoom;
-    // Space toggles pause. Arrows pan. Both only while the map has focus.
-    sigc::signal<void> signal_pause_toggle;
-    // A hidden or minimized map does not blink or rescan its tiles.
     void set_active(bool active) { active_ = active; }
-    sigc::signal<void, int, int> signal_pan;
+    bool active() const { return active_; }
 
-protected:
-    void on_realize() override;
-    void on_map() override;
-    bool on_draw(const Cairo::RefPtr<Cairo::Context> &cr) override;
-    bool on_button_press_event(GdkEventButton *event) override;
-    bool on_button_release_event(GdkEventButton *event) override;
-    bool on_motion_notify_event(GdkEventMotion *event) override;
-    bool on_leave_notify_event(GdkEventCrossing *event) override;
-    bool on_key_press_event(GdkEventKey *event) override;
+    // Advance the unpowered-zone blink. Call from the frame loop.
+    void tick(int elapsed_ms);
+
+    void draw(const Cairo::RefPtr<Cairo::Context> &cr);
+
+    // Coordinates are map-local pixels (after subtracting the scroll origin).
+    bool press(double x, double y);
+    void release();
+    void motion(double x, double y, bool button_down);
+    void leave();
+    bool dragging() const { return dragging_; }
+
+    // While a stroke is down, pan when the pointer sits in the viewport margin.
+    // view_* is the pointer inside the visible map port, not map-local.
+    bool edge_scroll(double view_x, double view_y, int view_w, int view_h, double &dx, double &dy) const;
+
+    std::function<void(int, int)> on_tool_down;
+    std::function<void(int, int, int, int)> on_tool_drag;
 
 private:
     bool tile_at(double x, double y, int &tx, int &ty) const;
@@ -73,17 +68,7 @@ private:
     void ensure_surface();
     int display_tile(int raw, const TileAtlas &atlas) const;
     void blit_tile(int x, int y, int shown, const TileAtlas &atlas);
-    void invalidate_tile(int x, int y);
-    void invalidate_footprint(int tx, int ty, int engine_tool);
-    void invalidate_sprite(const CitySession::SpriteDot &dot);
-    void end_drag();
-    void grab_pointer(GdkEventButton *event);
-    void ungrab_pointer();
-    bool scroll_at_edge(double root_x, double root_y);
-    void follow_root_pointer(double root_x, double root_y, bool drag);
     void follow_local_pointer(double x, double y, bool drag);
-    bool on_blink();
-    bool on_edge_scroll();
 
     CitySession *session_ = nullptr;
     int engine_tool_ = 6;
@@ -91,22 +76,17 @@ private:
     int shake_x_ = 0;
     int shake_y_ = 0;
     bool dragging_ = false;
-    bool pointer_grabbed_ = false;
     int last_x_ = -1;
     int last_y_ = -1;
-    double last_root_x_ = 0;
-    double last_root_y_ = 0;
     bool hover_valid_ = false;
     int hover_x_ = 0;
     int hover_y_ = 0;
     bool blink_on_ = false;
+    int blink_ms_ = 0;
     bool atlas_was_loaded_ = false;
     int last_sync_blits_ = 0;
+    bool active_ = true;
     std::vector<int> cached_raw_;
     std::vector<int> cached_shown_;
-    std::vector<CitySession::SpriteDot> cached_sprites_;
-    sigc::connection blink_timer_;
-    bool active_ = true;
-    sigc::connection edge_timer_;
     Cairo::RefPtr<Cairo::ImageSurface> map_pixels_;
 };
