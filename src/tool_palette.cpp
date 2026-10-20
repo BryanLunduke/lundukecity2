@@ -8,15 +8,10 @@
 
 #include "micropolis.h"
 
-#include <gdkmm/cursor.h>
-#include <gtkmm/tooltip.h>
-
-#include <algorithm>
-
 namespace {
 
-void box(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double w, double h,
-         double r, double g, double b)
+void box(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double w, double h, double r, double g,
+         double b)
 {
     cr->set_source_rgb(r, g, b);
     cr->rectangle(x, y, w, h);
@@ -188,19 +183,18 @@ IconFn icon_for(int engine_id)
 
 ToolPalette::ToolPalette()
 {
-    set_size_request(kPad * 2 + kCols * kCell, kPad * 2 + (kToolCount / kCols) * kCell);
-    add_events(Gdk::BUTTON_PRESS_MASK | Gdk::POINTER_MOTION_MASK | Gdk::LEAVE_NOTIFY_MASK);
-    set_has_tooltip(true);
-    signal_query_tooltip().connect(sigc::mem_fun(*this, &ToolPalette::on_query_tooltip));
     selected_ = kDefaultToolIndex;
 }
 
-void ToolPalette::on_realize()
+int ToolPalette::width_for(int cell)
 {
-    Gtk::DrawingArea::on_realize();
-    if (auto window = get_window()) {
-        window->set_cursor(Gdk::Cursor::create(get_display(), Gdk::HAND2));
-    }
+    return kPad * 2 + kCols * cell;
+}
+
+int ToolPalette::height_for(int cell)
+{
+    const int rows = (kToolCount + kCols - 1) / kCols;
+    return kPad * 2 + rows * cell;
 }
 
 void ToolPalette::set_selected(int index)
@@ -209,8 +203,9 @@ void ToolPalette::set_selected(int index)
         return;
     }
     selected_ = index;
-    queue_draw();
-    signal_selected.emit(selected_);
+    if (on_selected) {
+        on_selected(selected_);
+    }
 }
 
 int ToolPalette::index_at(double x, double y) const
@@ -218,8 +213,8 @@ int ToolPalette::index_at(double x, double y) const
     if (x < kPad || y < kPad) {
         return -1;
     }
-    const int col = static_cast<int>(x - kPad) / kCell;
-    const int row = static_cast<int>(y - kPad) / kCell;
+    const int col = static_cast<int>(x - kPad) / cell_;
+    const int row = static_cast<int>(y - kPad) / cell_;
     if (col < 0 || row < 0 || col >= kCols) {
         return -1;
     }
@@ -230,63 +225,51 @@ int ToolPalette::index_at(double x, double y) const
     return index;
 }
 
-bool ToolPalette::on_button_press_event(GdkEventButton *event)
+const char *ToolPalette::tooltip() const
 {
-    if (event->button != 1) {
-        return false;
+    if (hover_ < 0) {
+        return nullptr;
     }
-    const int index = index_at(event->x, event->y);
-    if (index < 0) {
-        return false;
-    }
-    if (index != selected_) {
-        selected_ = index;
-        queue_draw();
-        signal_selected.emit(selected_);
-    }
-    return true;
+    return tool_by_index(hover_)->hint;
 }
 
-bool ToolPalette::on_motion_notify_event(GdkEventMotion *event)
-{
-    const int index = index_at(event->x, event->y);
-    if (index != hover_) {
-        hover_ = index;
-        queue_draw();
-    }
-    return true;
-}
-
-bool ToolPalette::on_leave_notify_event(GdkEventCrossing *)
-{
-    if (hover_ != -1) {
-        hover_ = -1;
-        queue_draw();
-    }
-    return true;
-}
-
-bool ToolPalette::on_query_tooltip(int x, int y, bool, const Glib::RefPtr<Gtk::Tooltip> &tooltip)
+bool ToolPalette::press(double x, double y)
 {
     const int index = index_at(x, y);
     if (index < 0) {
         return false;
     }
-    tooltip->set_text(tool_by_index(index)->hint);
+    if (index != selected_) {
+        selected_ = index;
+        if (on_selected) {
+            on_selected(selected_);
+        }
+    }
     return true;
 }
 
-bool ToolPalette::on_draw(const Cairo::RefPtr<Cairo::Context> &cr)
+void ToolPalette::motion(double x, double y)
+{
+    hover_ = index_at(x, y);
+}
+
+void ToolPalette::leave()
+{
+    hover_ = -1;
+}
+
+void ToolPalette::draw(const Cairo::RefPtr<Cairo::Context> &cr) const
 {
     cr->set_antialias(Cairo::ANTIALIAS_NONE);
-    get_style_context()->render_background(cr, 0, 0, get_allocated_width(), get_allocated_height());
+    const int rows = (kToolCount + kCols - 1) / kCols;
+    box(cr, 0, 0, kPad * 2 + kCols * cell_, kPad * 2 + rows * cell_, 0xED / 255.0, 0xEC / 255.0, 0xEB / 255.0);
 
     for (int i = 0; i < kToolCount; ++i) {
         const int col = i % kCols;
         const int row = i / kCols;
-        const double x = kPad + col * kCell + 1;
-        const double y = kPad + row * kCell + 1;
-        const double bs = kCell - 2;
+        const double x = kPad + col * cell_ + 1;
+        const double y = kPad + row * cell_ + 1;
+        const double bs = cell_ - 2;
         const bool pressed = i == selected_;
         const bool hover = i == hover_ && !pressed;
 
@@ -317,5 +300,4 @@ bool ToolPalette::on_draw(const Cairo::RefPtr<Cairo::Context> &cr)
         const double shift = pressed ? 1.0 : 0.0;
         icon_for(kTools[i].engine_id)(cr, x + 4 + shift, y + 4 + shift, bs - 10);
     }
-    return true;
 }

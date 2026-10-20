@@ -6,9 +6,6 @@
 
 #include "assets.hpp"
 
-#include <gdkmm/general.h>
-#include <gdkmm/pixbuf.h>
-
 #include <iostream>
 #include <string>
 #include <vector>
@@ -16,7 +13,6 @@
 namespace {
 
 struct Frame {
-    Glib::RefPtr<Gdk::Pixbuf> pix;
     Cairo::RefPtr<Cairo::ImageSurface> surface;
 };
 
@@ -41,19 +37,14 @@ bool load_frame(int type, int frame_index)
     if (path.empty()) {
         return false;
     }
-    try {
-        frame.pix = Gdk::Pixbuf::create_from_file(path);
-        if (frame.pix && !frame.pix->get_has_alpha()) {
-            frame.pix = frame.pix->add_alpha(false, 0, 0, 0);
-        }
-        frame.surface = Gdk::Cairo::create_surface_from_pixbuf(frame.pix, 1);
-    } catch (const Glib::Error &err) {
-        std::cerr << "Lunduke City: could not read sprite " << relative << ": " << err.what()
-                  << "\n";
+    auto surface = Cairo::ImageSurface::create_from_png(path);
+    if (!surface || surface->get_status() != CAIRO_STATUS_SUCCESS) {
+        std::cerr << "Lunduke City 2: could not read sprite " << relative << "\n";
         frame.surface.clear();
         return false;
     }
-    return static_cast<bool>(frame.surface);
+    frame.surface = surface;
+    return true;
 }
 
 } // namespace
@@ -68,7 +59,6 @@ Cairo::RefPtr<Cairo::ImageSurface> sprite_frame(int type, int frame)
         index = kFrames - 1;
     }
     if (!load_frame(type, index)) {
-        // Engine frames sometimes run one past a short cycle; use the last real image.
         for (int back = index - 1; back >= 0; --back) {
             if (load_frame(type, back) || slot(type, back).surface) {
                 return slot(type, back).surface;

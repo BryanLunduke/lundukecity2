@@ -204,7 +204,7 @@ int main(int argc, char **argv)
         return fail(3, "could not start lunduke-city with a city file");
     }
     std::string err;
-    const int loaded_rc = wait_for_title(loaded, "Lunduke City - Harbor Town", err);
+    const int loaded_rc = wait_for_title(loaded, "Lunduke City 2 - Harbor Town", err);
     stop_child(loaded);
     if (loaded_rc == 2 || err.find("can not open files") != std::string::npos) {
         return fail(4, "lunduke-city rejected a saved city on the command line");

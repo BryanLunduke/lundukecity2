@@ -1,7 +1,7 @@
 #!/bin/sh
-# Build lunduke-city_0.9.5-2_amd64.deb into packaging/debs/ (repo-local).
+# Build lunduke-city-2_2.0.0_amd64.deb into packaging/debs/ (repo-local).
 # Does NOT seed lcos-live-07 (Phil seeds by hand into packages.chroot).
-# meson install ships Icon=lunduke-city into hicolor (SVG plus 16/32/48/64/128/256).
+# meson install ships Icon=lunduke-city-2 into hicolor (SVG plus 16/32/48/64/128/256).
 set -eu
 
 # GUI tests fail when DISPLAY is unset. Give the build its own server
@@ -12,10 +12,10 @@ if [ -z "${DISPLAY:-}" ]; then
 fi
 
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
-VERSION="0.9.5-2"
-PKGNAME="lunduke-city_${VERSION}_amd64"
+VERSION="2.0.0"
+PKGNAME="lunduke-city-2_${VERSION}_amd64"
 BUILD="$ROOT/build-deb"
-DEST="$ROOT/packaging/src/lunduke-city"
+DEST="$ROOT/packaging/src/lunduke-city-2"
 DEB_DIR="$ROOT/packaging/debs"
 
 cd "$ROOT"
@@ -30,9 +30,9 @@ meson install -C "$BUILD" --destdir "$DEST"
 
 # Ensure GPL+EA NOTICE and COPYING ship in the package (meson install_data
 # should place them; reinforce copy if missing).
-mkdir -p "$DEST/usr/share/doc/lunduke-city"
-cp -a "$ROOT/NOTICE" "$DEST/usr/share/doc/lunduke-city/NOTICE"
-cp -a "$ROOT/COPYING" "$DEST/usr/share/doc/lunduke-city/COPYING"
+mkdir -p "$DEST/usr/share/doc/lunduke-city-2"
+cp -a "$ROOT/NOTICE" "$DEST/usr/share/doc/lunduke-city-2/NOTICE"
+cp -a "$ROOT/COPYING" "$DEST/usr/share/doc/lunduke-city-2/COPYING"
 
 mkdir -p "$DEST/debian"
 cp "$ROOT/debian/control" "$DEST/debian/control"
@@ -48,7 +48,7 @@ SIZE="$(du -sk "$DEST/usr" | awk '{print $1}')"
 
 mkdir -p "$DEST/DEBIAN"
 cat > "$DEST/DEBIAN/control" << CTRL
-Package: lunduke-city
+Package: lunduke-city-2
 Version: ${VERSION}
 Section: games
 Priority: optional
@@ -57,11 +57,9 @@ Installed-Size: ${SIZE}
 Maintainer: LCOS <lcos@lunduke.com>
 Homepage: https://lunduke.com
 Depends: ${SHLIBS_DEPS}, desktop-file-utils, gtk-update-icon-cache, shared-mime-info
-Recommends: libpulse0
-Description: Lunduke City, a gtkmm city-builder for LCOS
+Description: Lunduke City 2, an SDL3 city-builder for LCOS
  Windowed city-building game for the Lunduke Computer Operating System.
- Classic menu / funds / tool-palette / map layout wired to the Micropolis
- simulation engine (tiles, sprites, budget, overlays, PulseAudio sounds).
+ SDL3 menus and dialogs, gamepad and touch, beside the original Lunduke City.
  GPL-3.0-or-later with Electronic Arts additional terms; see NOTICE.
 CTRL
 
@@ -84,7 +82,7 @@ exit 0
 POST
 chmod 0755 "$DEST/DEBIAN/postinst"
 
-cp "$ROOT/debian/lunduke-city.triggers" "$DEST/DEBIAN/triggers"
+cp "$ROOT/debian/lunduke-city-2.triggers" "$DEST/DEBIAN/triggers"
 
 (
   cd "$DEST"

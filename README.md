@@ -1,181 +1,116 @@
 # Lunduke City 2
 
-This repository is a **hard fork** of
-[Lunduke City](https://github.com/BryanLunduke/LundukeCity) at tag
-`v0.9.5-2` (commit `59fc175`). The commits below this one are the
-original project's history, kept so attribution stays intact. Nothing
-in this fork is pushed back to that repository.
+Lunduke City 2 is a hard fork of [Lunduke City](https://github.com/BryanLunduke/LundukeCity) at tag `v0.9.5-2`. It is the same city builder, with the window system ported from gtkmm to SDL3 so it can run on LCOS, on the Steam Deck under the Steam Linux Runtime, and on Windows.
 
-Lunduke City 2 is GPL-3.0-or-later. The vendored simulation engine and
-its assets keep Electronic Arts' additional terms (no use of the
-SimCity name, no implied EA affiliation). See [NOTICE](NOTICE).
+The simulation is the vendored Micropolis engine. Saved games stay `.cty` files and still load cities written by Lunduke City. The product name does not use the SimCity or Micropolis names. Licensing stays GPL-3.0-or-later together with the Electronic Arts additional terms in `NOTICE` (no use of the SimCity name, no implied EA affiliation).
 
-The tree at this commit is still the imported 0.9.5-2 gtkmm sources.
-The SDL3 port (side-by-side install name `lunduke-city-2`, version
-2.0.0, no gtkmm) lands on the development branch.
+Lunduke City 2 installs beside the original:
 
-## Imported Lunduke City 0.9.5-2
+| | Lunduke City | Lunduke City 2 |
+|---|---|---|
+| Binary | `lunduke-city` | `lunduke-city-2` |
+| Desktop id | `com.lunduke.LundukeCity` | `com.lunduke.LundukeCity2` |
+| Config | `~/.config/lunduke-city` | `~/.config/lunduke-city-2` |
+| Recovery | `~/.local/state/lunduke-city` | `~/.local/state/lunduke-city-2` |
+| Version | 0.9.5-2 | 2.0.0 |
 
-Lunduke City is a windowed city-building game for LCOS. Version 0.9.5
-(Debian package 0.9.5-2, Meson project version 0.9.5) is the LCOS 0.9.5
-release track: classic menu / funds / tool-palette / map layout, wired
-to the Micropolis simulation engine. The map uses the Micropolis
-16-pixel tiles, and trains, ships, aircraft, tornadoes, and the monster
-are drawn from the engine's sprite frames. Debian revision 0.9-10
-opens a saved city from the command line, separates the graph colors,
-and keeps the 0.9-9 legend names. Official 0.8 stays at tag `v0.8.1`.
+On Windows the config directory is `%APPDATA%\lunduke-city-2` and recovery is `%LOCALAPPDATA%\lunduke-city-2`.
 
-## What 0.9-2 fixes
+The default window is **1280×800** (Steam Deck native). It is resizable. When `SteamDeck=1` is set, or the SDL hint `SteamDeck` is `1`, the window starts fullscreen.
 
-- Residential growth follows the residential ratio. Industrial demand
-  is clamped on its own.
-- Fire, tornado, earthquake, crash, monster, meltdown, riot, and traffic
-  messages play their sounds. Options → Auto-goto starts on for a new
-  city and keeps the value stored in a save.
-- The map and minimap redraw tiles that changed. Pause stops tile
-  animation. The minimap is 6:5, like the city.
-- Roads, wires, and the bulldozer keep the pointer grabbed and scroll
-  the view at the edge.
-- A successful load replaces an earlier load error.
-- Evaluation updates opinion and problems about once a month of game
-  time. Graph legends show R/C/I as people and crime/pollution as levels.
-- Sounds mix on one stream. Closing Query shows the tool price again.
-  Modal dialogs pause the city and open a waiting budget afterward.
+## Build on LCOS / Debian 13
 
-The interface is original. It does not use Tcl/Tk. Lunduke City is an
-independent project and is not affiliated with or endorsed by Electronic Arts.
-The engine's copyright and additional terms are in [NOTICE](NOTICE). The
-GNU GPL version 3 is in [COPYING](COPYING).
-
-## Build
-
-Dependencies on Debian or Ubuntu:
-
-```bash
-sudo apt install build-essential meson ninja-build pkg-config libgtkmm-3.0-dev
-```
-
-Requires a C++17 compiler.
-
-```bash
+```sh
+sudo apt install build-essential meson ninja-build pkg-config \
+  libsdl3-dev libcairo2-dev libcairomm-1.0-dev libpango1.0-dev libpng-dev
 meson setup build
-ninja -C build
-./build/src/lunduke-city
+meson compile -C build
+meson test -C build
+./build/src/lunduke-city-2
 ```
 
-The installed binary name is `lunduke-city`. A desktop entry and the
-roadmap-blueprint icon are installed with `ninja -C build install`
-(`Icon=lunduke-city`: scalable SVG from `data/lunduke-city.svg`, plus
-hicolor PNGs at 16, 32, 48, 64, 128, and 256).
+SDL 3.2 or newer is required (Debian 13 ships 3.2.10; the Steam Linux Runtime 3.0 "sniper" ships a newer 3.4). Ubuntu 24.04 has no `libsdl3-dev` package. On that release, build [SDL 3.2.10](https://github.com/libsdl-org/SDL/releases/tag/release-3.2.10) and install it where `pkg-config` can see `sdl3`.
 
-`meson test -C build` runs headless checks: the engine smoke test, the
-engine fixes (problem votes and sprite cleanup), plus budget funding,
-overlay samples, tile animation, a sprite report, and sound startup
-(playback is skipped cleanly when no audio device is available).
+Pango uses fontconfig. Install a UI font such as `fonts-dejavu-core` or Noto Sans so the menus are not missing glyphs.
 
-## What 0.7-4 fixes
+## Steam Linux Runtime (sniper)
 
-- New City seed is an entry field: blank or auto takes a seed from the
-  clock; any other whole number is used as the seed. Typed values are
-  read when you leave the field or press Next, so generation no longer
-  ignores a seed that was still focused.
-- Ctrl+= and Ctrl+- zoom the map when the map itself has focus, not only
-  via the window accelerators.
-- Query opens a zone report dialog and keeps the same text on the
-  message bar.
+The sniper runtime has SDL3 and does not have gtkmm, which is why this port exists. Build inside the sniper SDK so the binary links a glibc the runtime can load:
 
-## What 0.7-3 fixes
+```sh
+# From the Steam Runtime SDK, after the sniper chroot is entered:
+apt install build-essential meson ninja-build pkg-config \
+  libsdl3-dev libcairo2-dev libcairomm-1.0-dev libpango1.0-dev libpng-dev
+meson setup build --buildtype=release
+meson compile -C build
+```
 
-- Traffic, fountains, and smokestacks animate. Each session tick runs
-  the engine's tile animation after the simulation step.
-- The vendored engine's yearly problem vote stays inside the problem
-  table.
-- Leaving a city frees the engine's sprites as well as its map arrays.
-- The engine sources are a modified version of the upstream program.
-  The changes are listed under Engine below and in [NOTICE](NOTICE).
+Ship `lunduke-city-2` plus `share/lunduke-city-2/micropolis-assets` (or set `LUNDUKE_CITY_ASSETS` to that tree). Launch with `SteamDeck=1` for fullscreen. The system file portal is not available in the Deck session, so Load and Save use the in-window city list there.
 
-## What 0.7-2 adds
+## Windows cross-compile
 
-- System → New City is a three-step wizard: name, then difficulty,
-  terrain, and seed, then generate. Difficulty is the engine game level
-  (easy $20,000, medium $10,000, hard $5,000). Terrain choices are the
-  generator's island, river, lake, and tree controls. The seed field is
-  passed to `generateSomeCity`. Leave it blank, or type auto, to take one
-  from the clock. Any other whole number is the seed.
-- Windows → Graphs charts population (from the residential, commercial,
-  and industrial histories), cash flow, crime, and pollution for the
-  10-year and 120-year engine scales. It keeps updating while the city runs.
-- Windows → Evaluation shows the engine score, mayor opinion, the worst
-  problems, and the city statistics.
-- System → Rename City renames the open city and the window title.
-- Windows → About Lunduke City is a dialog with the 0.7-2 version, a
-  short description, the GPL and NOTICE pointers, and a statement that
-  the project is independent of Electronic Arts.
+`cross/mingw-w64-x86_64.txt` is a Meson cross file for MinGW-w64:
 
-## What 0.3 adds
+```sh
+sudo apt install mingw-w64
+meson setup build-win --cross-file cross/mingw-w64-x86_64.txt
+meson compile -C build-win
+```
 
-- Options → Zoom in is Ctrl and the +/= key, with no Shift (Ctrl+=).
-  Ctrl and the minus key (Ctrl+-) zooms out. Keypad plus and minus do too.
-- The map outlines the footprint of the selected build tool under the
-  pointer (zones, roads, rail, wire, park, bulldozer, and the other
-  placeable tools). Query does not.
-- System → Play Scenario… lists the eight engine scenarios (Dullsville
-  through Rio de Janeiro) and starts the one you pick.
-- The desktop and window icon are the roadmap blueprint (`lunduke-city`).
-  The window sets that name with `set_default_icon_name` and `set_icon_name`.
+The new code paths (config, recovery, asset lookup, no POSIX-only calls without a Windows branch) are in place. A finished Windows link also needs Cairo, Pango, and SDL3 built for MinGW. Those are not in the Debian/Ubuntu MinGW packages, so a Windows link was not produced here. Point `x86_64-w64-mingw32-pkg-config` at a sysroot that has them before expecting `meson compile` to finish.
 
-## What 0.2 does
+## Controls
 
-- Menu bar: System, Options, Disasters, Windows. Options includes speed,
-  zoom, and mute. The menus and the rest of the window chrome follow the
-  system GTK theme.
-- Status line: funds, city name, date.
-- Left tool palette (2×8). The selected tool is highlighted, and the message
-  bar shows its price (for example `Power lines: $5. Underwater wire: $25`).
-- Minimap (click to jump) and R / C / I demand meters (green / blue / yellow).
-- Scrolling map drawn from live engine tile indices through the Micropolis
-  16-pixel atlas (`tiles.png`, the same artwork as `res/hexa.*`).
-- Trains, helicopters, airplanes, ships, the monster, tornadoes, explosions,
-  and buses use the engine sprite frames (`obj*.png`) instead of flat markers.
-- New city, load, and save (`.cty`, the engine's city format).
-- Simulation ticks on a timer. Speed is Pause, Slow, Medium, or Fast.
-- Tools spend funds through the engine. Query reports the tile under the cursor.
-- Disasters and a short evaluation window call into the engine.
-- Windows → Budget opens the funding book: tax rate, and road, police, and
-  fire funding, with taxes collected, cash flow, and the requested and
-  funded amounts from the engine.
-- Windows menu map views for power, water, pollution, crime, land value,
-  and traffic. Water is the engine's water tiles; the others read the
-  engine's layers.
-- Sounds. The engine asks by name (`Siren`, `HonkHonkLow`, and the rest).
-  Matching PCM files in `res/sounds/` play through PulseAudio when a device
-  is open. Mute is under Options. With no device, or no matching file, the
-  request is ignored.
+Mouse and keyboard work as in Lunduke City.
 
-## Engine
+| Input | Action |
+|---|---|
+| Left button / one-finger tap | Select a tool, or build on the map. Drag paints a line. |
+| Two-finger drag | Pan the map |
+| Pinch | Zoom |
+| Wheel | Scroll the map. Ctrl+wheel zooms |
+| Arrow keys | Pan |
+| Space | Pause / resume |
+| Ctrl+N / O / S / Shift+S / Q | New, Load, Save, Save As, Quit |
+| Ctrl+P | Pause / resume the previous speed |
+| Ctrl+1 / 2 / 3 | Slow, Medium, Fast |
+| Ctrl+= / Ctrl++ / Ctrl+minus | Zoom. Keypad plus and minus too |
+| Alt+letter, F10 | Open a menu. Arrows move. Enter activates. Esc closes |
+| F11 or Alt+Enter | Fullscreen |
 
-Sources live in `third_party/micropolis/MicropolisEngine/`, taken from
-[SimHacker/micropolis](https://github.com/SimHacker/micropolis) commit
-`c98f6b08519887b450d9be198bfca5237aab6d0c`, path
-`MicropolisCore/src/MicropolisEngine/src`, and then modified. They are
-compiled as a static library. This is not the original engine program.
-The modifications, required to be marked by GPL section 7 and the
-additional terms in [NOTICE](NOTICE), are:
+Gamepad (Xbox letters, PlayStation symbols when the pad reports them, Steam Deck uses the Xbox set):
 
-- `voteProblems()` wraps its problem index when the index reaches
-  `PROBNUM`, so a yearly evaluation does not read one entry past
-  `problemTable` or overwrite `problemOrder[0]`.
-- `destroy()` frees sprites on the active list and the free list, as
-  well as the map arrays.
+| Button | Action |
+|---|---|
+| Left stick | Move the cursor |
+| Right stick | Pan |
+| D-pad | Pan the map, or move the highlight in a menu or dialog |
+| A / Cross | Build, or confirm the highlighted control |
+| B / Circle | Cancel, close a menu or dialog |
+| X / Square | Query tool |
+| Y / Triangle | Pause / resume |
+| LB / RB | Previous / next tool |
+| LT / RT | Zoom out / in |
+| Start | Open or close the menu |
 
-Provenance details are in
-[third_party/micropolis/README.md](third_party/micropolis/README.md).
+The status line shows the glyphs for the connected pad. A focused control draws an orange ring.
 
-Tiles, sprites, and sounds are vendored under
-[third_party/micropolis-assets/](third_party/micropolis-assets/README.md)
-from the same upstream commit. They are unmodified.
+City name and rename fields call `SDL_StartTextInput`. On the Steam Deck that raises the Steam keyboard. A gamepad, a Deck session, or a touchscreen also gets an on-screen key grid in those dialogs.
 
-## Next steps
+## Menus
 
-- Ship a few sample cities, with the same license notices as the engine.
-  The scenario set (`res/snro.*`) is already included.
+The bar has the same rows as Lunduke City 0.9.5-2: 35 actionable entries (System, Options, Disasters, Windows, Help), plus the hidden zoom accelerators. Dialogs (New City, Budget, Graphs, Evaluation, the six overlays, scenarios, rename, query, About, confirmations) are drawn in the window in Clearlooks-Phenix colours. Tax-year budget, New City, scenarios, rename, About, and the confirmations pause the clock. Graphs, evaluation, overlays, query, and a budget opened from the menu do not.
+
+Recent cities are stored in `~/.config/lunduke-city-2/recent.txt` (ten paths). That list is not the GTK recent database, so it is not shared with Lunduke City. Load and Save try the SDL file dialog (the desktop portal on Linux, the Win32 dialog on Windows) and fall back to the in-window list, which is also what the Deck and a headless run use.
+
+There is no D-Bus single instance. A second launch is a second process. Outside opens that arrive while a dialog is up wait until it closes.
+
+## Headless checks
+
+```sh
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy LUNDUKE_CITY2_SMOKE=1 ./build/src/lunduke-city-2
+```
+
+That loads Dullsville, ticks, draws a frame, checks Ctrl+1, cycles a tool from a virtual gamepad, and accepts a synthetic tap. `LUNDUKE_CITY2_DEMO=window|menu|budget|gamepad` and `LUNDUKE_CITY2_SHOT=frame.png` write a PNG and exit. `LUNDUKE_CITY2_SAVE=city.cty` writes a save during the smoke run.
+
+The dummy SDL audio driver is not used for playback. It corrupts its simplified stream when a mixer thread is attached, so sound is skipped for that driver only.

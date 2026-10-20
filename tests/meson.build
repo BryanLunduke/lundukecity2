@@ -23,7 +23,7 @@ features = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -42,7 +42,7 @@ regressions = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -61,7 +61,7 @@ round3 = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -71,36 +71,7 @@ round3 = executable(
 
 test('round3', round3, timeout: 120)
 
-ui_round3 = executable(
-  'ui_round3',
-  'ui_round3.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round3', ui_round3, timeout: 180)
 
 round4 = executable(
   'round4',
@@ -111,7 +82,7 @@ round4 = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -130,7 +101,7 @@ round5 = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -140,36 +111,7 @@ round5 = executable(
 
 test('round5', round5, timeout: 180)
 
-ui_round4 = executable(
-  'ui_round4',
-  'ui_round4.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round4', ui_round4, timeout: 180)
 
 round6 = executable(
   'round6',
@@ -180,7 +122,7 @@ round6 = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -190,58 +132,11 @@ round6 = executable(
 
 test('round6', round6, timeout: 180)
 
-ui_round6 = executable(
-  'ui_round6',
-  'ui_round6.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round6', ui_round6, timeout: 180)
 
-ui_graphs = executable(
-  'ui_graphs',
-  'ui_graphs.cpp',
-  '../src/assets.cpp',
-  '../src/city_session.cpp',
-  '../src/graphs_window.cpp',
-  '../src/messages.cpp',
-  '../src/sound_player.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
 # Reads pixels from the window. Other GUI tests on the same X server cover
 # those pixels, so this one runs by itself.
-test('ui_graphs', ui_graphs, timeout: 180, is_parallel: false)
 
 round7 = executable(
   'round7',
@@ -275,7 +170,7 @@ argv_open = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -293,36 +188,7 @@ test(
   is_parallel: false,
 )
 
-ui_round7 = executable(
-  'ui_round7',
-  'ui_round7.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round7', ui_round7, timeout: 180)
 
 round8 = executable(
   'round8',
@@ -333,7 +199,7 @@ round8 = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -343,42 +209,13 @@ round8 = executable(
 
 test('round8', round8)
 
-ui_round8 = executable(
-  'ui_round8',
-  'ui_round8.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round8', ui_round8, timeout: 180)
 
 round9 = executable(
   'round9',
   'round9.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -388,42 +225,13 @@ round9 = executable(
 
 test('round9', round9)
 
-ui_round9 = executable(
-  'ui_round9',
-  'ui_round9.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round9', ui_round9, timeout: 180)
 
 round10 = executable(
   'round10',
   'round10.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -439,76 +247,18 @@ round11 = executable(
   'round11',
   'round11.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
 )
 
 test('round11', round11)
 
 # Round 11 (C-2): the main window's minimum size fits 1280x720 and
 # GDK_SCALE=2 on 1366x768.
-ui_round11 = executable(
-  'ui_round11',
-  'ui_round11.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round11', ui_round11, timeout: 180)
 
 # Round 12: Help menu, Save As shortcut, empty-city evaluation, load reasons,
 # full map redraw (dirt map), Budget fits 1280x720 and 1366x768.
-ui_round12 = executable(
-  'ui_round12',
-  'ui_round12.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round12', ui_round12, timeout: 180)
 
 # Round 13 (C-1, C-2): reject damaged city files with a reason; clamp
 # window positions to the work area.
@@ -516,7 +266,7 @@ round13 = executable(
   'round13',
   'round13.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
   ],
@@ -528,7 +278,7 @@ round14 = executable(
   'round14',
   'round14.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
 )
 
 test('round14', round14)
@@ -544,7 +294,7 @@ round15 = executable(
   '../src/sound_player.cpp',
   '../src/tools.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep],
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
@@ -556,77 +306,36 @@ test('round15', round15)
 
 # Round 15 window checks: autosave timer, SIGTERM recovery, the recovery
 # prompt (Not Now / Discard-Cancel / Recover), Open Recent.
-ui_round15 = executable(
-  'ui_round15',
-  'ui_round15.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round15', ui_round15, timeout: 240)
 
 # 0.9.5-2 C-1: outside opens held while a City dialog is up; Save City As
 # bound to its city.
-ui_round0952 = executable(
-  'ui_round0952',
-  'ui_round0952.cpp',
-  '../src/about_dialog.cpp',
-  '../src/app_window.cpp',
-  '../src/assets.cpp',
-  '../src/budget_window.cpp',
-  '../src/city_session.cpp',
-  '../src/evaluation_window.cpp',
-  '../src/graphs_window.cpp',
-  '../src/map_view.cpp',
-  '../src/messages.cpp',
-  '../src/new_city_dialog.cpp',
-  '../src/overlay_window.cpp',
-  '../src/side_widgets.cpp',
-  '../src/sound_player.cpp',
-  '../src/sprite_art.cpp',
-  '../src/tile_atlas.cpp',
-  '../src/tool_palette.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [gtkmm_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
 
-test('ui_round0952', ui_round0952, timeout: 180)
 
 # 0.9.5-2 C-2: a second launch (plain, or with a .cty) forwards to the
 # running City and exits; it does not stay behind as a hidden process.
+
+# Menu model: 35 actionable rows, accelerators, and keyboard navigation.
+# The gtkmm window tests are gone with the toolkit. Single-instance D-Bus
+# forwarding (second_launch) is not part of the SDL shell.
+menu_model = executable(
+  'menu_model',
+  'menu_model.cpp',
+  include_directories: include_directories('../src'),
+)
+
+test('menu_model', menu_model)
+
+# Headless SDL: start, load Dullsville, tick, draw a frame, cycle a tool
+# from a virtual gamepad, accept a synthetic tap.
 test(
-  'second_launch',
-  find_program('sh'),
-  args: [files('second_launch.sh'), lunduke_city_exe.full_path(), lunduke_asset_dir],
-  depends: lunduke_city_exe,
+  'sdl_smoke',
+  lunduke_city_exe,
+  env: [
+    'SDL_VIDEODRIVER=dummy',
+    'SDL_AUDIODRIVER=dummy',
+    'LUNDUKE_CITY2_SMOKE=1',
+  ],
   timeout: 120,
   is_parallel: false,
 )

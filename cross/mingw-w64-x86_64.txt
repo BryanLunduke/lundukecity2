@@ -1,0 +1,24 @@
+# Meson cross file for a Windows build of Lunduke City 2.
+# Host packages (Debian/Ubuntu):
+#   sudo apt install mingw-w64
+# Cairo, Pango, and SDL3 for MinGW are not in the distro packages used here.
+# Point pkg-config at a MinGW sysroot that has them, then:
+#   meson setup build-win --cross-file cross/mingw-w64-x86_64.txt
+#   meson compile -C build-win
+
+[binaries]
+c = 'x86_64-w64-mingw32-gcc'
+cpp = 'x86_64-w64-mingw32-g++'
+ar = 'x86_64-w64-mingw32-ar'
+strip = 'x86_64-w64-mingw32-strip'
+pkg-config = 'x86_64-w64-mingw32-pkg-config'
+windres = 'x86_64-w64-mingw32-windres'
+
+[host_machine]
+system = 'windows'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'
+
+[properties]
+needs_exe_wrapper = true

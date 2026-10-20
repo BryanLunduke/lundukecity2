@@ -4,8 +4,9 @@
 
 #pragma once
 
+#include "platform.hpp"
+
 #include <cctype>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -96,20 +97,8 @@ inline std::string proposed_city_filename(const std::string &city_name, const st
     return cleaned;
 }
 
-// The welcome flag and the last save folder live here, never under an XFCE
-// config tree. XDG_CONFIG_HOME is ignored on purpose.
-inline std::string city_config_dir()
-{
-    const char *home = std::getenv("HOME");
-    if (home == nullptr || home[0] != '/') {
-        return {};
-    }
-    const std::string dir = std::string(home) + "/.config/lunduke-city";
-    if (dir.find("/xfce") != std::string::npos) {
-        return {};
-    }
-    return dir;
-}
+// city_config_dir() lives in platform.hpp (~/.config/lunduke-city-2, or
+// %APPDATA%\lunduke-city-2). XDG_CONFIG_HOME is ignored on purpose.
 
 // Last folder used by Save or Load. Empty when none has been stored, or when
 // the stored path is not an absolute directory.
@@ -130,7 +119,7 @@ inline std::string remembered_city_folder()
     while (line.size() > 1 && line.back() == '/') {
         line.pop_back();
     }
-    if (line.empty() || line[0] != '/' || line.find("/xfce") != std::string::npos) {
+    if (line.empty() || !path_is_absolute(line) || line.find("/xfce") != std::string::npos) {
         return {};
     }
     std::error_code ec;
@@ -159,7 +148,7 @@ inline void remember_city_folder(const std::string &path)
     while (folder.size() > 1 && folder.back() == '/') {
         folder.pop_back();
     }
-    if (folder.empty() || folder[0] != '/' || folder.find("/xfce") != std::string::npos) {
+    if (folder.empty() || !path_is_absolute(folder) || folder.find("/xfce") != std::string::npos) {
         return;
     }
     const std::string dir = city_config_dir();

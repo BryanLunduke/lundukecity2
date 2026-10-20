@@ -1,3 +1,12 @@
+lunduke-city-2 (2.0.0) unstable; urgency=medium
+
+  * SDL3 port of Lunduke City. Installs beside the original as
+    lunduke-city-2, with its own config directory and desktop id.
+    Default window is 1280x800. Menus and dialogs are drawn in the
+    window. Gamepad, touch, and the original .cty saves are supported.
+
+ -- Phil <phil@brushpad.local>  Tue, 20 Oct 2026 18:00:00 +0000
+
 lunduke-city (0.9.5-2) unstable; urgency=medium
 
   * Pre-1.0 fix C-1: a city opened from outside (command line, file
