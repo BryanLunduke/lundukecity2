@@ -1,4 +1,20 @@
-# Lunduke City
+# Lunduke City 2
+
+This repository is a **hard fork** of
+[Lunduke City](https://github.com/BryanLunduke/LundukeCity) at tag
+`v0.9.5-2` (commit `59fc175`). The commits below this one are the
+original project's history, kept so attribution stays intact. Nothing
+in this fork is pushed back to that repository.
+
+Lunduke City 2 is GPL-3.0-or-later. The vendored simulation engine and
+its assets keep Electronic Arts' additional terms (no use of the
+SimCity name, no implied EA affiliation). See [NOTICE](NOTICE).
+
+The tree at this commit is still the imported 0.9.5-2 gtkmm sources.
+The SDL3 port (side-by-side install name `lunduke-city-2`, version
+2.0.0, no gtkmm) lands on the development branch.
+
+## Imported Lunduke City 0.9.5-2
 
 Lunduke City is a windowed city-building game for LCOS. Version 0.9.5
 (Debian package 0.9.5-2, Meson project version 0.9.5) is the LCOS 0.9.5
