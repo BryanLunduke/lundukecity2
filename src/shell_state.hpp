@@ -53,7 +53,7 @@ enum class Dialog : int {
     Controls
 };
 
-enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad };
+enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
 
 struct Hotspot {
     double x = 0;

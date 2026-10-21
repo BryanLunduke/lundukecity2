@@ -572,6 +572,21 @@ void Shell::proceed(AfterSave next)
         finish_open(queued_path_);
         queued_path_.clear();
         break;
+    case AfterSave::Recover:
+        if (!session_.load_recovery(recovery_.path, recovery_.origin)) {
+            info_title_ = "Recover city";
+            info_body_ = session_.last_load_error().empty() ? "The recovery file could not be read."
+                                                            : session_.last_load_error();
+            open_dialog(Dialog::Info);
+            break;
+        }
+        own_recovery_ = recovery_.path;
+        ++city_generation_;
+        autosave_fingerprint_ = session_.change_fingerprint();
+        set_speed(0);
+        center_on_fraction(0.5, 0.5);
+        sync_title();
+        break;
     case AfterSave::Nothing:
         break;
     }
@@ -966,24 +981,8 @@ void Shell::on_dialog_button(int id)
         if (id == kRecover) {
             const city_recovery::Entry entry = recovery_;
             close_dialog();
-            if (!session_.needs_save_prompt() || true) {
-                if (session_.needs_save_prompt()) {
-                    queued_path_.clear();
-                }
-            }
-            if (!session_.load_recovery(entry.path, entry.origin)) {
-                info_title_ = "Recover city";
-                info_body_ = session_.last_load_error().empty() ? "The recovery file could not be read."
-                                                                : session_.last_load_error();
-                open_dialog(Dialog::Info);
-                return;
-            }
-            own_recovery_ = entry.path;
-            ++city_generation_;
-            autosave_fingerprint_ = session_.change_fingerprint();
-            set_speed(0);
-            center_on_fraction(0.5, 0.5);
-            sync_title();
+            recovery_ = entry;
+            request_with_save(AfterSave::Recover);
             return;
         }
         if (id == kDelete) {

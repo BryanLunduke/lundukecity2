@@ -435,6 +435,9 @@ void Shell::draw_dialog(cairo_t *cr)
         case AfterSave::FilesLoad:
             question = "Save changes to this city before opening another city?";
             break;
+        case AfterSave::Recover:
+            question = "Save changes to this city before recovering another city?";
+            break;
         case AfterSave::Nothing:
             break;
         }

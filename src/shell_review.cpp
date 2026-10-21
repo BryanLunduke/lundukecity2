@@ -289,6 +289,20 @@ void Shell::run_review_checks()
         fail("settings cancel did not restore the volume");
         return;
     }
+    const int tax_before = session_.tax();
+    session_.set_tax(tax_before == 20 ? 19 : 20);
+    recovery_.path = "/no/such/lunduke-recovery.cty";
+    dialog_ = Dialog::Recovery;
+    on_dialog_button(kRecover);
+    if (!session_.needs_save_prompt() || dialog_ != Dialog::Unsaved || after_save_ != AfterSave::Recover) {
+        fail("recover replaced an unsaved city without asking");
+        return;
+    }
+    close_dialog();
+    after_save_ = AfterSave::Nothing;
+    session_.set_tax(tax_before);
+    session_.accept_preferences();
+
     gamepad_nav_ = true;
     note_keyboard_input();
     if (gamepad_nav_) {
