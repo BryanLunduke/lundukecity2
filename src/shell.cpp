@@ -629,6 +629,7 @@ void Shell::shutdown()
     sound_.shutdown();
     save_window_settings();
     release_text_cache();
+    release_fontconfig();
     if (frame_surface_ != nullptr) {
         cairo_surface_destroy(frame_surface_);
         frame_surface_ = nullptr;

@@ -8,6 +8,10 @@
 
 #include <pango/pangocairo.h>
 
+#ifdef LUNDUKE_HAS_FONTCONFIG
+#include <fontconfig/fontconfig.h>
+#endif
+
 #include <algorithm>
 #include <cstddef>
 #include <string>
@@ -45,6 +49,17 @@ inline void release_text_cache()
         }
     }
     text_cache().clear();
+}
+
+// Drop the thread's Cairo font map, then fontconfig's cache. Call only from
+// Shell::shutdown, after release_text_cache(), and never from a unit test:
+// FcFini() ends fontconfig for the whole process.
+inline void release_fontconfig()
+{
+#ifdef LUNDUKE_HAS_FONTCONFIG
+    pango_cairo_font_map_set_default(nullptr);
+    FcFini();
+#endif
 }
 
 // Layouts are reused across frames. A paused city otherwise built thousands

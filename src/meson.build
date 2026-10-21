@@ -34,14 +34,23 @@ if host_machine.system() == 'windows'
   lunduke_city_win_subsystem = 'windows'
 endif
 
+# Pango uses fontconfig, but --as-needed will not link it unless this
+# binary calls FcFini itself. Sniper and Windows may lack the .pc file;
+# the leak suppressions in tests/lsan.supp still cover that case.
+fontconfig_dep = dependency('fontconfig', required: false)
+lunduke_city_deps = [sdl3_dep, cairo_dep, pangocairo_dep, micropolis_dep, thread_dep]
+lunduke_city_cpp_args = ['-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"']
+if fontconfig_dep.found()
+  lunduke_city_deps += fontconfig_dep
+  lunduke_city_cpp_args += '-DLUNDUKE_HAS_FONTCONFIG=1'
+endif
+
 lunduke_city_exe = executable(
   'lunduke-city-2',
   lunduke_city_src,
   link_args: lunduke_city_link_args,
   win_subsystem: lunduke_city_win_subsystem,
-  dependencies: [sdl3_dep, cairo_dep, pangocairo_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-  ],
+  dependencies: lunduke_city_deps,
+  cpp_args: lunduke_city_cpp_args,
   install: true,
 )
