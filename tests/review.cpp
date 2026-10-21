@@ -146,10 +146,15 @@ int main()
     if (!write_text_atomic(atomic_path, "one\n") || !write_text_atomic(atomic_path, "two\n")) {
         return fail("atomic write failed");
     }
-    std::ifstream atomic_in(atomic_path);
     std::string atomic_body;
-    std::getline(atomic_in, atomic_body);
-    std::filesystem::remove(atomic_path);
+    {
+        // Close the file before deleting it. Windows refuses to remove a
+        // file that still has a reader open.
+        std::ifstream atomic_in(atomic_path);
+        std::getline(atomic_in, atomic_body);
+    }
+    std::error_code remove_ec;
+    std::filesystem::remove(atomic_path, remove_ec);
     if (atomic_body != "two") {
         return fail("atomic write did not replace the file");
     }
