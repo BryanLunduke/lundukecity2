@@ -374,6 +374,7 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     const double margin = dp(16);
+    text_spans_.clear();
     const double large_w = std::min(static_cast<double>(dp(860)), std::max(1.0, win_w_ - 2.0 * margin));
     const double large_h = std::min(static_cast<double>(dp(640)), std::max(1.0, win_h_ - 2.0 * margin));
     auto buttons_at = [&](double px, double pw, double by, const std::vector<std::pair<const char *, int>> &buttons,
@@ -414,6 +415,21 @@ void Shell::draw_dialog(cairo_t *cr)
     };
     auto text_block_height = [&](const std::string &text, double width) {
         return static_cast<double>(std::max(dp(18), measure_text(cr, body_font(), text, static_cast<int>(width)).height));
+    };
+    // Pango's wrapped height, not a fixed line grid. Callers stack with a gap
+    // so a second line never lands on the next heading or on a slider.
+    auto line_height = [&](const char *font, const std::string &text, double width) {
+        const int wrap = static_cast<int>(std::max(1.0, width));
+        const std::string shown = text.empty() ? std::string(" ") : text;
+        return static_cast<double>(std::max(1, measure_text(cr, font, shown, wrap).height));
+    };
+    auto place_line = [&](const char *font, const std::string &text, double x, double y, double width, double r, double g,
+                          double b) {
+        const double h = line_height(font, text, width);
+        const int wrap = static_cast<int>(std::max(1.0, width));
+        paint_text(cr, font, text, x, y, r, g, b, wrap);
+        text_spans_.push_back(TextSpan{x, y, std::max(1.0, width), h});
+        return h;
     };
     auto paint_caret = [&](double tx, double ty, double th, const std::string &text, bool focused) {
         if (!focused) {
@@ -696,24 +712,28 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::About) {
-        const double width = message_width(win_w_, margin, dp(420), dp(560));
-        const double height = dp(230);
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
-        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "About Lunduke City 2");
+        const double width = message_width(win_w_, margin, dp(480), dp(640));
         const double icon = dp(72);
-        const double icon_x = panel.x + margin;
-        const double icon_y = panel.y + dp(56);
-        fill(cr, icon_x, icon_y + dp(36), icon, dp(28), theme::kSelectR, theme::kSelectG, theme::kSelectB);
-        fill(cr, icon_x + dp(8), icon_y + dp(16), dp(18), dp(48), 0.93, 0.93, 0.90);
-        fill(cr, icon_x + dp(30), icon_y + dp(4), dp(14), dp(60), 0.55, 0.62, 0.70);
-        fill(cr, icon_x + dp(48), icon_y + dp(22), dp(16), dp(42), 0.75, 0.55, 0.28);
         const std::string body = std::string(kProductName) + " " + kPackageVersion +
                                  "\nA city-building game for LCOS, Steam Deck, and Windows. "
                                  "Hard fork of Lunduke City.\n"
                                  "Independent work. Not affiliated with Electronic Arts.\n"
                                  "GPL-3.0-or-later. See NOTICE and COPYING.";
-        label(cr, body_font(), body, icon_x + icon + dp(12), panel.y + dp(52),
-              static_cast<int>(panel.w - 2 * margin - icon - dp(12)));
+        const double text_w = std::max(1.0, width - 2 * margin - icon - dp(16));
+        const double body_h = line_height(body_font(), body, text_w);
+        const double content_h = std::max(static_cast<double>(icon), body_h);
+        const double height = dp(40) + margin + content_h + dp(16) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "About Lunduke City 2");
+        const double icon_x = panel.x + margin;
+        const double icon_y = panel.y + dp(48);
+        fill(cr, icon_x, icon_y + dp(36), icon, dp(28), theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        fill(cr, icon_x + dp(8), icon_y + dp(16), dp(18), dp(48), 0.93, 0.93, 0.90);
+        fill(cr, icon_x + dp(30), icon_y + dp(4), dp(14), dp(60), 0.55, 0.62, 0.70);
+        fill(cr, icon_x + dp(48), icon_y + dp(22), dp(16), dp(42), 0.75, 0.55, 0.28);
+        const double body_w = std::max(1.0, panel.w - 2 * margin - icon - dp(16));
+        place_line(body_font(), body, icon_x + icon + dp(12), panel.y + dp(48), body_w, theme::kTextR, theme::kTextG,
+                   theme::kTextB);
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kClose}});
         return;
     }
@@ -920,45 +940,72 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Budget) {
         const auto book = session_.budget();
         const BudgetCopy copy = budget_copy(book, budget_is_tax_);
-        const double pitch = dp(64);
-        const double note_h = copy.closing_note.empty() ? 0.0 : dp(36);
-        const double height = dp(40) + margin + dp(44) + note_h + dp(8) + pitch * 4 + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, dp(640), height, margin);
+        const double width = std::min(static_cast<double>(dp(680)), std::max(1.0, win_w_ - 2.0 * margin));
+        const double gap = static_cast<double>(dp(6));
+        const double col_gap = static_cast<double>(dp(16));
+        const double inner = width - 2.0 * margin;
+        const double col_w = std::max(1.0, (inner - col_gap) / 2.0);
+        const double row1 = std::max(line_height(ui_font(), copy.taxes, col_w), line_height(ui_font(), copy.previous_funds, col_w));
+        const double row2 = std::max(line_height(ui_font(), copy.cash_flow, col_w), line_height(ui_font(), copy.current_funds, col_w));
+        const double note_h = copy.closing_note.empty() ? 0.0 : line_height(ui_font(), copy.closing_note, inner) + gap;
+        auto block_h = [&](const std::string &caption, const std::string &value_text, const std::string &detail) {
+            const double value_w = static_cast<double>(measure_text(cr, bold_font(), value_text, -1).width);
+            const double cap_w = std::max(1.0, inner - value_w - gap);
+            double h = line_height(bold_font(), caption, cap_w) + gap;
+            if (!detail.empty()) {
+                h += line_height(ui_font(), detail, inner) + gap;
+            }
+            h += static_cast<double>(dp(8) + dp(16) + dp(8));
+            return h;
+        };
+        const double blocks = block_h(copy.tax_title, copy.tax_value, "") +
+                              block_h("Road fund", std::to_string(road_) + "%", copy.road) +
+                              block_h("Police fund", std::to_string(police_) + "%", copy.police) +
+                              block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
+        const double height = dp(40) + margin + row1 + gap + row2 + gap + note_h + blocks + dp(8) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         const double dh = panel.h;
         frame_panel(cr, x, y, dw, dh, "Budget");
-        const double col_w = (dw - 2 * margin - dp(16)) / 2.0;
-        paint_text(cr, ui_font(), copy.taxes, x + margin, y + dp(48), theme::kTextR, theme::kTextG, theme::kTextB,
-                   static_cast<int>(col_w));
-        paint_text(cr, ui_font(), copy.previous_funds, x + margin + col_w + dp(16), y + dp(48), theme::kTextR, theme::kTextG,
-                   theme::kTextB, static_cast<int>(col_w));
-        paint_text(cr, ui_font(), copy.cash_flow, x + margin, y + dp(68), theme::kTextR, theme::kTextG, theme::kTextB,
-                   static_cast<int>(col_w));
-        paint_text(cr, ui_font(), copy.current_funds, x + margin + col_w + dp(16), y + dp(68), theme::kTextR, theme::kTextG,
-                   theme::kTextB, static_cast<int>(col_w));
-        double note_bottom = y + dp(92);
+        const double live_inner = dw - 2.0 * margin;
+        const double live_col = std::max(1.0, (live_inner - col_gap) / 2.0);
+        double cursor = y + dp(48);
+        const double taxes_h =
+            place_line(ui_font(), copy.taxes, x + margin, cursor, live_col, theme::kTextR, theme::kTextG, theme::kTextB);
+        const double previous_h = place_line(ui_font(), copy.previous_funds, x + margin + live_col + col_gap, cursor, live_col,
+                                             theme::kTextR, theme::kTextG, theme::kTextB);
+        cursor += std::max(taxes_h, previous_h) + gap;
+        const double flow_h =
+            place_line(ui_font(), copy.cash_flow, x + margin, cursor, live_col, theme::kTextR, theme::kTextG, theme::kTextB);
+        const double funds_h = place_line(ui_font(), copy.current_funds, x + margin + live_col + col_gap, cursor, live_col,
+                                          theme::kTextR, theme::kTextG, theme::kTextB);
+        cursor += std::max(flow_h, funds_h) + gap;
         if (!copy.closing_note.empty()) {
-            paint_text(cr, ui_font(), copy.closing_note, x + margin, note_bottom, theme::kAccelR, theme::kAccelG,
-                       theme::kAccelB, static_cast<int>(dw - 2 * margin));
-            note_bottom += note_h;
+            const double h = place_line(ui_font(), copy.closing_note, x + margin, cursor, live_inner, theme::kAccelR,
+                                        theme::kAccelG, theme::kAccelB);
+            cursor += h + gap;
         }
-        const double sliders_top = note_bottom + dp(8);
         auto slider = [&](int index, const std::string &caption, const std::string &value_text, const std::string &detail,
-                          int value, int min, int max, double sy) {
-            paint_text(cr, bold_font(), caption, x + margin, sy, theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(dw - 2 * margin - dp(80)));
+                          int value, int min, int max) {
             const TextMetrics value_metrics = measure_text(cr, bold_font(), value_text, -1);
-            paint_text(cr, bold_font(), value_text, x + dw - margin - value_metrics.width, sy, theme::kTextR, theme::kTextG,
-                       theme::kTextB, -1);
+            const double value_w = static_cast<double>(value_metrics.width);
+            const double cap_w = std::max(1.0, live_inner - value_w - gap);
+            const double cap_h = place_line(bold_font(), caption, x + margin, cursor, cap_w, theme::kTextR, theme::kTextG,
+                                            theme::kTextB);
+            place_line(bold_font(), value_text, x + dw - margin - value_w, cursor, std::max(1.0, value_w), theme::kTextR,
+                       theme::kTextG, theme::kTextB);
+            cursor += cap_h + gap;
             if (!detail.empty()) {
-                paint_text(cr, ui_font(), detail, x + margin, sy + dp(18), theme::kAccelR, theme::kAccelG, theme::kAccelB,
-                           static_cast<int>(dw - 2 * margin));
+                const double detail_h = place_line(ui_font(), detail, x + margin, cursor, live_inner, theme::kAccelR,
+                                                   theme::kAccelG, theme::kAccelB);
+                cursor += detail_h + gap;
             }
-            const double bar_y = sy + dp(36);
+            cursor += dp(8);
+            const double bar_y = cursor;
             const double sx = x + margin;
-            const double sw = dw - 2 * margin;
+            const double sw = live_inner;
             fill(cr, sx, bar_y, sw, dp(16), 1, 1, 1);
             const double t = (value - min) / static_cast<double>(std::max(1, max - min));
             fill(cr, sx, bar_y, sw * t, dp(16), theme::kSelectR, theme::kSelectG, theme::kSelectB);
@@ -973,11 +1020,12 @@ void Shell::draw_dialog(cairo_t *cr)
                 cairo_rectangle(cr, sx + 1, bar_y - dp(4), sw - 2, dp(24));
                 cairo_stroke(cr);
             }
+            cursor += dp(16) + dp(8);
         };
-        slider(1, copy.tax_title, copy.tax_value, "", tax_, 0, 20, sliders_top);
-        slider(2, "Road fund", std::to_string(road_) + "%", copy.road, road_, 0, 100, sliders_top + pitch);
-        slider(3, "Police fund", std::to_string(police_) + "%", copy.police, police_, 0, 100, sliders_top + pitch * 2);
-        slider(4, "Fire fund", std::to_string(fire_) + "%", copy.fire, fire_, 0, 100, sliders_top + pitch * 3);
+        slider(1, copy.tax_title, copy.tax_value, "", tax_, 0, 20);
+        slider(2, "Road fund", std::to_string(road_) + "%", copy.road, road_, 0, 100);
+        slider(3, "Police fund", std::to_string(police_) + "%", copy.police, police_, 0, 100);
+        slider(4, "Fire fund", std::to_string(fire_) + "%", copy.fire, fire_, 0, 100);
         if (budget_is_tax_) {
             buttons_at(x, dw, y + dh - margin - dp(36), {{"_Reset", kReset}, {"_Collect Taxes", kCollect}});
         } else {
@@ -1027,58 +1075,83 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Evaluation) {
         const EvaluationCopy copy = evaluation_copy(session_.evaluation(), session_.scenario_progress());
         const std::string heading = session_.city_name() + " — " + session_.date_text();
-        const int left_lines = 7;
-        int right_lines = 2 + static_cast<int>(copy.problems.size()) + 5;
-        if (!copy.scenario.empty()) {
-            ++right_lines;
+        const double width = std::min(static_cast<double>(dp(760)), std::max(1.0, win_w_ - 2.0 * margin));
+        const double gap = static_cast<double>(dp(6));
+        const double col_gap = margin;
+        const double inner = width - 2.0 * margin;
+        const double col_w = std::max(1.0, (inner - col_gap) / 2.0);
+        struct Row {
+            const char *font;
+            std::string text;
+        };
+        std::vector<Row> left_rows = {
+            {bold_font(), copy.score_caption},
+            {body_font(), copy.score},
+            {body_font(), copy.score_delta},
+            {bold_font(), copy.opinion_caption},
+            {body_font(), copy.opinion_question},
+            {body_font(), copy.yes + "    " + copy.no},
+        };
+        const double bar_h = copy.yes_percent >= 0 ? static_cast<double>(dp(10)) : 0.0;
+        std::vector<Row> right_rows = {{bold_font(), copy.problems_caption}};
+        for (const std::string &problem : copy.problems) {
+            right_rows.push_back(Row{body_font(), problem});
         }
-        const double line_h = dp(22);
-        const double height = dp(40) + margin + line_h + dp(8) + std::max(left_lines, right_lines) * line_h + dp(12) +
-                              dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, dp(700), height, margin);
+        right_rows.push_back(Row{bold_font(), copy.stats_caption});
+        right_rows.push_back(Row{body_font(), copy.population});
+        right_rows.push_back(Row{body_font(), copy.migration});
+        right_rows.push_back(Row{body_font(), copy.assessed});
+        right_rows.push_back(Row{body_font(), copy.category});
+        right_rows.push_back(Row{body_font(), copy.difficulty});
+        if (!copy.scenario.empty()) {
+            right_rows.push_back(Row{body_font(), copy.scenario});
+        }
+        auto column_h = [&](const std::vector<Row> &rows, double column) {
+            double h = 0;
+            for (const Row &row : rows) {
+                h += line_height(row.font, row.text, column) + gap;
+            }
+            return h;
+        };
+        const double left_h = column_h(left_rows, col_w) + (bar_h > 0.0 ? bar_h + gap : 0.0) +
+                              line_height(ui_font(), copy.opinion_bar, col_w) + gap;
+        const double right_h = column_h(right_rows, col_w);
+        const double heading_h = line_height(body_font(), heading, inner);
+        const double height = dp(40) + margin + heading_h + gap + std::max(left_h, right_h) + dp(8) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         frame_panel(cr, x, y, dw, panel.h, "Evaluation");
-        paint_text(cr, body_font(), heading, x + margin, y + dp(48), theme::kTextR, theme::kTextG, theme::kTextB,
-                   static_cast<int>(dw - 2 * margin));
-        const double col_w = (dw - 3 * margin) / 2.0;
+        const double live_inner = dw - 2.0 * margin;
+        const double live_col = std::max(1.0, (live_inner - col_gap) / 2.0);
+        const double head_y = y + dp(48);
+        const double placed_head =
+            place_line(body_font(), heading, x + margin, head_y, live_inner, theme::kTextR, theme::kTextG, theme::kTextB);
         const double left_x = x + margin;
-        const double right_x = x + margin + col_w + margin;
-        const double top = y + dp(48) + line_h + dp(8);
-        auto line = [&](const char *font, const std::string &text, double lx, int row) {
-            paint_text(cr, font, text, lx, top + row * line_h, theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(col_w));
+        const double right_x = x + margin + live_col + col_gap;
+        double left_y = head_y + placed_head + gap;
+        double right_y = left_y;
+        auto paint_rows = [&](const std::vector<Row> &rows, double lx, double &cursor) {
+            for (const Row &row : rows) {
+                const double h = place_line(row.font, row.text, lx, cursor, live_col, theme::kTextR, theme::kTextG,
+                                            theme::kTextB);
+                cursor += h + gap;
+            }
         };
-        int row = 0;
-        line(bold_font(), copy.score_caption, left_x, row++);
-        line(body_font(), copy.score, left_x, row++);
-        line(body_font(), copy.score_delta, left_x, row++);
-        line(bold_font(), copy.opinion_caption, left_x, row++);
-        line(body_font(), copy.opinion_question, left_x, row++);
-        line(body_font(), copy.yes + "    " + copy.no, left_x, row++);
+        paint_rows(left_rows, left_x, left_y);
         if (copy.yes_percent >= 0) {
-            const double bar_y = top + row * line_h + dp(4);
-            const double bw = std::min(col_w, static_cast<double>(dp(180)));
-            fill(cr, left_x, bar_y, bw, dp(10), 0.9, 0.9, 0.9);
-            fill(cr, left_x, bar_y, bw * (copy.yes_percent / 100.0), dp(10), theme::kSelectR, theme::kSelectG,
+            const double bw = std::min(live_col, static_cast<double>(dp(180)));
+            fill(cr, left_x, left_y, bw, bar_h, 0.9, 0.9, 0.9);
+            fill(cr, left_x, left_y, bw * (copy.yes_percent / 100.0), bar_h, theme::kSelectR, theme::kSelectG,
                  theme::kSelectB);
+            left_y += bar_h + gap;
         }
-        line(ui_font(), copy.opinion_bar, left_x, row);
-        row = 0;
-        line(bold_font(), copy.problems_caption, right_x, row++);
-        for (const std::string &problem : copy.problems) {
-            line(body_font(), problem, right_x, row++);
-        }
-        line(bold_font(), copy.stats_caption, right_x, row++);
-        line(body_font(), copy.population, right_x, row++);
-        line(body_font(), copy.migration, right_x, row++);
-        line(body_font(), copy.assessed, right_x, row++);
-        line(body_font(), copy.category, right_x, row++);
-        line(body_font(), copy.difficulty, right_x, row++);
-        if (!copy.scenario.empty()) {
-            line(body_font(), copy.scenario, right_x, row++);
-        }
+        const double opinion_h =
+            place_line(ui_font(), copy.opinion_bar, left_x, left_y, live_col, theme::kTextR, theme::kTextG, theme::kTextB);
+        left_y += opinion_h + gap;
+        (void)left_y;
+        paint_rows(right_rows, right_x, right_y);
         buttons_at(x, dw, y + panel.h - margin - dp(36), {{"_Close", kClose}});
         return;
     }

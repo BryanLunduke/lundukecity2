@@ -410,6 +410,90 @@ void Shell::run_review_checks()
     }
     std::filesystem::remove(saved_city);
 
+    // M1: wrapped lines keep their measured height, so headings, fund labels,
+    // and the Close button do not share pixels. Checked at 1x and at a scale
+    // that wraps the evaluation sentences.
+    {
+        auto boxes_overlap = [](const TextSpan &a, double bx, double by, double bw, double bh) {
+            return a.x < bx + bw - 0.5 && bx < a.x + a.w - 0.5 && a.y < by + bh - 0.5 && by < a.y + a.h - 0.5;
+        };
+        auto spans_clash = [&]() {
+            for (std::size_t i = 0; i < text_spans_.size(); ++i) {
+                for (std::size_t j = i + 1; j < text_spans_.size(); ++j) {
+                    const TextSpan &b = text_spans_[j];
+                    if (boxes_overlap(text_spans_[i], b.x, b.y, b.w, b.h)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto button_clash = [&]() {
+            for (const Hotspot &hot : hot_) {
+                const bool button = hot.id == kClose || hot.id == kOk || hot.id == kCancel || hot.id == kCollect;
+                if (!button) {
+                    continue;
+                }
+                for (const TextSpan &span : text_spans_) {
+                    if (boxes_overlap(span, hot.x, hot.y, hot.w, hot.h)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto bar_clash = [&]() {
+            for (const SliderGeom &slider : sliders_) {
+                const double bar_y = slider.y + dp(6);
+                const double bar_h = static_cast<double>(dp(16));
+                for (const TextSpan &span : text_spans_) {
+                    if (boxes_overlap(span, slider.x, bar_y, slider.w, bar_h)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto apply_scale = [&](float scale) {
+            ui_scale_ = scale;
+            font_ui_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
+            font_body_ = ui_scale::scaled_font("Sans", 14, ui_scale_);
+            font_title_ = ui_scale::scaled_font("Sans Bold", 18, ui_scale_);
+            font_menu_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
+            font_bold_ = ui_scale::scaled_font("Sans Bold", 13, ui_scale_);
+        };
+        const Dialog checks[] = {Dialog::Evaluation, Dialog::Budget, Dialog::About};
+        const char *names[] = {"evaluation", "budget", "about"};
+        const float scales[] = {1.0f, 1.77f};
+        for (float scale : scales) {
+            apply_scale(scale);
+            for (int i = 0; i < 3; ++i) {
+                dialog_ = checks[i];
+                presented_ = false;
+                render();
+                if (text_spans_.empty()) {
+                    fail(std::string(names[i]) + " recorded no text");
+                    return;
+                }
+                if (spans_clash()) {
+                    fail(std::string(names[i]) + " text overlaps at scale " + std::to_string(scale));
+                    return;
+                }
+                if (button_clash()) {
+                    fail(std::string(names[i]) + " text overlaps a button at scale " + std::to_string(scale));
+                    return;
+                }
+                if (bar_clash()) {
+                    fail(std::string(names[i]) + " text overlaps a slider at scale " + std::to_string(scale));
+                    return;
+                }
+            }
+        }
+        apply_scale(1.0f);
+        dialog_ = Dialog::None;
+        presented_ = false;
+    }
+
 #ifndef _WIN32
     const auto previous_sigint = std::signal(SIGINT, SIG_DFL);
     std::signal(SIGINT, previous_sigint);

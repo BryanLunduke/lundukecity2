@@ -73,6 +73,15 @@ struct SliderGeom {
     int max = 0;
 };
 
+// A block of dialog text, in the same coordinates as the hotspots. The
+// review pass checks these against each other and against the buttons.
+struct TextSpan {
+    double x = 0;
+    double y = 0;
+    double w = 0;
+    double h = 0;
+};
+
 class Shell {
 public:
     int run(int argc, char **argv);
@@ -331,6 +340,7 @@ private:
     std::vector<int> next_focus_;
     std::vector<SliderGeom> sliders_;
     std::vector<SliderGeom> next_sliders_;
+    std::vector<TextSpan> text_spans_;
     int hover_id_ = 0;
     int focus_id_ = 0;
     int slider_drag_ = 0;
