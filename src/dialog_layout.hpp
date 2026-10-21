@@ -57,3 +57,33 @@ inline DialogRect place_near(double win_w, double win_h, double want_w, double w
     rect.y = std::max(margin, std::min(rect.y, std::max(margin, win_h - margin - rect.h)));
     return rect;
 }
+
+// A menu flyout sits beside the row that opened it and grows with its labels.
+// content_w already includes the text and its horizontal padding.
+inline DialogRect place_submenu(double drop_x, double drop_w, double row_y, double row_h, int rows, double content_w,
+                                double win_w, double win_h, double min_w)
+{
+    const int shown = std::max(1, rows);
+    DialogRect rect;
+    rect.h = static_cast<double>(shown) * row_h + 8.0;
+    const double limit = std::max(80.0, win_w - 8.0);
+    rect.w = std::min(limit, std::max(min_w, content_w));
+    rect.x = drop_x + drop_w - 4.0;
+    if (rect.x + rect.w > win_w - 4.0) {
+        const double flipped = drop_x + 4.0 - rect.w;
+        if (flipped >= 4.0) {
+            rect.x = flipped;
+        } else {
+            rect.x = 4.0;
+            rect.w = std::max(80.0, win_w - 8.0);
+        }
+    }
+    if (rect.h > win_h - 8.0) {
+        rect.h = std::max(row_h + 8.0, win_h - 8.0);
+    }
+    rect.y = row_y;
+    if (rect.y + rect.h > win_h - 4.0) {
+        rect.y = std::max(4.0, win_h - 4.0 - rect.h);
+    }
+    return rect;
+}

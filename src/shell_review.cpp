@@ -335,6 +335,34 @@ void Shell::run_review_checks()
         return;
     }
 
+    dialog_ = Dialog::None;
+    menu_.open_menu = 0;
+    menu_.cursor = 2;
+    menu_.recent_open = true;
+    recent_.clear();
+    recent_.push_back(std::string("/home/player/Cities/") + std::string(48, 'W') + ".cty");
+    menu_.recent_count = static_cast<int>(recent_.size());
+    render();
+    const Hotspot *recent_row = nullptr;
+    const Hotspot *flyout = nullptr;
+    for (const Hotspot &spot : hot_) {
+        if (spot.id == kMenuItem + 2) {
+            recent_row = &spot;
+        }
+        if (spot.id == kRecentItem) {
+            flyout = &spot;
+        }
+    }
+    // The row hotspot is the menu line. The flyout's first city sits on that
+    // line, inset by the panel's 4px padding, and grows past the old 340px cap.
+    if (recent_row == nullptr || flyout == nullptr || std::abs(flyout->y - (recent_row->y + 4.0)) > 1.0 ||
+        flyout->w < 360 || flyout->w > 1100 || flyout->x < 40) {
+        fail("the recent submenu did not follow its row or widen for a long name");
+        return;
+    }
+    menu_.close();
+    recent_.clear();
+
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {

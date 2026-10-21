@@ -247,6 +247,8 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     fill(cr, drop_x, menu_h_, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
     stroke_rect(cr, drop_x, menu_h_, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
     double y = menu_h_ + 4;
+    double recent_row_y = y;
+    bool have_recent_row = false;
     for (int i = 0; i < count; ++i) {
         const MenuEntry &item = items[i];
         if (item.kind == ItemKind::Separator) {
@@ -316,6 +318,10 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         }
         paint_mnemonic(cr, menu_font(), item.label, drop_x + 28, y + 7, menu_.alt_shown, theme::kTextR,
                        theme::kTextG, theme::kTextB);
+        if (item.action == Action::Recent) {
+            recent_row_y = y;
+            have_recent_row = true;
+        }
         if (item.accel_text != nullptr && !gamepad_nav_) {
             const TextMetrics accel = measure_text(cr, menu_font(), item.accel_text, -1);
             paint_text(cr, menu_font(), item.accel_text, drop_x + drop_w - accel.width - 12, y + 7, theme::kAccelR,
@@ -326,27 +332,39 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     if (!menu_.recent_open) {
         return;
     }
-    const double rx = drop_x + drop_w - 4;
     const int rows = std::max(1, static_cast<int>(recent_.size()));
-    const double rh = rows * row_h + 8;
-    fill(cr, rx, menu_h_ + 4 + 2 * row_h, 340, rh, 1, 1, 1);
-    stroke_rect(cr, rx, menu_h_ + 4 + 2 * row_h, 340, rh, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+    double label_w = 0;
+    auto consider = [&](const std::string &text) {
+        label_w = std::max(label_w, static_cast<double>(measure_text(cr, menu_font(), text, -1).width));
+    };
     if (recent_.empty()) {
-        paint_text(cr, menu_font(), "No recent cities", rx + 10, menu_h_ + 4 + 2 * row_h + 8, theme::kTextR,
-                   theme::kTextG, theme::kTextB, 320);
+        consider("No recent cities");
+    }
+    for (const std::string &shown : recent_) {
+        const auto slash = shown.find_last_of("/\\");
+        consider(slash == std::string::npos ? shown : shown.substr(slash + 1));
+    }
+    const DialogRect sub = place_submenu(drop_x, drop_w, have_recent_row ? recent_row_y : menu_h_ + 4, row_h, rows,
+                                         label_w + dp(28), win_w_, win_h_, dp(180));
+    fill(cr, sub.x, sub.y, sub.w, sub.h, 1, 1, 1);
+    stroke_rect(cr, sub.x, sub.y, sub.w, sub.h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+    const int text_w = static_cast<int>(std::max(40.0, sub.w - dp(20)));
+    if (recent_.empty()) {
+        paint_text(cr, menu_font(), "No recent cities", sub.x + 10, sub.y + 8, theme::kTextR, theme::kTextG,
+                   theme::kTextB, text_w);
         return;
     }
     for (int i = 0; i < static_cast<int>(recent_.size()); ++i) {
-        const double ry = menu_h_ + 8 + 2 * row_h + i * row_h;
+        const double ry = sub.y + 4 + i * row_h;
         const int id = kRecentItem + i;
-        push_hot(rx + 2, ry, 336, row_h, id);
+        push_hot(sub.x + 2, ry, std::max(1.0, sub.w - 4), row_h, id);
         if (menu_.recent_cursor == i || hover_id_ == id) {
-            fill(cr, rx + 3, ry, 334, row_h, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), row_h, theme::kHoverR, theme::kHoverG, theme::kHoverB);
         }
         const std::string shown = recent_[static_cast<std::size_t>(i)];
         const auto slash = shown.find_last_of("/\\");
-        paint_text(cr, menu_font(), slash == std::string::npos ? shown : shown.substr(slash + 1), rx + 10, ry + 7,
-                   theme::kTextR, theme::kTextG, theme::kTextB, 310);
+        paint_text(cr, menu_font(), slash == std::string::npos ? shown : shown.substr(slash + 1), sub.x + 10, ry + 7,
+                   theme::kTextR, theme::kTextG, theme::kTextB, text_w);
     }
 }
 

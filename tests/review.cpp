@@ -175,6 +175,13 @@ int main()
     if (std::abs(button_width(40, 32, 120) - 120) > 0.1 || std::abs(button_width(200, 32, 120) - 232) > 0.1) {
         return fail("button width");
     }
+    const DialogRect fly = place_submenu(8, 320, 180, 32, 3, 480, 1280, 800, 180);
+    const DialogRect low = place_submenu(8, 320, 760, 32, 4, 200, 1280, 800, 180);
+    const DialogRect cramped = place_submenu(900, 320, 40, 32, 1, 500, 1280, 800, 180);
+    if (std::abs(fly.y - 180) > 0.1 || fly.w < 480 || fly.x + fly.w > 1276 || low.y + low.h > 796 || cramped.x < 4 ||
+        cramped.x + cramped.w > 1276 || std::abs(cramped.y - 40) > 0.1) {
+        return fail("recent submenu did not follow the row or stay on screen");
+    }
     std::vector<std::string> rows = {"city10.cty", "Notes/", "city2.cty", "a.cty", "..", "Zoo/"};
     std::sort(rows.begin(), rows.end(), file_row_less);
     if (rows.size() != 6 || rows[0] != ".." || rows[1] != "Notes/" || rows[2] != "Zoo/" || rows[3] != "a.cty" ||
