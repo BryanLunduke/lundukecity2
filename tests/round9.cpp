@@ -62,8 +62,24 @@ int main()
     if (at == std::string::npos || at + 8 + 32 > d.size()) {
         return fail(3, "saved city has no wide trailer");
     }
-    // Funds then census (res, com, ind): huge, and negative.
+    // Funds outside ±1e12 are refused and the message shows the raw 64-bit
+    // amount. The live city is left untouched.
     put_le64(d, at + 8, 0x7fffffffffffff00LL);
+    {
+        std::ofstream out(bad, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char *>(d.data()), static_cast<std::streamsize>(d.size()));
+    }
+    Micropolis sim;
+    sim.generateSomeCity(3);
+    const Quad funds_before = sim.totalFunds;
+    if (sim.loadFile(bad.c_str()) || sim.loadErrorDetail.find("$9,223,372,036,854,775,552") == std::string::npos ||
+        sim.loadErrorDetail.find("$-") != std::string::npos || sim.totalFunds != funds_before) {
+        std::cerr << "detail " << sim.loadErrorDetail << " funds " << (long long)sim.totalFunds << "\n";
+        return fail(4, "absurd funds loaded or were not shown as 64-bit money (C-2)");
+    }
+    // Census still clamps when the treasury itself is in range, and the
+    // city keeps simulating.
+    put_le64(d, at + 8, 20000);
     put_le64(d, at + 16, 0x7fffffffffffff00LL);
     put_le64(d, at + 24, -0x7fffffffffffff00LL);
     put_le64(d, at + 32, 0x4000000000000000LL);
@@ -71,19 +87,18 @@ int main()
         std::ofstream out(bad, std::ios::binary | std::ios::trunc);
         out.write(reinterpret_cast<const char *>(d.data()), static_cast<std::streamsize>(d.size()));
     }
-    Micropolis sim;
     if (!sim.loadFile(bad.c_str())) {
-        return fail(4, "the corrupted city did not load");
+        return fail(5, "a city with a wild census did not load");
     }
     std::cout << "funds=" << sim.totalFunds << " res=" << sim.resPop << " com=" << sim.comPop
               << " ind=" << sim.indPop << "\n";
     const long long kMaxPop = 10000000LL;
     if (sim.totalFunds > 1000000000000LL || sim.totalFunds < -1000000000000LL) {
-        return fail(5, "funds were not clamped on load (C-2)");
+        return fail(6, "in-range funds were not kept on load (C-2)");
     }
     if (sim.resPop < 0 || sim.resPop > kMaxPop || sim.comPop < 0 || sim.comPop > kMaxPop ||
         sim.indPop < 0 || sim.indPop > kMaxPop) {
-        return fail(6, "population was not clamped on load (C-2)");
+        return fail(7, "population was not clamped on load (C-2)");
     }
     sim.setSpeed(3);
     sim.setPasses(1);
