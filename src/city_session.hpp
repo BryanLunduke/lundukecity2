@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <cstdarg>
 #include <functional>
 #include <string>
@@ -30,16 +31,16 @@ public:
     };
 
     struct BudgetBook {
-        long taxes = 0;
-        long cash_flow = 0;
-        long funds = 0;
-        long previous_funds = 0;
-        long road_need = 0;
-        long police_need = 0;
-        long fire_need = 0;
-        long road_spent = 0;
-        long police_spent = 0;
-        long fire_spent = 0;
+        std::int64_t taxes = 0;
+        std::int64_t cash_flow = 0;
+        std::int64_t funds = 0;
+        std::int64_t previous_funds = 0;
+        std::int64_t road_need = 0;
+        std::int64_t police_need = 0;
+        std::int64_t fire_need = 0;
+        std::int64_t road_spent = 0;
+        std::int64_t police_spent = 0;
+        std::int64_t fire_spent = 0;
         int tax_percent = 0;
         int road_percent = 100;
         int police_percent = 100;
@@ -154,7 +155,7 @@ public:
     static bool name_is_usable(const std::string &name);
 
     int difficulty() const;
-    long funds() const;
+    std::int64_t funds() const;
     int generated_seed() const;
 
     void tick();
@@ -209,7 +210,7 @@ public:
     // the census is complete. Returns false when the pass was skipped.
     bool note_evaluation_month(int month_index);
     // cityAssessedValue as stored on the engine, not the preview copy.
-    long stored_assessed_value() const;
+    std::int64_t stored_assessed_value() const;
     // Unsaved tools, budget, disasters, rename, or a tax year still open.
     bool needs_save_prompt() const;
     bool time_advanced_since_save() const;
@@ -262,7 +263,7 @@ public:
     static constexpr int kHistoryPoints = 120;
     int history_value(HistorySeries series, HistoryScale scale, int index) const;
     // Dollars for one cash-flow sample. Index 0 is the newest.
-    long cash_flow_history(HistoryScale scale, int index) const;
+    std::int64_t cash_flow_history(HistoryScale scale, int index) const;
     // False when the sample was reconstructed from the capped history byte.
     bool cash_flow_history_exact(HistoryScale scale, int index) const;
     // 1 when the scenario was just won, -1 when it was just lost, then 0.
@@ -299,9 +300,9 @@ public:
         int score = 0;
         int score_delta = 0;
         int yes_percent = 0;
-        long population = 0;
-        long migration = 0;
-        long assessed_value = 0;
+        std::int64_t population = 0;
+        std::int64_t migration = 0;
+        std::int64_t assessed_value = 0;
         std::string category;
         std::string difficulty;
         std::vector<Problem> problems;

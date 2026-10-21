@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 #include <unistd.h>
+#include "win_compat.hpp"
 
 namespace {
 

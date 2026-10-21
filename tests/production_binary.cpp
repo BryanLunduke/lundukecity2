@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -95,6 +96,69 @@ int scan(const std::vector<unsigned char> &bytes, std::size_t begin, std::size_t
     return 0;
 }
 
+// Byte ranges the loader maps: ELF PT_LOAD segments, or the PE sections
+// that are not discardable (MinGW's .debug_* sections are).
+bool load_ranges(const std::vector<unsigned char> &bytes, std::vector<std::pair<std::size_t, std::size_t>> &ranges,
+                 const char *&error)
+{
+    if (bytes.size() >= 64 && bytes[0] == 0x7f && bytes[1] == 'E' && bytes[2] == 'L' && bytes[3] == 'F' &&
+        bytes[4] == 2 && bytes[5] == 1) {
+        const std::uint64_t phoff = read64(bytes, 32);
+        const std::uint16_t phentsize = read16(bytes, 54);
+        const std::uint16_t phnum = read16(bytes, 56);
+        if (phentsize < 56 || phoff + static_cast<std::uint64_t>(phentsize) * phnum > bytes.size()) {
+            error = "the city binary has a bad program header";
+            return false;
+        }
+        for (std::uint16_t i = 0; i < phnum; ++i) {
+            const std::size_t off = static_cast<std::size_t>(phoff + static_cast<std::uint64_t>(i) * phentsize);
+            if (read32(bytes, off) != 1) {
+                continue;
+            }
+            const std::uint64_t offset = read64(bytes, off + 8);
+            const std::uint64_t filesz = read64(bytes, off + 32);
+            if (offset + filesz > bytes.size()) {
+                error = "a load segment runs past the end of the binary";
+                return false;
+            }
+            ranges.emplace_back(static_cast<std::size_t>(offset), static_cast<std::size_t>(offset + filesz));
+        }
+        return true;
+    }
+    if (bytes.size() >= 64 && bytes[0] == 'M' && bytes[1] == 'Z') {
+        const std::uint32_t pe = read32(bytes, 0x3c);
+        if (pe + 24 > bytes.size() || bytes[pe] != 'P' || bytes[pe + 1] != 'E' || bytes[pe + 2] != 0 ||
+            bytes[pe + 3] != 0) {
+            error = "the city binary has a bad PE header";
+            return false;
+        }
+        const std::uint16_t nsect = read16(bytes, pe + 6);
+        const std::uint16_t optsize = read16(bytes, pe + 20);
+        const std::size_t table = pe + 24 + optsize;
+        if (table + static_cast<std::size_t>(nsect) * 40 > bytes.size()) {
+            error = "the city binary has a bad section table";
+            return false;
+        }
+        for (std::uint16_t i = 0; i < nsect; ++i) {
+            const std::size_t sh = table + static_cast<std::size_t>(i) * 40;
+            const std::uint32_t rawsize = read32(bytes, sh + 16);
+            const std::uint32_t rawptr = read32(bytes, sh + 20);
+            const std::uint32_t flags = read32(bytes, sh + 36);
+            if ((flags & 0x02000000u) != 0 || rawsize == 0) {
+                continue; // IMAGE_SCN_MEM_DISCARDABLE, or no file data
+            }
+            if (static_cast<std::uint64_t>(rawptr) + rawsize > bytes.size()) {
+                error = "a section runs past the end of the binary";
+                return false;
+            }
+            ranges.emplace_back(rawptr, static_cast<std::size_t>(rawptr) + rawsize);
+        }
+        return true;
+    }
+    error = "the city binary is not a little-endian ELF64 or a PE image";
+    return false;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -104,30 +168,18 @@ int main(int argc, char **argv)
     }
     std::ifstream in(argv[1], std::ios::binary);
     std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    if (bytes.size() < 64 || bytes[0] != 0x7f || bytes[1] != 'E' || bytes[2] != 'L' || bytes[3] != 'F' ||
-        bytes[4] != 2 || bytes[5] != 1) {
-        return fail(1, "the city binary is not a little-endian ELF64");
-    }
-    const std::uint64_t phoff = read64(bytes, 32);
-    const std::uint16_t phentsize = read16(bytes, 54);
-    const std::uint16_t phnum = read16(bytes, 56);
-    if (phentsize < 56 || phoff + static_cast<std::uint64_t>(phentsize) * phnum > bytes.size()) {
-        return fail(1, "the city binary has a bad program header");
+    std::vector<std::pair<std::size_t, std::size_t>> ranges;
+    const char *error = nullptr;
+    if (!load_ranges(bytes, ranges, error)) {
+        return fail(1, error);
     }
     bool saw_load = false;
     bool saw_assets = false;
-    for (std::uint16_t i = 0; i < phnum; ++i) {
-        const std::size_t off = static_cast<std::size_t>(phoff + static_cast<std::uint64_t>(i) * phentsize);
-        if (read32(bytes, off) != 1) {
-            continue;
-        }
-        const std::uint64_t offset = read64(bytes, off + 8);
-        const std::uint64_t filesz = read64(bytes, off + 32);
-        if (offset + filesz > bytes.size()) {
-            return fail(1, "a load segment runs past the end of the binary");
-        }
+    for (const auto &range : ranges) {
+        const std::size_t offset = range.first;
+        const std::size_t end = range.second;
         saw_load = true;
-        const int found = scan(bytes, static_cast<std::size_t>(offset), static_cast<std::size_t>(offset + filesz));
+        const int found = scan(bytes, offset, end);
         if (found == 2) {
             return fail(2, "the release binary contains /workspace");
         }
@@ -135,7 +187,7 @@ int main(int argc, char **argv)
             return fail(3, "the release binary contains a screenshot or demo hook");
         }
         const std::string assets = "LUNDUKE_CITY_ASSETS";
-        for (std::size_t at = static_cast<std::size_t>(offset); at + assets.size() <= offset + filesz; ++at) {
+        for (std::size_t at = offset; at + assets.size() <= end; ++at) {
             bool match = true;
             for (std::size_t n = 0; n < assets.size(); ++n) {
                 if (bytes[at + n] != static_cast<unsigned char>(assets[n])) {

@@ -10,6 +10,7 @@
 
 #include "micropolis.h"
 
+#include <cinttypes>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -170,7 +171,7 @@ int main()
             session.budget().road_need != 5000 || session.budget().police_need != 300 ||
             session.budget().fire_need != 400 || session.funds() != 3000000000L ||
             session.evaluation().population != static_cast<long>(lunduke_city_round5_population(loaded))) {
-            std::fprintf(stderr, "book tax %ld known %d road %ld pop %ld funds %ld\n", session.budget().taxes,
+            std::fprintf(stderr, "book tax %" PRId64 " known %d road %" PRId64 " pop %" PRId64 " funds %" PRId64 "\n", session.budget().taxes,
                          session.budget().taxes_known ? 1 : 0, session.budget().road_need,
                          session.evaluation().population, session.funds());
             return fail(9, "the budget and evaluation still show the wrapped or missing numbers");
@@ -301,7 +302,7 @@ int main()
             const long expect = def.id == SC_DULLSVILLE ? 5000 : 20000;
             if (!session.load_scenario(def.id) || session.city_name() != def.name || session.funds() != expect ||
                 !session.disasters()) {
-                std::fprintf(stderr, "%s funds %ld\n", def.name, session.funds());
+                std::fprintf(stderr, "%s funds %" PRId64 "\n", def.name, session.funds());
                 return fail(25, "a scenario load changed funds, the name, or disasters");
             }
         }

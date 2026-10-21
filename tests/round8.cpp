@@ -20,6 +20,7 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include "win_compat.hpp"
 
 namespace {
 

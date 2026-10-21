@@ -34,6 +34,7 @@
 #include <direct.h>
 #include <io.h>
 #include <process.h>
+#include <sys/stat.h>
 #include <windows.h>
 #else
 #include <dirent.h>
@@ -105,7 +106,11 @@ inline std::string dir(bool create = true)
     }
     const std::string out = base + "/lunduke-city-2";
     struct stat st;
+#ifdef _WIN32
+    if (::stat(out.c_str(), &st) != 0) {
+#else
     if (lstat(out.c_str(), &st) != 0) {
+#endif
         if (!create) {
             return {};
         }
@@ -381,8 +386,19 @@ inline std::string describe(const Entry &e)
 #endif
         if (have_tm) {
             char buf[64];
+#ifdef _WIN32
+            // msvcrt's strftime has no %e (its invalid-parameter handler
+            // would abort); use %d and drop the leading zero instead.
+            if (std::strftime(buf, sizeof(buf), "%a %d %b %H:%M", &tmv) > 0) {
+                std::string when = buf;
+                const auto sp = when.find(' ');
+                if (sp != std::string::npos && sp + 1 < when.size() && when[sp + 1] == '0') {
+                    when.erase(sp + 1, 1);
+                }
+#else
             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
                 std::string when = buf;
+#endif
                 // %e pads a one-digit day with a space.
                 const auto dbl = when.find("  ");
                 if (dbl != std::string::npos) {

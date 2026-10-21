@@ -4,13 +4,14 @@
 
 #pragma once
 
+#include <cstdint>
 #include <algorithm>
 #include <string>
 
 // Residential history stores resPop/8. City population counts that sample,
 // and the commercial and industrial samples, as people with *160:
 // (resPop + (comPop + indPop) * 8) * 20 == (resSample + comSample + indSample) * 160.
-inline constexpr long kHistoryPeoplePerSample = 160;
+inline constexpr std::int64_t kHistoryPeoplePerSample = 160;
 
 enum class GraphLegendKind {
     Population,
@@ -19,10 +20,10 @@ enum class GraphLegendKind {
     Level,
 };
 
-inline std::string grouped_number(long value)
+inline std::string grouped_number(std::int64_t value)
 {
     const bool neg = value < 0;
-    unsigned long mag = static_cast<unsigned long>(neg ? -value : value);
+    std::uint64_t mag = static_cast<std::uint64_t>(neg ? -value : value);
     const std::string digits = std::to_string(mag);
     std::string text;
     int count = 0;
@@ -40,7 +41,7 @@ inline std::string grouped_number(long value)
     return text;
 }
 
-inline std::string graph_money(long value)
+inline std::string graph_money(std::int64_t value)
 {
     const bool neg = value < 0;
     return (neg ? "-$" : "$") + grouped_number(neg ? -value : value);
@@ -50,7 +51,7 @@ inline std::string graph_money(long value)
 // Crime and pollution stay 0-255 and are labeled as levels. Cash flow is the
 // year's dollars. exact is false when that figure was rebuilt from the
 // capped history byte in an older city file.
-inline std::string graph_legend_caption(const char *name, GraphLegendKind kind, long sample,
+inline std::string graph_legend_caption(const char *name, GraphLegendKind kind, std::int64_t sample,
                                         bool exact = true)
 {
     std::string caption = name != nullptr ? name : "";

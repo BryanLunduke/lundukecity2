@@ -11,6 +11,37 @@
 #include <fstream>
 #include <string>
 
+// The native file dialog on Windows hands back backslash paths. A backslash
+// is an ordinary file name character on POSIX, so only Windows splits on it.
+#ifdef _WIN32
+inline constexpr const char *kPathSeparators = "/\\";
+#else
+inline constexpr const char *kPathSeparators = "/";
+#endif
+
+inline bool is_path_separator(char ch)
+{
+#ifdef _WIN32
+    return ch == '/' || ch == '\\';
+#else
+    return ch == '/';
+#endif
+}
+
+// Drop a trailing slash, but keep the root. On Windows "C:\" is that root:
+// stripping the slash leaves "C:", which is not an absolute path.
+inline void strip_trailing_separators(std::string &path)
+{
+    while (path.size() > 1 && is_path_separator(path.back())) {
+#ifdef _WIN32
+        if (path.size() == 3 && path[1] == ':') {
+            break;
+        }
+#endif
+        path.pop_back();
+    }
+}
+
 // True when the path already ends in .cty, ignoring case.
 inline bool path_has_cty_suffix(const std::string &path)
 {
@@ -40,7 +71,7 @@ inline std::string with_cty_suffix(const std::string &path)
 inline std::string proposed_city_filename(const std::string &city_name, const std::string &current_path)
 {
     if (!current_path.empty()) {
-        const auto slash = current_path.find_last_of('/');
+        const auto slash = current_path.find_last_of(kPathSeparators);
         std::string base = slash == std::string::npos ? current_path : current_path.substr(slash + 1);
         if (!base.empty() && base != "." && base != "..") {
             if (!path_has_cty_suffix(base)) {
@@ -116,9 +147,7 @@ inline std::string remembered_city_folder()
     while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
         line.pop_back();
     }
-    while (line.size() > 1 && line.back() == '/') {
-        line.pop_back();
-    }
+    strip_trailing_separators(line);
     if (line.empty() || !path_is_absolute(line) || line.find("/xfce") != std::string::npos) {
         return {};
     }
@@ -139,15 +168,22 @@ inline void remember_city_folder(const std::string &path)
     std::string folder = path;
     std::error_code ec;
     if (!std::filesystem::is_directory(folder, ec)) {
-        const auto slash = folder.find_last_of('/');
+        const auto slash = folder.find_last_of(kPathSeparators);
         if (slash == std::string::npos) {
             return;
         }
-        folder = slash == 0 ? std::string("/") : folder.substr(0, slash);
+        if (slash == 0) {
+            folder = folder.substr(0, 1);
+#ifdef _WIN32
+        } else if (slash == 2 && folder[1] == ':') {
+            // "C:\city.cty" lives in the drive root, not in "C:".
+            folder.resize(3);
+#endif
+        } else {
+            folder = folder.substr(0, slash);
+        }
     }
-    while (folder.size() > 1 && folder.back() == '/') {
-        folder.pop_back();
-    }
+    strip_trailing_separators(folder);
     if (folder.empty() || !path_is_absolute(folder) || folder.find("/xfce") != std::string::npos) {
         return;
     }
