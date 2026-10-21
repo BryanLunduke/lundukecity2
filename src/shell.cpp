@@ -221,8 +221,9 @@ int Shell::run(int argc, char **argv)
     if (!init_video()) {
         return 1;
     }
-    // Pause before the first city exists, matching the gtkmm shell. Setting
-    // speed 0 afterwards would mark the untouched city as unsaved work.
+    // Pause before the first city exists, matching the gtkmm shell. The
+    // generated city starts in January 1900. Starting the clock afterwards
+    // is a preference, not an edit, same as New City.
     session_.set_speed(0);
     speed_ = 0;
     session_.new_city("New City");

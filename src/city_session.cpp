@@ -647,13 +647,19 @@ void CitySession::new_city(const NewCitySpec &spec)
     dirty_ = false;
     mark_clean_time();
     fresh_generated_ = true;
-    birth_month_ = static_cast<int>(sim.cityMonth);
-    if (birth_month_ < 0 || birth_month_ > 11) {
-        birth_month_ = 0;
-    }
+    // simInit() leaves cityTime at 50, which is January 1901. generateSomeCity()
+    // sets cityTime back to 0. Refresh the calendar from that counter so the
+    // birth month cannot stay on the pre-generation date.
+    sim.updateDate();
     {
-        const long year = static_cast<long>(sim.cityYear);
-        birth_year_ = static_cast<int>(year > 0 ? year : sim.startingYear);
+        const Quad time = sim.cityTime < 0 ? static_cast<Quad>(0) : sim.cityTime;
+        int month = static_cast<int>((time % 48) >> 2);
+        if (month < 0 || month > 11) {
+            month = 0;
+        }
+        birth_month_ = month;
+        const int year = static_cast<int>(time / 48) + static_cast<int>(sim.startingYear);
+        birth_year_ = year > 0 ? year : static_cast<int>(sim.startingYear);
     }
     eval_month_ = -1;
     eval_month_pending_ = false;
@@ -979,7 +985,13 @@ void CitySession::set_speed(int speed)
     speed_ = speed;
     if (ready_) {
         engine_->sim.setSpeed(static_cast<short>(speed_));
-        dirty_ = true;
+        // Speed is a preference, stored with the window, not in the city.
+        // The launch city is created paused and then started; that is the
+        // same as New City, which is created while the clock is already
+        // running. A saved, loaded, or scenario city still counts it.
+        if (!fresh_generated_) {
+            dirty_ = true;
+        }
     }
 }
 

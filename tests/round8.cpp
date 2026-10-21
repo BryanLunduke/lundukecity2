@@ -164,6 +164,50 @@ int main()
         }
     }
 
+    // Launch pauses, creates "New City" with the clock seed, then the player
+    // or a saved preference starts the clock. That is not an edit, and the
+    // calendar is January 1900 rather than the January 1901 simInit leaves
+    // behind. A saved city still treats a speed change as unsaved work.
+    {
+        CitySession launched;
+        launched.set_speed(0);
+        launched.new_city("New City");
+        if (launched.date_text() != "Jan 1900") {
+            std::cerr << launched.date_text() << "\n";
+            return fail(28, "the startup city is not January 1900");
+        }
+        launched.set_speed(3);
+        if (launched.needs_save_prompt()) {
+            return fail(29, "starting the clock on a new city asks to save");
+        }
+        const std::string born = launched.date_text();
+        for (int i = 0; i < 30; ++i) {
+            launched.tick();
+        }
+        if (launched.date_text() != born) {
+            std::cerr << born << " -> " << launched.date_text() << "\n";
+            return fail(30, "the startup city's first month ended too soon");
+        }
+        if (launched.needs_save_prompt()) {
+            return fail(31, "the startup city asks to save inside its first month");
+        }
+        launched.set_tax(9);
+        if (!launched.needs_save_prompt()) {
+            return fail(32, "editing the startup city did not ask to save");
+        }
+    }
+    {
+        CitySession saved;
+        saved.new_city("New City", 4);
+        if (!saved.save_city_as(city)) {
+            return fail(33, "could not save before the speed check");
+        }
+        saved.set_speed(3);
+        if (!saved.needs_save_prompt()) {
+            return fail(34, "changing speed on a saved city did not ask to save");
+        }
+    }
+
     // C-5's historyInitialized fix is a default member initialiser; the
     // UBSan build of this suite is what checks it (no invalid bool loads).
 
