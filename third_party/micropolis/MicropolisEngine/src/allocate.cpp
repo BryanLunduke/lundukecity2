@@ -93,6 +93,30 @@ void Micropolis::initMapArrays()
     pollutionHist = (short *)newPtr(HISTORY_LENGTH);
     crimeHist = (short *)newPtr(HISTORY_LENGTH);
     miscHist = (short *)newPtr(MISC_HISTORY_LENGTH);
+
+    // newPtr is malloc. initGraphMax reads these before any city is generated,
+    // so an unzeroed buffer scaled the graphs from leftover heap bytes.
+    if (resHist != NULL) {
+        memset(resHist, 0, HISTORY_LENGTH);
+    }
+    if (comHist != NULL) {
+        memset(comHist, 0, HISTORY_LENGTH);
+    }
+    if (indHist != NULL) {
+        memset(indHist, 0, HISTORY_LENGTH);
+    }
+    if (moneyHist != NULL) {
+        memset(moneyHist, 0, HISTORY_LENGTH);
+    }
+    if (pollutionHist != NULL) {
+        memset(pollutionHist, 0, HISTORY_LENGTH);
+    }
+    if (crimeHist != NULL) {
+        memset(crimeHist, 0, HISTORY_LENGTH);
+    }
+    if (miscHist != NULL) {
+        memset(miscHist, 0, MISC_HISTORY_LENGTH);
+    }
 }
 
 

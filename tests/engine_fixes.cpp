@@ -220,6 +220,20 @@ int lunduke_city_test_message_sound()
     return 0;
 }
 
+int lunduke_city_test_history_starts_clear()
+{
+    Micropolis sim;
+    const int misc_last = (MISC_HISTORY_LENGTH / 2) - 1;
+    if (sim.resHist == nullptr || sim.comHist == nullptr || sim.indHist == nullptr || sim.moneyHist == nullptr ||
+        sim.pollutionHist == nullptr || sim.crimeHist == nullptr || sim.miscHist == nullptr || sim.graph10Max != 0 ||
+        sim.resHist[0] != 0 || sim.resHist[118] != 0 || sim.resHist[238] != 0 || sim.comHist[238] != 0 ||
+        sim.indHist[238] != 0 || sim.moneyHist[0] != 0 || sim.pollutionHist[0] != 0 || sim.crimeHist[0] != 0 ||
+        sim.miscHist[0] != 0 || sim.miscHist[misc_last] != 0) {
+        return fail(12, "history buffers were not zero before initGraphMax");
+    }
+    return 0;
+}
+
 int main()
 {
     if (const int code = lunduke_city_test_vote_problems()) {
@@ -232,6 +246,9 @@ int main()
         return code;
     }
     if (const int code = lunduke_city_test_message_sound()) {
+        return code;
+    }
+    if (const int code = lunduke_city_test_history_starts_clear()) {
         return code;
     }
     return 0;
