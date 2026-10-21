@@ -10,6 +10,7 @@
 #include "notice_bar.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
+#include "text_paint.hpp"
 #include "tile_atlas.hpp"
 #include "tools.hpp"
 #include "version.hpp"
@@ -549,6 +550,11 @@ void Shell::bind_session()
 void Shell::shutdown()
 {
     save_window_settings();
+    release_text_cache();
+    if (frame_surface_ != nullptr) {
+        cairo_surface_destroy(frame_surface_);
+        frame_surface_ = nullptr;
+    }
     if (pad_ != nullptr) {
         SDL_CloseGamepad(pad_);
         pad_ = nullptr;
@@ -568,6 +574,39 @@ void Shell::shutdown()
     SDL_Quit();
 }
 
+std::string Shell::visual_stamp() const
+{
+    const auto now = std::chrono::steady_clock::now();
+    const bool hint_visible = !shown_message_.empty() && hint_until_ > now;
+    std::ostringstream out;
+    out << win_w_ << 'x' << win_h_ << ' ' << ui_scale_ << ' ' << static_cast<int>(dialog_) << ' ' << new_page_ << ' '
+        << list_index_ << ' ' << list_scroll_ << ' ' << scenario_index_ << ' ' << focus_id_ << ' ' << hover_id_ << ' '
+        << menu_.open_menu << ' ' << menu_.cursor << ' ' << menu_.recent_open << ' ' << menu_.recent_cursor << ' '
+        << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
+        << speed_ << ' ' << session_.map_serial() << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
+        << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
+        << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_ << ' ' << shown_message_ << ' '
+        << hint_visible << ' ' << query_pinned_ << ' ' << gamepad_nav_ << ' ' << cursor_x_ << ' ' << cursor_y_ << ' '
+        << pointer_x_ << ' ' << pointer_y_ << ' ' << field_a_ << ' ' << field_b_ << ' ' << dialog_error_ << ' '
+        << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
+        << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
+        << static_cast<int>(files_.size());
+    return out.str();
+}
+
+redraw::Reasons Shell::redraw_reasons() const
+{
+    redraw::Reasons reasons;
+    reasons.forced = !presented_ || ui_test_ || smoke_ || !demo_.empty() || !shot_path_.empty();
+    reasons.sim_running = speed_ > 0 && !dialog_pauses();
+    reasons.quake = quake_strength_ > 0;
+    reasons.navigating = pointer_down_ || pad_dragging_ || std::fabs(stick_x_) > 0.05f || std::fabs(stick_y_) > 0.05f ||
+                         std::fabs(pan_x_) > 0.05f || std::fabs(pan_y_) > 0.05f;
+    reasons.blink = blink_drew_;
+    reasons.stamp_changed = visual_stamp() != visual_stamp_;
+    return reasons;
+}
+
 void Shell::loop()
 {
     bool running = true;
@@ -580,7 +619,39 @@ void Shell::loop()
             std::_Exit(0);
         }
 #endif
+        const bool spin = ui_test_ || smoke_ || review_ || !demo_.empty() || !shot_path_.empty();
+        const bool animate = (speed_ > 0 && !dialog_pauses()) || quake_strength_ > 0 || pad_dragging_ || pointer_down_ ||
+                             std::fabs(stick_x_) > 0.05f || std::fabs(stick_y_) > 0.05f || std::fabs(pan_x_) > 0.05f ||
+                             std::fabs(pan_y_) > 0.05f;
         SDL_Event event;
+        // A paused city waits for input. WaitEventTimeout sleeps the thread;
+        // a NULL event would drop the input, so the event is handled here.
+        if (!spin && presented_ && !animate) {
+            int timeout = 500;
+            const auto now_wait = std::chrono::steady_clock::now();
+            if (hint_until_ > now_wait) {
+                const int ms = static_cast<int>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(hint_until_ - now_wait).count());
+                timeout = std::max(1, std::min(timeout, ms));
+            }
+            if (next_autosave_ <= now_wait) {
+                timeout = 1;
+            } else {
+                const int ms = static_cast<int>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(next_autosave_ - now_wait).count());
+                timeout = std::max(1, std::min(timeout, ms));
+            }
+            if (dialog_ == Dialog::FileWait) {
+                timeout = std::min(timeout, 30);
+            }
+            if (SDL_WaitEventTimeout(&event, timeout)) {
+                if (event.type == SDL_EVENT_QUIT) {
+                    request_with_save(AfterSave::Quit);
+                } else {
+                    handle_event(event);
+                }
+            }
+        }
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT) {
                 request_with_save(AfterSave::Quit);
@@ -593,12 +664,14 @@ void Shell::loop()
         if (elapsed < 0) {
             elapsed = 0;
         }
-        if (elapsed > 100) {
-            elapsed = 100;
+        if (elapsed > 2000) {
+            elapsed = 2000;
         }
         last = now;
-        sim_acc += elapsed;
-        map_.tick(elapsed);
+        // Simulation does not fast-forward through a long idle sleep. The
+        // blink clock does, or a paused city would flash late.
+        sim_acc += std::min(elapsed, 100);
+        blink_drew_ = map_.tick(elapsed);
         if (zoom_cool_ > 0) {
             zoom_cool_ -= elapsed;
         }
@@ -847,7 +920,7 @@ void Shell::loop()
         if (!demo_.empty() && frame_ >= 3) {
             quitting_ = true;
         }
-        if (headless_ || deck_) {
+        if (headless_ && (spin || animate)) {
             SDL_Delay(1);
         }
     }

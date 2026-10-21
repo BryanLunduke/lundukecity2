@@ -11,6 +11,7 @@
 #include "map_view.hpp"
 #include "menu_model.hpp"
 #include "overlay_map.hpp"
+#include "redraw.hpp"
 #include "side_widgets.hpp"
 #include "sound_player.hpp"
 #include "tool_palette.hpp"
@@ -155,6 +156,8 @@ private:
     void load_window_settings();
     void save_window_settings();
     void note_window_geometry();
+    std::string visual_stamp() const;
+    redraw::Reasons redraw_reasons() const;
     bool attach_test_pad();
     void pump_events();
     void release_pad_drag();
@@ -347,4 +350,11 @@ private:
     bool ran_ok_ = true;
     std::string smoke_error_;
     int frame_ = 0;
+    bool presented_ = false;
+    bool blink_drew_ = false;
+    int redraws_ = 0;
+    int skipped_redraws_ = 0;
+    int surface_builds_ = 0;
+    std::string visual_stamp_;
+    cairo_surface_t *frame_surface_ = nullptr;
 };

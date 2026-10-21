@@ -4,6 +4,7 @@
 
 #include "assets.hpp"
 #include "list_scroll.hpp"
+#include "redraw.hpp"
 #include "ui_scale.hpp"
 #include "window_fit.hpp"
 
@@ -122,6 +123,17 @@ int main()
     if (!parsed.has_geometry || parsed.x != 40 || parsed.y != 50 || parsed.w != 1280 || parsed.h != 800 || !parsed.maximized ||
         std::abs(parsed.user_scale - 1.5f) > 0.001f) {
         return fail("settings did not round-trip");
+    }
+    redraw::Reasons idle;
+    if (redraw::needed(idle)) {
+        return fail("idle frame should not redraw");
+    }
+    redraw::Reasons running;
+    running.sim_running = true;
+    redraw::Reasons blink;
+    blink.blink = true;
+    if (!redraw::needed(running) || !redraw::needed(blink)) {
+        return fail("simulation and blink frames should redraw");
     }
     const ui_scale::StoredSettings unknown = ui_scale::settings_parse("not_a_window=1\nui_scale=0\n");
     if (unknown.has_geometry || unknown.user_scale != 0.0f) {

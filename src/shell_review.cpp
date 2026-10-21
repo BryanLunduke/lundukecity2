@@ -5,6 +5,8 @@
 #include "shell_state.hpp"
 
 #include "list_scroll.hpp"
+#include "redraw.hpp"
+#include "text_paint.hpp"
 #include "tile_atlas.hpp"
 #include "ui_scale.hpp"
 
@@ -136,6 +138,31 @@ void Shell::run_review_checks()
     const ui_scale::Placement desktop = ui_scale::fit_default_window(1280, 800, 0, 0, 1920, 1080);
     if (desktop.w < 1280 || desktop.h < 800) {
         fail("a 1080p display should not shrink the classic window");
+        return;
+    }
+
+    // H6: a paused city reuses its frame and does not repaint when nothing changed.
+    if (skipped_redraws_ < 1) {
+        fail("paused city repainted every frame (" + std::to_string(redraws_) + " draws)");
+        return;
+    }
+    if (surface_builds_ != 1) {
+        fail("cairo surface was rebuilt for an unchanged window");
+        return;
+    }
+    if (text_cache_entries() < 1) {
+        fail("text layouts were not cached");
+        return;
+    }
+    redraw::Reasons idle;
+    if (redraw::needed(idle)) {
+        fail("an idle frame asked for a redraw");
+        return;
+    }
+    redraw::Reasons running;
+    running.sim_running = true;
+    if (!redraw::needed(running)) {
+        fail("a running simulation did not ask for a redraw");
         return;
     }
 }

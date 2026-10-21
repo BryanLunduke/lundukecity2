@@ -27,18 +27,19 @@ MapView::~MapView()
     }
 }
 
-void MapView::tick(int elapsed_ms)
+bool MapView::tick(int elapsed_ms)
 {
     if (!active_) {
-        return;
+        return false;
     }
     blink_ms_ += elapsed_ms;
     if (blink_ms_ < 500) {
-        return;
+        return false;
     }
     blink_ms_ = 0;
     blink_on_ = !blink_on_;
     sync();
+    return last_sync_blits_ > 0;
 }
 
 void MapView::invalidate_all()

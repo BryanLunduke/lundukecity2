@@ -9,6 +9,7 @@
 #include "list_scroll.hpp"
 #include "notice_bar.hpp"
 #include "osk_layout.hpp"
+#include "redraw.hpp"
 #include "text_paint.hpp"
 #include "theme.hpp"
 #include "tools.hpp"
@@ -938,8 +939,21 @@ void Shell::render()
 {
     layout();
     clamp_scroll();
-    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, win_w_, win_h_);
-    cairo_t *context = cairo_create(surface);
+    if (!redraw::needed(redraw_reasons())) {
+        ++skipped_redraws_;
+        blink_drew_ = false;
+        return;
+    }
+    blink_drew_ = false;
+    if (frame_surface_ == nullptr || cairo_image_surface_get_width(frame_surface_) != win_w_ ||
+        cairo_image_surface_get_height(frame_surface_) != win_h_) {
+        if (frame_surface_ != nullptr) {
+            cairo_surface_destroy(frame_surface_);
+        }
+        frame_surface_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, std::max(1, win_w_), std::max(1, win_h_));
+        ++surface_builds_;
+    }
+    cairo_t *context = cairo_create(frame_surface_);
     next_hot_.clear();
     next_focus_.clear();
     next_sliders_.clear();
@@ -954,10 +968,10 @@ void Shell::render()
         SDL_StopTextInput(window_);
         text_input_on_ = false;
     }
-    cairo_surface_flush(surface);
-    note_ui_frame(surface);
+    cairo_surface_flush(frame_surface_);
+    note_ui_frame(frame_surface_);
     if (!shot_path_.empty()) {
-        cairo_surface_write_to_png(surface, shot_path_.c_str());
+        cairo_surface_write_to_png(frame_surface_, shot_path_.c_str());
     }
     if (texture_ == nullptr || tex_w_ != win_w_ || tex_h_ != win_h_) {
         if (texture_ != nullptr) {
@@ -971,12 +985,14 @@ void Shell::render()
         }
     }
     if (texture_ != nullptr) {
-        SDL_UpdateTexture(texture_, nullptr, cairo_image_surface_get_data(surface),
-                          cairo_image_surface_get_stride(surface));
+        SDL_UpdateTexture(texture_, nullptr, cairo_image_surface_get_data(frame_surface_),
+                          cairo_image_surface_get_stride(frame_surface_));
         SDL_RenderClear(renderer_);
         SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
         SDL_RenderPresent(renderer_);
     }
     cairo_destroy(context);
-    cairo_surface_destroy(surface);
+    visual_stamp_ = visual_stamp();
+    presented_ = true;
+    ++redraws_;
 }

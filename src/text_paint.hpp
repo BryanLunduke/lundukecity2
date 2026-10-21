@@ -9,46 +9,97 @@
 #include <pango/pangocairo.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <string>
+#include <vector>
 
 struct TextMetrics {
     int width = 0;
     int height = 0;
 };
 
-inline TextMetrics measure_text(cairo_t *cr, const char *font, const std::string &text, int wrap_width)
+struct TextCacheEntry {
+    std::string font;
+    std::string text;
+    int wrap = -1;
+    PangoLayout *layout = nullptr;
+};
+
+inline std::vector<TextCacheEntry> &text_cache()
 {
-    TextMetrics metrics;
-    PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *desc = pango_font_description_from_string(font);
+    static std::vector<TextCacheEntry> cache;
+    return cache;
+}
+
+inline int text_cache_entries()
+{
+    return static_cast<int>(text_cache().size());
+}
+
+inline void release_text_cache()
+{
+    for (TextCacheEntry &entry : text_cache()) {
+        if (entry.layout != nullptr) {
+            g_object_unref(entry.layout);
+            entry.layout = nullptr;
+        }
+    }
+    text_cache().clear();
+}
+
+// Layouts are reused across frames. A paused city otherwise built thousands
+// of PangoLayouts a second.
+inline PangoLayout *cached_layout(cairo_t *cr, const char *font, const std::string &text, int wrap_width)
+{
+    const char *face = font != nullptr ? font : "";
+    for (TextCacheEntry &entry : text_cache()) {
+        if (entry.wrap == wrap_width && entry.font == face && entry.text == text && entry.layout != nullptr) {
+            pango_cairo_update_layout(cr, entry.layout);
+            return entry.layout;
+        }
+    }
+    auto &cache = text_cache();
+    if (cache.size() >= 512) {
+        const std::size_t drop = cache.size() / 2;
+        for (std::size_t i = 0; i < drop; ++i) {
+            if (cache[i].layout != nullptr) {
+                g_object_unref(cache[i].layout);
+            }
+        }
+        cache.erase(cache.begin(), cache.begin() + static_cast<std::ptrdiff_t>(drop));
+    }
+    PangoFontMap *map = pango_cairo_font_map_get_default();
+    PangoContext *context = pango_font_map_create_context(map);
+    PangoLayout *layout = pango_layout_new(context);
+    g_object_unref(context);
+    PangoFontDescription *desc = pango_font_description_from_string(face);
     pango_layout_set_font_description(layout, desc);
+    pango_font_description_free(desc);
     if (wrap_width > 0) {
         pango_layout_set_width(layout, wrap_width * PANGO_SCALE);
         pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
     }
     pango_layout_set_text(layout, text.c_str(), -1);
+    pango_cairo_update_layout(cr, layout);
+    cache.push_back(TextCacheEntry{face, text, wrap_width, layout});
+    return layout;
+}
+
+inline TextMetrics measure_text(cairo_t *cr, const char *font, const std::string &text, int wrap_width)
+{
+    TextMetrics metrics;
+    PangoLayout *layout = cached_layout(cr, font, text, wrap_width);
     pango_layout_get_pixel_size(layout, &metrics.width, &metrics.height);
-    pango_font_description_free(desc);
-    g_object_unref(layout);
     return metrics;
 }
 
 inline void paint_text(cairo_t *cr, const char *font, const std::string &text, double x, double y, double r,
                        double g, double b, int wrap_width)
 {
-    PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *desc = pango_font_description_from_string(font);
-    pango_layout_set_font_description(layout, desc);
-    if (wrap_width > 0) {
-        pango_layout_set_width(layout, wrap_width * PANGO_SCALE);
-        pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
-    }
-    pango_layout_set_text(layout, text.c_str(), -1);
+    PangoLayout *layout = cached_layout(cr, font, text, wrap_width);
     cairo_set_source_rgb(cr, r, g, b);
     cairo_move_to(cr, x, y);
     pango_cairo_show_layout(cr, layout);
-    pango_font_description_free(desc);
-    g_object_unref(layout);
 }
 
 // Draws a menu label. When show_underline is set, the mnemonic letter is

@@ -44,8 +44,9 @@ public:
     void set_active(bool active) { active_ = active; }
     bool active() const { return active_; }
 
-    // Advance the unpowered-zone blink. Call from the frame loop.
-    void tick(int elapsed_ms);
+    // Advance the unpowered-zone blink. Returns true when the blink actually
+    // changed a tile, so a paused city with nothing to flash can stay idle.
+    bool tick(int elapsed_ms);
 
     void draw(cairo_t *cr);
 
