@@ -8,6 +8,7 @@
 #include "text_edit.hpp"
 #include "list_scroll.hpp"
 #include "redraw.hpp"
+#include "sound_player.hpp"
 #include "ui_scale.hpp"
 #include "window_fit.hpp"
 
@@ -169,6 +170,10 @@ int main()
     field_insert(word, caret, anchor, "Z", 64);
     if (word != "Z" || caret != 1) {
         return fail("typing did not replace the selection");
+    }
+    if (audio_queue_limit_bytes(22050, 1, 2, 50) != 2205 || audio_bytes_to_write(0, 2205, 80000) != 2205 ||
+        audio_bytes_to_write(2205, 2205, 800) != 0 || audio_bytes_to_write(2000, 2205, 800) != 205) {
+        return fail("audio streams are not paced to 50 ms");
     }
     if (!text_has_path_separator("a/b") || text_has_path_separator("ab")) {
         return fail("path separator check");

@@ -549,6 +549,8 @@ void Shell::bind_session()
 
 void Shell::shutdown()
 {
+    // The mixer thread uses SDL audio. Join it before SDL_Quit.
+    sound_.shutdown();
     save_window_settings();
     release_text_cache();
     if (frame_surface_ != nullptr) {
