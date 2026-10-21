@@ -947,16 +947,9 @@ void Micropolis::collectTax()
         }
     }
 
-    // Gift income is its own payment. It is not folded into cashFlow, which
-    // stays tax minus the three departments. An empty city still collects it.
+    // Special buildings do not pay income. The table still has an
+    // annual_income column so a later building can define one.
     specialIncome = 0;
-    if (specialIncomeFn != NULL) {
-        const int income = specialIncomeFn(this);
-        if (income > 0) {
-            specialIncome = income;
-            spend(-income);
-        }
-    }
 }
 
 

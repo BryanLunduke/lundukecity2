@@ -2,8 +2,9 @@
 // Copyright (C) 2026 The Lunduke City authors
 // See COPYING and NOTICE.
 
-// Placement, cost, land value, annual income, save/load, query, bulldoze,
-// and fire for the special-building table.
+// Placement, cost, land value, save/load, query, bulldoze, fire, water,
+// and leftover tiles for the special-building table. Income stays in the
+// table and is zero for the buildings that ship today.
 
 #include "city_session.hpp"
 #include "special_buildings.hpp"
@@ -44,8 +45,8 @@ int main()
         return fail(1, "the table should start with zoo, big park, and library");
     }
     if (std::string(special_building(0).name) != "Zoo" || special_building(0).cost != 100 ||
-        special_building(0).annual_income != 100 || std::string(special_building(1).name) != "Big Park" ||
-        special_building(1).annual_income != 0 || special_building(2).annual_income != 100) {
+        special_building(0).annual_income != 0 || std::string(special_building(1).name) != "Big Park" ||
+        special_building(1).annual_income != 0 || special_building(2).annual_income != 0) {
         return fail(2, "special building costs or incomes do not match the table");
     }
     const ToolFootprint footprint = tool_footprint(kSpecialEngineId);
@@ -63,7 +64,6 @@ int main()
     sim.setFunds(5000);
     sim.autoBulldoze = true;
     sim.totalPop = 0;
-    sim.specialIncomeFn = special_annual_income;
     sim.specialLandFn = boost_special_land_value;
 
     std::string error;
@@ -89,8 +89,8 @@ int main()
         (sim.map[9][9] & LOMASK) != kSpecialBodyTile || (sim.map[11][11] & (BURNBIT | BULLBIT)) == 0) {
         return fail(10, "the zoo footprint is not a center plus eight body tiles");
     }
-    if (!special_building_intact(&sim, 10, 10) || special_annual_income(&sim) != 200) {
-        return fail(11, "intact zoo and library should pay $200, and the park pays nothing");
+    if (!special_building_intact(&sim, 10, 10) || special_annual_income(&sim) != 0) {
+        return fail(11, "intact special buildings should not pay income");
     }
     // The published effect is "raises land value" with no magnitude. The
     // engine adds the table bonus once per land-value scan, only on cells
@@ -151,7 +151,8 @@ int main()
         return fail(38, "a land-value scan did not add the zoo bonus once");
     }
     const std::string query = special_query_at(&sim, 9, 11);
-    if (query.find("Zoo") == std::string::npos || query.find("$100") == std::string::npos) {
+    if (query.find("Zoo") == std::string::npos || query.find("$100") == std::string::npos ||
+        query.find("year") != std::string::npos) {
         std::fprintf(stderr, "query '%s'\n", query.c_str());
         return fail(12, "query on a zoo tile did not name it");
     }
@@ -159,15 +160,17 @@ int main()
     const long before_tax = static_cast<long>(sim.totalFunds);
     sim.taxFlag = false;
     sim.collectTax();
-    if (sim.specialIncome != 200 || static_cast<long>(sim.totalFunds) != before_tax + 200 || sim.cashFlow != 0) {
+    // An empty city has no tax cash flow. Special buildings used to add
+    // their income on top of that. They no longer pay anything.
+    if (sim.specialIncome != 0 || static_cast<long>(sim.totalFunds) != before_tax || sim.cashFlow != 0) {
         std::fprintf(stderr, "income %ld funds %ld cash %ld\n", static_cast<long>(sim.specialIncome),
                      static_cast<long>(sim.totalFunds), static_cast<long>(sim.cashFlow));
-        return fail(13, "January did not pay the special buildings without changing cash flow");
+        return fail(13, "January paid special-building income");
     }
 
     sim.map[31][10] = DIRT;
-    if (special_building_intact(&sim, 30, 10) || special_annual_income(&sim) != 100) {
-        return fail(14, "a damaged library still paid out");
+    if (special_building_intact(&sim, 30, 10) || special_annual_income(&sim) != 0) {
+        return fail(14, "a damaged library changed the income total");
     }
     const std::string damaged = special_query_at(&sim, 30, 10);
     if (damaged.find("Library") == std::string::npos || damaged.find("Damaged") == std::string::npos) {
@@ -371,6 +374,81 @@ int main()
     }
     if (!found) {
         return fail(35, "the loaded city lost the zoo");
+    }
+
+    Micropolis wet;
+    wet.generateSomeCity(17);
+    fill_dirt(wet);
+    wet.setFunds(500);
+    wet.autoBulldoze = true;
+    wet.map[20][20] = RIVER;
+    if (place_special_building(&wet, 0, 20, 20, error) || error != "Can't build on water.") {
+        std::fprintf(stderr, "water '%s'\n", error.c_str());
+        return fail(39, "building on a river did not say it can't build on water");
+    }
+    if ((wet.map[20][20] & LOMASK) != RIVER) {
+        return fail(39, "a refused water placement changed the river");
+    }
+    wet.map[20][20] = DIRT;
+    wet.map[24][20] = FLOOD;
+    if (place_special_building(&wet, 0, 24, 20, error) || error != "Can't build on water.") {
+        std::fprintf(stderr, "flood '%s'\n", error.c_str());
+        return fail(39, "building on a flood did not say it can't build on water");
+    }
+    wet.map[28][20] = ROADBASE;
+    if (place_special_building(&wet, 0, 28, 20, error) || error != "Bulldoze that area first.") {
+        std::fprintf(stderr, "road '%s'\n", error.c_str());
+        return fail(40, "building on a road did not ask for a bulldoze");
+    }
+    wet.map[28][20] = RIVER;
+    wet.map[29][20] = ROADBASE;
+    if (place_special_building(&wet, 0, 28, 20, error) || error != "Bulldoze that area first.") {
+        std::fprintf(stderr, "mixed '%s'\n", error.c_str());
+        return fail(40, "water plus a road should still ask for a bulldoze");
+    }
+
+    // Fire can erase the centre tile and leave the eight body tiles. One
+    // bulldoze clears that footprint for $1 and leaves the next building.
+    Micropolis remnant;
+    remnant.generateSomeCity(21);
+    fill_dirt(remnant);
+    remnant.setFunds(1000);
+    remnant.autoBulldoze = true;
+    if (!place_special_building(&remnant, 0, 10, 10, error) || !place_special_building(&remnant, 2, 14, 10, error)) {
+        return fail(41, "could not place a zoo beside a library");
+    }
+    remnant.map[10][10] = FIRE;
+    const long before_remnant = static_cast<long>(remnant.totalFunds);
+    if (!bulldoze_special_at(&remnant, 9, 9) || static_cast<long>(remnant.totalFunds) != before_remnant - 1) {
+        return fail(42, "bulldozing one leftover tile did not clear the footprint for $1");
+    }
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (!is_rubble(remnant.map[10 + dx][10 + dy])) {
+                return fail(43, "a leftover bulldoze left part of the zoo standing");
+            }
+        }
+    }
+    if (!special_building_intact(&remnant, 14, 10)) {
+        return fail(44, "clearing the burned zoo also removed the library");
+    }
+    if (!place_special_building(&remnant, 0, 30, 30, error)) {
+        return fail(45, "could not place a zoo whose centre will burn");
+    }
+    remnant.map[30][30] = FIRE;
+    const long before_centre = static_cast<long>(remnant.totalFunds);
+    if (!bulldoze_special_at(&remnant, 30, 30) || static_cast<long>(remnant.totalFunds) != before_centre - 1) {
+        return fail(46, "bulldozing the burned centre did not clear the footprint for $1");
+    }
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (!is_rubble(remnant.map[30 + dx][30 + dy])) {
+                return fail(47, "the burned centre's footprint was not all cleared");
+            }
+        }
+    }
+    if (!special_building_intact(&remnant, 14, 10)) {
+        return fail(48, "clearing a burned centre removed the neighbouring library");
     }
 
     return 0;

@@ -18,13 +18,13 @@ namespace {
 
 // Sources for the numbers are written up in the pull request. In short:
 // every gift costs $100 and occupies 3x3 (FatRatKnight's SNES gift FAQ,
-// GameFAQs 68878; the fandom SNES page agrees on the price). Zoo pays
-// $100 a year. Big Park pays nothing. Library pays $100 a year. All three
-// raise nearby land value.
+// GameFAQs 68878; the fandom SNES page agrees on the price). All three
+// raise nearby land value. annual_income stays in the table for a later
+// building, and the editor set it to 0 for these three: nothing is paid.
 const SpecialBuilding kBuildings[] = {
-    {1020, "Zoo", "zoo", "zoo", 100, 100, 3, 3, 6, 48, "$100 a year, raises nearby land value"},
+    {1020, "Zoo", "zoo", "zoo", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
     {1021, "Big Park", "bigpark", "big-park", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
-    {1022, "Library", "library", "library", 100, 100, 3, 3, 6, 48, "$100 a year, raises nearby land value"},
+    {1022, "Library", "library", "library", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
 };
 
 bool in_bounds(int x, int y)
@@ -75,6 +75,35 @@ bool auto_clearable(int raw)
     return (raw & BULLBIT) != 0;
 }
 
+bool is_water_tile(int tile)
+{
+    if (tile >= RIVER && tile <= WATER_HIGH) {
+        return true;
+    }
+    return tile >= FLOOD && tile <= LASTFLOOD;
+}
+
+bool live_center_at(const Micropolis *sim, int x, int y)
+{
+    if (!in_bounds(x, y)) {
+        return false;
+    }
+    const int raw = static_cast<int>(sim->map[x][y]);
+    return (raw & ZONEBIT) != 0 && special_index_for_tile(raw & LOMASK) >= 0;
+}
+
+bool remnant_tile(int raw)
+{
+    const int tile = raw & LOMASK;
+    if (tile == kSpecialBodyTile || special_index_for_tile(tile) >= 0) {
+        return true;
+    }
+    if (tile >= FIRE && tile <= LASTFIRE) {
+        return true;
+    }
+    return tile >= RUBBLE && tile <= LASTRUBBLE;
+}
+
 bool find_center(const Micropolis *sim, int x, int y, int &cx, int &cy, int &index)
 {
     for (int dy = -1; dy <= 1; ++dy) {
@@ -103,6 +132,94 @@ bool find_center(const Micropolis *sim, int x, int y, int &cx, int &cy, int &ind
         }
     }
     return false;
+}
+
+bool orphan_body(const Micropolis *sim, int x, int y)
+{
+    if (tile_of(sim, x, y) != kSpecialBodyTile) {
+        return false;
+    }
+    int cx = 0;
+    int cy = 0;
+    int index = -1;
+    return !find_center(sim, x, y, cx, cy, index);
+}
+
+// The 3x3 that still holds the clicked remnant after its centre is gone.
+// A window that contains another building's centre is rejected.
+bool orphan_footprint(const Micropolis *sim, int x, int y, int &left, int &top)
+{
+    int best = -1;
+    int best_center = -1;
+    int best_left = 0;
+    int best_top = 0;
+    for (int cy = y - 1; cy <= y + 1; ++cy) {
+        for (int cx = x - 1; cx <= x + 1; ++cx) {
+            const int l = cx - 1;
+            const int t = cy - 1;
+            if (l < 0 || t < 0 || l + 3 > WORLD_W || t + 3 > WORLD_H) {
+                continue;
+            }
+            if (x < l || x >= l + 3 || y < t || y >= t + 3) {
+                continue;
+            }
+            int bodies = 0;
+            bool foreign = false;
+            for (int dy = 0; dy < 3 && !foreign; ++dy) {
+                for (int dx = 0; dx < 3; ++dx) {
+                    const int sx = l + dx;
+                    const int sy = t + dy;
+                    if (live_center_at(sim, sx, sy)) {
+                        foreign = true;
+                        break;
+                    }
+                    if (tile_of(sim, sx, sy) != kSpecialBodyTile) {
+                        continue;
+                    }
+                    if (!orphan_body(sim, sx, sy)) {
+                        foreign = true;
+                        break;
+                    }
+                    ++bodies;
+                }
+            }
+            if (foreign || bodies < 1) {
+                continue;
+            }
+            const int center_tile = tile_of(sim, cx, cy);
+            int center_score = 0;
+            if ((center_tile >= FIRE && center_tile <= LASTFIRE) || (center_tile >= RUBBLE && center_tile <= LASTRUBBLE) ||
+                special_index_for_tile(center_tile) >= 0) {
+                center_score = 1;
+            }
+            if (bodies > best || (bodies == best && center_score > best_center)) {
+                best = bodies;
+                best_center = center_score;
+                best_left = l;
+                best_top = t;
+            }
+        }
+    }
+    if (best < 1) {
+        return false;
+    }
+    left = best_left;
+    top = best_top;
+    return true;
+}
+
+void clear_remnant(Micropolis *sim, int left, int top)
+{
+    for (int dy = 0; dy < 3; ++dy) {
+        for (int dx = 0; dx < 3; ++dx) {
+            const int x = left + dx;
+            const int y = top + dy;
+            if (!in_bounds(x, y) || !remnant_tile(static_cast<int>(sim->map[x][y]))) {
+                continue;
+            }
+            sim->map[x][y] = static_cast<unsigned short>(RUBBLE | BULLBIT);
+        }
+    }
 }
 
 } // namespace
@@ -220,7 +337,8 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
         error = "That would be off the map.";
         return false;
     }
-    bool needs_bulldoze = false;
+    bool blocked_by_water = false;
+    bool blocked_by_land = false;
     for (int dy = 0; dy < building.height; ++dy) {
         for (int dx = 0; dx < building.width; ++dx) {
             const int raw = static_cast<int>(sim->map[left + dx][top + dy]);
@@ -231,10 +349,18 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
             if (sim->autoBulldoze && auto_clearable(raw)) {
                 continue;
             }
-            needs_bulldoze = true;
+            if (is_water_tile(tile)) {
+                blocked_by_water = true;
+            } else {
+                blocked_by_land = true;
+            }
         }
     }
-    if (needs_bulldoze) {
+    if (blocked_by_water && !blocked_by_land) {
+        error = "Can't build on water.";
+        return false;
+    }
+    if (blocked_by_water || blocked_by_land) {
         error = "Bulldoze that area first.";
         return false;
     }
@@ -263,22 +389,43 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y)
     int cx = 0;
     int cy = 0;
     int index = -1;
-    if (!find_center(sim, tile_x, tile_y, cx, cy, index)) {
+    if (find_center(sim, tile_x, tile_y, cx, cy, index)) {
+        if (sim->totalFunds < 1) {
+            return false;
+        }
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int x = cx + dx;
+                const int y = cy + dy;
+                if (!in_bounds(x, y)) {
+                    continue;
+                }
+                sim->map[x][y] = static_cast<unsigned short>(RUBBLE | BULLBIT);
+            }
+        }
+        sim->spend(1);
+        sim->invalidateMaps();
+        return true;
+    }
+    // The centre tile can burn away first and leave the other eight standing.
+    // Bulldozing any of those leftovers, or the burned centre, clears the rest.
+    const int clicked = tile_of(sim, tile_x, tile_y);
+    const bool burned = (clicked >= FIRE && clicked <= LASTFIRE) || (clicked >= RUBBLE && clicked <= LASTRUBBLE);
+    if (!orphan_body(sim, tile_x, tile_y) && !burned) {
+        return false;
+    }
+    int left = 0;
+    int top = 0;
+    if (!orphan_footprint(sim, tile_x, tile_y, left, top)) {
+        return false;
+    }
+    if (burned && (tile_x != left + 1 || tile_y != top + 1)) {
         return false;
     }
     if (sim->totalFunds < 1) {
         return false;
     }
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
-            const int x = cx + dx;
-            const int y = cy + dy;
-            if (!in_bounds(x, y)) {
-                continue;
-            }
-            sim->map[x][y] = static_cast<unsigned short>(RUBBLE | BULLBIT);
-        }
-    }
+    clear_remnant(sim, left, top);
     sim->spend(1);
     sim->invalidateMaps();
     return true;

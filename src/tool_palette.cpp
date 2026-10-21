@@ -22,8 +22,8 @@ void box(cairo_t *cr, double x, double y, double w, double h, double r, double g
 }
 
 // Original 40px sprites in data/tool-icons. Nearest-neighbor only. The
-// sprite is authored to fill a Deck-size button; icon_pixel_scale grows or
-// shrinks it to the slot so it is not left tiny and not clipped.
+// sprite fills a 40px slot. A larger slot uses a whole multiple of that
+// size, and a smaller slot (UI scale under 1) is the only case that shrinks.
 struct ToolIcons {
     bool tried = false;
     cairo_surface_t *image[17] = {};

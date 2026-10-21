@@ -42,7 +42,7 @@ private:
 class DemandView {
 public:
     void set_session(CitySession *session);
-    void draw(cairo_t *cr, int width, int height) const;
+    void draw(cairo_t *cr, int width, int height, float ui_scale) const;
 
 private:
     CitySession *session_ = nullptr;

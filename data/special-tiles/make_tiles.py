@@ -142,25 +142,38 @@ def big_park(im):
 
 
 def library(im):
+    # Columned hall with a book. The old blue pediment read as a letter F.
     grass(im)
-    rect(im, 6, 36, 36, 6, "D")
-    rect(im, 4, 34, 40, 3, "G")
-    hline(im, 4, 34, 40, "W")
-    rect(im, 8, 18, 32, 16, "W")
-    hline(im, 8, 18, 32, "w")
-    hline(im, 8, 33, 32, "s")
-    for x in (10, 16, 22, 28, 34):
-        rect(im, x, 20, 3, 14, "g")
-        vline(im, x, 20, 14, "W")
-    rect(im, 20, 22, 8, 6, "u")
-    hline(im, 20, 24, 8, "W")
-    rect(im, 22, 28, 4, 6, "T")
-    for i, width in enumerate(range(12, 36, 4)):
-        hline(im, 24 - width // 2, 10 + i, width, "U" if i % 2 == 0 else "b")
-    rect(im, 18, 6, 12, 4, "H")
-    hline(im, 18, 6, 12, "D")
-    rect(im, 22, 4, 4, 2, "Y")
-    tree(im, 0, 20)
+    tree(im, 0, 18)
+    rect(im, 10, 40, 32, 4, "D")
+    rect(im, 8, 37, 34, 4, "G")
+    hline(im, 8, 37, 34, "W")
+    rect(im, 10, 22, 28, 16, "w")
+    hline(im, 10, 22, 28, "W")
+    hline(im, 10, 37, 28, "s")
+    for x in (12, 18, 30, 36):
+        rect(im, x, 23, 3, 14, "W")
+        vline(im, x, 23, 14, "G")
+        vline(im, x + 2, 23, 14, "s")
+    # Open book in the center bay, pages marked, spine in the middle.
+    rect(im, 22, 24, 8, 7, "n")
+    rect(im, 23, 25, 6, 5, "F")
+    vline(im, 26, 25, 5, "U")
+    hline(im, 23, 27, 6, "u")
+    rect(im, 23, 32, 6, 5, "T")
+    vline(im, 23, 32, 5, "t")
+    # Flat lintel and a flat roof of the same width. Not a tapering banner.
+    rect(im, 8, 18, 32, 4, "H")
+    hline(im, 8, 18, 32, "D")
+    hline(im, 8, 21, 32, "t")
+    rect(im, 10, 13, 28, 5, "U")
+    hline(im, 10, 13, 28, "u")
+    hline(im, 10, 17, 28, "b")
+    rect(im, 20, 8, 8, 5, "R")
+    vline(im, 20, 8, 5, "y")
+    hline(im, 21, 9, 6, "W")
+    hline(im, 21, 10, 6, "w")
+    hline(im, 21, 11, 6, "W")
 
 
 def outlined(draw):

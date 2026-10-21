@@ -11,10 +11,9 @@
 
 // Two-by-nine tool grid. Icons are original drawings, not imported artwork.
 
-// Nearest-neighbor scale that fits a square sprite into a slot.
-// An integer multiple is used when it already fills the slot. Otherwise the
-// sprite grows or shrinks to the slot, still with hard pixels, so a 0.5 UI
-// scale is not clipped and a 1.5 scale is not left at the 1x size.
+// Nearest-neighbor scale for a square sprite. A slot smaller than the sprite
+// (UI scale below 1) shrinks to fit. A larger slot uses the biggest whole
+// multiple that fits, so the pixels are not stretched by a fraction.
 inline double icon_pixel_scale(int source, int slot)
 {
     if (source < 1 || slot < 1) {
@@ -23,11 +22,7 @@ inline double icon_pixel_scale(int source, int slot)
     if (slot < source) {
         return static_cast<double>(slot) / static_cast<double>(source);
     }
-    const int integer = slot / source;
-    if (integer * source * 20 >= slot * 17) {
-        return static_cast<double>(integer);
-    }
-    return static_cast<double>(slot) / static_cast<double>(source);
+    return static_cast<double>(std::max(1, slot / source));
 }
 
 // Short name drawn when the sprite file is missing, so the button is not blank.

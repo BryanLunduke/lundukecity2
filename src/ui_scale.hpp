@@ -42,6 +42,13 @@ inline float resolve_ui_scale(float display_scale, float user_override)
 
 inline int scaled_px(int px, float scale);
 
+// Toolbar button size for a window body (the area under the menu and above
+// the status bars). The 40px sprites sit in a slot of cell-8. At UI scale 1
+// and above that slot never drops under 40px, and it only steps up by whole
+// sprite sizes, so a higher scale cannot draw a smaller or fractionally
+// scaled icon.
+inline int toolbar_cell(float scale, int body_px);
+
 // True when the menu, tool column, demand gauges, and status/message bars
 // all sit inside the window at this scale. The numbers match Shell::layout.
 inline bool chrome_fits(float scale, int win_w, int win_h)
@@ -57,20 +64,11 @@ inline bool chrome_fits(float scale, int win_w, int win_h)
     if (body < px(32)) {
         return false;
     }
-    int cell = px(48);
-    const int floor_cell = px(36);
-    const int step = std::max(1, px(4));
     // Nine rows: 17 tools, two columns. This has to match
     // ToolPalette::height_for, which is pad plus rows times the cell.
+    const int cell = toolbar_cell(scale, body);
     auto palette_h = [](int c) { return 8 + 9 * c; };
     auto palette_w = [](int c) { return 8 + 2 * c; };
-    while (cell > floor_cell && palette_h(cell) + px(210) > body) {
-        cell -= step;
-        if (cell < floor_cell) {
-            cell = floor_cell;
-            break;
-        }
-    }
     const int side = palette_w(cell);
     if (px(6) + side + px(8) + px(32) > win_w) {
         return false;
@@ -117,6 +115,54 @@ inline int scaled_px(int px, float scale)
         scale = 1.0f;
     }
     return std::max(1, static_cast<int>(std::lround(static_cast<double>(px) * static_cast<double>(scale))));
+}
+
+inline int toolbar_cell(float scale, int body_px)
+{
+    if (!(scale > 0.0f)) {
+        scale = 1.0f;
+    }
+    auto px = [&](int n) { return scaled_px(n, scale); };
+    constexpr int kSprite = 40;
+    constexpr int kBevel = 8;
+    int cell = px(48);
+    int floor_cell = px(36);
+    if (scale >= 1.0f) {
+        floor_cell = std::max(floor_cell, kSprite + kBevel);
+    }
+    if (cell < floor_cell) {
+        cell = floor_cell;
+    }
+    const int step = std::max(1, px(4));
+    auto palette_h = [](int c) { return 8 + 9 * c; };
+    while (cell > floor_cell && palette_h(cell) + px(210) > body_px) {
+        cell -= step;
+    }
+    if (cell < floor_cell) {
+        cell = floor_cell;
+    }
+    if (scale >= 1.0f) {
+        const int slot = cell - kBevel;
+        if (slot < kSprite) {
+            cell = kSprite + kBevel;
+        } else {
+            const int snapped = (slot / kSprite) * kSprite + kBevel;
+            if (snapped >= floor_cell && snapped <= cell) {
+                cell = snapped;
+            }
+        }
+    }
+    return std::max(1, cell);
+}
+
+// R/C/I letters under the demand meters. They follow the UI scale instead
+// of staying at a fixed pixel size.
+inline double demand_label_px(float scale)
+{
+    if (!(scale > 0.0f)) {
+        scale = 1.0f;
+    }
+    return static_cast<double>(scaled_px(14, scale));
 }
 
 inline std::string scaled_font(const char *family, int points, float scale)

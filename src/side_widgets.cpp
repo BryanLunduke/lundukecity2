@@ -7,10 +7,12 @@
 #include "city_session.hpp"
 #include "map_fit.hpp"
 #include "tile_atlas.hpp"
+#include "ui_scale.hpp"
 
 #include "micropolis.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace {
@@ -220,10 +222,12 @@ void DemandView::set_session(CitySession *session)
     session_ = session;
 }
 
-void DemandView::draw(cairo_t *cr, int width, int height) const
+void DemandView::draw(cairo_t *cr, int width, int height, float ui_scale) const
 {
     const double w = width;
     const double h = height;
+    const float scale = ui_scale > 0.05f ? ui_scale : 1.0f;
+    auto px = [&](double n) { return std::max(1.0, std::round(n * static_cast<double>(scale))); };
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
     fill(cr, 0, 0, w, h, 0xED / 255.0, 0xEC / 255.0, 0xEB / 255.0);
 
@@ -239,10 +243,12 @@ void DemandView::draw(cairo_t *cr, int width, int height) const
     };
     const char *letters[3] = {"R", "C", "I"};
 
-    const double gap = 5;
+    const double gap = px(5);
     const double col_w = (w - gap * 4) / 3.0;
-    const double top = 6;
-    const double meter_h = h - 28;
+    const double top = px(6);
+    const double label_px = ui_scale::demand_label_px(scale);
+    const double label_band = label_px + px(8);
+    const double meter_h = std::max(px(8), h - top - label_band);
     const double mid = top + meter_h / 2.0;
 
     for (int i = 0; i < 3; ++i) {
@@ -271,10 +277,10 @@ void DemandView::draw(cairo_t *cr, int width, int height) const
         const double text_b = i == 2 ? 0.0 : colors[i][2] * 0.75;
         cairo_set_source_rgb(cr, text_r, text_g, text_b);
         cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-        cairo_set_font_size(cr, 14);
+        cairo_set_font_size(cr, label_px);
         cairo_text_extents_t ext;
         cairo_text_extents(cr, letters[i], &ext);
-        cairo_move_to(cr, x + (col_w - ext.width) / 2.0, h - 6);
+        cairo_move_to(cr, x + (col_w - ext.width) / 2.0, top + meter_h + label_px);
         cairo_show_text(cr, letters[i]);
     }
 }

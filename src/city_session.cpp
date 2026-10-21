@@ -399,7 +399,6 @@ CitySession::CitySession()
         self->on_callback(name, params, args);
     };
     engine_->sim.callbackData = this;
-    engine_->sim.specialIncomeFn = special_annual_income;
     engine_->sim.specialLandFn = boost_special_land_value;
     engine_->sim.setEnableSound(sound_enabled_);
 }
@@ -408,7 +407,6 @@ CitySession::~CitySession()
 {
     engine_->sim.callbackHook = nullptr;
     engine_->sim.callbackData = nullptr;
-    engine_->sim.specialIncomeFn = nullptr;
     engine_->sim.specialLandFn = nullptr;
     delete engine_;
 }
@@ -1246,14 +1244,6 @@ CitySession::BudgetBook CitySession::budget() const
     book.police_need = static_cast<std::int64_t>(sim.policeFund);
     book.fire_need = static_cast<std::int64_t>(sim.fireFund);
     book.taxes_known = sim.taxReceiptKnown;
-    const int live_special = special_annual_income(&sim);
-    if (sim.taxReceiptKnown && sim.specialIncome > 0) {
-        book.special_income = static_cast<std::int64_t>(sim.specialIncome);
-        book.special_collected = true;
-    } else {
-        book.special_income = live_special;
-        book.special_collected = false;
-    }
 
     // A new city, a scenario, and a classic file have no January receipt.
     // roadFund stays 0 until collectTax, which is not the same as a

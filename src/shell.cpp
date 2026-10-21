@@ -271,7 +271,7 @@ int Shell::run(int argc, char **argv)
         welcome_gate_ = true;
     }
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
-        demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery") {
+        demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -1143,10 +1143,28 @@ void Shell::loop()
                 special_choice_ = 0;
                 special_cursor_ = 0;
                 special_open_ = true;
+                // Deck hint bar: A selects a building, B closes the list.
+                gamepad_nav_ = true;
+                cursor_x_ = static_cast<float>(view_x_ + view_w_ / 2);
+                cursor_y_ = static_cast<float>(view_y_ + view_h_ / 2);
             } else if (demo_ == "gifts") {
                 demo_place_gifts(false);
             } else if (demo_ == "giftquery") {
                 demo_place_gifts(true);
+            } else if (demo_ == "giftbudget") {
+                demo_place_gifts(false);
+                const auto book = session_.budget();
+                tax_ = book.tax_percent;
+                road_ = book.road_percent;
+                police_ = book.police_percent;
+                fire_ = book.fire_percent;
+                open_tax_ = tax_;
+                open_road_ = road_;
+                open_police_ = police_;
+                open_fire_ = fire_;
+                budget_is_tax_ = false;
+                open_dialog(Dialog::Budget);
+                gamepad_nav_ = true;
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);

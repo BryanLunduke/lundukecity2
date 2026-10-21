@@ -98,10 +98,7 @@ void Shell::layout()
     status_h_ = dp(36);
     message_h_ = dp(44);
     const int body = win_h_ - menu_h_ - status_h_ - message_h_;
-    cell_ = dp(48);
-    while (cell_ > dp(36) && ToolPalette::height_for(cell_) + dp(210) > body) {
-        cell_ -= dp(4);
-    }
+    cell_ = ui_scale::toolbar_cell(ui_scale_, body);
     palette_.set_cell(cell_);
     side_w_ = ToolPalette::width_for(cell_);
     side_x_ = dp(6);
@@ -1080,8 +1077,6 @@ void Shell::draw_dialog(cairo_t *cr)
         const double row1 = std::max(line_height(ui_font(), taxes, col_w), line_height(ui_font(), previous, col_w));
         const double row2 = std::max(line_height(ui_font(), flow, col_w), line_height(ui_font(), funds, col_w));
         const double note_h = copy.closing_note.empty() ? 0.0 : line_height(ui_font(), copy.closing_note, inner) + gap;
-        const double special_h =
-            copy.specials.empty() ? 0.0 : line_height(ui_font(), copy.specials, inner) + gap;
         auto block_h = [&](const std::string &caption, const std::string &value_text, const std::string &detail) {
             const double value_w = static_cast<double>(measure_text(cr, bold_font(), value_text, -1).width);
             const double cap_w = std::max(1.0, inner - value_w - gap);
@@ -1096,8 +1091,7 @@ void Shell::draw_dialog(cairo_t *cr)
                               block_h("Road fund", std::to_string(road_) + "%", copy.road) +
                               block_h("Police fund", std::to_string(police_) + "%", copy.police) +
                               block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
-        const double height =
-            dp(40) + margin + row1 + gap + row2 + gap + special_h + note_h + blocks + dp(8) + dp(36) + margin;
+        const double height = dp(40) + margin + row1 + gap + row2 + gap + note_h + blocks + dp(8) + dp(36) + margin;
         const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
@@ -1117,11 +1111,6 @@ void Shell::draw_dialog(cairo_t *cr)
         const double funds_h = place_line(ui_font(), funds, x + margin + live_col + col_gap, cursor, live_col,
                                           theme::kTextR, theme::kTextG, theme::kTextB);
         cursor += std::max(flow_h, funds_h) + gap;
-        if (!copy.specials.empty()) {
-            const double h = place_line(ui_font(), copy.specials, x + margin, cursor, live_inner, theme::kTextR,
-                                        theme::kTextG, theme::kTextB);
-            cursor += h + gap;
-        }
         if (!copy.closing_note.empty()) {
             const double h = place_line(ui_font(), copy.closing_note, x + margin, cursor, live_inner, theme::kAccelR,
                                         theme::kAccelG, theme::kAccelB);
@@ -1359,7 +1348,18 @@ void Shell::draw_special_menu(cairo_t *cr)
     const int row = slot / 2;
     const double anchor_x = side_x_ + 4 + (col + 1) * cell_ + 6;
     const double anchor_y = pal_y_ + 4 + row * cell_;
-    const double row_h = std::max(static_cast<double>(dp(44)), static_cast<double>(cell_ - 4));
+    int name_h = 1;
+    int cost_h = 1;
+    for (int i = 0; i < count; ++i) {
+        const SpecialBuilding &building = special_building(i);
+        name_h = std::max(name_h, measure_text(cr, bold_font(), building.name, -1).height);
+        const std::string sample = "$" + std::to_string(building.cost);
+        cost_h = std::max(cost_h, measure_text(cr, ui_font(), sample, -1).height);
+    }
+    const int between = dp(6);
+    const int text_block = name_h + between + cost_h;
+    const double row_h = std::max(std::max(static_cast<double>(dp(44)), static_cast<double>(cell_ - 4)),
+                                  static_cast<double>(text_block + dp(12)));
     const double icon = std::min(static_cast<double>(dp(40)), row_h - dp(8));
     const double drop_w = std::max(static_cast<double>(dp(240)), icon + dp(150));
     double drop_x = anchor_x;
@@ -1399,8 +1399,10 @@ void Shell::draw_special_menu(cairo_t *cr)
         const double text_r = lit ? 0.05 : theme::kTextR;
         const double text_g = lit ? 0.05 : theme::kTextG;
         const double text_b = lit ? 0.05 : theme::kTextB;
-        paint_text(cr, bold_font(), name, text_x, y + dp(6), text_r, text_g, text_b, static_cast<int>(drop_w - icon - dp(24)));
-        paint_text(cr, ui_font(), cost, text_x, y + dp(6) + dp(16), text_r, text_g, text_b, -1);
+        const double text_y = y + std::max(4.0, (row_h - text_block) / 2.0);
+        paint_text(cr, bold_font(), name, text_x, text_y, text_r, text_g, text_b,
+                   static_cast<int>(drop_w - icon - dp(24)));
+        paint_text(cr, ui_font(), cost, text_x, text_y + name_h + between, text_r, text_g, text_b, -1);
         push_hot(drop_x + 3, y, drop_w - 6, row_h - 2, kSpecialItem + i);
     }
 }
@@ -1426,7 +1428,7 @@ void Shell::draw(cairo_t *cr)
     {
         TargetCr live(cr);
         cairo_translate(live.cr, side_x_, demand_y_);
-        demand_.draw(live.cr, side_w_, demand_h_);
+        demand_.draw(live.cr, side_w_, demand_h_, ui_scale_);
     }
     stroke_rect(cr, view_x_ - 1, view_y_ - 1, view_w_ + 2, view_h_ + 2, theme::kMenuFrameR, theme::kMenuFrameG,
                 theme::kMenuFrameB);
@@ -1469,8 +1471,12 @@ void Shell::draw(cairo_t *cr)
     }
     paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, win_w_ / 2);
     if (gamepad_nav_) {
-        const std::string hint = std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " build   " +
-                                 glyph(SDL_GAMEPAD_BUTTON_EAST) + " cancel   LB/RB tools   Start menu";
+        const bool picking = special_open_ && dialog_ == Dialog::None && !menu_.open();
+        const std::string hint =
+            picking ? std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " Select   " + glyph(SDL_GAMEPAD_BUTTON_EAST) +
+                          " Close"
+                    : std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " build   " + glyph(SDL_GAMEPAD_BUTTON_EAST) +
+                          " cancel   LB/RB tools   Start menu";
         const TextMetrics metrics = measure_text(cr, ui_font(), hint, -1);
         paint_text(cr, ui_font(), hint, win_w_ - metrics.width - 8, status_y + 8, theme::kTextR, theme::kTextG,
                    theme::kTextB, -1);
