@@ -142,6 +142,8 @@ void Shell::open_dialog(Dialog dialog)
         focus_id_ = kCancel;
     } else if (dialog == Dialog::Recovery) {
         focus_id_ = kRecover;
+    } else if (dialog == Dialog::Scenario) {
+        focus_id_ = kPlay;
     } else if (dialog == Dialog::Outcome) {
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {

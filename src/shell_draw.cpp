@@ -387,7 +387,7 @@ void Shell::draw_dialog(cairo_t *cr)
     const double large_w = std::min(static_cast<double>(dp(860)), std::max(1.0, win_w_ - 2.0 * margin));
     const double large_h = std::min(static_cast<double>(dp(640)), std::max(1.0, win_h_ - 2.0 * margin));
     auto buttons_at = [&](double px, double pw, double by, const std::vector<std::pair<const char *, int>> &buttons,
-                          int left_count = 0) {
+                          int left_count = 0, int primary_id = -1) {
         const double gap = dp(8);
         const double bh = dp(36);
         const int count = static_cast<int>(buttons.size());
@@ -401,7 +401,7 @@ void Shell::draw_dialog(cairo_t *cr)
         for (int i = 0; i < left_count; ++i) {
             const auto &button_def = buttons[static_cast<std::size_t>(i)];
             button(cr, left, by, widths[static_cast<std::size_t>(i)], bh, button_def.first, button_def.second,
-                   button_def.second == focus_id_);
+                   button_def.second == primary_id);
             left += widths[static_cast<std::size_t>(i)] + gap;
         }
         double right_w = 0;
@@ -418,7 +418,7 @@ void Shell::draw_dialog(cairo_t *cr)
         for (int i = left_count; i < count; ++i) {
             const auto &button_def = buttons[static_cast<std::size_t>(i)];
             button(cr, right, by, widths[static_cast<std::size_t>(i)], bh, button_def.first, button_def.second,
-                   button_def.second == focus_id_);
+                   button_def.second == primary_id);
             right += widths[static_cast<std::size_t>(i)] + gap;
         }
     };
@@ -677,7 +677,7 @@ void Shell::draw_dialog(cairo_t *cr)
         fill(cr, track_x, thumb_y, 12, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
         stroke_rect(cr, track_x, list_top, 12, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
         push_hot(track_x - 4, list_top, 20, track_h, kListScroll);
-        buttons_at(x, dw, y + dh - margin - dp(36), {{"_Cancel", kCancel}, {"_Play", kPlay}});
+        buttons_at(x, dw, y + dh - margin - dp(36), {{"_Cancel", kCancel}, {"_Play", kPlay}}, 0, kPlay);
         return;
     }
     if (dialog_ == Dialog::Rename) {
