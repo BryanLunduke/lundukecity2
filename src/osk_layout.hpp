@@ -71,7 +71,7 @@ inline const OskKey *osk_keys(int &count)
         {"-", "-", "-", "-", OskKind::Text, 4, 1},
         {"'", "'", "'", "'", OskKind::Text, 4, 1},
         {"space", "space", nullptr, nullptr, OskKind::Space, 4, 6},
-        {"auto", "auto", nullptr, nullptr, OskKind::Auto, 4, 2},
+        {"Random", "Random", nullptr, nullptr, OskKind::Auto, 4, 2},
     };
     count = static_cast<int>(sizeof(keys) / sizeof(keys[0]));
     return keys;

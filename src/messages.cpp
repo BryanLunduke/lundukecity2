@@ -145,12 +145,12 @@ std::string zone_status_text(int tile_category, int population, int land_value,
         kind = kCategories[tile_category - 1];
     }
 
-    const char *pop = band(population, 1, "sparse", "settled", "busy", "packed");
-    const char *land = band(land_value, 5, "low", "modest", "high", "prime");
-    const char *crm = band(crime, 9, "safe", "light", "moderate", "dangerous");
-    const char *pol = band(pollution, 13, "clean", "light", "moderate", "heavy");
-    const char *gro = band(growth, 17, "declining", "stable", "growing", "booming");
+    const char *pop = band(population, 1, "Sparse", "Settled", "Busy", "Packed");
+    const char *land = band(land_value, 5, "Low", "Modest", "High", "Prime");
+    const char *crm = band(crime, 9, "Safe", "Light", "Moderate", "Dangerous");
+    const char *pol = band(pollution, 13, "Clean", "Light", "Moderate", "Heavy");
+    const char *gro = band(growth, 17, "Declining", "Stable", "Growing", "Booming");
 
-    return std::string(kind) + " — population " + pop + ", land value " + land +
-           ", crime " + crm + ", pollution " + pol + ", growth " + gro;
+    return std::string(kind) + " — Population: " + pop + ", Land value: " + land + ", Crime: " + crm +
+           ", Pollution: " + pol + ", Growth: " + gro;
 }

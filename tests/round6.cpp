@@ -74,12 +74,12 @@ int main()
         }
         const std::string won = dull.scenario_outcome_text(true);
         const std::string lost = dull.scenario_outcome_text(false);
-        if (won.find("Dullsville is won.") == std::string::npos || won.find("The goal was met:") == std::string::npos ||
+        if (won.find("You did it! Dullsville met the goal.") == std::string::npos ||
             won.find(kGoals[0]) == std::string::npos ||
-            won.find("paused for this announcement") == std::string::npos ||
+            won.find("Closing this window leaves the city paused.") == std::string::npos ||
             won.find("Keep playing continues at the previous speed") == std::string::npos ||
-            won.find("cancelling the scenario list, leaves the city paused") == std::string::npos ||
-            lost.find("The goal was missed:") == std::string::npos) {
+            lost.find("Time's up. Dullsville missed the goal.") == std::string::npos ||
+            lost.find(kGoals[0]) == std::string::npos) {
             std::fprintf(stderr, "won '%s'\n", won.c_str());
             return fail(6, "the outcome dialog does not name the goal or the paused close");
         }

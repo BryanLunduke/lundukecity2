@@ -52,7 +52,8 @@ enum class Dialog : int {
     Settings,
     Controls,
     Welcome,
-    QuitConfirm
+    QuitConfirm,
+    Messages
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
@@ -140,6 +141,14 @@ private:
     double map_local_x(double x) const;
     double map_local_y(double y) const;
     void zoom_by(int delta);
+    void zoom_at(int delta, double px, double py);
+    void toggle_fullscreen();
+    void toggle_overlay(CitySession::MapLayer layer);
+    void reroll_terrain();
+    void jump_notice(int index);
+    void arm_touch_tool();
+    std::string context_hint() const;
+    std::string dialog_title_hint() const;
     void set_speed(int speed);
     void toggle_pause();
     void cycle_tool(int delta);
@@ -280,7 +289,7 @@ private:
     bool open_pause_unfocused_ = false;
     ui_scale::StoredSettings loaded_{};
     int paused_from_ = 2;
-    int tool_index_ = 3;
+    int tool_index_ = 16;
     bool special_open_ = false;
     int special_cursor_ = 0;
     int special_choice_ = -1;
@@ -331,6 +340,37 @@ private:
     int police_ = 100;
     int fire_ = 100;
     bool graphs_long_ = false;
+    int graph_mask_ = 0x7f;
+    int graph_pointer_x_ = -1;
+    double graph_chart_x_ = 0;
+    double graph_chart_y_ = 0;
+    double graph_chart_w_ = 0;
+    double graph_chart_h_ = 0;
+    std::string graph_readout_;
+    bool overlay_on_ = false;
+    bool wheel_zooms_ = false;
+    bool open_wheel_zooms_ = false;
+    bool open_fullscreen_ = false;
+    int controls_page_ = 0;
+    bool goal_dismissed_ = false;
+    int goal_scenario_ = -1;
+    std::chrono::steady_clock::time_point goal_until_{};
+    bool pause_noted_ = false;
+    bool touch_pending_ = false;
+    bool touch_armed_ = false;
+    bool touch_minimap_ = false;
+    float touch_down_x_ = 0;
+    float touch_down_y_ = 0;
+    Uint64 touch_down_ms_ = 0;
+    bool pan_pointer_ = false;
+    bool pan_moved_ = false;
+    int pan_button_ = 0;
+    double pan_start_x_ = 0;
+    double pan_start_y_ = 0;
+    double pan_scroll_x_ = 0;
+    double pan_scroll_y_ = 0;
+    int terrain_key_ = 0;
+    cairo_surface_t *terrain_preview_ = nullptr;
     double overlay_x_ = 0;
     double overlay_y_ = 0;
     double overlay_w_ = 0;

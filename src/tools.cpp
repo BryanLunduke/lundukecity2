@@ -30,7 +30,7 @@ const ToolDef kTools[] = {
 };
 
 const int kToolCount = static_cast<int>(sizeof(kTools) / sizeof(kTools[0]));
-const int kDefaultToolIndex = 3; // Power lines
+const int kDefaultToolIndex = 16; // Query. A first click reports the tile and does not build.
 
 const ToolDef *tool_by_index(int index)
 {

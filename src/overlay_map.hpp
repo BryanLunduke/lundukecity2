@@ -9,7 +9,10 @@
 #include <cairo.h>
 
 #include <string>
-#include <vector>
+
+// On-map data view. One sample per city tile, drawn with the map's own
+// tile size so the picture keeps the 120:100 shape. Zero is transparent.
+// Magnitude layers use one fixed scale and the same yellow-to-red ramp.
 
 class OverlayMap {
 public:
@@ -19,22 +22,25 @@ public:
     OverlayMap &operator=(const OverlayMap &) = delete;
 
     void set_layer(CitySession::MapLayer layer);
+    CitySession::MapLayer layer() const { return layer_; }
     void set_session(CitySession *session);
     void sync();
+    // Paints in map space. (0, 0) is tile (0, 0). Each tile is tile_size pixels.
+    void draw_at(cairo_t *cr, int tile_size);
+    // Letterboxed into a box, integer nearest scale, aspect kept.
     void draw(cairo_t *cr, int width, int height);
-    bool click(double x, double y, int width, int height, double &fx, double &fy) const;
 
     const char *title() const;
     const char *legend() const;
 
 private:
-    bool density_layer() const;
     void rebuild();
 
     CitySession::MapLayer layer_ = CitySession::MapLayer::Power;
     CitySession *session_ = nullptr;
     cairo_surface_t *image_ = nullptr;
-    std::vector<int> cells_;
-    int peak_ = 1;
     unsigned map_serial_ = 0;
 };
+
+const char *overlay_title(CitySession::MapLayer layer);
+const char *overlay_legend(CitySession::MapLayer layer);

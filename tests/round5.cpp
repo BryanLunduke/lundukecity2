@@ -384,8 +384,8 @@ int main()
             return fail(35, "the win did not pause for the announcement");
         }
         const std::string text = won.scenario_outcome_text(true);
-        if (text.find("Dullsville is won.") == std::string::npos ||
-            text.find("paused for this announcement") == std::string::npos ||
+        if (text.find("You did it! Dullsville met the goal.") == std::string::npos ||
+            text.find("Closing this window leaves the city paused.") == std::string::npos ||
             text.find("Keep playing continues at the previous speed") == std::string::npos) {
             std::fprintf(stderr, "text '%s'\n", text.c_str());
             return fail(36, "the win dialog still says the city stays paused");
@@ -406,7 +406,7 @@ int main()
         lost.set_speed(1);
         hostile_review_session_probe(lost, 6);
         const std::string lost_text = lost.scenario_outcome_text(false);
-        if (lost_text.find("Hamburg is lost.") == std::string::npos ||
+        if (lost_text.find("Time's up. Hamburg missed the goal.") == std::string::npos ||
             lost_text.find("Keep playing continues") == std::string::npos) {
             return fail(40, "the loss dialog does not say Keep playing continues");
         }

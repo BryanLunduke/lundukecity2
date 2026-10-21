@@ -435,6 +435,38 @@ review = executable(
 
 test('review', review)
 
+# Review fixes that do not need a window. Built on Windows too.
+round16 = executable(
+  'round16',
+  'round16.cpp',
+  '../src/assets.cpp',
+  '../src/city_glance.cpp',
+  '../src/city_session.cpp',
+  '../src/messages.cpp',
+  '../src/overlay_map.cpp',
+  '../src/sound_player.cpp',
+  '../src/special_buildings.cpp',
+  '../src/sprite_art.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep, cairo_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+    '-DLUNDUKE_CITY_TEST_HOOKS',
+  ],
+)
+
+test(
+  'round16',
+  round16,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+  timeout: 180,
+)
+
 # Headless checks for the numbered review fixes. The binary drives itself.
 # Release builds omit the self-test, so this test is not registered there.
 if lunduke_review_checks_on

@@ -4,51 +4,60 @@
 
 #include "overlay_map.hpp"
 
+#include "micropolis.h"
+
 #include <algorithm>
 #include <cstdint>
+#include <vector>
 
 namespace {
 
-struct Rgb {
-    double r, g, b;
-};
+constexpr int kW = CitySession::kWorldW;
+constexpr int kH = CitySession::kWorldH;
 
-Rgb heat(CitySession::MapLayer layer, double t)
+void heat(double t, unsigned char &r, unsigned char &g, unsigned char &b, unsigned char &a)
 {
-    t = std::max(0.0, std::min(1.0, t));
-    switch (layer) {
-    case CitySession::MapLayer::Pollution:
-        return {0.15 + 0.75 * t, 0.16 + 0.16 * t, 0.14 + 0.10 * t};
-    case CitySession::MapLayer::Crime:
-        return {0.20 + 0.75 * t, 0.05, 0.12 + 0.15 * t};
-    case CitySession::MapLayer::LandValue:
-        return {0.05 + 0.25 * t, 0.18 + 0.62 * t, 0.08 + 0.15 * t};
-    case CitySession::MapLayer::Traffic:
-        return {0.25 + 0.70 * t, 0.12 + 0.35 * t, 0.05};
-    default:
-        return {t, t, t};
+    if (t <= 0.0) {
+        r = g = b = a = 0;
+        return;
     }
+    if (t > 1.0) {
+        t = 1.0;
+    }
+    r = 255;
+    g = static_cast<unsigned char>(220.0 * (1.0 - t));
+    b = static_cast<unsigned char>(32.0 * (1.0 - t));
+    a = static_cast<unsigned char>(150.0 + 90.0 * t);
+}
+
+void cool(double t, unsigned char &r, unsigned char &g, unsigned char &b, unsigned char &a)
+{
+    if (t <= 0.0) {
+        r = g = b = a = 0;
+        return;
+    }
+    if (t > 1.0) {
+        t = 1.0;
+    }
+    r = static_cast<unsigned char>(40.0 * (1.0 - t));
+    g = static_cast<unsigned char>(120.0 + 40.0 * t);
+    b = 230;
+    a = static_cast<unsigned char>(150.0 + 90.0 * t);
+}
+
+void solid(unsigned char r, unsigned char g, unsigned char b, unsigned char a, unsigned char *pixel)
+{
+    pixel[0] = b;
+    pixel[1] = g;
+    pixel[2] = r;
+    pixel[3] = a;
 }
 
 } // namespace
 
-void OverlayMap::set_layer(CitySession::MapLayer layer)
+const char *overlay_title(CitySession::MapLayer layer)
 {
-    if (layer_ != layer) {
-        layer_ = layer;
-        cells_.clear();
-        map_serial_ = 0;
-    }
-}
-
-void OverlayMap::set_session(CitySession *session)
-{
-    session_ = session;
-}
-
-const char *OverlayMap::title() const
-{
-    switch (layer_) {
+    switch (layer) {
     case CitySession::MapLayer::Power:
         return "Power";
     case CitySession::MapLayer::Water:
@@ -61,32 +70,70 @@ const char *OverlayMap::title() const
         return "Land value";
     case CitySession::MapLayer::Traffic:
         return "Traffic";
+    case CitySession::MapLayer::Police:
+        return "Police coverage";
+    case CitySession::MapLayer::Fire:
+        return "Fire coverage";
+    case CitySession::MapLayer::Population:
+        return "Population";
+    case CitySession::MapLayer::Growth:
+        return "Growth";
+    case CitySession::MapLayer::Zones:
+        return "Zones";
     }
     return "Map";
 }
 
-const char *OverlayMap::legend() const
+const char *overlay_legend(CitySession::MapLayer layer)
 {
-    switch (layer_) {
+    switch (layer) {
     case CitySession::MapLayer::Power:
-        return "Yellow powered zones, red unpowered zones, orange lines, blue water.";
+        return "Yellow zones have power. Red zones do not. Orange is a power line.";
     case CitySession::MapLayer::Water:
-        return "Blue is water and flood. The engine stores water as map tiles.";
+        return "Blue is river, water, and flood. Land stays clear.";
     case CitySession::MapLayer::Pollution:
-        return "Brighter gray means higher pollution on the engine's density map.";
+        return "Red means heavy pollution. Clear means none. Build parks and spread industry.";
     case CitySession::MapLayer::Crime:
-        return "Brighter red means a higher crime rate on the engine's crime map.";
+        return "Red means high crime. Clear means none. Build police stations nearby.";
     case CitySession::MapLayer::LandValue:
-        return "Brighter green means higher land value on the engine's land-value map.";
+        return "Red means expensive land. Clear means little value. Parks and water raise it.";
     case CitySession::MapLayer::Traffic:
-        return "Brighter orange means heavier traffic on the engine's traffic map.";
+        return "Red means heavy traffic. Clear means quiet streets. Add roads or rail.";
+    case CitySession::MapLayer::Police:
+        return "Red means a police station covers this block. Clear means no coverage.";
+    case CitySession::MapLayer::Fire:
+        return "Red means a fire station covers this block. Clear means no coverage.";
+    case CitySession::MapLayer::Population:
+        return "Red means a crowded block. Clear means nobody lives or works there.";
+    case CitySession::MapLayer::Growth:
+        return "Red means the block is growing. Blue means it is shrinking. Clear means no change.";
+    case CitySession::MapLayer::Zones:
+        return "Green homes, blue shops, yellow industry, gray roads, brown rail, blue water.";
     }
     return "";
 }
 
-bool OverlayMap::density_layer() const
+void OverlayMap::set_layer(CitySession::MapLayer layer)
 {
-    return layer_ != CitySession::MapLayer::Power && layer_ != CitySession::MapLayer::Water;
+    if (layer_ != layer) {
+        layer_ = layer;
+        map_serial_ = 0;
+    }
+}
+
+void OverlayMap::set_session(CitySession *session)
+{
+    session_ = session;
+}
+
+const char *OverlayMap::title() const
+{
+    return overlay_title(layer_);
+}
+
+const char *OverlayMap::legend() const
+{
+    return overlay_legend(layer_);
 }
 
 void OverlayMap::sync()
@@ -94,101 +141,90 @@ void OverlayMap::sync()
     if (session_ == nullptr) {
         return;
     }
-    const bool density = density_layer();
-    const int cells_w = density ? CitySession::kWorldW / 2 : CitySession::kWorldW;
-    const int cells_h = density ? CitySession::kWorldH / 2 : CitySession::kWorldH;
-    const int count = cells_w * cells_h;
-    std::vector<int> next(static_cast<std::size_t>(count));
-    int peak = 1;
-    for (int y = 0; y < cells_h; ++y) {
-        for (int x = 0; x < cells_w; ++x) {
-            const int tile_x = density ? x * 2 : x;
-            const int tile_y = density ? y * 2 : y;
-            int water = session_->layer_value(CitySession::MapLayer::Water, tile_x, tile_y);
-            if (density) {
-                for (int dy = 0; dy < 2 && water == 0; ++dy) {
-                    for (int dx = 0; dx < 2; ++dx) {
-                        if (session_->layer_value(CitySession::MapLayer::Water, tile_x + dx, tile_y + dy) > 0) {
-                            water = 1;
-                            break;
-                        }
-                    }
-                }
-            }
-            int value = 0;
-            if (layer_ != CitySession::MapLayer::Water) {
-                value = session_->layer_value(layer_, tile_x, tile_y);
-            }
-            if (density) {
-                peak = std::max(peak, value);
-            }
-            next[static_cast<std::size_t>(y * cells_w + x)] = water > 0 ? -value - 1 : value;
-        }
-    }
     const unsigned serial = session_->map_serial();
-    if (!cells_.empty() && cells_ == next && peak_ == peak && map_serial_ == serial && image_ != nullptr) {
+    if (image_ != nullptr && map_serial_ == serial) {
         return;
     }
-    cells_ = std::move(next);
-    peak_ = peak;
     map_serial_ = serial;
     rebuild();
 }
 
 void OverlayMap::rebuild()
 {
-    const bool density = density_layer();
-    const int cells_w = density ? CitySession::kWorldW / 2 : CitySession::kWorldW;
-    const int cells_h = density ? CitySession::kWorldH / 2 : CitySession::kWorldH;
-    if (image_ == nullptr || cairo_image_surface_get_width(image_) != cells_w ||
-        cairo_image_surface_get_height(image_) != cells_h) {
+    if (image_ == nullptr || cairo_image_surface_get_width(image_) != kW ||
+        cairo_image_surface_get_height(image_) != kH ||
+        cairo_image_surface_get_format(image_) != CAIRO_FORMAT_ARGB32) {
         if (image_ != nullptr) {
             cairo_surface_destroy(image_);
         }
-        image_ = cairo_image_surface_create(CAIRO_FORMAT_RGB24, cells_w, cells_h);
+        image_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, kW, kH);
     }
     unsigned char *data = cairo_image_surface_get_data(image_);
     const int stride = cairo_image_surface_get_stride(image_);
-    auto pack = [](const Rgb &color) {
-        auto channel = [](double value) {
-            const int byte = static_cast<int>(value * 255.0 + 0.5);
-            return static_cast<std::uint32_t>(std::max(0, std::min(255, byte)));
-        };
-        return (channel(color.r) << 16) | (channel(color.g) << 8) | channel(color.b);
-    };
-    for (int y = 0; y < cells_h; ++y) {
-        for (int x = 0; x < cells_w; ++x) {
-            const int packed = cells_[static_cast<std::size_t>(y * cells_w + x)];
-            const bool water = packed < 0;
-            const int value = water ? -packed - 1 : packed;
-            Rgb color{0.55, 0.42, 0.28};
-            if (water && layer_ != CitySession::MapLayer::Water) {
-                color = {0.10, 0.28, 0.72};
-            }
-            if (layer_ == CitySession::MapLayer::Power && !water) {
-                switch (value) {
-                case 2:
-                    color = {0.85, 0.12, 0.10};
-                    break;
-                case 3:
-                    color = {0.98, 0.86, 0.15};
-                    break;
-                case 4:
-                    color = {0.95, 0.55, 0.10};
-                    break;
-                default:
-                    break;
+    std::fill(data, data + stride * kH, 0);
+    if (session_ == nullptr) {
+        cairo_surface_mark_dirty(image_);
+        return;
+    }
+    for (int y = 0; y < kH; ++y) {
+        for (int x = 0; x < kW; ++x) {
+            unsigned char *pixel = data + y * stride + x * 4;
+            const int value = session_->layer_value(layer_, x, y);
+            unsigned char r = 0;
+            unsigned char g = 0;
+            unsigned char b = 0;
+            unsigned char a = 0;
+            switch (layer_) {
+            case CitySession::MapLayer::Power:
+                if (value == 3) {
+                    solid(250, 220, 40, 210, pixel);
+                } else if (value == 2) {
+                    solid(220, 40, 32, 210, pixel);
+                } else if (value == 4) {
+                    solid(240, 140, 24, 210, pixel);
                 }
-            } else if (layer_ == CitySession::MapLayer::Water) {
-                color = water ? Rgb{0.15, 0.45, 0.95} : Rgb{0.45, 0.36, 0.24};
-            } else if (!water && layer_ != CitySession::MapLayer::Power) {
-                const double t = value / static_cast<double>(std::max(peak_, 1));
-                if (t > 0) {
-                    color = heat(layer_, t);
+                continue;
+            case CitySession::MapLayer::Water:
+                if (value > 0) {
+                    solid(40, 110, 230, 180, pixel);
                 }
+                continue;
+            case CitySession::MapLayer::Zones:
+                if (value == 1) {
+                    solid(40, 170, 48, 200, pixel);
+                } else if (value == 2) {
+                    solid(48, 96, 210, 200, pixel);
+                } else if (value == 3) {
+                    solid(230, 190, 32, 200, pixel);
+                } else if (value == 4) {
+                    solid(48, 48, 52, 200, pixel);
+                } else if (value == 5) {
+                    solid(140, 84, 36, 200, pixel);
+                } else if (value == 8) {
+                    solid(40, 110, 230, 160, pixel);
+                }
+                continue;
+            case CitySession::MapLayer::Growth: {
+                const double t = static_cast<double>(value) / 200.0;
+                if (t < 0.0) {
+                    cool(-t, r, g, b, a);
+                } else {
+                    heat(t, r, g, b, a);
+                }
+                break;
             }
-            auto *pixel = reinterpret_cast<std::uint32_t *>(data + y * stride + x * 4);
-            *pixel = pack(color);
+            case CitySession::MapLayer::Police:
+            case CitySession::MapLayer::Fire:
+                heat(static_cast<double>(value) / static_cast<double>(MAX_POLICE_STATION_EFFECT), r, g, b, a);
+                break;
+            default:
+                heat(static_cast<double>(value) / 255.0, r, g, b, a);
+                break;
+            }
+            if (a == 0) {
+                continue;
+            }
+            solid(r, g, b, a, pixel);
         }
     }
     cairo_surface_mark_dirty(image_);
@@ -202,6 +238,22 @@ OverlayMap::~OverlayMap()
     }
 }
 
+void OverlayMap::draw_at(cairo_t *cr, int tile_size)
+{
+    if (image_ == nullptr) {
+        sync();
+    }
+    if (image_ == nullptr || tile_size < 1) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_scale(cr, static_cast<double>(tile_size), static_cast<double>(tile_size));
+    cairo_set_source_surface(cr, image_, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
+}
+
 void OverlayMap::draw(cairo_t *cr, int width, int height)
 {
     if (image_ == nullptr) {
@@ -210,21 +262,14 @@ void OverlayMap::draw(cairo_t *cr, int width, int height)
     if (image_ == nullptr || width < 2 || height < 2) {
         return;
     }
+    const int scale = std::max(1, std::min(width / kW, height / kH));
+    const int dw = kW * scale;
+    const int dh = kH * scale;
     cairo_save(cr);
-    cairo_scale(cr, static_cast<double>(width) / cairo_image_surface_get_width(image_),
-                static_cast<double>(height) / cairo_image_surface_get_height(image_));
+    cairo_translate(cr, (width - dw) / 2.0, (height - dh) / 2.0);
+    cairo_scale(cr, static_cast<double>(scale), static_cast<double>(scale));
     cairo_set_source_surface(cr, image_, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
     cairo_restore(cr);
-}
-
-bool OverlayMap::click(double x, double y, int width, int height, double &fx, double &fy) const
-{
-    if (width < 2 || height < 2) {
-        return false;
-    }
-    fx = std::max(0.0, std::min(1.0, x / width));
-    fy = std::max(0.0, std::min(1.0, y / height));
-    return true;
 }

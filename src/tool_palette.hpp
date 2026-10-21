@@ -20,7 +20,9 @@ inline double icon_pixel_scale(int source, int slot)
         return 1.0;
     }
     if (slot < source) {
-        return static_cast<double>(slot) / static_cast<double>(source);
+        // Half the sprite, nearest-neighbour. A smaller cell may clip it.
+        // A fractional fit (16/40) would blur the pixels.
+        return (source % 2 == 0) ? 0.5 : 1.0;
     }
     return static_cast<double>(std::max(1, slot / source));
 }
