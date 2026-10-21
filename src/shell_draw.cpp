@@ -1046,7 +1046,13 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::Graphs) {
-        const DialogRect panel = place_dialog(win_w_, win_h_, large_w, large_h, margin);
+        const std::vector<ChartLegend> legend = chart_legend(&session_, graphs_long_);
+        const int legend_cols = 2;
+        const int legend_rows = std::max(1, (static_cast<int>(legend.size()) + legend_cols - 1) / legend_cols);
+        const double legend_h = legend_rows * static_cast<double>(dp(20));
+        const double width = std::min(static_cast<double>(dp(640)), std::max(1.0, win_w_ - 2.0 * margin));
+        const double height = dp(86) + dp(220) + dp(8) + legend_h + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -1054,11 +1060,7 @@ void Shell::draw_dialog(cairo_t *cr)
         frame_panel(cr, x, y, dw, dh, "Graphs");
         button(cr, x + margin, y + dp(46), dp(140), dp(32), "10 year", kShortScale, !graphs_long_);
         button(cr, x + margin + dp(148), y + dp(46), dp(140), dp(32), "120 year", kLongScale, graphs_long_);
-        const std::vector<ChartLegend> legend = chart_legend(&session_, graphs_long_);
-        const int legend_cols = 2;
-        const int legend_rows = std::max(1, (static_cast<int>(legend.size()) + legend_cols - 1) / legend_cols);
         const double legend_row_h = dp(20);
-        const double legend_h = legend_rows * legend_row_h;
         const double button_top = y + dh - margin - dp(36);
         const double legend_top = button_top - dp(12) - legend_h;
         const double chart_top = y + dp(86);
