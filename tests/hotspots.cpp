@@ -3,7 +3,7 @@
 // See COPYING and NOTICE.
 
 // Hotspot ids are one enum. Dialog buttons must not reuse the map, toolbar,
-// minimap, welcome bar, or menu-title ids. OSK Up/Down moves by row.
+// minimap, or menu-title ids. OSK Up/Down moves by row.
 
 #include "hotspots.hpp"
 #include "osk_layout.hpp"
@@ -27,10 +27,10 @@ int main()
     static_assert(kCancel != kMapId, "Cancel must not share the map id");
     static_assert(kOk != kPaletteId, "OK must not share the toolbar id");
     static_assert(kDiscard != kMinimapId, "Discard must not share the minimap id");
-    static_assert(kSave != kWelcomeId, "Save must not share the welcome Dismiss id");
+    static_assert(kWelcomeNew != kMapId, "Start a New City must not share the map id");
     static_assert(kClose != kMenuTitle, "Close must not share the System menu id");
     static_assert(kCancel > kMenuTitle + 5, "dialog buttons overlap menu titles");
-    static_assert(kLongScale < kMenuItem, "dialog buttons overlap menu items");
+    static_assert(kWelcomeQuit < kMenuItem, "dialog buttons overlap menu items");
     static_assert(kMenuItem + 5 * 40 < kRecentItem, "menu items overlap recent files");
     static_assert(kRecentItem + 32 < kFieldName, "recent files overlap text fields");
     static_assert(kFieldSeed < kOsk && kOsk + 64 < kListItem, "OSK overlaps a neighbour range");
@@ -38,10 +38,12 @@ int main()
     static_assert(kOverlayMap < kCancel && kOverlayMap != kMenuTitle, "overlay map id is not unique");
 
     const int ids[] = {
-        kMapId,       kPaletteId, kMinimapId,    kWelcomeId, kMenuTitle,    kHScroll,      kVScroll,     kOverlayMap,
-        kCancel,      kOk,        kDiscard,      kSave,      kBack,         kNext,         kGenerate,    kPlay,
-        kRename,      kClose,     kReset,        kCollect,   kKeep,         kStay,         kScenarioList, kRecover,
-        kNotNow,      kDelete,    kUp,           kSystemFiles, kShortScale, kLongScale,    kMenuItem,    kRecentItem,
+        kMapId,       kPaletteId, kMinimapId,    kMenuTitle,    kHScroll,      kVScroll,     kOverlayMap,  kCancel,
+        kOk,          kDiscard,   kSave,         kBack,      kNext,         kGenerate,     kPlay,        kRename,
+        kClose,       kReset,     kCollect,      kKeep,      kStay,         kScenarioList, kRecover,     kNotNow,
+        kDelete,      kUp,        kSystemFiles,  kShortScale, kLongScale,   kWelcomeNew,   kWelcomeLoad, kWelcomeScenario,
+        kWelcomeQuit,
+        kMenuItem,    kRecentItem,
         kFieldName,   kFieldSeed, kOsk,          kListItem,  kSlider,       kChoice,
     };
     const int n = static_cast<int>(sizeof(ids) / sizeof(ids[0]));
@@ -53,13 +55,12 @@ int main()
         }
     }
     if (is_modal_control(kMapId) || is_modal_control(kPaletteId) || is_modal_control(kMinimapId) ||
-        is_modal_control(kWelcomeId) || is_modal_control(kMenuTitle) || is_modal_control(kMenuTitle + 4) ||
-        is_modal_control(kMenuItem)) {
+        is_modal_control(kMenuTitle) || is_modal_control(kMenuTitle + 4) || is_modal_control(kMenuItem)) {
         return fail("a background hotspot is treated as a dialog control");
     }
     if (!is_modal_control(kCancel) || !is_modal_control(kSave) || !is_modal_control(kClose) || !is_modal_control(kOsk) ||
         !is_modal_control(kSlider + 1) || !is_modal_control(kFieldName) || !is_dialog_button(kLongScale) ||
-        is_dialog_button(kWelcomeId)) {
+        !is_dialog_button(kWelcomeNew) || !is_dialog_button(kWelcomeQuit)) {
         return fail("dialog controls are not recognised");
     }
 

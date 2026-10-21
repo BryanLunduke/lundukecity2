@@ -10,6 +10,7 @@ lunduke_city_src = files(
   'shell_actions.cpp',
   'shell_draw.cpp',
   'shell_uitest.cpp',
+  'scenario_preview.cpp',
   'side_widgets.cpp',
   'sound_player.cpp',
   'sprite_art.cpp',
@@ -42,9 +43,11 @@ lunduke_city_deps = [sdl3_dep, cairo_dep, pangocairo_dep, micropolis_dep, thread
 # LUNDUKE_CITY_* string, and the value is the prefix rather than the
 # source tree (a source path must not land in the release binary).
 city_data_dir = get_option('prefix') / get_option('datadir') / 'lunduke-city-2' / 'micropolis-assets'
+city_ui_dir = get_option('prefix') / get_option('datadir') / 'lunduke-city-2'
 lunduke_city_cpp_args = [
   '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
   '-DCITY_DATA_DIR="' + city_data_dir + '"',
+  '-DCITY_UI_DIR="' + city_ui_dir + '"',
 ]
 if fontconfig_dep.found()
   lunduke_city_deps += fontconfig_dep

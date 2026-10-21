@@ -6,9 +6,71 @@
 
 #include <cairo.h>
 
+#include <algorithm>
 #include <functional>
 
 // Two-by-eight tool grid. Icons are original drawings, not imported artwork.
+
+// Nearest-neighbor scale that fits a square sprite into a slot.
+// An integer multiple is used when it already fills the slot. Otherwise the
+// sprite grows or shrinks to the slot, still with hard pixels, so a 0.5 UI
+// scale is not clipped and a 1.5 scale is not left at the 1x size.
+inline double icon_pixel_scale(int source, int slot)
+{
+    if (source < 1 || slot < 1) {
+        return 1.0;
+    }
+    if (slot < source) {
+        return static_cast<double>(slot) / static_cast<double>(source);
+    }
+    const int integer = slot / source;
+    if (integer * source * 20 >= slot * 17) {
+        return static_cast<double>(integer);
+    }
+    return static_cast<double>(slot) / static_cast<double>(source);
+}
+
+// Short name drawn when the sprite file is missing, so the button is not blank.
+inline const char *tool_icon_fallback_label(int index)
+{
+    static const char *labels[16] = {
+        "BD", "RD", "RL", "PW", "PK", "R", "C", "I", "PO", "FD", "ST", "SP", "CO", "NU", "AP", "?",
+    };
+    if (index < 0 || index >= 16) {
+        return "?";
+    }
+    return labels[index];
+}
+
+inline void paint_tool_fallback(cairo_t *cr, int index, double x, double y, double size)
+{
+    if (cr == nullptr || size < 4.0) {
+        return;
+    }
+    static const double colors[16][3] = {
+        {0.85, 0.62, 0.12}, {0.25, 0.25, 0.28}, {0.45, 0.28, 0.14}, {0.55, 0.55, 0.15},
+        {0.18, 0.55, 0.22}, {0.20, 0.62, 0.28}, {0.16, 0.32, 0.72}, {0.72, 0.40, 0.12},
+        {0.15, 0.28, 0.70}, {0.75, 0.16, 0.14}, {0.20, 0.55, 0.28}, {0.12, 0.40, 0.62},
+        {0.22, 0.22, 0.24}, {0.15, 0.55, 0.58}, {0.35, 0.45, 0.62}, {0.25, 0.25, 0.28},
+    };
+    const int clamped = std::max(0, std::min(index, 15));
+    cairo_set_source_rgb(cr, colors[clamped][0], colors[clamped][1], colors[clamped][2]);
+    cairo_rectangle(cr, x, y, size, size);
+    cairo_fill(cr);
+    cairo_set_source_rgb(cr, 0.08, 0.07, 0.06);
+    cairo_set_line_width(cr, 1);
+    cairo_rectangle(cr, x + 0.5, y + 0.5, size - 1.0, size - 1.0);
+    cairo_stroke(cr);
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, std::max(8.0, size * 0.36));
+    cairo_text_extents_t extents;
+    const char *label = tool_icon_fallback_label(clamped);
+    cairo_text_extents(cr, label, &extents);
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_move_to(cr, x + (size - extents.width) / 2.0 - extents.x_bearing,
+                  y + (size - extents.height) / 2.0 - extents.y_bearing);
+    cairo_show_text(cr, label);
+}
 class ToolPalette {
 public:
     ToolPalette();

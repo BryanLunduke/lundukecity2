@@ -235,12 +235,6 @@ int Shell::run(int argc, char **argv)
         info_body_ = tile_atlas().load_error().empty() ? asset_missing_text(asset_candidates()) : tile_atlas().load_error();
         open_dialog(Dialog::Info);
     }
-    welcome_ = true;
-    const std::string dismissed = city_config_dir().empty() ? std::string() : city_config_dir() + "/welcome-dismissed";
-    if (!dismissed.empty()) {
-        std::ifstream in(dismissed);
-        welcome_ = !in.good();
-    }
     load_recent();
     started_ = std::chrono::steady_clock::now();
     next_autosave_ = started_ + std::chrono::seconds(60);
@@ -248,23 +242,35 @@ int Shell::run(int argc, char **argv)
     center_on_fraction(0.5, 0.5);
     // Command-line opens happen before the first tick, so a brand-new city
     // has not yet become unsaved work and the file replaces it directly.
+    const bool launched_with_file = !pending_opens_.empty();
     while (dialog_ == Dialog::None && !pending_opens_.empty()) {
         queued_path_ = pending_opens_.front();
         pending_opens_.erase(pending_opens_.begin());
         request_with_save(AfterSave::OpenPath);
     }
-    if (smoke_ && !ui_test_ && pending_opens_.empty() && session_.city_name() == "New City") {
+    if (smoke_ && !ui_test_ && !launched_with_file && session_.city_name() == "New City") {
         session_.load_scenario(CitySession::scenario_def(0).id);
         speed_ = session_.speed();
         center_on_fraction(0.5, 0.5);
     }
     if (ui_test_ || review_) {
-        welcome_ = false;
         recovery_checked_ = true;
         speed_ = 0;
         session_.set_speed(0);
     }
-    if (!demo_.empty() && demo_ != "budget" && demo_ != "menu") {
+    // The launch screen is for a player who has not already named a city
+    // on the command line, and not for the scripted demo / review runs.
+    const bool scripted = smoke_ || ui_test_ || review_ || !demo_.empty();
+    if (!scripted && !launched_with_file) {
+        welcome_gate_ = true;
+        if (dialog_ == Dialog::None) {
+            open_dialog(Dialog::Welcome);
+        }
+    } else if (launched_with_file && dialog_ == Dialog::LoadError) {
+        welcome_gate_ = true;
+    }
+    if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
+        demo_ != "quit") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -692,7 +698,7 @@ std::string Shell::visual_stamp() const
         << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << session_.map_serial()
         << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
         << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
-        << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_ << ' ' << shown_message_ << ' '
+        << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_gate_ << ' ' << shown_message_ << ' '
         << hint_visible << ' ' << query_pinned_ << ' ' << gamepad_nav_ << ' ' << cursor_x_ << ' ' << cursor_y_ << ' '
         << pointer_x_ << ' ' << pointer_y_ << ' ' << field_a_ << ' ' << field_b_ << ' ' << field_caret_ << ' ' << field_anchor_
         << ' ' << dialog_error_ << ' '
@@ -1020,6 +1026,22 @@ void Shell::loop()
                 menu_.cursor = 7;
                 menu_.alt_shown = true;
                 gamepad_nav_ = true;
+            } else if (demo_ == "scenario") {
+                scenario_index_ = 0;
+                list_index_ = 0;
+                list_scroll_ = 0;
+                open_dialog(Dialog::Scenario);
+            } else if (demo_ == "welcome") {
+                welcome_gate_ = true;
+                open_dialog(Dialog::Welcome);
+            } else if (demo_ == "quit") {
+                welcome_gate_ = true;
+                open_dialog(Dialog::QuitConfirm);
+            } else if (demo_ == "goal") {
+                session_.load_scenario(CitySession::scenario_def(0).id);
+                speed_ = 0;
+                session_.set_speed(0);
+                close_dialog();
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);

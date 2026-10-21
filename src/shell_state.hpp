@@ -50,7 +50,9 @@ enum class Dialog : int {
     Info,
     Overwrite,
     Settings,
-    Controls
+    Controls,
+    Welcome,
+    QuitConfirm
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
@@ -110,6 +112,9 @@ private:
     bool dialog_pauses() const;
     void set_paused_for_dialog();
     void close_dialog();
+    // Close the dialog. When the launch screen is still the way back in,
+    // open it again instead of leaving the window on an untouched city.
+    void dismiss_dialog();
     void open_dialog(Dialog dialog);
     void proceed(AfterSave next);
     void request_with_save(AfterSave next);
@@ -241,7 +246,6 @@ private:
     int side_w_ = 120;
     int cell_ = 48;
     int menu_h_ = 34;
-    int welcome_h_ = 0;
     int status_h_ = 34;
     int message_h_ = 42;
     int pal_y_ = 0;
@@ -332,7 +336,9 @@ private:
     std::chrono::steady_clock::time_point hint_until_{};
     std::chrono::steady_clock::time_point started_{};
     bool recovery_checked_ = false;
-    bool welcome_ = true;
+    // True from the launch screen until a city is actually started, loaded,
+    // or a scenario begins. Cancelling those flows comes back here.
+    bool welcome_gate_ = false;
     std::string own_recovery_;
     std::string autosave_fingerprint_;
     bool autosave_warned_ = false;

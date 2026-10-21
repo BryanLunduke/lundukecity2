@@ -59,6 +59,27 @@ install_subdir(
   install_dir: get_option('datadir') / 'lunduke-city-2',
 )
 install_data(
+  [
+    'data/tool-icons/bulldozer.png',
+    'data/tool-icons/road.png',
+    'data/tool-icons/rail.png',
+    'data/tool-icons/wire.png',
+    'data/tool-icons/park.png',
+    'data/tool-icons/residential.png',
+    'data/tool-icons/commercial.png',
+    'data/tool-icons/industrial.png',
+    'data/tool-icons/police.png',
+    'data/tool-icons/fire.png',
+    'data/tool-icons/stadium.png',
+    'data/tool-icons/seaport.png',
+    'data/tool-icons/coal.png',
+    'data/tool-icons/nuclear.png',
+    'data/tool-icons/airport.png',
+    'data/tool-icons/query.png',
+  ],
+  install_dir: get_option('datadir') / 'lunduke-city-2' / 'tool-icons',
+)
+install_data(
   'NOTICE',
   'COPYING',
   install_dir: get_option('datadir') / 'doc' / 'lunduke-city-2',
