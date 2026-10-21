@@ -136,6 +136,30 @@ inline std::string settings_text(const StoredSettings &settings)
     return out.str();
 }
 
+// A Steam Deck session is fullscreen and must not replace the desktop
+// window rectangle. When the file already has one, write that rectangle
+// back. When it does not, leave the keys out rather than storing the
+// Deck window.
+inline void keep_desktop_geometry(StoredSettings &stored, const StoredSettings &loaded, bool deck, bool live_valid, int x,
+                                  int y, int w, int h, bool maximized)
+{
+    if (deck) {
+        stored.has_geometry = loaded.has_geometry;
+        stored.x = loaded.x;
+        stored.y = loaded.y;
+        stored.w = loaded.w;
+        stored.h = loaded.h;
+        stored.maximized = loaded.maximized;
+        return;
+    }
+    stored.has_geometry = live_valid;
+    stored.x = x;
+    stored.y = y;
+    stored.w = w;
+    stored.h = h;
+    stored.maximized = maximized;
+}
+
 // Unknown keys are ignored so later settings can share the file.
 inline StoredSettings settings_parse(const std::string &text)
 {

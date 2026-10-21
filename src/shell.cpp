@@ -354,12 +354,16 @@ void Shell::load_window_settings()
     const ui_scale::StoredSettings stored = ui_scale::settings_parse(buffer.str());
     loaded_ = stored;
     user_scale_ = stored.user_scale;
-    if (stored.has_geometry && !size_override_ && !deck_) {
+    // Remember the desktop rectangle even on Deck. The window itself stays
+    // fullscreen; the rectangle is written back when the session ends.
+    if (stored.has_geometry && !size_override_) {
         saved_x_ = stored.x;
         saved_y_ = stored.y;
         saved_w_ = stored.w;
         saved_h_ = stored.h;
-        want_maximized_ = stored.maximized;
+        if (!deck_) {
+            want_maximized_ = stored.maximized;
+        }
         has_saved_window_ = true;
     }
 }
@@ -380,23 +384,11 @@ void Shell::save_window_settings()
     stored.disasters = session_.disasters() ? 1 : 0;
     stored.auto_goto = session_.auto_goto() ? 1 : 0;
     stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
-    if (deck_ && has_saved_window_) {
-        // A fullscreen Deck session must not replace the rectangle a desktop
-        // window will restore.
-        stored.has_geometry = true;
-        stored.x = saved_x_;
-        stored.y = saved_y_;
-        stored.w = saved_w_;
-        stored.h = saved_h_;
-        stored.maximized = want_maximized_;
-    } else if (!deck_) {
-        stored.has_geometry = normal_valid_;
-        stored.x = normal_x_;
-        stored.y = normal_y_;
-        stored.w = normal_w_;
-        stored.h = normal_h_;
+    {
         const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
-        stored.maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
+        const bool maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
+        ui_scale::keep_desktop_geometry(stored, loaded_, deck_, normal_valid_, normal_x_, normal_y_, normal_w_, normal_h_,
+                                        deck_ ? loaded_.maximized : maximized);
     }
     const std::string dir = city_config_dir();
     if (dir.empty()) {

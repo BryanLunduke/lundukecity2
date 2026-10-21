@@ -106,6 +106,36 @@ int main()
     if (missing.find("/nowhere/tiles") == std::string::npos && candidates.empty()) {
         return fail("missing-asset text dropped the searched path");
     }
+    // A Deck session must put the desktop rectangle back, and must not invent
+    // one from the fullscreen window when the file had none.
+    {
+        const ui_scale::StoredSettings loaded = ui_scale::settings_parse(
+            "ui_scale=1.25\nwindow_x=40\nwindow_y=50\nwindow_w=1100\nwindow_h=700\nmaximized=1\n");
+        if (!loaded.has_geometry || loaded.w != 1100 || loaded.h != 700) {
+            return fail("settings did not keep the desktop window");
+        }
+        ui_scale::StoredSettings deck_save;
+        deck_save.speed = 2;
+        ui_scale::keep_desktop_geometry(deck_save, loaded, true, true, 0, 0, 1920, 1080, false);
+        const std::string deck_text = ui_scale::settings_text(deck_save);
+        if (deck_text.find("window_w=1100") == std::string::npos || deck_text.find("window_h=700") == std::string::npos ||
+            deck_text.find("window_x=40") == std::string::npos || deck_text.find("window_y=50") == std::string::npos ||
+            deck_text.find("maximized=1") == std::string::npos || deck_text.find("window_w=1920") != std::string::npos) {
+            return fail("a Deck session replaced the desktop window");
+        }
+        ui_scale::StoredSettings empty;
+        ui_scale::StoredSettings deck_empty;
+        ui_scale::keep_desktop_geometry(deck_empty, empty, true, true, 0, 0, 1920, 1080, false);
+        if (ui_scale::settings_text(deck_empty).find("window_") != std::string::npos) {
+            return fail("a Deck session stored a window it did not load");
+        }
+        ui_scale::StoredSettings desktop;
+        ui_scale::keep_desktop_geometry(desktop, loaded, false, true, 8, 9, 1280, 800, false);
+        const std::string desktop_text = ui_scale::settings_text(desktop);
+        if (desktop_text.find("window_w=1280") == std::string::npos || desktop_text.find("window_h=800") == std::string::npos) {
+            return fail("a desktop session did not store the live window");
+        }
+    }
     // H5: scale follows the display unless the user set one, and the default
     // window fits the work area.
     if (std::abs(ui_scale::resolve_ui_scale(2.0f, 0.0f) - 2.0f) > 0.001f) {
