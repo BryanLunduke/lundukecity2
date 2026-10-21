@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "dialog_layout.hpp"
+#include "file_list.hpp"
 #include "list_scroll.hpp"
 #include "redraw.hpp"
 #include "text_paint.hpp"
@@ -168,6 +169,15 @@ void Shell::run_review_checks()
     }
 
     // M1: content-sized dialogs stay inside a Steam Deck and a short laptop window.
+    files_.clear();
+    files_.push_back("..");
+    files_.push_back(".git/");
+    files_.push_back("city10.cty");
+    std::sort(files_.begin(), files_.end(), file_row_less);
+    if (files_.empty() || files_[0] != ".." || file_name_hidden("city.cty")) {
+        fail("file list lost the parent row");
+        return;
+    }
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {

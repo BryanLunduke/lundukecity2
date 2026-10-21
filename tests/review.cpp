@@ -4,14 +4,17 @@
 
 #include "assets.hpp"
 #include "dialog_layout.hpp"
+#include "file_list.hpp"
 #include "list_scroll.hpp"
 #include "redraw.hpp"
 #include "ui_scale.hpp"
 #include "window_fit.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -140,6 +143,18 @@ int main()
     }
     if (std::abs(button_width(40, 32, 120) - 120) > 0.1 || std::abs(button_width(200, 32, 120) - 232) > 0.1) {
         return fail("button width");
+    }
+    std::vector<std::string> rows = {"city10.cty", "Notes/", "city2.cty", "a.cty", "..", "Zoo/"};
+    std::sort(rows.begin(), rows.end(), file_row_less);
+    if (rows.size() != 6 || rows[0] != ".." || rows[1] != "Notes/" || rows[2] != "Zoo/" || rows[3] != "a.cty" ||
+        rows[4] != "city2.cty" || rows[5] != "city10.cty") {
+        return fail("file list did not put .. first, then folders, then natural names");
+    }
+    if (!file_name_hidden(".git") || file_name_hidden("city.cty")) {
+        return fail("dotfile filter");
+    }
+    if (default_cities_dir().find("Lunduke City 2") == std::string::npos) {
+        return fail("default city folder is not under Documents");
     }
     const DialogRect popped = place_near(1280, 800, 480, 160, 1200, 700, 16);
     if (popped.x < 16 || popped.y < 16 || popped.x + popped.w > 1280 - 16 || popped.y + popped.h > 800 - 16) {

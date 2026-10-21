@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "city_seed.hpp"
+#include "file_list.hpp"
 #include "list_scroll.hpp"
 #include "osk_layout.hpp"
 #include "platform.hpp"
@@ -371,23 +372,34 @@ void Shell::refresh_files()
     std::error_code ec;
     if (files_dir_.empty() || !std::filesystem::is_directory(files_dir_, ec)) {
         const std::string remembered = remembered_city_folder();
-        files_dir_ = remembered.empty() ? std::filesystem::current_path(ec).string() : remembered;
-    }
-    for (const auto &entry : std::filesystem::directory_iterator(files_dir_, ec)) {
-        if (ec) {
-            break;
-        }
-        const std::string name = entry.path().filename().string();
-        if (name.empty() || name == ".") {
-            continue;
-        }
-        if (entry.is_directory(ec)) {
-            files_.push_back(name + "/");
-        } else if (ends_with_ci(name, ".cty")) {
-            files_.push_back(name);
+        if (!remembered.empty()) {
+            files_dir_ = remembered;
+        } else {
+            files_dir_ = default_cities_dir();
         }
     }
-    std::sort(files_.begin(), files_.end());
+    if (!files_dir_.empty() && !std::filesystem::is_directory(files_dir_, ec) && !headless_ && !smoke_ && !ui_test_ &&
+        !review_) {
+        std::filesystem::create_directories(files_dir_, ec);
+    }
+    files_.push_back("..");
+    if (std::filesystem::is_directory(files_dir_, ec)) {
+        for (const auto &entry : std::filesystem::directory_iterator(files_dir_, ec)) {
+            if (ec) {
+                break;
+            }
+            const std::string name = entry.path().filename().string();
+            if (name.empty() || name == "." || name == ".." || file_name_hidden(name)) {
+                continue;
+            }
+            if (entry.is_directory(ec)) {
+                files_.push_back(name + "/");
+            } else if (ends_with_ci(name, ".cty")) {
+                files_.push_back(name);
+            }
+        }
+    }
+    std::sort(files_.begin(), files_.end(), file_row_less);
     if (list_index_ >= static_cast<int>(files_.size())) {
         list_index_ = 0;
     }
@@ -910,6 +922,13 @@ void Shell::on_dialog_button(int id)
             }
             if (list_index_ >= 0 && list_index_ < static_cast<int>(files_.size())) {
                 const std::string name = files_[static_cast<std::size_t>(list_index_)];
+                if (name == "..") {
+                    files_dir_ = parent_dir(files_dir_);
+                    list_index_ = 0;
+                    list_scroll_ = 0;
+                    refresh_files();
+                    return;
+                }
                 if (!name.empty() && name.back() == '/') {
                     files_dir_ = path_join(files_dir_, name.substr(0, name.size() - 1));
                     list_index_ = 0;

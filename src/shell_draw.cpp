@@ -6,6 +6,7 @@
 
 #include "dialog_copy.hpp"
 #include "dialog_layout.hpp"
+#include "file_list.hpp"
 #include "graph_legend.hpp"
 #include "list_scroll.hpp"
 #include "notice_bar.hpp"
@@ -742,8 +743,13 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, body_font(), field_a_, x + 24, y + dh - 92, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 48));
         }
-        buttons_at(x, dw, y + dh - margin - dp(36),
-                   {{"_Up", kUp}, {"_Cancel", kCancel}, {files_save_ ? "_Save" : "_Open", files_save_ ? kSave : kOk}}, 1);
+        bool folder_row = false;
+        if (!files_save_ && list_index_ >= 0 && list_index_ < static_cast<int>(files_.size())) {
+            folder_row = file_row_is_dir(files_[static_cast<std::size_t>(list_index_)]);
+        }
+        const char *open_label = files_save_ ? "_Save" : (folder_row ? "Open _Folder" : "_Open");
+        const int open_id = files_save_ ? kSave : kOk;
+        buttons_at(x, dw, y + dh - margin - dp(36), {{"_Up", kUp}, {"_Cancel", kCancel}, {open_label, open_id}}, 1);
         return;
     }
     if (dialog_ == Dialog::LoadError || dialog_ == Dialog::SaveError || dialog_ == Dialog::Info) {
