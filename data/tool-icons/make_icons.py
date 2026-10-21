@@ -312,7 +312,9 @@ def _paint_shape(im, inside, fill, rim_hi, rim_mid, rim_lo):
             for dy in (-1, 0, 1):
                 for dx in (-1, 0, 1):
                     nx, ny = x + dx, y + dy
-                    if 0 <= nx < SIZE and 0 <= ny < SIZE and rim[ny][nx]:
+                    # Only the outer edge seeds the inner rim. Treating the
+                    # inner rim as an edge floods the whole badge.
+                    if 0 <= nx < SIZE and 0 <= ny < SIZE and rim[ny][nx] == 1:
                         rim[y][x] = 2
                         break
     for y in range(SIZE):
@@ -320,7 +322,7 @@ def _paint_shape(im, inside, fill, rim_hi, rim_mid, rim_lo):
             if not mask[y][x]:
                 continue
             if rim[y][x] == 1:
-                put(im, x, y, rim_hi if (x + y) < 34 else rim_lo)
+                put(im, x, y, rim_hi if (x + y) < 40 else rim_lo)
             elif rim[y][x] == 2:
                 put(im, x, y, rim_mid)
             else:
@@ -328,48 +330,60 @@ def _paint_shape(im, inside, fill, rim_hi, rim_mid, rim_lo):
 
 
 def _shield(x, y):
-    # Police shield: broad shoulders, flat top, point at the bottom.
-    if y < 3 or y > 36:
+    # Police shield: pointed bottom, and a bite out of each top corner
+    # deep enough that the 1px outline does not fill it back in.
+    if y < 4 or y > 34:
         return False
-    cx = 19.5
-    if y <= 18:
-        half = 8 + (y - 3) * 2
-        if half > 16:
-            half = 16
-        return abs(x + 0.5 - cx) <= half
-    half = 16 * (36 - y) / 18.0
-    return abs(x + 0.5 - cx) <= half
-
-
-def _maltese(x, y):
-    # Fire badge: four flared arms with a V notch in each tip.
-    dx = abs(x + 0.5 - 19.5)
-    dy = abs(y + 0.5 - 19.5)
-    along = dx if dx >= dy else dy
-    across = dy if dx >= dy else dx
-    if along > 18.2:
+    if y <= 12:
+        half = 14
+    else:
+        half = int(round(14 * (34 - y) / 22.0))
+    if abs(x - 19) > half:
         return False
-    limit = 6.2 + along * 0.34
-    if across > limit:
-        return False
-    if along > 13.5 and across < (along - 13.5) * 1.15:
+    if 5 <= y <= 8 and (x <= 19 - half + 4 or x >= 19 + half - 4):
         return False
     return True
 
 
+def _maltese(x, y):
+    # Fire badge: four arms, narrow at the waist and wider at a concave
+    # end. The tip is scooped, and the corners of that scoop are blunt.
+    dx = abs(x + 0.5 - 19.5)
+    dy = abs(y + 0.5 - 19.5)
+    along, across = (dx, dy) if dx >= dy else (dy, dx)
+    if min(dx, dy) > 6.2 and max(dx, dy) < min(dx, dy) * 1.85:
+        return False
+    if along > 17.2:
+        return False
+    half = 5.2 + along * 0.22
+    if half > 9.0:
+        half = 9.0
+    if across > half:
+        return False
+    edge = half * 0.82
+    if across >= edge:
+        reach = 15.6
+    else:
+        t = 0 if edge <= 0 else across / edge
+        reach = 17.2 - 1.8 * (1 - t * t)
+    return along <= reach
+
+
 def police(im):
-    _paint_shape(im, _shield, "U", "W", "Y", "G")
-    glyph2x(im, 8, 10, "P", "W")
-    glyph2x(im, 22, 10, "D", "W")
+    # Blue field, gold rim. White PD sits in the field, not on the rim.
+    _paint_shape(im, _shield, "U", "y", "Y", "d")
+    glyph2x(im, 9, 12, "P", "W")
+    glyph2x(im, 21, 12, "D", "W")
 
 
 def fire(im):
-    _paint_shape(im, _maltese, "R", "y", "Y", "n")
-    # Centre disc so FD sits on a flat field inside the cross.
-    disc(im, 20, 19, 12, 9, "n")
-    disc(im, 20, 19, 11, 8, "R")
-    glyph2x(im, 8, 12, "F", "W")
-    glyph2x(im, 22, 12, "D", "W")
+    # Red cross, gold outline, small red disc for the letters.
+    _paint_shape(im, _maltese, "R", "y", "Y", "d")
+    disc(im, 20, 20, 10, 8, "Y")
+    disc(im, 20, 20, 8, 6, "n")
+    disc(im, 20, 20, 7, 5, "R")
+    glyph2x(im, 10, 13, "F", "W")
+    glyph2x(im, 22, 13, "D", "W")
 
 
 def stadium(im):
@@ -472,21 +486,23 @@ def power_hall(im):
 
 def coal(im):
     power_hall(im)
-    # Coal pile at the foot of the stack.
-    for i, width in enumerate((12, 10, 8, 6)):
-        hline(im, 22, 33 - i, width, "B" if i % 2 == 0 else "N")
+    # Coal pile beside the stack. Stays on x >= 22 so the shared hall matches.
+    disc(im, 25, 33, 3, 2, "B")
+    disc(im, 27, 32, 3, 2, "N")
+    put(im, 24, 33, "s")
+    put(im, 26, 31, "s")
     # Smokestack.
     rect(im, 28, 10, 6, 24, "g")
     vline(im, 28, 10, 24, "G")
     vline(im, 33, 10, 24, "B")
     rect(im, 27, 8, 8, 3, "N")
     hline(im, 27, 8, 8, "G")
-    # Dark smoke, drifting up and to the right.
-    rect(im, 30, 4, 6, 4, "N")
-    rect(im, 33, 1, 5, 4, "B")
-    rect(im, 24, 3, 5, 3, "s")
-    put(im, 36, 0, "N")
-    put(im, 23, 5, "B")
+    # Dark grey puffs, the same cloud shape as the nuclear steam.
+    disc(im, 31, 5, 4, 3, "s")
+    disc(im, 35, 2, 3, 2, "M")
+    disc(im, 26, 4, 3, 2, "N")
+    disc(im, 30, 1, 2, 1, "s")
+    put(im, 33, 4, "B")
 
 
 def nuclear(im):
