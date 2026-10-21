@@ -738,6 +738,9 @@ void Micropolis::init()
 
     // CallbackFunction callbackHook;
     callbackHook = NULL;
+    specialIncomeFn = NULL;
+    specialLandFn = NULL;
+    specialIncome = 0;
 
     // void *callbackData;
     callbackData = NULL;

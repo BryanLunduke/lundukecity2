@@ -12,6 +12,7 @@
 #include "text_edit.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
+#include "special_buildings.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 
@@ -120,6 +121,7 @@ void Shell::dismiss_dialog()
 void Shell::open_dialog(Dialog dialog)
 {
     menu_.close();
+    special_open_ = false;
     dialog_ = dialog;
     dialog_error_.clear();
     // A hover left over from the map must not light a dialog button.
@@ -214,6 +216,16 @@ void Shell::toggle_pause()
     }
 }
 
+int Shell::special_tool_index() const
+{
+    for (int i = 0; i < kToolCount; ++i) {
+        if (tool_by_index(i)->engine_id == kSpecialEngineId) {
+            return i;
+        }
+    }
+    return kToolCount - 1;
+}
+
 void Shell::select_tool(int index)
 {
     if (index < 0) {
@@ -222,14 +234,77 @@ void Shell::select_tool(int index)
     if (index >= kToolCount) {
         index = 0;
     }
+    const int special = special_tool_index();
+    const bool entering = index == special && tool_index_ != index;
+    const bool leaving = tool_index_ == special && index != special;
     tool_index_ = index;
     palette_.set_selected(index);
     map_.set_tool(tool_by_index(index)->engine_id);
+    if (entering) {
+        menu_.close();
+        special_open_ = true;
+        if (special_cursor_ < 0 || special_cursor_ >= special_building_count()) {
+            special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
+        }
+    }
+    if (leaving) {
+        special_open_ = false;
+    }
 }
 
 void Shell::cycle_tool(int delta)
 {
+    if (special_open_) {
+        special_open_ = false;
+    }
     select_tool(tool_index_ + delta);
+}
+
+void Shell::press_palette(double x, double y)
+{
+    const int index = palette_.index_at(x, y);
+    if (index >= 0 && index == tool_index_ && tool_by_index(index)->engine_id == kSpecialEngineId) {
+        special_open_ = !special_open_;
+        if (special_open_) {
+            menu_.close();
+            if (special_cursor_ < 0 || special_cursor_ >= special_building_count()) {
+                special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
+            }
+        }
+        return;
+    }
+    palette_.press(x, y);
+}
+
+void Shell::move_special_cursor(int delta)
+{
+    const int count = special_building_count();
+    if (count < 1) {
+        return;
+    }
+    int next = special_cursor_ + delta;
+    if (next < 0) {
+        next = count - 1;
+    }
+    if (next >= count) {
+        next = 0;
+    }
+    special_cursor_ = next;
+}
+
+void Shell::choose_special(int index)
+{
+    if (index < 0 || index >= special_building_count()) {
+        return;
+    }
+    special_choice_ = index;
+    special_cursor_ = index;
+    const int slot = special_tool_index();
+    if (tool_index_ != slot) {
+        select_tool(slot);
+    }
+    special_open_ = false;
+    map_.set_tool(kSpecialEngineId);
 }
 
 void Shell::clamp_scroll()
@@ -1183,6 +1258,16 @@ void Shell::on_dialog_button(int id)
 
 void Shell::on_hotspot(int id, double x, double y)
 {
+    if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
+        if (id >= kSpecialItem && id < kSpecialItem + special_building_count()) {
+            choose_special(id - kSpecialItem);
+            return;
+        }
+        if (id == kHotNone) {
+            special_open_ = false;
+            return;
+        }
+    }
     if (id == kOverlayMap && dialog_ == Dialog::Overlay) {
         double fx = 0;
         double fy = 0;
@@ -1193,6 +1278,7 @@ void Shell::on_hotspot(int id, double x, double y)
         return;
     }
     if (id >= kMenuTitle && id < kMenuTitle + 5 && dialog_ == Dialog::None) {
+        special_open_ = false;
         const int column = id - kMenuTitle;
         if (menu_.open_menu == column) {
             menu_.close();

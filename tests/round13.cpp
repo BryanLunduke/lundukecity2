@@ -157,7 +157,7 @@ int main()
     }
     {
         auto d = base;
-        put_be16(d, kMap + 2 * 500, 1023);
+        put_be16(d, kMap + 2 * 500, 1019);
         cases.push_back({"unknown tile", d, "unknown tile"});
     }
     int n = 0;

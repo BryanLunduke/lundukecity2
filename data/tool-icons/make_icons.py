@@ -3,6 +3,7 @@
 # Original toolbar icons for Lunduke City 2. These are not traced from
 # SimCity or any other game. Run this script to regenerate the PNGs.
 
+import math
 import pathlib
 import struct
 import zlib
@@ -139,93 +140,65 @@ def bulldozer(im):
 
 
 def road(im):
-    rect(im, 2, 2, 36, 36, "E")
-    rect(im, 4, 2, 32, 36, "e")
-    rect(im, 10, 2, 20, 36, "D")
-    rect(im, 12, 2, 16, 36, "N")
-    rect(im, 14, 2, 12, 36, "g")
-    vline(im, 14, 2, 36, "s")
-    vline(im, 25, 2, 36, "G")
-    for y in (4, 12, 20, 28):
-        rect(im, 18, y, 4, 5, "W")
+    # Horizontal roadway, same band as the rails. The asphalt is 15 pixels
+    # tall so a 1px centre line has the same asphalt above and below it.
+    rect(im, 0, 11, 40, 17, "g")
+    rect(im, 0, 12, 40, 15, "N")
+    hline(im, 0, 12, 40, "G")
+    hline(im, 0, 26, 40, "B")
+    for x in (2, 12, 22, 32):
+        rect(im, x, 19, 6, 1, "Y")
 
 
 def rail(im):
-    # Ballast and ties that run to the edges, with a gap of sky so the
-    # ties read as a track rather than a crate.
-    rect(im, 8, 1, 24, 38, "g")
-    rect(im, 10, 1, 20, 38, "s")
-    for y in range(1, 38, 4):
-        rect(im, 2, y, 36, 2, "T")
-        hline(im, 2, y, 36, "H")
-    # Two rails.
-    rect(im, 12, 0, 3, 40, "N")
-    vline(im, 12, 0, 40, "W")
-    rect(im, 25, 0, 3, 40, "N")
-    vline(im, 27, 0, 40, "G")
-    # A train car sitting on the rails. Rails stay visible past both ends.
-    rect(im, 6, 12, 28, 16, "R")
-    hline(im, 6, 12, 28, "r")
-    hline(im, 6, 27, 28, "n")
-    rect(im, 8, 14, 8, 4, "q")
-    rect(im, 24, 14, 8, 4, "u")
-    rect(im, 8, 22, 8, 4, "q")
-    rect(im, 24, 22, 8, 4, "u")
-    hline(im, 6, 19, 28, "Y")
-    hline(im, 6, 20, 28, "A")
-    # Wheels on the rails.
-    for x in (13, 25):
-        rect(im, x, 11, 3, 2, "B")
-        rect(im, x, 27, 3, 2, "B")
+    # Horizontal track, same thickness as the road. Ties, two rails, no train.
+    for x in range(0, 40, 4):
+        rect(im, x, 11, 2, 17, "T")
+        vline(im, x, 11, 17, "H")
+    rect(im, 0, 14, 40, 3, "N")
+    hline(im, 0, 14, 40, "G")
+    rect(im, 0, 23, 40, 3, "N")
+    hline(im, 0, 25, 40, "s")
 
 
 def wire(im):
-    # Cables sag from the crossarm out to both edges.
-    left = ((1, 2), (3, 4), (5, 6), (7, 7), (9, 8), (11, 8), (13, 7), (15, 5))
-    for x, y in left:
+    # Wooden pole, one crossarm, insulators, wires leaving both sides.
+    sag = ((0, 10), (2, 12), (4, 14), (6, 15), (8, 16), (10, 16), (12, 15), (14, 13), (16, 11))
+    for x, y in sag:
         put(im, x, y, "B")
         put(im, x, y + 1, "N")
         put(im, 39 - x, y, "B")
         put(im, 39 - x, y + 1, "N")
-    # Crossarm with three insulators. The tower below is an open lattice,
-    # so it reads as a pylon rather than a T, a lamp, or a solid wedge.
-    rect(im, 2, 6, 36, 3, "T")
-    hline(im, 2, 6, 36, "H")
-    for x in (6, 18, 30):
-        rect(im, x, 4, 4, 4, "Y")
-        hline(im, x, 4, 4, "y")
-    for i in range(24):
-        y = 10 + i
-        half = 4 + (i * 12) // 23
-        left_x = 19 - half
-        right_x = 20 + half
-        put(im, left_x, y, "W")
-        put(im, left_x + 1, y, "S")
-        put(im, right_x, y, "s")
-        put(im, right_x - 1, y, "N")
-        span = max(1, right_x - left_x)
-        put(im, left_x + (i * span) // 23, y, "N")
-        put(im, right_x - (i * span) // 23, y, "B")
-    for y, half in ((16, 7), (24, 11), (32, 14)):
-        hline(im, 19 - half, y, half * 2 + 2, "s")
-    rect(im, 3, 34, 34, 4, "N")
-    hline(im, 2, 37, 36, "s")
+    rect(im, 4, 10, 32, 3, "T")
+    hline(im, 4, 10, 32, "H")
+    for x in (8, 18, 29):
+        rect(im, x, 7, 3, 4, "W")
+        hline(im, x, 7, 3, "Y")
+        put(im, x + 1, 8, "y")
+    rect(im, 18, 13, 4, 22, "T")
+    vline(im, 18, 13, 22, "t")
+    vline(im, 21, 13, 22, "H")
+    rect(im, 14, 34, 12, 4, "t")
+    hline(im, 14, 34, 12, "H")
 
 
 def park(im):
-    rect(im, 1, 28, 38, 10, "E")
-    hline(im, 1, 28, 38, "e")
+    # Grass with an irregular canopy. The crown is stacked blocks, not a disc.
+    rect(im, 1, 26, 38, 12, "E")
+    hline(im, 1, 26, 38, "e")
     hline(im, 2, 36, 36, "f")
-    rect(im, 17, 20, 5, 12, "T")
-    vline(im, 17, 21, 10, "t")
-    vline(im, 21, 21, 9, "H")
-    disc(im, 20, 16, 14, 12, "E")
-    disc(im, 18, 14, 10, 8, "e")
-    disc(im, 14, 12, 5, 4, "L")
-    disc(im, 26, 18, 5, 4, "f")
-    rect(im, 6, 24, 3, 6, "t")
-    disc(im, 7, 21, 5, 5, "E")
-    disc(im, 6, 20, 3, 3, "e")
+    rect(im, 18, 20, 4, 12, "T")
+    vline(im, 18, 20, 12, "t")
+    vline(im, 21, 20, 11, "H")
+    rect(im, 8, 16, 20, 8, "E")
+    rect(im, 5, 12, 14, 8, "e")
+    rect(im, 18, 9, 14, 8, "E")
+    rect(im, 11, 7, 8, 6, "L")
+    rect(im, 24, 13, 8, 5, "f")
+    rect(im, 14, 18, 10, 4, "e")
+    rect(im, 9, 14, 4, 3, "L")
+    put(im, 28, 11, "e")
+    put(im, 7, 15, "E")
 
 
 def _badge(im, x, y, fill, hi, letter):
@@ -303,70 +276,170 @@ def industrial(im):
     _badge(im, 2, 2, "O", "o", "I")
 
 
+GLYPHS = {
+    "P": ("####.", "#...#", "#...#", "####.", "#....", "#....", "#...."),
+    # Straight left stem, round right side. Cutting every corner made this
+    # read as O at 1x.
+    "D": ("####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."),
+    "F": ("#####", "#....", "#....", "####.", "#....", "#....", "#...."),
+}
+
+
+def glyph2x(im, x, y, letter, color):
+    for row, bits in enumerate(GLYPHS[letter]):
+        for col, bit in enumerate(bits):
+            if bit == "#":
+                rect(im, x + col * 2, y + row * 2, 2, 2, color)
+
+
+def _paint_shape(im, inside, fill, rim_hi, rim_mid, rim_lo):
+    mask = [[inside(x, y) for x in range(SIZE)] for y in range(SIZE)]
+    rim = [[0] * SIZE for _ in range(SIZE)]
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if not mask[y][x]:
+                continue
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    nx, ny = x + dx, y + dy
+                    if not (0 <= nx < SIZE and 0 <= ny < SIZE and mask[ny][nx]):
+                        rim[y][x] = 1
+                        break
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if not mask[y][x] or rim[y][x]:
+                continue
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    nx, ny = x + dx, y + dy
+                    # Only the outer edge seeds the inner rim. Treating the
+                    # inner rim as an edge floods the whole badge.
+                    if 0 <= nx < SIZE and 0 <= ny < SIZE and rim[ny][nx] == 1:
+                        rim[y][x] = 2
+                        break
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if not mask[y][x]:
+                continue
+            if rim[y][x] == 1:
+                put(im, x, y, rim_hi if (x + y) < 40 else rim_lo)
+            elif rim[y][x] == 2:
+                put(im, x, y, rim_mid)
+            else:
+                put(im, x, y, fill)
+
+
+def _shield(x, y):
+    # Police shield: pointed bottom, and a bite out of each top corner
+    # deep enough that the 1px outline does not fill it back in.
+    if y < 4 or y > 34:
+        return False
+    if y <= 12:
+        half = 14
+    else:
+        half = int(round(14 * (34 - y) / 22.0))
+    if abs(x - 19) > half:
+        return False
+    if 5 <= y <= 8 and (x <= 19 - half + 4 or x >= 19 + half - 4):
+        return False
+    return True
+
+
+def _maltese(x, y):
+    # Fire badge: four arms, narrow at the waist and wider at a concave
+    # end. The tip is scooped, and the corners of that scoop are blunt.
+    dx = abs(x + 0.5 - 19.5)
+    dy = abs(y + 0.5 - 19.5)
+    along, across = (dx, dy) if dx >= dy else (dy, dx)
+    if min(dx, dy) > 6.2 and max(dx, dy) < min(dx, dy) * 1.85:
+        return False
+    if along > 17.2:
+        return False
+    half = 5.2 + along * 0.22
+    if half > 9.0:
+        half = 9.0
+    if across > half:
+        return False
+    edge = half * 0.82
+    if across >= edge:
+        reach = 15.6
+    else:
+        t = 0 if edge <= 0 else across / edge
+        reach = 17.2 - 1.8 * (1 - t * t)
+    return along <= reach
+
+
 def police(im):
-    rect(im, 6, 2, 28, 7, "U")
-    rect(im, 3, 8, 34, 16, "U")
-    rect(im, 6, 24, 28, 7, "U")
-    rect(im, 10, 31, 20, 4, "U")
-    rect(im, 15, 35, 10, 4, "b")
-    hline(im, 6, 2, 28, "u")
-    rect(im, 10, 6, 20, 22, "A")
-    rect(im, 13, 9, 14, 16, "U")
-    hline(im, 10, 6, 20, "a")
-    # Six-point star, built as a diamond plus a bar so it reads as a badge.
-    for y, half in ((13, 2), (14, 4), (15, 6), (16, 9), (17, 6), (18, 4), (19, 2)):
-        hline(im, 20 - half, y, half * 2, "a")
-    for x, half in ((15, 2), (16, 3), (17, 2)):
-        vline(im, x, 16 - half, half * 2, "a")
-        vline(im, 40 - x, 16 - half, half * 2, "a")
-    hline(im, 13, 16, 14, "Y")
-    put(im, 19, 16, "W")
-    put(im, 20, 16, "W")
+    # Blue field, gold rim. White PD sits in the field, not on the rim.
+    _paint_shape(im, _shield, "U", "y", "Y", "d")
+    glyph2x(im, 9, 12, "P", "W")
+    glyph2x(im, 21, 12, "D", "W")
 
 
 def fire(im):
-    rect(im, 2, 10, 12, 16, "R")
-    hline(im, 2, 10, 12, "r")
-    rect(im, 4, 13, 8, 6, "q")
-    hline(im, 4, 13, 8, "W")
-    rect(im, 14, 8, 22, 18, "R")
-    hline(im, 14, 8, 22, "r")
-    hline(im, 14, 24, 22, "n")
-    rect(im, 17, 13, 16, 5, "W")
-    hline(im, 17, 15, 16, "S")
-    rect(im, 16, 3, 18, 5, "A")
-    hline(im, 16, 3, 18, "a")
-    for x in (19, 24, 29):
-        vline(im, x, 3, 5, "T")
-    rect(im, 2, 6, 5, 4, "o")
-    put(im, 4, 7, "y")
-    rect(im, 1, 24, 4, 4, "S")
-    disc(im, 10, 33, 6, 6, "B")
-    disc(im, 10, 33, 3, 3, "G")
-    disc(im, 29, 33, 6, 6, "B")
-    disc(im, 29, 33, 3, 3, "G")
-    hline(im, 5, 26, 28, "n")
+    # Red cross, gold outline, small red disc for the letters.
+    _paint_shape(im, _maltese, "R", "y", "Y", "d")
+    disc(im, 20, 20, 10, 8, "Y")
+    disc(im, 20, 20, 8, 6, "n")
+    disc(im, 20, 20, 7, 5, "R")
+    glyph2x(im, 10, 13, "F", "W")
+    glyph2x(im, 22, 13, "D", "W")
 
 
 def stadium(im):
-    # Bowl and stands. The field has yard lines, not a cross.
-    disc(im, 20, 22, 16, 14, "N")
-    disc(im, 20, 22, 15, 13, "P")
-    disc(im, 20, 22, 13, 11, "p")
-    disc(im, 20, 22, 11, 9, "s")
-    disc(im, 20, 23, 8, 6, "E")
-    disc(im, 20, 23, 7, 5, "e")
-    for y in (20, 23, 26):
-        hline(im, 15, y, 10, "W")
-    disc(im, 20, 23, 3, 2, "L")
-    hline(im, 18, 23, 4, "W")
-    # Floodlights.
-    rect(im, 3, 4, 3, 10, "s")
-    rect(im, 34, 4, 3, 10, "s")
-    hline(im, 2, 4, 5, "Y")
-    hline(im, 2, 5, 5, "y")
-    hline(im, 33, 4, 5, "Y")
-    hline(im, 33, 5, 5, "y")
+    # Side profile, facemask to the right. The jaw and the cage keep it
+    # from reading as a ball at 1x.
+    shell = {
+        4: (16, 22),
+        5: (13, 25),
+        6: (11, 27),
+        7: (9, 28),
+        8: (7, 29),
+        9: (6, 29),
+        10: (5, 28),
+        11: (5, 26),
+        12: (4, 24),
+        13: (4, 23),
+        14: (4, 22),
+        15: (4, 22),
+        16: (5, 22),
+        17: (5, 22),
+        18: (5, 22),
+        19: (5, 23),
+        20: (6, 24),
+        21: (6, 25),
+        22: (7, 26),
+        23: (8, 27),
+        24: (9, 27),
+        25: (11, 26),
+        26: (13, 24),
+        27: (15, 22),
+    }
+    for y, (x0, x1) in shell.items():
+        hline(im, x0, y, x1 - x0 + 1, "U")
+        put(im, x0, y, "u")
+        put(im, x1, y, "b")
+    # Stripe over the crown, from the back of the shell to the brow.
+    for y, x0, x1 in (
+        (4, 17, 21),
+        (5, 15, 23),
+        (6, 13, 25),
+        (7, 12, 26),
+        (8, 14, 24),
+        (9, 16, 22),
+    ):
+        hline(im, x0, y, x1 - x0 + 1, "W")
+    # Ear hole.
+    disc(im, 12, 17, 4, 4, "N")
+    disc(im, 12, 17, 2, 2, "B")
+    # Facemask: clips at the brow and the jaw, three bars, a vertical cage.
+    rect(im, 26, 9, 4, 3, "G")
+    rect(im, 24, 23, 4, 3, "G")
+    for y in (11, 16, 21):
+        rect(im, 28, y, 8, 2, "B")
+        hline(im, 28, y, 8, "W")
+    rect(im, 35, 11, 2, 12, "B")
+    vline(im, 36, 11, 12, "W")
 
 
 def seaport(im):
@@ -393,51 +466,64 @@ def seaport(im):
     hline(im, 32, 14, 6, "H")
 
 
+def power_hall(im):
+    # Shared factory. Stacks are drawn to the right of x=21, so this hall
+    # stays identical on the coal and nuclear icons.
+    rect(im, 1, 20, 20, 16, "s")
+    hline(im, 1, 20, 20, "G")
+    hline(im, 1, 35, 20, "B")
+    rect(im, 1, 16, 20, 4, "N")
+    hline(im, 1, 16, 20, "G")
+    hline(im, 1, 19, 20, "B")
+    rect(im, 3, 23, 5, 4, "Y")
+    hline(im, 3, 23, 5, "y")
+    rect(im, 10, 23, 5, 4, "o")
+    hline(im, 10, 23, 5, "Y")
+    rect(im, 15, 27, 4, 8, "T")
+    vline(im, 15, 27, 8, "t")
+    put(im, 17, 30, "y")
+
+
 def coal(im):
-    # Power hall, stack on the left, coal heap on the right, and a bolt.
-    # The factory icon is a sawtooth shed with the stack on the right.
-    rect(im, 14, 18, 22, 14, "N")
-    hline(im, 14, 18, 22, "g")
-    hline(im, 14, 30, 22, "B")
-    rect(im, 17, 22, 4, 5, "o")
-    rect(im, 23, 22, 4, 5, "Y")
-    rect(im, 29, 22, 4, 5, "o")
-    rect(im, 4, 10, 8, 24, "s")
-    vline(im, 4, 10, 24, "G")
-    vline(im, 11, 10, 24, "B")
-    rect(im, 3, 7, 10, 3, "N")
-    disc(im, 8, 5, 6, 3, "M")
-    disc(im, 5, 3, 3, 2, "F")
-    put(im, 12, 2, "W")
-    for i, w in enumerate((5, 9, 13, 16)):
-        hline(im, 20, 35 - i, w, "B" if i % 2 == 0 else "N")
-    put(im, 24, 33, "G")
-    # Lightning bolt on the hall.
-    for x, y in ((24, 19), (23, 21), (24, 21), (22, 23), (23, 23), (21, 25), (22, 25), (23, 25)):
-        put(im, x, y, "Y")
-    put(im, 22, 21, "y")
+    power_hall(im)
+    # Coal pile beside the stack. Stays on x >= 22 so the shared hall matches.
+    disc(im, 25, 33, 3, 2, "B")
+    disc(im, 27, 32, 3, 2, "N")
+    put(im, 24, 33, "s")
+    put(im, 26, 31, "s")
+    # Smokestack.
+    rect(im, 28, 10, 6, 24, "g")
+    vline(im, 28, 10, 24, "G")
+    vline(im, 33, 10, 24, "B")
+    rect(im, 27, 8, 8, 3, "N")
+    hline(im, 27, 8, 8, "G")
+    # Dark grey puffs, the same cloud shape as the nuclear steam.
+    disc(im, 31, 5, 4, 3, "s")
+    disc(im, 35, 2, 3, 2, "M")
+    disc(im, 26, 4, 3, 2, "N")
+    disc(im, 30, 1, 2, 1, "s")
+    put(im, 33, 4, "B")
 
 
 def nuclear(im):
-    # Hyperbolic cooling tower: wide lip, narrow waist, wide base.
-    halves = (8, 10, 9, 7, 6, 5, 5, 5, 6, 6, 7, 8, 9, 10, 12, 13, 14)
+    power_hall(im)
+    # Cooling tower: wide lip, narrow waist, wide base. White steam on top.
+    halves = (8, 7, 6, 5, 5, 4, 4, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8)
     for i, half in enumerate(halves):
-        color = "c" if i < 3 else "C" if i < 12 else "Z"
-        hline(im, 24 - half, 11 + i, half * 2, color)
-        if i % 4 == 0:
-            put(im, 24 - half + 2, 11 + i, "W")
-    hline(im, 6, 28, 32, "s")
-    rect(im, 4, 29, 34, 8, "N")
-    hline(im, 4, 36, 34, "s")
-    disc(im, 24, 4, 7, 3, "F")
-    disc(im, 19, 2, 4, 2, "W")
-    put(im, 32, 1, "W")
-    # Trefoil on a dark badge, beside the tower rather than a band.
-    rect(im, 2, 16, 12, 14, "N")
-    disc(im, 8, 19, 3, 3, "Y")
-    disc(im, 5, 25, 3, 3, "Y")
-    disc(im, 11, 25, 3, 3, "Y")
-    disc(im, 8, 23, 2, 2, "N")
+        y = 10 + i
+        color = "W" if i == 0 else "C" if i < 12 else "Z"
+        hline(im, 31 - half, y, half * 2, color)
+        put(im, 31 - half, y, "G")
+        put(im, 30 + half, y, "s")
+    hline(im, 23, 26, 16, "s")
+    hline(im, 22, 27, 18, "N")
+    rect(im, 26, 2, 9, 6, "W")
+    rect(im, 32, 0, 6, 4, "F")
+    rect(im, 23, 4, 5, 3, "W")
+    # Radiation mark to the left of the tower base, still off the shared hall.
+    for x, y in ((23, 22), (24, 21), (25, 22), (24, 23), (22, 23), (25, 24), (23, 24)):
+        put(im, x, y, "Y")
+    put(im, 24, 22, "B")
 
 
 def airport(im):
@@ -480,6 +566,115 @@ def query(im):
     put(im, 33, 34, "Y")
 
 
+def _in_star(x, y):
+    cx, cy = 19.5, 19.5
+    outer, inner = 17.2, 8.4
+    pts = []
+    for i in range(5):
+        outer_a = -math.pi / 2 + i * 2 * math.pi / 5
+        inner_a = outer_a + math.pi / 5
+        pts.append((cx + outer * math.cos(outer_a), cy + outer * math.sin(outer_a)))
+        pts.append((cx + inner * math.cos(inner_a), cy + inner * math.sin(inner_a)))
+    inside = False
+    j = len(pts) - 1
+    for i, (px, py) in enumerate(pts):
+        qx, qy = pts[j]
+        if ((py > y) != (qy > y)) and (x < (qx - px) * (y - py) / ((qy - py) or 1e-6) + px):
+            inside = not inside
+        j = i
+    return inside
+
+
+def special(im):
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if not _in_star(x + 0.5, y + 0.5):
+                continue
+            if y < 16 and x < 22:
+                put(im, x, y, "y")
+            elif y > 24:
+                put(im, x, y, "d")
+            else:
+                put(im, x, y, "Y")
+
+
+def zoo(im):
+    rect(im, 1, 22, 38, 16, "E")
+    hline(im, 1, 22, 38, "e")
+    rect(im, 4, 24, 32, 10, "D")
+    hline(im, 4, 28, 32, "T")
+    rect(im, 6, 16, 10, 12, "H")
+    hline(im, 6, 16, 10, "D")
+    rect(im, 8, 18, 5, 4, "u")
+    rect(im, 8, 24, 4, 4, "T")
+    # Elephant: body, head, trunk, ear. Blocky, not a circle.
+    rect(im, 18, 20, 12, 8, "g")
+    rect(im, 28, 18, 6, 6, "G")
+    rect(im, 30, 16, 3, 3, "S")
+    vline(im, 33, 22, 6, "s")
+    vline(im, 34, 24, 6, "N")
+    rect(im, 16, 18, 4, 5, "s")
+    rect(im, 20, 26, 2, 4, "N")
+    rect(im, 26, 26, 2, 4, "N")
+    rect(im, 22, 14, 6, 4, "e")
+    rect(im, 20, 12, 4, 3, "L")
+
+
+def bigpark(im):
+    rect(im, 1, 24, 38, 14, "E")
+    hline(im, 1, 24, 38, "e")
+    rect(im, 6, 28, 28, 3, "D")
+    rect(im, 8, 18, 4, 10, "T")
+    rect(im, 26, 16, 4, 12, "T")
+    rect(im, 2, 12, 14, 8, "E")
+    rect(im, 4, 8, 10, 6, "e")
+    rect(im, 10, 10, 6, 4, "L")
+    rect(im, 22, 8, 14, 8, "E")
+    rect(im, 24, 5, 8, 6, "e")
+    rect(im, 30, 10, 6, 4, "f")
+    rect(im, 18, 30, 4, 3, "T")
+    rect(im, 14, 26, 3, 2, "R")
+    rect(im, 32, 28, 3, 2, "Y")
+
+
+def library(im):
+    # Columned hall and a book. A triangular blue pediment read as the letter F.
+    rect(im, 0, 32, 40, 7, "E")
+    hline(im, 0, 32, 40, "e")
+    for x in range(2, 38, 7):
+        put(im, x, 35, "f")
+        put(im, x + 3, 37, "L")
+    rect(im, 5, 29, 30, 4, "G")
+    hline(im, 5, 29, 30, "W")
+    hline(im, 5, 32, 30, "s")
+    rect(im, 7, 17, 26, 13, "w")
+    hline(im, 7, 17, 26, "W")
+    for x in (8, 15, 22, 29):
+        rect(im, x, 18, 3, 12, "W")
+        vline(im, x, 18, 12, "G")
+        vline(im, x + 2, 18, 12, "s")
+    # Open book between the middle columns.
+    rect(im, 18, 19, 4, 6, "R")
+    vline(im, 18, 19, 6, "y")
+    hline(im, 19, 20, 3, "W")
+    hline(im, 19, 22, 3, "w")
+    hline(im, 19, 23, 3, "W")
+    rect(im, 18, 26, 4, 4, "T")
+    # Flat stone lintel and a flat blue roof. No tapering banner.
+    rect(im, 5, 14, 30, 3, "H")
+    hline(im, 5, 14, 30, "D")
+    hline(im, 5, 16, 30, "t")
+    rect(im, 7, 9, 26, 5, "U")
+    hline(im, 7, 9, 26, "u")
+    hline(im, 7, 13, 26, "b")
+    # Closed book standing on the roof.
+    rect(im, 16, 4, 8, 5, "n")
+    vline(im, 16, 4, 5, "y")
+    hline(im, 17, 5, 6, "W")
+    hline(im, 17, 6, 6, "w")
+    hline(im, 17, 7, 6, "W")
+
+
 ICONS = [
     ("bulldozer", bulldozer),
     ("road", road),
@@ -496,7 +691,11 @@ ICONS = [
     ("coal", coal),
     ("nuclear", nuclear),
     ("airport", airport),
+    ("special", special),
     ("query", query),
+    ("zoo", zoo),
+    ("bigpark", bigpark),
+    ("library", library),
 ]
 
 
@@ -527,9 +726,44 @@ def to_rgba(im):
 
 
 def main():
+    drawn = {}
     for name, draw in ICONS:
         im = outlined(draw)
+        drawn[name] = im
         write_png(ROOT / f"{name}.png", SIZE, SIZE, to_rgba(im))
+    coal_im = drawn["coal"]
+    nuclear_im = drawn["nuclear"]
+    for y in range(SIZE):
+        for x in range(22):
+            if coal_im[y][x] != nuclear_im[y][x]:
+                raise SystemExit(f"power hall differs at {x},{y}: {coal_im[y][x]} vs {nuclear_im[y][x]}")
+    check_road_and_rail(drawn["road"], drawn["rail"])
+
+
+def check_road_and_rail(road, rail):
+    """The yellow dashes sit on the exact middle row of the road band."""
+    rows = sorted({y for y in range(SIZE) for x in range(SIZE) if road[y][x] == "Y"})
+    if len(rows) not in (1, 2) or rows[-1] - rows[0] != len(rows) - 1:
+        raise SystemExit(f"road centre line is not a 1-2px band: {rows}")
+    column = next(x for x in range(SIZE) if road[rows[0]][x] == "Y")
+    painted = [y for y in range(SIZE) if road[y][column] != "."]
+    above = rows[0] - painted[0]
+    below = painted[-1] - rows[-1]
+    if above != below or above < 1:
+        raise SystemExit(f"road centre line is off-centre: {above}px above, {below}px below")
+    def band(im):
+        ys = [y for y in range(SIZE) if any(im[y][x] != "." for x in range(SIZE))]
+        return ys[0], ys[-1]
+
+    road_top, road_bot = band(road)
+    rail_top, rail_bot = band(rail)
+    if road_bot - road_top != rail_bot - rail_top:
+        raise SystemExit(
+            f"road and rail bands differ: road {road_top}-{road_bot}, rail {rail_top}-{rail_bot}"
+        )
+    for name, im in (("road", road), ("rail", rail)):
+        if not any(im[y][0] != "." for y in range(SIZE)) or not any(im[y][SIZE - 1] != "." for y in range(SIZE)):
+            raise SystemExit(f"{name} does not run from the left edge to the right edge")
 
 
 if __name__ == "__main__":

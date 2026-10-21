@@ -5,6 +5,7 @@
 #include "tools.hpp"
 
 #include "micropolis.h"
+#include "special_buildings.hpp"
 
 #include <cassert>
 
@@ -24,6 +25,7 @@ const ToolDef kTools[] = {
     {TOOL_COALPOWER, "Coal power", 3000, "Coal power: $3,000"},
     {TOOL_NUCLEARPOWER, "Nuclear power", 5000, "Nuclear power: $5,000"},
     {TOOL_AIRPORT, "Airport", 10000, "Airport: $10,000"},
+    {kSpecialEngineId, "Special buildings", 0, "Special buildings"},
     {TOOL_QUERY, "Query", 0, "Query"},
 };
 
@@ -59,6 +61,8 @@ ToolFootprint tool_footprint(int engine_id)
         return {true, 4, 4, 1, 1};
     case TOOL_AIRPORT:
         return {true, 6, 6, 1, 1};
+    case kSpecialEngineId:
+        return {true, 3, 3, 1, 1};
     case TOOL_WIRE:
     case TOOL_BULLDOZER:
     case TOOL_RAILROAD:
@@ -82,8 +86,9 @@ struct ToolIdCheck {
     {
         assert(TOOL_BULLDOZER == kTools[0].engine_id);
         assert(TOOL_WIRE == kTools[3].engine_id);
-        assert(TOOL_QUERY == kTools[15].engine_id);
-        assert(kToolCount == 16);
+        assert(kSpecialEngineId == kTools[15].engine_id);
+        assert(TOOL_QUERY == kTools[16].engine_id);
+        assert(kToolCount == 17);
     }
 };
 

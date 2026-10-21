@@ -16,6 +16,7 @@
 #include "text_paint.hpp"
 #include "theme.hpp"
 #include "scenario_preview.hpp"
+#include "special_buildings.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 
@@ -97,10 +98,7 @@ void Shell::layout()
     status_h_ = dp(36);
     message_h_ = dp(44);
     const int body = win_h_ - menu_h_ - status_h_ - message_h_;
-    cell_ = dp(48);
-    while (cell_ > dp(36) && ToolPalette::height_for(cell_) + dp(210) > body) {
-        cell_ -= dp(4);
-    }
+    cell_ = ui_scale::toolbar_cell(ui_scale_, body);
     palette_.set_cell(cell_);
     side_w_ = ToolPalette::width_for(cell_);
     side_x_ = dp(6);
@@ -1334,6 +1332,81 @@ void Shell::draw_dialog(cairo_t *cr)
     }
 }
 
+void Shell::draw_special_menu(cairo_t *cr)
+{
+    if (!special_open_ || dialog_ != Dialog::None || menu_.open()) {
+        return;
+    }
+    const int count = special_building_count();
+    if (count < 1) {
+        return;
+    }
+    // Clicks outside the list close it. Rows are pushed after this catcher.
+    push_hot(0, menu_h_, win_w_, std::max(0, win_h_ - menu_h_), 0);
+    const int slot = special_tool_index();
+    const int col = slot % 2;
+    const int row = slot / 2;
+    const double anchor_x = side_x_ + 4 + (col + 1) * cell_ + 6;
+    const double anchor_y = pal_y_ + 4 + row * cell_;
+    int name_h = 1;
+    int cost_h = 1;
+    for (int i = 0; i < count; ++i) {
+        const SpecialBuilding &building = special_building(i);
+        name_h = std::max(name_h, measure_text(cr, bold_font(), building.name, -1).height);
+        const std::string sample = "$" + std::to_string(building.cost);
+        cost_h = std::max(cost_h, measure_text(cr, ui_font(), sample, -1).height);
+    }
+    const int between = dp(6);
+    const int text_block = name_h + between + cost_h;
+    const double row_h = std::max(std::max(static_cast<double>(dp(44)), static_cast<double>(cell_ - 4)),
+                                  static_cast<double>(text_block + dp(12)));
+    const double icon = std::min(static_cast<double>(dp(40)), row_h - dp(8));
+    const double drop_w = std::max(static_cast<double>(dp(240)), icon + dp(150));
+    double drop_x = anchor_x;
+    if (drop_x + drop_w > win_w_ - 4) {
+        drop_x = std::max(4.0, win_w_ - drop_w - 4);
+    }
+    double drop_y = anchor_y;
+    const double drop_h = 8 + count * row_h;
+    if (drop_y + drop_h > win_h_ - status_h_ - message_h_ - 4) {
+        drop_y = std::max(static_cast<double>(menu_h_ + 4), win_h_ - status_h_ - message_h_ - 4 - drop_h);
+    }
+    fill(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
+    stroke_rect(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+    for (int i = 0; i < count; ++i) {
+        const SpecialBuilding &building = special_building(i);
+        const double y = drop_y + 4 + i * row_h;
+        const bool lit = i == special_cursor_;
+        if (lit) {
+            fill(cr, drop_x + 3, y, drop_w - 6, row_h - 2, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        }
+        cairo_surface_t *sprite = tool_icon_named(building.icon);
+        if (sprite != nullptr) {
+            const int iw = cairo_image_surface_get_width(sprite);
+            const int ih = cairo_image_surface_get_height(sprite);
+            const double scale = icon_pixel_scale(std::max(iw, ih), static_cast<int>(icon));
+            cairo_save(cr);
+            cairo_translate(cr, std::floor(drop_x + 8), std::floor(y + (row_h - icon) / 2.0));
+            cairo_scale(cr, scale, scale);
+            cairo_set_source_surface(cr, sprite, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+            cairo_paint(cr);
+            cairo_restore(cr);
+        }
+        const std::string name = building.name;
+        const std::string cost = "$" + std::to_string(building.cost);
+        const double text_x = drop_x + 8 + icon + dp(8);
+        const double text_r = lit ? 0.05 : theme::kTextR;
+        const double text_g = lit ? 0.05 : theme::kTextG;
+        const double text_b = lit ? 0.05 : theme::kTextB;
+        const double text_y = y + std::max(4.0, (row_h - text_block) / 2.0);
+        paint_text(cr, bold_font(), name, text_x, text_y, text_r, text_g, text_b,
+                   static_cast<int>(drop_w - icon - dp(24)));
+        paint_text(cr, ui_font(), cost, text_x, text_y + name_h + between, text_r, text_g, text_b, -1);
+        push_hot(drop_x + 3, y, drop_w - 6, row_h - 2, kSpecialItem + i);
+    }
+}
+
 void Shell::draw(cairo_t *cr)
 {
     menu_.recent_count = static_cast<int>(recent_.size());
@@ -1355,7 +1428,7 @@ void Shell::draw(cairo_t *cr)
     {
         TargetCr live(cr);
         cairo_translate(live.cr, side_x_, demand_y_);
-        demand_.draw(live.cr, side_w_, demand_h_);
+        demand_.draw(live.cr, side_w_, demand_h_, ui_scale_);
     }
     stroke_rect(cr, view_x_ - 1, view_y_ - 1, view_w_ + 2, view_h_ + 2, theme::kMenuFrameR, theme::kMenuFrameG,
                 theme::kMenuFrameB);
@@ -1398,8 +1471,12 @@ void Shell::draw(cairo_t *cr)
     }
     paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, win_w_ / 2);
     if (gamepad_nav_) {
-        const std::string hint = std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " build   " +
-                                 glyph(SDL_GAMEPAD_BUTTON_EAST) + " cancel   LB/RB tools   Start menu";
+        const bool picking = special_open_ && dialog_ == Dialog::None && !menu_.open();
+        const std::string hint =
+            picking ? std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " Select   " + glyph(SDL_GAMEPAD_BUTTON_EAST) +
+                          " Close"
+                    : std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " build   " + glyph(SDL_GAMEPAD_BUTTON_EAST) +
+                          " cancel   LB/RB tools   Start menu";
         const TextMetrics metrics = measure_text(cr, ui_font(), hint, -1);
         paint_text(cr, ui_font(), hint, win_w_ - metrics.width - 8, status_y + 8, theme::kTextR, theme::kTextG,
                    theme::kTextB, -1);
@@ -1419,11 +1496,17 @@ void Shell::draw(cairo_t *cr)
     } else if (!expired && !shown_message_.empty()) {
         bar = shown_message_;
     } else {
-        const char *tip = palette_.tooltip();
-        if (tip == nullptr || tip[0] == '\0') {
-            tip = tool_by_index(tool_index_)->hint;
+        const int hover = palette_.hover();
+        const int special = special_tool_index();
+        if (hover == special || (hover < 0 && tool_index_ == special)) {
+            bar = special_status_text(special_choice_);
+        } else {
+            const char *tip = palette_.tooltip();
+            if (tip == nullptr || tip[0] == '\0') {
+                tip = tool_by_index(tool_index_)->hint;
+            }
+            bar = tip != nullptr ? tip : "";
         }
-        bar = tip != nullptr ? tip : "";
     }
     fill(cr, 0, win_h_ - message_h_, win_w_, message_h_, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
     paint_text(cr, body_font(), bar, 8, win_h_ - message_h_ + 10, theme::kTextR, theme::kTextG, theme::kTextB,
@@ -1457,6 +1540,7 @@ void Shell::draw(cairo_t *cr)
     }
     // Drop-down last, above the map, palette, dialog, and gamepad cursor.
     draw_menu_dropdown(cr);
+    draw_special_menu(cr);
 }
 
 void Shell::write_final_shot()

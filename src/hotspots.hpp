@@ -65,6 +65,9 @@ enum HotspotId : int {
     kListItem = 7000,
     kSlider = 8000,
     kChoice = 8300,
+
+    // Special-building rows are kSpecialItem + table index.
+    kSpecialItem = 9000,
 };
 
 inline bool is_dialog_button(int id)

@@ -161,6 +161,8 @@ public:
     void tick();
     void use_tool(int engine_tool, int tile_x, int tile_y);
     void drag_tool(int engine_tool, int from_x, int from_y, int to_x, int to_y);
+    // index is a row in the special-building table. The click is the center tile.
+    bool place_special(int index, int tile_x, int tile_y);
 
     void set_speed(int speed);
     int speed() const;

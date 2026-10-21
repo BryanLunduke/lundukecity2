@@ -8,7 +8,8 @@
 
 inline constexpr int kMinMapTile = 6;
 inline constexpr int kMaxMapTile = 64;
-inline constexpr int kMaxDemandPx = 176;
+// The toolbar is nine rows. A 176px graph crowds it on a 1280x800 window.
+inline constexpr int kMaxDemandPx = 128;
 
 inline int tile_size_to_cover(int view_w, int view_h, int world_w, int world_h, int current, int min_tile, int max_tile)
 {

@@ -946,6 +946,10 @@ void Micropolis::collectTax()
             fireEffect   = MAX_FIRE_STATION_EFFECT;
         }
     }
+
+    // Special buildings do not pay income. The table still has an
+    // annual_income column so a later building can define one.
+    specialIncome = 0;
 }
 
 

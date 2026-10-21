@@ -22,11 +22,11 @@ void box(cairo_t *cr, double x, double y, double w, double h, double r, double g
 }
 
 // Original 40px sprites in data/tool-icons. Nearest-neighbor only. The
-// sprite is authored to fill a Deck-size button; icon_pixel_scale grows or
-// shrinks it to the slot so it is not left tiny and not clipped.
+// sprite fills a 40px slot. A larger slot uses a whole multiple of that
+// size, and a smaller slot (UI scale under 1) is the only case that shrinks.
 struct ToolIcons {
     bool tried = false;
-    cairo_surface_t *image[16] = {};
+    cairo_surface_t *image[17] = {};
 
     ~ToolIcons()
     {
@@ -45,11 +45,12 @@ ToolIcons &tool_icons()
         return icons;
     }
     icons.tried = true;
-    static const char *names[16] = {
+    static const char *names[17] = {
         "bulldozer", "road",     "rail",     "wire",    "park",       "residential", "commercial", "industrial",
-        "police",    "fire",     "stadium",  "seaport", "coal",       "nuclear",     "airport",    "query",
+        "police",    "fire",     "stadium",  "seaport", "coal",       "nuclear",     "airport",    "special",
+        "query",
     };
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 17; ++i) {
         const std::string path = ui_data_file(std::string("tool-icons/") + names[i] + ".png");
         if (path.empty()) {
             continue;
@@ -174,6 +175,57 @@ void ToolPalette::leave()
     hover_ = -1;
 }
 
+cairo_surface_t *tool_icon_named(const char *stem)
+{
+    struct Slot {
+        const char *stem = nullptr;
+        cairo_surface_t *image = nullptr;
+        bool tried = false;
+    };
+    struct Cache {
+        Slot slots[8];
+        ~Cache()
+        {
+            for (Slot &slot : slots) {
+                if (slot.image != nullptr) {
+                    cairo_surface_destroy(slot.image);
+                }
+            }
+        }
+    };
+    static Cache cache;
+    if (stem == nullptr || stem[0] == '\0') {
+        return nullptr;
+    }
+    Slot *free_slot = nullptr;
+    for (Slot &slot : cache.slots) {
+        if (slot.tried && slot.stem != nullptr && std::string(slot.stem) == stem) {
+            return slot.image;
+        }
+        if (!slot.tried && free_slot == nullptr) {
+            free_slot = &slot;
+        }
+    }
+    if (free_slot == nullptr) {
+        return nullptr;
+    }
+    free_slot->tried = true;
+    free_slot->stem = stem;
+    const std::string path = ui_data_file(std::string("tool-icons/") + stem + ".png");
+    if (path.empty()) {
+        return nullptr;
+    }
+    cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
+    if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+        if (surface != nullptr) {
+            cairo_surface_destroy(surface);
+        }
+        return nullptr;
+    }
+    free_slot->image = surface;
+    return surface;
+}
+
 void ToolPalette::draw(cairo_t *cr) const
 {
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
@@ -214,7 +266,7 @@ void ToolPalette::draw(cairo_t *cr) const
         }
 
         const double shift = pressed ? 1.0 : 0.0;
-        cairo_surface_t *icon = (i >= 0 && i < 16) ? tool_icons().image[i] : nullptr;
+        cairo_surface_t *icon = (i >= 0 && i < 17) ? tool_icons().image[i] : nullptr;
         // 3px inside the bevel. At the default 48px cell the slot is 40px,
         // which is the authored sprite size, so the icon fills the face.
         paint_icon(cr, icon, i, x + 3 + shift, y + 3 + shift, bs - 6);

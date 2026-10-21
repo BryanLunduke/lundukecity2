@@ -10,6 +10,7 @@
 #include "notice_bar.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
+#include "special_buildings.hpp"
 #include "text_paint.hpp"
 #include "tile_atlas.hpp"
 #include "tools.hpp"
@@ -270,7 +271,7 @@ int Shell::run(int argc, char **argv)
         welcome_gate_ = true;
     }
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
-        demo_ != "quit") {
+        demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -632,6 +633,80 @@ bool Shell::init_video()
     return true;
 }
 
+void Shell::demo_place_gifts(bool query_one)
+{
+    session_.set_disasters(false);
+    session_.set_auto_bulldoze(true);
+    set_speed(0);
+    const int want = query_one ? 1 : special_building_count();
+    int placed_x[8] = {};
+    int placed_y[8] = {};
+    int placed = 0;
+    // Prefer one horizontal row so a single frame shows every building.
+    // Centers five tiles apart keep the 3x3 footprints from touching.
+    const int gap = 5;
+    const int bulldozer = tool_by_index(0)->engine_id;
+    for (int y = 3; y < CitySession::kWorldH - 3 && placed < want; ++y) {
+        const int x_limit = CitySession::kWorldW - 3 - gap * (want - 1);
+        for (int x = 3; x < x_limit && placed < want; ++x) {
+            placed = 0;
+            for (int i = 0; i < want; ++i) {
+                if (!session_.place_special(i, x + i * gap, y)) {
+                    break;
+                }
+                placed_x[i] = x + i * gap;
+                placed_y[i] = y;
+                placed = i + 1;
+            }
+            if (placed == want) {
+                break;
+            }
+            for (int i = 0; i < placed; ++i) {
+                session_.use_tool(bulldozer, placed_x[i], placed_y[i]);
+            }
+            placed = 0;
+        }
+    }
+    if (placed < want) {
+        placed = 0;
+        for (int y = 2; y < CitySession::kWorldH - 2 && placed < want; ++y) {
+            for (int x = 2; x < CitySession::kWorldW - 2 && placed < want; ++x) {
+                bool too_close = false;
+                for (int i = 0; i < placed; ++i) {
+                    int dx = x - placed_x[i];
+                    int dy = y - placed_y[i];
+                    if (dx < 0) {
+                        dx = -dx;
+                    }
+                    if (dy < 0) {
+                        dy = -dy;
+                    }
+                    if ((dx > dy ? dx : dy) < 4) {
+                        too_close = true;
+                    }
+                }
+                if (too_close || !session_.place_special(placed, x, y)) {
+                    continue;
+                }
+                placed_x[placed] = x;
+                placed_y[placed] = y;
+                ++placed;
+            }
+        }
+    }
+    if (placed < 1) {
+        return;
+    }
+    map_.set_tile_size(48);
+    const int mid = placed / 2;
+    center_on_fraction((placed_x[mid] + 0.5) / CitySession::kWorldW, (placed_y[mid] + 0.5) / CitySession::kWorldH);
+    if (query_one) {
+        pointer_x_ = view_x_ + view_w_ / 2.0;
+        pointer_y_ = view_y_ + view_h_ / 2.0;
+        session_.use_tool(tool_by_index(kToolCount - 1)->engine_id, placed_x[0], placed_y[0]);
+    }
+}
+
 void Shell::bind_session()
 {
     map_.set_session(&session_);
@@ -639,9 +714,29 @@ void Shell::bind_session()
     demand_.set_session(&session_);
     overlay_.set_session(&session_);
     select_tool(kDefaultToolIndex);
-    map_.on_tool_down = [this](int x, int y) { session_.use_tool(tool_by_index(tool_index_)->engine_id, x, y); };
+    map_.on_tool_down = [this](int x, int y) {
+        const ToolDef *tool = tool_by_index(tool_index_);
+        if (tool->engine_id == kSpecialEngineId) {
+            if (special_open_ || special_choice_ < 0) {
+                if (special_choice_ < 0) {
+                    special_open_ = true;
+                    special_cursor_ = 0;
+                } else {
+                    special_open_ = false;
+                }
+                return;
+            }
+            session_.place_special(special_choice_, x, y);
+            return;
+        }
+        session_.use_tool(tool->engine_id, x, y);
+    };
     map_.on_tool_drag = [this](int x0, int y0, int x1, int y1) {
-        session_.drag_tool(tool_by_index(tool_index_)->engine_id, x0, y0, x1, y1);
+        const ToolDef *tool = tool_by_index(tool_index_);
+        if (tool->engine_id == kSpecialEngineId) {
+            return;
+        }
+        session_.drag_tool(tool->engine_id, x0, y0, x1, y1);
     };
     palette_.on_selected = [this](int index) { select_tool(index); };
     minimap_.set_viewport_provider([this](double &fx, double &fy, double &fw, double &fh) {
@@ -695,6 +790,7 @@ std::string Shell::visual_stamp() const
         << list_index_ << ' ' << list_scroll_ << ' ' << scenario_index_ << ' ' << focus_id_ << ' ' << hover_id_ << ' '
         << menu_.open_menu << ' ' << menu_.cursor << ' ' << menu_.recent_open << ' ' << menu_.recent_cursor << ' '
         << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
+        << special_open_ << ' ' << special_cursor_ << ' ' << special_choice_ << ' '
         << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << session_.map_serial()
         << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
         << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
@@ -1042,6 +1138,33 @@ void Shell::loop()
                 speed_ = 0;
                 session_.set_speed(0);
                 close_dialog();
+            } else if (demo_ == "special") {
+                select_tool(special_tool_index());
+                special_choice_ = 0;
+                special_cursor_ = 0;
+                special_open_ = true;
+                // Deck hint bar: A selects a building, B closes the list.
+                gamepad_nav_ = true;
+                cursor_x_ = static_cast<float>(view_x_ + view_w_ / 2);
+                cursor_y_ = static_cast<float>(view_y_ + view_h_ / 2);
+            } else if (demo_ == "gifts") {
+                demo_place_gifts(false);
+            } else if (demo_ == "giftquery") {
+                demo_place_gifts(true);
+            } else if (demo_ == "giftbudget") {
+                demo_place_gifts(false);
+                const auto book = session_.budget();
+                tax_ = book.tax_percent;
+                road_ = book.road_percent;
+                police_ = book.police_percent;
+                fire_ = book.fire_percent;
+                open_tax_ = tax_;
+                open_road_ = road_;
+                open_police_ = police_;
+                open_fire_ = fire_;
+                budget_is_tax_ = false;
+                open_dialog(Dialog::Budget);
+                gamepad_nav_ = true;
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);
@@ -1128,6 +1251,8 @@ void Shell::handle_event(const SDL_Event &event)
             on_hotspot(kListScroll, pointer_x_, pointer_y_);
         } else if (pointer_on_map_ && dialog_ == Dialog::None && !menu_.open()) {
             map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), pointer_down_);
+        } else if (hover_id_ >= kSpecialItem && hover_id_ < kSpecialItem + special_building_count()) {
+            special_cursor_ = hover_id_ - kSpecialItem;
         } else if (hover_id_ == kPaletteId && !menu_.open()) {
             palette_.motion(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         }
@@ -1162,7 +1287,7 @@ void Shell::handle_event(const SDL_Event &event)
             SDL_CaptureMouse(true);
             map_.press(map_local_x(pointer_x_), map_local_y(pointer_y_));
         } else if (id == kPaletteId && dialog_ == Dialog::None) {
-            palette_.press(pointer_x_ - side_x_, pointer_y_ - pal_y_);
+            press_palette(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         } else if (id == kMinimapId && dialog_ == Dialog::None) {
             minimap_.press(pointer_x_ - side_x_, pointer_y_ - mini_y_, side_w_, mini_h_);
         } else {
@@ -1325,6 +1450,24 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
         }
+        if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
+            if (accel == AccelKey::Escape) {
+                special_open_ = false;
+                break;
+            }
+            if (accel == AccelKey::Return || accel == AccelKey::Space) {
+                choose_special(special_cursor_);
+                break;
+            }
+            if (accel == AccelKey::Up || accel == AccelKey::Left) {
+                move_special_cursor(-1);
+                break;
+            }
+            if (accel == AccelKey::Down || accel == AccelKey::Right) {
+                move_special_cursor(1);
+                break;
+            }
+        }
         if (accel == AccelKey::Space) {
             toggle_pause();
             break;
@@ -1359,6 +1502,7 @@ void Shell::handle_event(const SDL_Event &event)
         gamepad_nav_ = true;
         const auto button = static_cast<SDL_GamepadButton>(event.gbutton.button);
         if (button == SDL_GAMEPAD_BUTTON_START) {
+            special_open_ = false;
             if (dialog_ == Dialog::None) {
                 if (!menu_.open()) {
                     menu_.open_first();
@@ -1369,7 +1513,9 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (button == SDL_GAMEPAD_BUTTON_EAST || button == SDL_GAMEPAD_BUTTON_BACK) {
-            if (menu_.open()) {
+            if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
+                special_open_ = false;
+            } else if (menu_.open()) {
                 menu_.handle_key(AccelKey::Escape, 0, 0);
             } else if (dialog_ != Dialog::None) {
                 on_dialog_button(kCancel);
@@ -1379,7 +1525,9 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (button == SDL_GAMEPAD_BUTTON_SOUTH) {
-            if (menu_.open()) {
+            if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
+                choose_special(special_cursor_);
+            } else if (menu_.open()) {
                 menu_.handle_key(AccelKey::Return, 0, 0);
                 if (menu_.activated == Action::RecentIndex && menu_.activated_recent >= 0 &&
                     menu_.activated_recent < static_cast<int>(recent_.size())) {
@@ -1425,6 +1573,14 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (pad_dragging_) {
+            break;
+        }
+        if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
+            if (dir == AccelKey::Up || dir == AccelKey::Left) {
+                move_special_cursor(-1);
+            } else {
+                move_special_cursor(1);
+            }
             break;
         }
         if (menu_.open()) {
@@ -1549,6 +1705,8 @@ void Shell::handle_event(const SDL_Event &event)
                 const int id = hit(pointer_x_, pointer_y_);
                 if (menu_.open() && dialog_ == Dialog::None) {
                     on_hotspot(id, pointer_x_, pointer_y_);
+                } else if (id == kPaletteId && dialog_ == Dialog::None) {
+                    press_palette(pointer_x_ - side_x_, pointer_y_ - pal_y_);
                 } else if (id == kMapId && dialog_ == Dialog::None) {
                     pointer_on_map_ = true;
                     map_.press(map_local_x(pointer_x_), map_local_y(pointer_y_));

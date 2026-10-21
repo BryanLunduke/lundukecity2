@@ -762,12 +762,14 @@ std::string Micropolis::checkCityContents(const short *misc, const short *tiles,
     for (int i = 0; i < tileCount; i++) {
         const unsigned short v = (unsigned short)tiles[i];
         const unsigned int t = v & LOMASK;
-        if (t > CHURCH7LAST) {
+        const bool special_center = t == SPECIAL_ZOO || t == SPECIAL_PARK || t == SPECIAL_LIBRARY;
+        const bool special = special_center || t == SPECIAL_BODY;
+        if (t > CHURCH7LAST && !special) {
             unknown++;
         }
         if (v & ZONEBIT) {
             centres++;
-            if (t > CHURCH7LAST) {
+            if (t > CHURCH7LAST && !special_center) {
                 badCentres++;
             }
         }

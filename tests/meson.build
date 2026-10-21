@@ -23,6 +23,7 @@ features = executable(
   'features.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
   '../src/tools.cpp',
@@ -52,6 +53,7 @@ if posix_host
     'regressions.cpp',
     '../src/assets.cpp',
     '../src/city_session.cpp',
+    '../src/special_buildings.cpp',
     '../src/messages.cpp',
     '../src/sound_player.cpp',
     '../src/tools.cpp',
@@ -73,6 +75,7 @@ if posix_host
     'round3.cpp',
     '../src/assets.cpp',
     '../src/city_session.cpp',
+    '../src/special_buildings.cpp',
     '../src/messages.cpp',
     '../src/sound_player.cpp',
     '../src/tools.cpp',
@@ -95,6 +98,7 @@ round4 = executable(
   'round4.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
   '../src/tools.cpp',
@@ -114,6 +118,7 @@ round5 = executable(
   'round5.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
   '../src/tools.cpp',
@@ -135,6 +140,7 @@ round6 = executable(
   'round6.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
   '../src/tools.cpp',
@@ -184,6 +190,7 @@ if posix_host
     'argv_open.cpp',
     '../src/assets.cpp',
     '../src/city_session.cpp',
+    '../src/special_buildings.cpp',
     '../src/messages.cpp',
     '../src/sound_player.cpp',
     '../src/tools.cpp',
@@ -214,6 +221,7 @@ round8 = executable(
   'round8.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
   '../src/tools.cpp',
@@ -310,6 +318,7 @@ if posix_host
     'round15.cpp',
     '../src/assets.cpp',
     '../src/city_session.cpp',
+    '../src/special_buildings.cpp',
     '../src/messages.cpp',
     '../src/sound_player.cpp',
     '../src/tools.cpp',
@@ -376,6 +385,25 @@ tool_icons = executable(
 
 test('tool_icons', tool_icons)
 
+special_buildings_test = executable(
+  'special_buildings',
+  'special_buildings.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/special_buildings.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test('special_buildings', special_buildings_test, timeout: 120)
+
 # Thumbnails painted from the scenario files themselves.
 scenario_preview_test = executable(
   'scenario_preview',
@@ -384,6 +412,7 @@ scenario_preview_test = executable(
   '../src/tile_atlas.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
   '../src/tools.cpp',
