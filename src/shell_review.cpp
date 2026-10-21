@@ -72,4 +72,15 @@ void Shell::run_review_checks()
         fail("budget cancel kept tax " + std::to_string(session_.tax()) + " opened at " + std::to_string(opened_tax));
         return;
     }
+
+    // H2: Save from the unsaved prompt on a city with no file must keep the
+    // action that was waiting (Quit, New City, Load, ...).
+    after_save_ = AfterSave::Quit;
+    apply_action(Action::Save);
+    if (after_save_ != AfterSave::Quit || (dialog_ != Dialog::Files && dialog_ != Dialog::FileWait)) {
+        fail("save-as from the quit prompt dropped the pending quit");
+        return;
+    }
+    after_save_ = AfterSave::Nothing;
+    close_dialog();
 }

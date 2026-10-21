@@ -546,7 +546,8 @@ void Shell::apply_action(Action action)
         break;
     case Action::Save:
         if (session_.save_path().empty()) {
-            after_save_ = AfterSave::Nothing;
+            // A Save from "Save changes?" has no file yet. Keep the pending
+            // Quit / New / Load so it still runs after Save As succeeds.
             begin_save_as();
         } else if (!session_.save_city_as(session_.save_path())) {
             info_title_ = "Save City";
