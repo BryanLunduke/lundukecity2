@@ -671,7 +671,7 @@ void Shell::demo_place_gifts(bool query_one)
         placed = 0;
         for (int y = 2; y < CitySession::kWorldH - 2 && placed < want; ++y) {
             for (int x = 2; x < CitySession::kWorldW - 2 && placed < want; ++x) {
-                bool near = false;
+                bool too_close = false;
                 for (int i = 0; i < placed; ++i) {
                     int dx = x - placed_x[i];
                     int dy = y - placed_y[i];
@@ -682,10 +682,10 @@ void Shell::demo_place_gifts(bool query_one)
                         dy = -dy;
                     }
                     if ((dx > dy ? dx : dy) < 4) {
-                        near = true;
+                        too_close = true;
                     }
                 }
-                if (near || !session_.place_special(placed, x, y)) {
+                if (too_close || !session_.place_special(placed, x, y)) {
                     continue;
                 }
                 placed_x[placed] = x;
