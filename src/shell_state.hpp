@@ -167,6 +167,7 @@ private:
     void note_window_geometry();
     void apply_loaded_settings();
     void note_keyboard_input();
+    void note_background_write_failed(const char *text);
     std::string visual_stamp() const;
     redraw::Reasons redraw_reasons() const;
     bool attach_test_pad();
@@ -317,6 +318,7 @@ private:
     bool welcome_ = true;
     std::string own_recovery_;
     std::string autosave_fingerprint_;
+    bool autosave_warned_ = false;
     std::chrono::steady_clock::time_point next_autosave_{};
     int quake_strength_ = 0;
     std::chrono::steady_clock::time_point quake_until_{};

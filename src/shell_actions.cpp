@@ -4,6 +4,7 @@
 
 #include "shell_state.hpp"
 
+#include "atomic_write.hpp"
 #include "city_seed.hpp"
 #include "file_list.hpp"
 #include "list_scroll.hpp"
@@ -310,9 +311,16 @@ void Shell::remember_recent(const std::string &path)
     }
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/recent.txt", std::ios::trunc);
+    std::string body;
     for (const std::string &item : recent_) {
-        out << item << '\n';
+        body += item;
+        body += '\n';
+    }
+    if (!write_text_atomic(dir + "/recent.txt", body) && !autosave_warned_) {
+        autosave_warned_ = true;
+        shown_message_ = "Could not update the recent-cities list.";
+        shown_message_serial_ = session_.message_serial();
+        hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(6);
     }
 }
 
@@ -335,10 +343,12 @@ void Shell::autosave(bool force)
     if (own_recovery_.empty()) {
         own_recovery_ = city_recovery::new_recovery_path();
         if (own_recovery_.empty()) {
+            note_background_write_failed("Autosave is off. This city will not be recovered if the game closes.");
             return;
         }
     }
     if (!session_.write_recovery(own_recovery_)) {
+        note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
         return;
     }
     city_recovery::write_info(own_recovery_, session_.city_name(), session_.save_path(), session_.date_text());
@@ -1137,8 +1147,9 @@ void Shell::on_hotspot(int id, double x, double y)
         if (!dir.empty()) {
             std::error_code ec;
             std::filesystem::create_directories(dir, ec);
-            std::ofstream out(dir + "/welcome-dismissed", std::ios::trunc);
-            out << "dismissed\n";
+            if (!write_text_atomic(dir + "/welcome-dismissed", "dismissed\n")) {
+                note_background_write_failed("Could not remember that the welcome was dismissed.");
+            }
         }
         return;
     }

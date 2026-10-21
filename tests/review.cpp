@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "assets.hpp"
+#include "atomic_write.hpp"
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
 #include "text_edit.hpp"
@@ -15,6 +16,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -138,6 +141,20 @@ int main()
     game.auto_budget = 1;
     game.pause_unfocused = 1;
     const ui_scale::StoredSettings game_parsed = ui_scale::settings_parse(ui_scale::settings_text(game));
+    const std::string atomic_path = "review-atomic.txt";
+    if (!write_text_atomic(atomic_path, "one\n") || !write_text_atomic(atomic_path, "two\n")) {
+        return fail("atomic write failed");
+    }
+    std::ifstream atomic_in(atomic_path);
+    std::string atomic_body;
+    std::getline(atomic_in, atomic_body);
+    std::filesystem::remove(atomic_path);
+    if (atomic_body != "two") {
+        return fail("atomic write did not replace the file");
+    }
+    if (write_text_atomic("", "x")) {
+        return fail("atomic write accepted an empty path");
+    }
     if (game_parsed.speed != 2 || game_parsed.sound != 0 || game_parsed.volume != 40 || game_parsed.auto_budget != 1 ||
         game_parsed.pause_unfocused != 1 || game_parsed.auto_bulldoze != -1) {
         return fail("game settings did not round-trip");

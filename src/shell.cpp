@@ -447,6 +447,17 @@ void Shell::note_keyboard_input()
     gamepad_nav_ = false;
 }
 
+void Shell::note_background_write_failed(const char *text)
+{
+    if (autosave_warned_ || text == nullptr) {
+        return;
+    }
+    autosave_warned_ = true;
+    shown_message_ = text;
+    shown_message_serial_ = session_.message_serial();
+    hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+}
+
 void Shell::note_window_geometry()
 {
     if (window_ == nullptr) {
