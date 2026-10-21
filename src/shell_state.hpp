@@ -5,6 +5,7 @@
 #pragma once
 
 #include "chart.hpp"
+#include "hotspots.hpp"
 #include "city_recovery.hpp"
 #include "city_session.hpp"
 #include "map_view.hpp"
@@ -130,6 +131,9 @@ private:
     void push_hot(double x, double y, double w, double h, int id);
     void push_focus(int id);
     void move_focus(int delta);
+    // Up/Down on the on-screen keyboard. Returns false when focus is not a
+    // key, or the adjacent row does not exist (the caller then moves linearly).
+    bool move_osk_vertically(int direction);
     void activate_focus();
     void button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary);
     void label(cairo_t *cr, const char *font, const std::string &text, double x, double y, int wrap);

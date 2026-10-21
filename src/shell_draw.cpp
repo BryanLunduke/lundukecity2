@@ -21,44 +21,6 @@
 
 namespace {
 
-constexpr int kMapId = 1;
-constexpr int kPaletteId = 2;
-constexpr int kMinimapId = 3;
-constexpr int kWelcomeId = 4;
-constexpr int kMenuTitle = 10;
-constexpr int kHScroll = 50;
-constexpr int kVScroll = 51;
-constexpr int kMenuItem = 1000;
-constexpr int kRecentItem = 2000;
-constexpr int kListItem = 7000;
-constexpr int kFieldName = 6001;
-constexpr int kFieldSeed = 6002;
-constexpr int kOsk = 6100;
-constexpr int kSlider = 8000;
-constexpr int kChoice = 8300;
-constexpr int kCancel = 1;
-constexpr int kOk = 2;
-constexpr int kDiscard = 3;
-constexpr int kSave = 4;
-constexpr int kBack = 5;
-constexpr int kNext = 6;
-constexpr int kGenerate = 7;
-constexpr int kPlay = 8;
-constexpr int kRename = 9;
-constexpr int kClose = 10;
-constexpr int kReset = 11;
-constexpr int kCollect = 12;
-constexpr int kKeep = 13;
-constexpr int kStay = 14;
-constexpr int kScenarioList = 15;
-constexpr int kRecover = 16;
-constexpr int kNotNow = 17;
-constexpr int kDelete = 18;
-constexpr int kUp = 19;
-constexpr int kSystemFiles = 20;
-constexpr int kShortScale = 21;
-constexpr int kLongScale = 22;
-
 const char *speed_word(int speed)
 {
     switch (speed) {
@@ -144,7 +106,10 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
 {
     push_hot(x, y, w, h, id);
     push_focus(id);
-    const bool hot = hover_id_ == id || focus_id_ == id;
+    // A modal covers the city. The welcome Dismiss (and anything else that
+    // is not part of the dialog) must not light up with the dialog's focus.
+    const bool suppressed = dialog_ != Dialog::None && !is_modal_control(id);
+    const bool hot = !suppressed && (hover_id_ == id || focus_id_ == id);
     cairo_pattern_t *pattern = cairo_pattern_create_linear(x, y, x, y + h);
     if (primary || hot) {
         cairo_pattern_add_color_stop_rgb(pattern, 0, theme::kSelectHiR, theme::kSelectHiG, theme::kSelectHiB);
@@ -158,7 +123,7 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
     cairo_fill(cr);
     cairo_pattern_destroy(pattern);
     stroke_rect(cr, x, y, w, h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
-    if (focus_id_ == id && (gamepad_nav_ || dialog_ != Dialog::None)) {
+    if (!suppressed && focus_id_ == id && (gamepad_nav_ || dialog_ != Dialog::None)) {
         cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
         cairo_set_line_width(cr, 2);
         cairo_rectangle(cr, x + 2, y + 2, w - 4, h - 4);
@@ -200,50 +165,18 @@ void Shell::draw_osk(cairo_t *cr, double x, double y, double w, double max_h)
     }
     int count = 0;
     const OskKey *keys = osk_keys(count);
-    const double gap = kOskGap;
-    const double unit = std::max(8.0, (w - gap * 9.0) / 10.0);
-    double key_h = 52;
-    if (max_h > 0) {
-        key_h = std::floor((max_h - gap * (kOskRows - 1)) / kOskRows);
-    }
-    // Steam Deck at 1280x800 has room for 48 px targets. Smaller windows
-    // shrink the keys instead of letting them overlap the buttons.
-    if (key_h > 56) {
-        key_h = 56;
-    }
-    if (key_h < 28) {
-        key_h = 28;
-    }
-    const double row_pitch = key_h + gap;
-    const double full_w = 10.0 * unit + 9.0 * gap;
-    for (int row = 0; row < kOskRows; ++row) {
-        double spans = 0;
-        int n = 0;
-        for (int i = 0; i < count; ++i) {
-            if (keys[i].row != row) {
-                continue;
-            }
-            spans += keys[i].span;
-            ++n;
-        }
-        if (n == 0) {
+    OskPlacement placed[64];
+    const int n = osk_place(x, y, w, max_h, placed, 64);
+    for (int i = 0; i < n; ++i) {
+        const OskPlacement &box = placed[i];
+        if (box.index < 0 || box.index >= count) {
             continue;
         }
-        const double row_w = spans * unit + (n - 1) * gap;
-        double kx = x + std::max(0.0, (full_w - row_w) / 2.0);
-        const double ky = y + row * row_pitch;
-        for (int i = 0; i < count; ++i) {
-            if (keys[i].row != row) {
-                continue;
-            }
-            const OskKey &key = keys[i];
-            const double kw = key.span * unit + (key.span - 1.0) * gap;
-            const bool shifted = osk_shift_ && key.kind == OskKind::Text && key.shifted != nullptr;
-            const char *label = shifted ? key.shifted : key.label;
-            const bool primary = (key.kind == OskKind::Shift && osk_shift_) || focus_id_ == kOsk + i;
-            button(cr, kx, ky, kw, key_h, label, kOsk + i, primary);
-            kx += kw + gap;
-        }
+        const OskKey &key = keys[box.index];
+        const bool shifted = osk_shift_ && key.kind == OskKind::Text && key.shifted != nullptr;
+        const char *label = shifted ? key.shifted : key.label;
+        const bool primary = (key.kind == OskKind::Shift && osk_shift_) || focus_id_ == kOsk + box.index;
+        button(cr, box.x, box.y, box.w, box.h, label, kOsk + box.index, primary);
     }
 }
 
@@ -265,13 +198,14 @@ void Shell::draw_menubar(cairo_t *cr)
         const int id = kMenuTitle + c;
         push_hot(x, 2, w, menu_h_ - 4, id);
         const bool open = menu_.open_menu == c;
-        if (open || hover_id_ == id) {
+        // A focused Close button used to share the System title's id.
+        const bool lit = dialog_ == Dialog::None && (open || hover_id_ == id);
+        if (lit) {
             fill(cr, x, 3, w, menu_h_ - 6, theme::kSelectR, theme::kSelectG, theme::kSelectB);
             stroke_rect(cr, x, 3, w, menu_h_ - 6, theme::kSelectEdgeR, theme::kSelectEdgeG, theme::kSelectEdgeB);
         }
         paint_mnemonic(cr, theme::kMenuFont, title, x + 10, 9, menu_.alt_shown || menu_.open(),
-                       open || hover_id_ == id ? 1 : theme::kTextR, open || hover_id_ == id ? 1 : theme::kTextG,
-                       open || hover_id_ == id ? 1 : theme::kTextB);
+                       lit ? 1 : theme::kTextR, lit ? 1 : theme::kTextG, lit ? 1 : theme::kTextB);
         x += w + 2;
     }
 }
@@ -359,9 +293,14 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
                     cairo_stroke(cr);
                 }
             } else {
+                // Pango leaves the current point at the end of the previous
+                // row. cairo_arc joins to that point, which draws a diagonal
+                // from the row above into this radio circle.
+                cairo_new_sub_path(cr);
                 cairo_arc(cr, drop_x + 15, y + 16, 6, 0, 6.3);
                 cairo_stroke(cr);
                 if (on) {
+                    cairo_new_sub_path(cr);
                     cairo_arc(cr, drop_x + 15, y + 16, 3, 0, 6.3);
                     cairo_fill(cr);
                 }
@@ -678,14 +617,19 @@ void Shell::draw_dialog(cairo_t *cr)
                           int max, double sy) {
             paint_text(cr, "Sans Bold 13", caption, x + 16, sy, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 32));
-            const double detail_h = std::max(16.0, slot - 44);
+            // Directly under this field's caption and value. The old bar sat
+            // at the bottom of a tall slot, a few pixels above the next label.
+            double bar_y = sy + 40;
+            const double lowest = sy + slot - 22;
+            if (bar_y > lowest) {
+                bar_y = std::max(sy + 22.0, lowest);
+            }
             cairo_save(cr);
-            cairo_rectangle(cr, x + 16, sy + 16, dw - 32, detail_h);
+            cairo_rectangle(cr, x + 16, sy + 16, dw - 32, std::max(0.0, bar_y - 4 - (sy + 16)));
             cairo_clip(cr);
             paint_text(cr, theme::kUiFont, detail, x + 16, sy + 18, theme::kAccelR, theme::kAccelG, theme::kAccelB,
                        static_cast<int>(dw - 32));
             cairo_restore(cr);
-            const double bar_y = sy + slot - 24;
             const double sx = x + 16;
             const double sw = dw - 32;
             fill(cr, sx, bar_y, sw, 16, 1, 1, 1);
@@ -820,7 +764,7 @@ void Shell::draw_dialog(cairo_t *cr)
             overlay_.sync();
             overlay_.draw(live.cr, ow, oh);
         }
-        push_hot(overlay_x_, overlay_y_, ow, oh, 90);
+        push_hot(overlay_x_, overlay_y_, ow, oh, kOverlayMap);
         buttons_at(y + dh - 52, {{"_Close", kClose}});
         return;
     }
@@ -892,8 +836,6 @@ void Shell::draw(cairo_t *cr)
         const double by = view_y_ + (view_h_ - bh) * (scroll_y_ / max_y);
         fill(cr, view_x_ + view_w_ - 8, by, 6, bh, theme::kSelectR, theme::kSelectG, theme::kSelectB);
     }
-    (void)kHScroll;
-    (void)kVScroll;
     const int status_y = win_h_ - status_h_ - message_h_;
     fill(cr, 0, status_y, win_w_, status_h_, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);
     std::string status = session_.funds_text() + "    " + session_.city_name() + "    " + speed_word(speed_) + "    " +

@@ -335,6 +335,15 @@ dialog_copy = executable(
 
 test('dialog_copy', dialog_copy)
 
+# Unique hotspot ids, and on-screen keyboard Up/Down by row.
+hotspots = executable(
+  'hotspots',
+  'hotspots.cpp',
+  include_directories: include_directories('../src'),
+)
+
+test('hotspots', hotspots)
+
 # Menu hit-testing, gamepad drag-build, and budget slider keys. Headless.
 test(
   'ui_input',

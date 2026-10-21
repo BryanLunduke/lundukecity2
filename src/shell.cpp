@@ -29,43 +29,6 @@
 
 namespace {
 
-constexpr int kMapId = 1;
-constexpr int kPaletteId = 2;
-constexpr int kMinimapId = 3;
-constexpr int kWelcomeId = 4;
-constexpr int kMenuTitle = 10;
-constexpr int kMenuItem = 1000;
-constexpr int kRecentItem = 2000;
-constexpr int kListItem = 7000;
-constexpr int kFieldName = 6001;
-constexpr int kFieldSeed = 6002;
-constexpr int kOsk = 6100;
-constexpr int kSlider = 8000;
-constexpr int kChoice = 8300;
-
-constexpr int kCancel = 1;
-constexpr int kOk = 2;
-constexpr int kDiscard = 3;
-constexpr int kSave = 4;
-constexpr int kBack = 5;
-constexpr int kNext = 6;
-constexpr int kGenerate = 7;
-constexpr int kPlay = 8;
-constexpr int kRename = 9;
-constexpr int kClose = 10;
-constexpr int kReset = 11;
-constexpr int kCollect = 12;
-constexpr int kKeep = 13;
-constexpr int kStay = 14;
-constexpr int kScenarioList = 15;
-constexpr int kRecover = 16;
-constexpr int kNotNow = 17;
-constexpr int kDelete = 18;
-constexpr int kUp = 19;
-constexpr int kSystemFiles = 20;
-constexpr int kShortScale = 21;
-constexpr int kLongScale = 22;
-
 #ifndef _WIN32
 volatile std::sig_atomic_t g_terminate = 0;
 
@@ -635,6 +598,18 @@ void Shell::loop()
             } else if (demo_ == "osk") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::NewCity);
+            } else if (demo_ == "options") {
+                menu_.open_menu = 1;
+                menu_.cursor = 7;
+                menu_.alt_shown = true;
+                gamepad_nav_ = true;
+            } else if (demo_ == "unsaved") {
+                gamepad_nav_ = true;
+                open_dialog(Dialog::Unsaved);
+                // Stale map hover: before the id fix this lights the Cancel button.
+                hover_id_ = kMapId;
+                cursor_x_ = static_cast<float>(view_x_ + view_w_ / 2.0);
+                cursor_y_ = static_cast<float>(view_y_ + view_h_ / 2.0);
             }
         }
         if (ui_test_) {
@@ -787,9 +762,13 @@ void Shell::handle_event(const SDL_Event &event)
                     move_focus(direction);
                 }
             } else if (accel == AccelKey::Up) {
-                move_focus(-1);
+                if (!move_osk_vertically(-1)) {
+                    move_focus(-1);
+                }
             } else if (accel == AccelKey::Down) {
-                move_focus(1);
+                if (!move_osk_vertically(1)) {
+                    move_focus(1);
+                }
             } else if (key == SDLK_TAB) {
                 move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
             }
@@ -935,6 +914,9 @@ void Shell::handle_event(const SDL_Event &event)
         } else if (dialog_ != Dialog::None) {
             if ((dir == AccelKey::Left || dir == AccelKey::Right) &&
                 adjust_focused_slider(dir == AccelKey::Left ? -1 : 1)) {
+                break;
+            }
+            if ((dir == AccelKey::Up && move_osk_vertically(-1)) || (dir == AccelKey::Down && move_osk_vertically(1))) {
                 break;
             }
             move_focus(dir == AccelKey::Up || dir == AccelKey::Left ? -1 : 1);
