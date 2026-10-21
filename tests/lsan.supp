@@ -18,3 +18,7 @@ leak:libGLX_mesa
 leak:libGL.so
 leak:Mesa
 leak:dri
+# ALSA allocates a mixer state from the default playback device when no
+# sound card exists (the features test, about 746 bytes in libasound).
+# That test also sets the dummy audio driver so the device is not opened.
+leak:libasound

@@ -93,7 +93,7 @@ void Shell::layout()
         win_h_ = 1;
     }
     menu_h_ = dp(36);
-    welcome_h_ = welcome_ ? dp(52) : 0;
+    welcome_h_ = welcome_ ? ui_scale::welcome_bar(std::max(1, win_w_), ui_scale_).bar_h : 0;
     status_h_ = dp(36);
     message_h_ = dp(44);
     const int body = win_h_ - menu_h_ - welcome_h_ - status_h_ - message_h_;
@@ -959,13 +959,25 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Budget) {
         const auto book = session_.budget();
         const BudgetCopy copy = budget_copy(book, budget_is_tax_);
-        const double width = std::min(static_cast<double>(dp(680)), std::max(1.0, win_w_ - 2.0 * margin));
         const double gap = static_cast<double>(dp(6));
         const double col_gap = static_cast<double>(dp(16));
+        auto unwrapped = [&](const std::string &text) {
+            return measure_text(cr, ui_font(), text, -1).width;
+        };
+        const int need_col = std::max(std::max(unwrapped(copy.taxes), unwrapped(copy.previous_funds)),
+                                      std::max(unwrapped(copy.cash_flow), unwrapped(copy.current_funds))) +
+                             dp(8);
+        const double want = std::max(static_cast<double>(dp(680)), 2.0 * margin + col_gap + 2.0 * static_cast<double>(need_col));
+        const double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
         const double inner = width - 2.0 * margin;
         const double col_w = std::max(1.0, (inner - col_gap) / 2.0);
-        const double row1 = std::max(line_height(ui_font(), copy.taxes, col_w), line_height(ui_font(), copy.previous_funds, col_w));
-        const double row2 = std::max(line_height(ui_font(), copy.cash_flow, col_w), line_height(ui_font(), copy.current_funds, col_w));
+        const int col_px = static_cast<int>(col_w);
+        const std::string taxes = avoid_short_last_line(cr, ui_font(), copy.taxes, col_px);
+        const std::string previous = avoid_short_last_line(cr, ui_font(), copy.previous_funds, col_px);
+        const std::string flow = avoid_short_last_line(cr, ui_font(), copy.cash_flow, col_px);
+        const std::string funds = avoid_short_last_line(cr, ui_font(), copy.current_funds, col_px);
+        const double row1 = std::max(line_height(ui_font(), taxes, col_w), line_height(ui_font(), previous, col_w));
+        const double row2 = std::max(line_height(ui_font(), flow, col_w), line_height(ui_font(), funds, col_w));
         const double note_h = copy.closing_note.empty() ? 0.0 : line_height(ui_font(), copy.closing_note, inner) + gap;
         auto block_h = [&](const std::string &caption, const std::string &value_text, const std::string &detail) {
             const double value_w = static_cast<double>(measure_text(cr, bold_font(), value_text, -1).width);
@@ -992,13 +1004,13 @@ void Shell::draw_dialog(cairo_t *cr)
         const double live_col = std::max(1.0, (live_inner - col_gap) / 2.0);
         double cursor = y + dp(48);
         const double taxes_h =
-            place_line(ui_font(), copy.taxes, x + margin, cursor, live_col, theme::kTextR, theme::kTextG, theme::kTextB);
-        const double previous_h = place_line(ui_font(), copy.previous_funds, x + margin + live_col + col_gap, cursor, live_col,
+            place_line(ui_font(), taxes, x + margin, cursor, live_col, theme::kTextR, theme::kTextG, theme::kTextB);
+        const double previous_h = place_line(ui_font(), previous, x + margin + live_col + col_gap, cursor, live_col,
                                              theme::kTextR, theme::kTextG, theme::kTextB);
         cursor += std::max(taxes_h, previous_h) + gap;
         const double flow_h =
-            place_line(ui_font(), copy.cash_flow, x + margin, cursor, live_col, theme::kTextR, theme::kTextG, theme::kTextB);
-        const double funds_h = place_line(ui_font(), copy.current_funds, x + margin + live_col + col_gap, cursor, live_col,
+            place_line(ui_font(), flow, x + margin, cursor, live_col, theme::kTextR, theme::kTextG, theme::kTextB);
+        const double funds_h = place_line(ui_font(), funds, x + margin + live_col + col_gap, cursor, live_col,
                                           theme::kTextR, theme::kTextG, theme::kTextB);
         cursor += std::max(flow_h, funds_h) + gap;
         if (!copy.closing_note.empty()) {
@@ -1096,11 +1108,16 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Evaluation) {
         const EvaluationCopy copy = evaluation_copy(session_.evaluation(), session_.scenario_progress());
         const std::string heading = session_.city_name() + " — " + session_.date_text();
-        const double width = std::min(static_cast<double>(dp(760)), std::max(1.0, win_w_ - 2.0 * margin));
         const double gap = static_cast<double>(dp(6));
         const double col_gap = margin;
+        const int delta_px = measure_text(cr, body_font(), copy.score_delta, -1).width;
+        const double fitted_delta = static_cast<double>(delta_px + dp(12));
+        const double want = std::max(static_cast<double>(dp(760)), 2.0 * margin + col_gap + 2.0 * fitted_delta);
+        const double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
         const double inner = width - 2.0 * margin;
         const double col_w = std::max(1.0, (inner - col_gap) / 2.0);
+        const std::string score_delta =
+            avoid_short_last_line(cr, body_font(), copy.score_delta, static_cast<int>(col_w));
         struct Row {
             const char *font;
             std::string text;
@@ -1108,7 +1125,7 @@ void Shell::draw_dialog(cairo_t *cr)
         std::vector<Row> left_rows = {
             {bold_font(), copy.score_caption},
             {body_font(), copy.score},
-            {body_font(), copy.score_delta},
+            {body_font(), score_delta},
             {bold_font(), copy.opinion_caption},
             {body_font(), copy.opinion_question},
             {body_font(), copy.yes + "    " + copy.no},
@@ -1134,8 +1151,9 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             return h;
         };
-        const double left_h = column_h(left_rows, col_w) + (bar_h > 0.0 ? bar_h + gap : 0.0) +
-                              line_height(ui_font(), copy.opinion_bar, col_w) + gap;
+        const double opinion_extra =
+            copy.opinion_bar.empty() ? 0.0 : line_height(ui_font(), copy.opinion_bar, col_w) + gap;
+        const double left_h = column_h(left_rows, col_w) + (bar_h > 0.0 ? bar_h + gap : 0.0) + opinion_extra;
         const double right_h = column_h(right_rows, col_w);
         const double heading_h = line_height(body_font(), heading, inner);
         const double height = dp(40) + margin + heading_h + gap + std::max(left_h, right_h) + dp(8) + dp(36) + margin;
@@ -1168,9 +1186,11 @@ void Shell::draw_dialog(cairo_t *cr)
                  theme::kSelectB);
             left_y += bar_h + gap;
         }
-        const double opinion_h =
-            place_line(ui_font(), copy.opinion_bar, left_x, left_y, live_col, theme::kTextR, theme::kTextG, theme::kTextB);
-        left_y += opinion_h + gap;
+        if (!copy.opinion_bar.empty()) {
+            const double opinion_h = place_line(ui_font(), copy.opinion_bar, left_x, left_y, live_col, theme::kTextR,
+                                                theme::kTextG, theme::kTextB);
+            left_y += opinion_h + gap;
+        }
         (void)left_y;
         paint_rows(right_rows, right_x, right_y);
         buttons_at(x, dw, y + panel.h - margin - dp(36), {{"_Close", kClose}});
@@ -1220,12 +1240,14 @@ void Shell::draw(cairo_t *cr)
     fill(cr, 0, 0, win_w_, win_h_, theme::kWindowR, theme::kWindowG, theme::kWindowB);
     draw_menubar(cr);
     if (welcome_) {
+        const ui_scale::WelcomeBar bar = ui_scale::welcome_bar(win_w_, ui_scale_);
         fill(cr, 0, menu_h_, win_w_, welcome_h_, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
         const std::string line = std::string("Welcome to Lunduke City 2. The clock is ") +
                                  (speed_ <= 0 ? "paused." : std::string("running at ") + speed_word(speed_) + ".") +
                                  " Choose a speed under Options, start a city with System, New City, or pick Play Scenario.";
-        paint_text(cr, ui_font(), line, 10, menu_h_ + 6, theme::kTextR, theme::kTextG, theme::kTextB, win_w_ - 140);
-        button(cr, win_w_ - dp(120), menu_h_ + dp(8), dp(100), dp(32), "Dismiss", kWelcomeId, false);
+        paint_text(cr, ui_font(), line, bar.text_x, menu_h_ + bar.text_y, theme::kTextR, theme::kTextG, theme::kTextB,
+                   bar.text_w);
+        button(cr, bar.button_x, menu_h_ + bar.button_y, bar.button_w, bar.button_h, "Dismiss", kWelcomeId, false);
     }
     {
         TargetCr live(cr);
@@ -1404,5 +1426,6 @@ void Shell::render()
     cairo_destroy(context);
     visual_stamp_ = visual_stamp();
     presented_ = true;
+    window_exposed_ = false;
     ++redraws_;
 }

@@ -11,6 +11,7 @@
 #include "list_scroll.hpp"
 #include "map_fit.hpp"
 #include "redraw.hpp"
+#include "text_wrap.hpp"
 #include "sound_player.hpp"
 #include "ui_scale.hpp"
 #include "window_fit.hpp"
@@ -342,8 +343,39 @@ int main()
     running.sim_running = true;
     redraw::Reasons blink;
     blink.blink = true;
-    if (!redraw::needed(running) || !redraw::needed(blink)) {
-        return fail("simulation and blink frames should redraw");
+    redraw::Reasons exposed;
+    exposed.exposed = true;
+    if (!redraw::needed(running) || !redraw::needed(blink) || !redraw::needed(exposed)) {
+        return fail("simulation, blink, and expose frames should redraw");
+    }
+    const ui_scale::WelcomeBar welcome = ui_scale::welcome_bar(1280, 1.77f);
+    if (welcome.text_x < 0 || welcome.text_w < 1 || welcome.text_x + welcome.text_w > welcome.button_x ||
+        welcome.button_x + welcome.button_w > 1280) {
+        return fail("welcome text runs into Dismiss at scale 1.77");
+    }
+    const ui_scale::WelcomeBar welcome_1 = ui_scale::welcome_bar(1280, 1.0f);
+    if (welcome_1.text_x + welcome_1.text_w > welcome_1.button_x) {
+        return fail("welcome text runs into Dismiss at scale 1");
+    }
+    auto letters = [](const std::string &sample) { return static_cast<int>(sample.size()); };
+    const std::string sentence = "The city is evaluated once people move in.";
+    const int sentence_col = static_cast<int>(sentence.size()) - 4;
+    const std::string wrapped = pull_short_last_token(sentence, sentence_col, letters);
+    if (wrapped.find("\nmove in.") == std::string::npos) {
+        return fail("evaluation leaves \"in.\" on its own line: " + wrapped);
+    }
+    const std::string taxes = "Estimated taxes, not yet collected: $960";
+    const int taxes_col = static_cast<int>(taxes.size()) - 5;
+    const std::string taxes_pulled = pull_short_last_token(taxes, taxes_col, letters);
+    if (taxes_pulled.find("\ncollected: $960") == std::string::npos) {
+        return fail("budget leaves \"$960\" on its own line: " + taxes_pulled);
+    }
+    if (pull_short_last_token(sentence, static_cast<int>(sentence.size()), letters) != sentence) {
+        return fail("a line that fits was rewritten");
+    }
+    const std::string long_tail = "abcdefgh ijklmnop";
+    if (pull_short_last_token(long_tail, 10, letters).find('\n') != std::string::npos) {
+        return fail("a long last word was pulled up");
     }
     const ui_scale::StoredSettings unknown = ui_scale::settings_parse("not_a_window=1\nui_scale=0\n");
     if (unknown.has_geometry || unknown.user_scale != 0.0f) {

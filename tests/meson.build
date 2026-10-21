@@ -35,7 +35,16 @@ features = executable(
   ],
 )
 
-test('features', features)
+# Dummy audio: opening the default ALSA device leaks inside libasound when
+# the machine has no sound card. started==0 is an accepted features result.
+test(
+  'features',
+  features,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+)
 
 if posix_host
   regressions = executable(

@@ -401,6 +401,7 @@ private:
     int frame_ = 0;
     bool presented_ = false;
     bool blink_drew_ = false;
+    bool window_exposed_ = false;
     int redraws_ = 0;
     int skipped_redraws_ = 0;
     int surface_builds_ = 0;

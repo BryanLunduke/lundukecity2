@@ -5,6 +5,7 @@
 #pragma once
 
 #include "menu_model.hpp"
+#include "text_wrap.hpp"
 
 #include <pango/pangocairo.h>
 
@@ -106,6 +107,14 @@ inline TextMetrics measure_text(cairo_t *cr, const char *font, const std::string
     PangoLayout *layout = cached_layout(cr, font, text, wrap_width);
     pango_layout_get_pixel_size(layout, &metrics.width, &metrics.height);
     return metrics;
+}
+
+// Insert a newline so a short last token stays with the word before it.
+inline std::string avoid_short_last_line(cairo_t *cr, const char *font, const std::string &text, int column_px)
+{
+    return pull_short_last_token(text, column_px, [&](const std::string &sample) {
+        return measure_text(cr, font, sample, -1).width;
+    });
 }
 
 inline void paint_text(cairo_t *cr, const char *font, const std::string &text, double x, double y, double r,

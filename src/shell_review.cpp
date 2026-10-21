@@ -174,6 +174,12 @@ void Shell::run_review_checks()
         fail("a running simulation did not ask for a redraw");
         return;
     }
+    redraw::Reasons exposed;
+    exposed.exposed = true;
+    if (!redraw::needed(exposed)) {
+        fail("an exposed window did not ask for a redraw");
+        return;
+    }
 
     // M1: content-sized dialogs stay inside a Steam Deck and a short laptop window.
     dialog_ = Dialog::NewCity;

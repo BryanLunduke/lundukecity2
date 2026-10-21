@@ -361,7 +361,9 @@ private:
     int speed_ = 2;
     bool dirty_ = false;
     // True only after new_city(), until the city is saved, loaded, or a
-    // scenario starts. birth_* is the month shown at that moment.
+    // scenario starts. birth_* is the month cityTime shows at that moment
+    // (January 1900 for a generated city). Changing speed does not count
+    // as an edit while this is set.
     bool fresh_generated_ = false;
     int birth_month_ = 0;
     int birth_year_ = 1900;
