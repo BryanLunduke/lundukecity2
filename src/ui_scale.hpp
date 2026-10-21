@@ -44,17 +44,16 @@ inline int scaled_px(int px, float scale);
 
 // True when the menu, tool column, demand gauges, and status/message bars
 // all sit inside the window at this scale. The numbers match Shell::layout.
-inline bool chrome_fits(float scale, int win_w, int win_h, bool welcome)
+inline bool chrome_fits(float scale, int win_w, int win_h)
 {
     if (!(scale > 0.0f) || win_w < 1 || win_h < 1) {
         return false;
     }
     auto px = [&](int n) { return scaled_px(n, scale); };
     const int menu = px(36);
-    const int welcome_h = welcome ? px(52) : 0;
     const int status = px(36);
     const int message = px(44);
-    const int body = win_h - menu - welcome_h - status - message;
+    const int body = win_h - menu - status - message;
     if (body < px(32)) {
         return false;
     }
@@ -74,7 +73,7 @@ inline bool chrome_fits(float scale, int win_w, int win_h, bool welcome)
     if (px(6) + side + px(8) + px(32) > win_w) {
         return false;
     }
-    const int pal_y = menu + welcome_h + px(6);
+    const int pal_y = menu + px(6);
     const int mini_y = pal_y + palette_h(cell) + px(8);
     const int mini_h = std::max(px(64), side * 5 / 6);
     const int demand_y = mini_y + mini_h + px(8);
@@ -83,7 +82,7 @@ inline bool chrome_fits(float scale, int win_w, int win_h, bool welcome)
 }
 
 // Shrink a requested scale until the chrome fits. The result stays at least 0.5.
-inline float clamp_ui_scale(float scale, int win_w, int win_h, bool welcome)
+inline float clamp_ui_scale(float scale, int win_w, int win_h)
 {
     if (!(scale > 0.0f)) {
         scale = 1.0f;
@@ -91,17 +90,17 @@ inline float clamp_ui_scale(float scale, int win_w, int win_h, bool welcome)
     if (scale < 0.5f) {
         scale = 0.5f;
     }
-    if (chrome_fits(scale, win_w, win_h, welcome)) {
+    if (chrome_fits(scale, win_w, win_h)) {
         return scale;
     }
     float lo = 0.5f;
     float hi = scale;
-    if (!chrome_fits(lo, win_w, win_h, welcome)) {
+    if (!chrome_fits(lo, win_w, win_h)) {
         return lo;
     }
     for (int i = 0; i < 16; ++i) {
         const float mid = (lo + hi) * 0.5f;
-        if (chrome_fits(mid, win_w, win_h, welcome)) {
+        if (chrome_fits(mid, win_w, win_h)) {
             lo = mid;
         } else {
             hi = mid;
@@ -121,43 +120,6 @@ inline int scaled_px(int px, float scale)
 inline std::string scaled_font(const char *family, int points, float scale)
 {
     return std::string(family) + " " + std::to_string(scaled_px(points, scale));
-}
-
-// The welcome strip. text_x + text_w stays left of Dismiss. A fixed 140px
-// gap does not, once the button is scaled (1.77 in a 1280-wide window).
-struct WelcomeBar {
-    int text_x = 0;
-    int text_y = 0;
-    int text_w = 1;
-    int button_x = 0;
-    int button_y = 0;
-    int button_w = 1;
-    int button_h = 1;
-    int bar_h = 1;
-};
-
-inline WelcomeBar welcome_bar(int win_w, float scale)
-{
-    WelcomeBar bar;
-    if (!(scale > 0.0f)) {
-        scale = 1.0f;
-    }
-    if (win_w < 1) {
-        win_w = 1;
-    }
-    const int edge = scaled_px(10, scale);
-    const int gap = scaled_px(16, scale);
-    bar.button_w = scaled_px(100, scale);
-    bar.button_h = scaled_px(32, scale);
-    const int button_right = scaled_px(20, scale);
-    bar.button_x = std::max(0, win_w - button_right - bar.button_w);
-    bar.button_y = scaled_px(8, scale);
-    bar.text_x = std::min(edge, std::max(0, bar.button_x));
-    bar.text_y = scaled_px(8, scale);
-    bar.text_w = std::max(1, bar.button_x - gap - bar.text_x);
-    const int button_bottom = bar.button_y + bar.button_h + scaled_px(8, scale);
-    bar.bar_h = std::max(scaled_px(52, scale), button_bottom);
-    return bar;
 }
 
 // Classic 1280x800 when the work area can hold it. A larger display grows

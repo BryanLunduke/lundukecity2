@@ -5,9 +5,8 @@
 #pragma once
 
 // One id space for every clickable region. Dialog buttons used to reuse the
-// map, toolbar, minimap, welcome bar, and System-menu ids, so a hover or
-// focus on the city lit the matching button (and the welcome Dismiss joined
-// the dialog's D-pad cycle).
+// map, toolbar, minimap, and System-menu ids, so a hover or focus on the
+// city lit the matching button.
 
 enum HotspotId : int {
     kHotNone = 0,
@@ -15,7 +14,6 @@ enum HotspotId : int {
     kMapId = 1,
     kPaletteId = 2,
     kMinimapId = 3,
-    kWelcomeId = 4,
 
     // Menu-bar titles occupy kMenuTitle + column (columns 0..4).
     kMenuTitle = 10,
@@ -52,6 +50,10 @@ enum HotspotId : int {
     kSystemFiles = 119,
     kShortScale = 120,
     kLongScale = 121,
+    // Launch screen. B / Escape on that screen quits; these three start a city.
+    kWelcomeNew = 122,
+    kWelcomeLoad = 123,
+    kWelcomeScenario = 124,
 
     kMenuItem = 1000,
     kRecentItem = 2000,
@@ -65,7 +67,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kLongScale;
+    return id >= kCancel && id <= kWelcomeScenario;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

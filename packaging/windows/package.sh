@@ -42,6 +42,8 @@ done
 for dll in "$root"/bin/*.dll; do "$strip" --strip-unneeded "$dll"; done
 
 cp -r "$src/third_party/micropolis-assets" "$root/share/$name/micropolis-assets"
+mkdir -p "$root/share/$name/tool-icons"
+cp "$src"/data/tool-icons/*.png "$root/share/$name/tool-icons/"
 cp "$here/fonts.conf" "$root/etc/fonts/fonts.conf"
 for f in DejaVuSans.ttf DejaVuSans-Bold.ttf DejaVuSans-Oblique.ttf DejaVuSans-BoldOblique.ttf \
          DejaVuSansMono.ttf DejaVuSansMono-Bold.ttf; do

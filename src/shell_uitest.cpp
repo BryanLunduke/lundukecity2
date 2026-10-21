@@ -280,24 +280,19 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
         };
         const Hotspot *cancel = find_hot(hot_, kCancel, 0);
         const Hotspot *save = find_hot(hot_, kSave, 0);
-        const Hotspot *dismiss = find_hot(hot_, kWelcomeId, 0);
         int cr = 0;
         int cg = 0;
         int cb = 0;
         int sr = 0;
         int sg = 0;
         int sb = 0;
-        int dr = 0;
-        int dg = 0;
-        int db = 0;
-        if (!sample(cancel, cr, cg, cb) || !sample(save, sr, sg, sb) || !sample(dismiss, dr, dg, db)) {
+        if (!sample(cancel, cr, cg, cb) || !sample(save, sr, sg, sb)) {
             ran_ok_ = false;
-            smoke_error_ = "save dialog is missing Cancel, Save, or Dismiss";
+            smoke_error_ = "save dialog is missing Cancel or Save";
             quitting_ = true;
             return;
         }
-        // Map hover must not turn Cancel blue, and Save's focus must not turn
-        // the welcome Dismiss blue. Save itself stays the focused blue.
+        // Map hover must not turn Cancel blue. Save itself stays the focused blue.
         if (cb > cr + 20 || cr < 180) {
             ran_ok_ = false;
             smoke_error_ = "Cancel lit up while the pointer was over the map (" + std::to_string(cr) + "," +
@@ -311,10 +306,13 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
             quitting_ = true;
             return;
         }
-        if (db > dr + 20) {
+        // The yellow welcome strip used to sit under the menu. That band is map now.
+        int yr = 0;
+        int yg = 0;
+        int yb = 0;
+        if (!channel_at(surface, win_w_ / 2, menu_h_ + 4, yr, yg, yb) || (yr > 230 && yg > 220 && yb > 120 && yb < 210)) {
             ran_ok_ = false;
-            smoke_error_ = "Dismiss lit up behind the save dialog (" + std::to_string(dr) + "," + std::to_string(dg) +
-                           "," + std::to_string(db) + ")";
+            smoke_error_ = "the welcome bar is still drawn under the menu";
             quitting_ = true;
         }
     }
@@ -396,6 +394,52 @@ void Shell::drive_ui_test()
         if (!attach_test_pad()) {
             quitting_ = true;
             return;
+        }
+        if (view_y_ != menu_h_) {
+            fail("the welcome bar still reserves a row of the map");
+            return;
+        }
+        if (session_.needs_save_prompt()) {
+            fail("startup asked to save a city that has not been edited");
+            return;
+        }
+        {
+            // The sprite is centered in the first tool button. Sample that
+            // interior, not the button bevel, which is only two or three greys.
+            const int cell = palette_.cell();
+            const int box = std::max(8, cell - 12);
+            const int origin = 9;
+            int colors = 0;
+            int seen_r[25] = {};
+            int seen_g[25] = {};
+            int seen_b[25] = {};
+            for (int i = 0; i < 25; ++i) {
+                const int sx = side_x_ + origin + (box * (1 + (i % 5))) / 6;
+                const int sy = pal_y_ + origin + (box * (1 + (i / 5))) / 6;
+                int r = 0;
+                int g = 0;
+                int b = 0;
+                if (!channel_at(frame_surface_, sx, sy, r, g, b)) {
+                    continue;
+                }
+                bool known = false;
+                for (int c = 0; c < colors; ++c) {
+                    if (std::abs(seen_r[c] - r) < 12 && std::abs(seen_g[c] - g) < 12 && std::abs(seen_b[c] - b) < 12) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known && colors < 24) {
+                    seen_r[colors] = r;
+                    seen_g[colors] = g;
+                    seen_b[colors] = b;
+                    ++colors;
+                }
+            }
+            if (colors < 5) {
+                fail("toolbar icons are still flat blocks (" + std::to_string(colors) + " colors)");
+                return;
+            }
         }
         g_menu_rows = 0;
         g_menu_seen = false;
@@ -670,7 +714,6 @@ void Shell::drive_ui_test()
         return;
     }
     case 17:
-        welcome_ = true;
         open_dialog(Dialog::Unsaved);
         // Stale map hover. Cancel used to share this id and light up.
         hover_id_ = kMapId;
@@ -681,7 +724,7 @@ void Shell::drive_ui_test()
             fail("save dialog did not open");
             return;
         }
-        if (kCancel == kMapId || kOk == kPaletteId || kDiscard == kMinimapId || kSave == kWelcomeId ||
+        if (kCancel == kMapId || kOk == kPaletteId || kDiscard == kMinimapId || kWelcomeNew == kMapId ||
             kClose == kMenuTitle) {
             fail("dialog button id still matches a screen region");
             return;
@@ -713,8 +756,7 @@ void Shell::drive_ui_test()
             fail("save dialog is missing a button in the focus cycle");
             return;
         }
-        if (std::find(focus_order_.begin(), focus_order_.end(), kWelcomeId) != focus_order_.end() ||
-            std::find(focus_order_.begin(), focus_order_.end(), kMapId) != focus_order_.end() ||
+        if (std::find(focus_order_.begin(), focus_order_.end(), kMapId) != focus_order_.end() ||
             std::find(focus_order_.begin(), focus_order_.end(), kMenuTitle) != focus_order_.end()) {
             fail("background hotspot joined the modal focus cycle");
             return;
@@ -729,7 +771,6 @@ void Shell::drive_ui_test()
             }
         }
         close_dialog();
-        welcome_ = false;
         ui_step_ = 12;
         return;
     }
@@ -902,7 +943,138 @@ void Shell::drive_ui_test()
             fail("holding A and moving did not drag-build (" + std::to_string(changed) + " tiles)");
             return;
         }
-        quitting_ = true;
+        ui_step_ = 19;
+        return;
+    }
+    case 19:
+        if (view_y_ != menu_h_) {
+            fail("the welcome bar still reserves a row of the map");
+            return;
+        }
+        welcome_gate_ = true;
+        open_dialog(Dialog::Welcome);
+        ui_step_ = 20;
+        return;
+    case 20: {
+        if (dialog_ != Dialog::Welcome) {
+            fail("the welcome screen did not open");
+            return;
+        }
+        if (find_hot(hot_, kWelcomeNew, 0) == nullptr || find_hot(hot_, kWelcomeLoad, 0) == nullptr ||
+            find_hot(hot_, kWelcomeScenario, 0) == nullptr) {
+            fail("the welcome screen is missing a button");
+            return;
+        }
+        if (focus_id_ != kWelcomeNew) {
+            fail("the welcome screen did not focus Start a New City");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeNew; });
+        if (focus_id_ != kWelcomeLoad) {
+            fail("D-pad Down did not move to Load a Saved City");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeLoad; });
+        if (focus_id_ != kWelcomeScenario) {
+            fail("D-pad Down did not move to Select a Scenario");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return dialog_ == Dialog::Welcome; });
+        if (dialog_ != Dialog::Scenario) {
+            fail("A did not open the scenario picker");
+            return;
+        }
+        ui_step_ = 21;
+        return;
+    }
+    case 21: {
+        if (dialog_ != Dialog::Scenario) {
+            fail("the scenario picker closed on its own");
+            return;
+        }
+        const Hotspot *row0 = find_hot(hot_, kListItem, 0);
+        const Hotspot *row1 = find_hot(hot_, kListItem + 1, 0);
+        if (row0 == nullptr || row1 == nullptr) {
+            fail("the scenario list has no rows");
+            return;
+        }
+        auto differ = [&](int dx, int dy) {
+            int r0 = 0;
+            int g0 = 0;
+            int b0 = 0;
+            int r1 = 0;
+            int g1 = 0;
+            int b1 = 0;
+            const int x0 = static_cast<int>(row0->x + 14 + dx);
+            const int y0 = static_cast<int>(row0->y + 10 + dy);
+            const int x1 = static_cast<int>(row1->x + 14 + dx);
+            const int y1 = static_cast<int>(row1->y + 10 + dy);
+            if (!channel_at(frame_surface_, x0, y0, r0, g0, b0) || !channel_at(frame_surface_, x1, y1, r1, g1, b1)) {
+                return false;
+            }
+            return r0 != r1 || g0 != g1 || b0 != b1;
+        };
+        if (!differ(0, 0) && !differ(8, 6) && !differ(20, 16) && !differ(4, 24)) {
+            fail("scenario previews are missing or identical");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return dialog_ == Dialog::Scenario; });
+        if (dialog_ != Dialog::Welcome) {
+            fail("B on the scenario picker did not return to the welcome screen");
+            return;
+        }
+        ui_step_ = 22;
+        return;
+    }
+    case 22: {
+        const Hotspot *start = find_hot(hot_, kWelcomeNew, 0);
+        if (start == nullptr || dialog_ != Dialog::Welcome) {
+            fail("the welcome screen did not come back");
+            return;
+        }
+        click_at(start->x + start->w * 0.5, start->y + start->h * 0.5);
+        if (dialog_ != Dialog::NewCity) {
+            fail("Start a New City did not open");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return dialog_ == Dialog::NewCity; });
+        if (dialog_ != Dialog::Welcome) {
+            fail("cancelling New City did not return to the welcome screen");
+            return;
+        }
+        ui_step_ = 23;
+        return;
+    }
+    case 23: {
+        const Hotspot *load = find_hot(hot_, kWelcomeLoad, 0);
+        if (load == nullptr) {
+            fail("Load a Saved City is not on the welcome screen");
+            return;
+        }
+        click_at(load->x + load->w * 0.5, load->y + load->h * 0.5);
+        if (dialog_ != Dialog::Files && dialog_ != Dialog::FileWait) {
+            fail("Load a Saved City did not open a file picker");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return dialog_ == Dialog::Files || dialog_ == Dialog::FileWait; });
+        if (dialog_ != Dialog::Welcome) {
+            fail("cancelling Load did not return to the welcome screen");
+            return;
+        }
+        session_.new_city("New City");
+        if (session_.needs_save_prompt()) {
+            fail("an untouched generated city still wants to be saved");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return dialog_ == Dialog::Welcome; });
+        if (dialog_ == Dialog::Unsaved) {
+            fail("leaving the welcome screen asked to save an untouched city");
+            return;
+        }
+        if (!quitting_) {
+            fail("B did not leave the welcome screen");
+            return;
+        }
         return;
     }
     default:

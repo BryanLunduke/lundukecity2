@@ -21,5 +21,9 @@ std::string asset_root();
 // asset_root() + "/" + relative, or empty if the root or file is missing.
 std::string asset_file(const std::string &relative);
 
+// Original UI art (toolbar icons). Search order is the install directory
+// share/lunduke-city-2, then exe-relative share/ and data/.
+std::string ui_data_file(const std::string &relative);
+
 // Shown when tiles.png cannot be found. Names every path that was searched.
 std::string asset_missing_text(const std::vector<std::string> &searched);

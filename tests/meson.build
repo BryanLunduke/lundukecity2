@@ -365,6 +365,38 @@ hotspots = executable(
 
 test('hotspots', hotspots)
 
+# Original 24px toolbar sprites, found beside the source tree.
+tool_icons = executable(
+  'tool_icons',
+  'tool_icons.cpp',
+  '../src/assets.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [cairo_dep],
+)
+
+test('tool_icons', tool_icons)
+
+# Thumbnails painted from the scenario files themselves.
+scenario_preview_test = executable(
+  'scenario_preview',
+  'scenario_preview.cpp',
+  '../src/scenario_preview.cpp',
+  '../src/tile_atlas.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep, cairo_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test('scenario_preview', scenario_preview_test, timeout: 120)
+
 review = executable(
   'review',
   'review.cpp',

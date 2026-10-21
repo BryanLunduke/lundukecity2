@@ -109,6 +109,14 @@ void Shell::close_dialog()
     set_paused_for_dialog();
 }
 
+void Shell::dismiss_dialog()
+{
+    close_dialog();
+    if (welcome_gate_ && dialog_ == Dialog::None) {
+        open_dialog(Dialog::Welcome);
+    }
+}
+
 void Shell::open_dialog(Dialog dialog)
 {
     menu_.close();
@@ -144,6 +152,8 @@ void Shell::open_dialog(Dialog dialog)
         focus_id_ = kRecover;
     } else if (dialog == Dialog::Scenario) {
         focus_id_ = kPlay;
+    } else if (dialog == Dialog::Welcome) {
+        focus_id_ = kWelcomeNew;
     } else if (dialog == Dialog::Outcome) {
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {
@@ -407,6 +417,7 @@ void Shell::finish_open(const std::string &path)
         sync_title();
         return;
     }
+    welcome_gate_ = false;
     ++city_generation_;
     restore_play_preferences();
     center_on_fraction(0.5, 0.5);
@@ -545,6 +556,9 @@ void Shell::poll_file_dialog()
     }
     // The player dismissed the system dialog. Do not quit on a later save.
     after_save_ = AfterSave::Nothing;
+    if (welcome_gate_ && !files_save_ && dialog_ == Dialog::None) {
+        open_dialog(Dialog::Welcome);
+    }
 }
 
 void Shell::proceed(AfterSave next)
@@ -811,6 +825,29 @@ void Shell::on_dialog_button(int id)
         close_dialog();
         return;
     }
+    if (dialog_ == Dialog::Welcome) {
+        if (id == kWelcomeNew) {
+            open_dialog(Dialog::NewCity);
+            return;
+        }
+        if (id == kWelcomeLoad) {
+            begin_load();
+            return;
+        }
+        if (id == kWelcomeScenario) {
+            scenario_index_ = 0;
+            list_index_ = 0;
+            list_scroll_ = 0;
+            open_dialog(Dialog::Scenario);
+            return;
+        }
+        // B and Escape leave the game. The launch city has not been edited,
+        // so this must not ask to save it.
+        welcome_gate_ = false;
+        close_dialog();
+        request_with_save(AfterSave::Quit);
+        return;
+    }
     if (id == kSystemFiles) {
         const bool save = files_save_;
         close_dialog();
@@ -848,7 +885,7 @@ void Shell::on_dialog_button(int id)
             return;
         }
         after_save_ = AfterSave::Nothing;
-        close_dialog();
+        dismiss_dialog();
         return;
     }
     if (dialog_ == Dialog::Disaster) {
@@ -884,7 +921,7 @@ void Shell::on_dialog_button(int id)
     }
     if (dialog_ == Dialog::NewCity) {
         if (id == kCancel) {
-            close_dialog();
+            dismiss_dialog();
             return;
         }
         if (id == kBack) {
@@ -931,6 +968,7 @@ void Shell::on_dialog_button(int id)
             spec.rivers = new_rivers_;
             spec.lakes = new_lakes_;
             spec.trees = new_trees_;
+            welcome_gate_ = false;
             close_dialog();
             const int serial = session_.message_serial();
             ++city_generation_;
@@ -955,6 +993,7 @@ void Shell::on_dialog_button(int id)
                     info_body_ = "Could not start that scenario.";
                     open_dialog(Dialog::Info);
                 } else {
+                    welcome_gate_ = false;
                     speed_ = session_.speed();
                     center_on_fraction(0.5, 0.5);
                     sync_title();
@@ -962,7 +1001,7 @@ void Shell::on_dialog_button(int id)
             }
             return;
         }
-        close_dialog();
+        dismiss_dialog();
         return;
     }
     if (dialog_ == Dialog::Rename) {
@@ -1044,7 +1083,7 @@ void Shell::on_dialog_button(int id)
             }
             return;
         }
-        close_dialog();
+        dismiss_dialog();
         return;
     }
     if (dialog_ == Dialog::Overwrite) {
@@ -1128,7 +1167,7 @@ void Shell::on_dialog_button(int id)
     if (dialog_ == Dialog::Files || dialog_ == Dialog::FileWait || dialog_ == Dialog::SaveError) {
         after_save_ = AfterSave::Nothing;
     }
-    close_dialog();
+    dismiss_dialog();
 }
 
 void Shell::on_hotspot(int id, double x, double y)
@@ -1139,18 +1178,6 @@ void Shell::on_hotspot(int id, double x, double y)
         if (overlay_.click(x - overlay_x_, y - overlay_y_, static_cast<int>(overlay_w_), static_cast<int>(overlay_h_), fx,
                            fy)) {
             center_on_fraction(fx, fy);
-        }
-        return;
-    }
-    if (id == kWelcomeId) {
-        welcome_ = false;
-        const std::string dir = city_config_dir();
-        if (!dir.empty()) {
-            std::error_code ec;
-            std::filesystem::create_directories(dir, ec);
-            if (!write_text_atomic(dir + "/welcome-dismissed", "dismissed\n")) {
-                note_background_write_failed("Could not remember that the welcome was dismissed.");
-            }
         }
         return;
     }
@@ -1445,8 +1472,8 @@ void Shell::push_hot(double x, double y, double w, double h, int id)
 
 void Shell::push_focus(int id)
 {
-    // The welcome bar, menu, and map stay on screen under a modal. They must
-    // not join the D-pad cycle.
+    // The menu and the map stay on screen under a modal. They must not join
+    // the D-pad cycle.
     if (dialog_ != Dialog::None && !is_modal_control(id)) {
         return;
     }

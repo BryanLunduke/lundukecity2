@@ -15,6 +15,7 @@
 #include "redraw.hpp"
 #include "text_paint.hpp"
 #include "theme.hpp"
+#include "scenario_preview.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 
@@ -77,7 +78,7 @@ void Shell::layout()
     }
     refresh_ui_scale();
     SDL_GetWindowSizeInPixels(window_, &win_w_, &win_h_);
-    const float fitted = ui_scale::clamp_ui_scale(ui_scale_, win_w_, win_h_, welcome_);
+    const float fitted = ui_scale::clamp_ui_scale(ui_scale_, win_w_, win_h_);
     if (std::fabs(fitted - ui_scale_) > 0.001f) {
         ui_scale_ = fitted;
         font_ui_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
@@ -93,10 +94,9 @@ void Shell::layout()
         win_h_ = 1;
     }
     menu_h_ = dp(36);
-    welcome_h_ = welcome_ ? ui_scale::welcome_bar(std::max(1, win_w_), ui_scale_).bar_h : 0;
     status_h_ = dp(36);
     message_h_ = dp(44);
-    const int body = win_h_ - menu_h_ - welcome_h_ - status_h_ - message_h_;
+    const int body = win_h_ - menu_h_ - status_h_ - message_h_;
     cell_ = dp(48);
     while (cell_ > dp(36) && ToolPalette::height_for(cell_) + dp(210) > body) {
         cell_ -= dp(4);
@@ -104,14 +104,14 @@ void Shell::layout()
     palette_.set_cell(cell_);
     side_w_ = ToolPalette::width_for(cell_);
     side_x_ = dp(6);
-    pal_y_ = menu_h_ + welcome_h_ + dp(6);
+    pal_y_ = menu_h_ + dp(6);
     mini_y_ = pal_y_ + ToolPalette::height_for(cell_) + dp(8);
     mini_h_ = std::max(dp(64), side_w_ * 5 / 6);
     demand_y_ = mini_y_ + mini_h_ + dp(8);
-    const int demand_room = menu_h_ + welcome_h_ + body - demand_y_ - dp(6);
+    const int demand_room = menu_h_ + body - demand_y_ - dp(6);
     demand_h_ = std::max(dp(72), std::min(dp(kMaxDemandPx), demand_room));
     view_x_ = side_x_ + side_w_ + dp(8);
-    view_y_ = menu_h_ + welcome_h_;
+    view_y_ = menu_h_;
     view_w_ = std::max(dp(32), win_w_ - view_x_ - dp(8));
     view_h_ = std::max(dp(32), win_h_ - view_y_ - status_h_ - message_h_);
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
@@ -123,8 +123,8 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
 {
     push_hot(x, y, w, h, id);
     push_focus(id);
-    // A modal covers the city. The welcome Dismiss (and anything else that
-    // is not part of the dialog) must not light up with the dialog's focus.
+    // A modal covers the city. Anything that is not part of the dialog must
+    // not light up with the dialog's focus.
     const bool suppressed = dialog_ != Dialog::None && !is_modal_control(id);
     const bool hot = !suppressed && (hover_id_ == id || focus_id_ == id);
     cairo_pattern_t *pattern = cairo_pattern_create_linear(x, y, x, y + h);
@@ -461,6 +461,33 @@ void Shell::draw_dialog(cairo_t *cr)
         cairo_line_to(cr, tx + cx + 0.5, ty + th);
         cairo_stroke(cr);
     };
+    if (dialog_ == Dialog::Welcome) {
+        const std::string heading = "Welcome to Lunduke City 2";
+        const std::string blurb = "Start a new city, load one you saved, or take on a scenario.";
+        const double width = message_width(win_w_, margin, dp(440), dp(520));
+        const double column = std::max(1.0, width - 2.0 * margin);
+        const double heading_h = line_height(title_font(), heading, column);
+        const double blurb_h = text_block_height(blurb, column);
+        const double bh = dp(44);
+        const double gap = dp(10);
+        const double height = dp(40) + margin + heading_h + dp(8) + blurb_h + dp(16) + bh * 3.0 + gap * 2.0 + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Welcome");
+        double text_y = panel.y + dp(40) + dp(12);
+        text_y += place_line(title_font(), heading, panel.x + margin, text_y, panel.w - 2 * margin, theme::kTextR,
+                             theme::kTextG, theme::kTextB);
+        text_y += dp(8);
+        text_y += place_line(body_font(), blurb, panel.x + margin, text_y, panel.w - 2 * margin, theme::kTextR, theme::kTextG,
+                             theme::kTextB);
+        const double bw = panel.w - 2 * margin;
+        double by = text_y + dp(16);
+        button(cr, panel.x + margin, by, bw, bh, "_Start a New City", kWelcomeNew, focus_id_ == kWelcomeNew);
+        by += bh + gap;
+        button(cr, panel.x + margin, by, bw, bh, "_Load a Saved City", kWelcomeLoad, focus_id_ == kWelcomeLoad);
+        by += bh + gap;
+        button(cr, panel.x + margin, by, bw, bh, "Select a _Scenario", kWelcomeScenario, focus_id_ == kWelcomeScenario);
+        return;
+    }
     if (dialog_ == Dialog::Unsaved) {
         SavePromptKind prompt = SavePromptKind::Continue;
         switch (after_save_) {
@@ -632,17 +659,38 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::Scenario) {
-        const DialogRect panel = place_dialog(win_w_, win_h_, large_w, large_h, margin);
+        const int count = CitySession::kScenarioCount;
+        const double row_h = dp(76);
+        const double header = dp(70);
+        const double footer = margin + dp(36) + dp(12);
+        const double max_list = std::max(row_h, static_cast<double>(win_h_) - 2.0 * margin - header - footer);
+        int want_rows = static_cast<int>(max_list / row_h);
+        if (want_rows < 1) {
+            want_rows = 1;
+        }
+        if (want_rows > count) {
+            want_rows = count;
+        }
+        const double want_h = header + footer + want_rows * row_h;
+        const double want_w = std::min(static_cast<double>(dp(680)), std::max(1.0, win_w_ - 2.0 * margin));
+        const DialogRect panel = place_dialog(win_w_, win_h_, want_w, want_h, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         const double dh = panel.h;
         frame_panel(cr, x, y, dw, dh, "Play Scenario");
-        label(cr, ui_font(), "Choose a scenario. Playing it replaces the city on the map.", x + 16, y + 42,
-              static_cast<int>(dw - 32));
-        const double row_h = 56;
-        const int count = CitySession::kScenarioCount;
-        const int visible = std::max(1, std::min(count, static_cast<int>((dh - 140) / row_h)));
+        label(cr, ui_font(), "Choose a scenario. Playing it replaces the city on the map.", x + margin, y + dp(46),
+              static_cast<int>(dw - 2 * margin));
+        const double list_top = y + header;
+        const double buttons_y = y + dh - margin - dp(36);
+        const double list_room = std::max(row_h, buttons_y - dp(8) - list_top);
+        int visible = static_cast<int>(list_room / row_h);
+        if (visible < 1) {
+            visible = 1;
+        }
+        if (visible > count) {
+            visible = count;
+        }
         files_visible_ = visible;
         if (scenario_index_ < 0) {
             scenario_index_ = 0;
@@ -652,8 +700,10 @@ void Shell::draw_dialog(cairo_t *cr)
         }
         list_index_ = scenario_index_;
         list_reveal(list_scroll_, scenario_index_, visible, count);
-        const double list_top = y + 78;
-        const double row_w = dw - 24 - 16;
+        const double track_w = dp(12);
+        const double row_w = dw - margin - track_w - dp(16);
+        const int preview_w = dp(72);
+        const int preview_h = std::max(1, preview_w * CitySession::kWorldH / CitySession::kWorldW);
         for (int row = 0; row < visible; ++row) {
             const int i = list_scroll_ + row;
             if (i < 0 || i >= count) {
@@ -662,29 +712,50 @@ void Shell::draw_dialog(cairo_t *cr)
             const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
             const double ry = list_top + row * row_h;
             const int id = kListItem + row;
-            push_hot(x + 12, ry, row_w, row_h - 4, id);
+            const double row_box_h = std::max(1.0, row_h - dp(4));
+            push_hot(x + dp(8), ry, row_w, row_box_h, id);
             push_focus(id);
             if (scenario_index_ == i || focus_id_ == id) {
-                fill(cr, x + 12, ry, row_w, row_h - 4, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+                fill(cr, x + dp(8), ry, row_w, row_box_h, theme::kHoverR, theme::kHoverG, theme::kHoverB);
             }
+            const double tx = x + dp(12);
+            const double ty = ry + std::max(0.0, (row_box_h - preview_h) / 2.0);
+            cairo_surface_t *preview = scenario_preview(i);
+            if (preview != nullptr) {
+                cairo_save(cr);
+                cairo_rectangle(cr, tx, ty, preview_w, preview_h);
+                cairo_clip(cr);
+                cairo_translate(cr, tx, ty);
+                cairo_scale(cr, static_cast<double>(preview_w) / CitySession::kWorldW,
+                            static_cast<double>(preview_h) / CitySession::kWorldH);
+                cairo_set_source_surface(cr, preview, 0, 0);
+                // The thumbnail is smaller than the 120x100 map, so a smooth
+                // downscale reads more clearly than dropping tiles.
+                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+                cairo_paint(cr);
+                cairo_restore(cr);
+            }
+            stroke_rect(cr, tx, ty, preview_w, preview_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+            const double text_x = tx + preview_w + dp(8);
+            const double text_w = std::max(1.0, x + dp(8) + row_w - text_x - dp(6));
             const std::string line = std::string(def.name) + " (" + std::to_string(def.year) + ")";
-            paint_text(cr, body_font(), line, x + 20, ry + 4, theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(row_w - 16));
-            paint_text(cr, ui_font(), def.goal, x + 20, ry + 26, theme::kAccelR, theme::kAccelG, theme::kAccelB,
-                       static_cast<int>(row_w - 16));
+            paint_text(cr, body_font(), line, text_x, ry + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(text_w));
+            paint_text(cr, ui_font(), def.goal, text_x, ry + dp(28), theme::kAccelR, theme::kAccelG, theme::kAccelB,
+                       static_cast<int>(text_w));
         }
-        const double track_x = x + dw - 26;
+        const double track_x = x + dw - margin - track_w;
         const double track_h = visible * row_h;
         list_track_y_ = list_top;
         list_track_h_ = std::max(1.0, track_h);
-        fill(cr, track_x, list_top, 12, track_h, 0.86, 0.86, 0.86);
+        fill(cr, track_x, list_top, track_w, track_h, 0.86, 0.86, 0.86);
         double thumb_y = list_top;
         double thumb_h = track_h;
         list_thumb(list_scroll_, count, visible, list_top, track_h, thumb_y, thumb_h);
-        fill(cr, track_x, thumb_y, 12, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
-        stroke_rect(cr, track_x, list_top, 12, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
-        push_hot(track_x - 4, list_top, 20, track_h, kListScroll);
-        buttons_at(x, dw, y + dh - margin - dp(36), {{"_Cancel", kCancel}, {"_Play", kPlay}}, 0, kPlay);
+        fill(cr, track_x, thumb_y, track_w, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        stroke_rect(cr, track_x, list_top, track_w, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+        push_hot(track_x - dp(4), list_top, track_w + dp(8), track_h, kListScroll);
+        buttons_at(x, dw, buttons_y, {{"_Cancel", kCancel}, {"_Play", kPlay}}, 0, kPlay);
         return;
     }
     if (dialog_ == Dialog::Rename) {
@@ -1239,16 +1310,6 @@ void Shell::draw(cairo_t *cr)
     menu_.recent_count = static_cast<int>(recent_.size());
     fill(cr, 0, 0, win_w_, win_h_, theme::kWindowR, theme::kWindowG, theme::kWindowB);
     draw_menubar(cr);
-    if (welcome_) {
-        const ui_scale::WelcomeBar bar = ui_scale::welcome_bar(win_w_, ui_scale_);
-        fill(cr, 0, menu_h_, win_w_, welcome_h_, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
-        const std::string line = std::string("Welcome to Lunduke City 2. The clock is ") +
-                                 (speed_ <= 0 ? "paused." : std::string("running at ") + speed_word(speed_) + ".") +
-                                 " Choose a speed under Options, start a city with System, New City, or pick Play Scenario.";
-        paint_text(cr, ui_font(), line, bar.text_x, menu_h_ + bar.text_y, theme::kTextR, theme::kTextG, theme::kTextB,
-                   bar.text_w);
-        button(cr, bar.button_x, menu_h_ + bar.button_y, bar.button_w, bar.button_h, "Dismiss", kWelcomeId, false);
-    }
     {
         TargetCr live(cr);
         cairo_translate(live.cr, side_x_, pal_y_);

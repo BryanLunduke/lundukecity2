@@ -201,3 +201,56 @@ std::string asset_file(const std::string &relative)
 #endif
     return {};
 }
+
+namespace {
+
+bool file_readable(const std::string &path)
+{
+    std::ifstream in(path, std::ios::binary);
+    return in.good();
+}
+
+} // namespace
+
+std::string ui_data_file(const std::string &relative)
+{
+    if (relative.empty()) {
+        return {};
+    }
+    std::vector<std::string> roots;
+#if defined(CITY_UI_DIR)
+    if (CITY_UI_DIR[0] != '\0') {
+        roots.emplace_back(CITY_UI_DIR);
+    }
+#endif
+    std::string dir = exe_dir();
+    for (int level = 0; level < 6 && !dir.empty(); ++level) {
+        add_layout(roots, dir, "share/lunduke-city-2");
+        add_layout(roots, dir, "data");
+        const std::string up = parent_dir(dir);
+        if (up.empty() || up == dir) {
+            break;
+        }
+        dir = up;
+    }
+    for (const std::string &root : roots) {
+        const bool trailed = !root.empty() && (root.back() == '/' || root.back() == '\\');
+        const std::string path = trailed ? root + relative : root + "/" + relative;
+        if (file_readable(path)) {
+            return path;
+        }
+#ifdef _WIN32
+        std::string win = relative;
+        for (char &ch : win) {
+            if (ch == '/') {
+                ch = '\\';
+            }
+        }
+        const std::string alt = trailed ? root + win : root + "\\" + win;
+        if (file_readable(alt)) {
+            return alt;
+        }
+#endif
+    }
+    return {};
+}
