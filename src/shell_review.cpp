@@ -197,6 +197,19 @@ void Shell::run_review_checks()
         fail("file list lost the parent row");
         return;
     }
+    // M4: Replace-file Cancel keeps the typed name and the folder being browsed.
+    field_a_ = "Other";
+    files_dir_ = "/tmp";
+    after_save_ = AfterSave::Quit;
+    dialog_ = Dialog::Overwrite;
+    on_dialog_button(kCancel);
+    if (field_a_ != "Other" || dialog_ != Dialog::Files || files_dir_ != "/tmp" || after_save_ != AfterSave::Quit) {
+        fail("replace-file cancel dropped the typed name");
+        return;
+    }
+    close_dialog();
+    after_save_ = AfterSave::Nothing;
+
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {

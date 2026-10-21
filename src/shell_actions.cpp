@@ -960,7 +960,21 @@ void Shell::on_dialog_button(int id)
             finish_save(path);
             return;
         }
+        // Cancel returns to Save As with the name and folder the player typed.
+        const std::string typed = field_a_;
+        const std::string dir = files_dir_;
+        const AfterSave pending = after_save_;
         begin_files(true);
+        after_save_ = pending;
+        if (!dir.empty()) {
+            files_dir_ = dir;
+            list_index_ = 0;
+            list_scroll_ = 0;
+            refresh_files();
+        }
+        field_a_ = typed;
+        field_select_all(field_a_, field_caret_, field_anchor_);
+        focus_id_ = kFieldName;
         return;
     }
     if (dialog_ == Dialog::Budget) {
