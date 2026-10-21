@@ -2,6 +2,7 @@
 // Copyright (C) 2026 The Lunduke City authors
 // See COPYING and NOTICE.
 
+#include "assets.hpp"
 #include "list_scroll.hpp"
 
 #include <iostream>
@@ -57,6 +58,22 @@ int main()
     list_thumb(0, 4, 10, 10, 200, ty, th);
     if (ty != 10.0 || th != 200.0) {
         return fail("a short list fills the track");
+    }
+    // H4: packaged search paths are absolute install locations, never the
+    // process's current directory. A relative third_party/ fallback used to
+    // load whatever tree happened to be in the launch folder.
+    const std::vector<std::string> candidates = asset_candidates();
+    for (const std::string &candidate : candidates) {
+        if (candidate == "third_party/micropolis-assets" || candidate == "third_party\\micropolis-assets") {
+            return fail("asset search still probes the current directory");
+        }
+    }
+    const std::string missing = asset_missing_text(candidates.empty() ? std::vector<std::string>{"/nowhere/tiles"} : candidates);
+    if (missing.find("tiles.png") == std::string::npos || missing.find("Looked in:") == std::string::npos) {
+        return fail("missing-asset text does not name the file and the paths");
+    }
+    if (missing.find("/nowhere/tiles") == std::string::npos && candidates.empty()) {
+        return fail("missing-asset text dropped the searched path");
     }
     std::cout << "review ok\n";
     return 0;

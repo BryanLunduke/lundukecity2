@@ -807,7 +807,11 @@ bool CitySession::load_scenario(int id)
     in.seekg(0, std::ios::end);
     const auto bytes = in.good() ? static_cast<long>(in.tellg()) : -1L;
     if (bytes != 27120) {
-        message_ = "Could not start that scenario.";
+        if (root.empty()) {
+            message_ = "Could not start that scenario. The game data files were not found.";
+        } else {
+            message_ = "Could not start that scenario.\n" + file + " is missing or the wrong size.";
+        }
         notify();
         return false;
     }

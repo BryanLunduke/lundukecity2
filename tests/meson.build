@@ -359,6 +359,7 @@ test('hotspots', hotspots)
 review = executable(
   'review',
   'review.cpp',
+  '../src/assets.cpp',
   include_directories: include_directories('../src'),
 )
 

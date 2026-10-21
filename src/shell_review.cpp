@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "list_scroll.hpp"
+#include "tile_atlas.hpp"
 
 #include <string>
 
@@ -95,6 +96,19 @@ void Shell::run_review_checks()
     on_dialog_button(kOk);
     if (quitting_ || after_save_ != AfterSave::Nothing) {
         fail("dismissing the save error quit the game");
+        return;
+    }
+
+    // H4: a missing tile sheet is reported once, not every frame.
+    const int attempts = tile_atlas().load_attempts();
+    tile_atlas().ensure_loaded();
+    tile_atlas().ensure_loaded();
+    if (tile_atlas().load_attempts() != attempts) {
+        fail("map tiles were opened more than once");
+        return;
+    }
+    if (!tile_atlas().loaded() && tile_atlas().load_error().find("tiles.png") == std::string::npos) {
+        fail("missing tiles did not name tiles.png");
         return;
     }
 }

@@ -4,11 +4,13 @@
 
 #include "shell_state.hpp"
 
+#include "assets.hpp"
 #include "city_seed.hpp"
 #include "dialog_copy.hpp"
 #include "notice_bar.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
+#include "tile_atlas.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 #include "zoom_keys.hpp"
@@ -212,6 +214,11 @@ int Shell::run(int argc, char **argv)
     session_.new_city("New City");
     session_.set_speed(0);
     bind_session();
+    if (!tile_atlas().loaded() && dialog_ == Dialog::None) {
+        info_title_ = "Missing game data";
+        info_body_ = tile_atlas().load_error().empty() ? asset_missing_text(asset_candidates()) : tile_atlas().load_error();
+        open_dialog(Dialog::Info);
+    }
     welcome_ = true;
     const std::string dismissed = city_config_dir().empty() ? std::string() : city_config_dir() + "/welcome-dismissed";
     if (!dismissed.empty()) {

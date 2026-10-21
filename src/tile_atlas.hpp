@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 // Classic 16-pixel Micropolis map tiles, indexed the same way as the engine
 // (low 10 bits of a map word). Loaded once from images/micropolisEngine/tiles.png.
@@ -23,10 +24,17 @@ public:
     void blit(int tile, unsigned char *dest, int stride) const;
 
     bool ensure_loaded();
+    // Empty when the tiles loaded. Otherwise the dialog body (searched paths).
+    const std::string &load_error() const { return error_; }
+    // How many times the file was actually opened. A failure is not retried.
+    int load_attempts() const { return attempts_; }
 
 private:
     int count_ = 0;
     int columns_ = 16;
+    int attempts_ = 0;
+    bool tried_ = false;
+    std::string error_;
     // Tightly packed opaque pixels, 16*16 per tile, native ARGB32.
     // Held as bytes so the header stays free of containers' noise in TUs.
     const std::uint32_t *pixels_ = nullptr;

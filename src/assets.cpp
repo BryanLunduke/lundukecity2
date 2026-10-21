@@ -69,30 +69,57 @@ std::string exe_dir()
 
 } // namespace
 
+std::vector<std::string> asset_candidates()
+{
+    std::vector<std::string> candidates;
+    // Developer override for the asset tree when the binary is not
+    // installed next to share/lunduke-city-2. This is not a test hook.
+    if (const char *env = std::getenv("LUNDUKE_CITY_ASSETS")) {
+        if (env[0] != '\0') {
+            candidates.emplace_back(env);
+        }
+    }
+#if defined(LUNDUKE_CITY_ASSET_DIR)
+    // Set for unit tests only. The installed executable is not compiled
+    // with a source-tree path, so a package cannot fall back into a build.
+    candidates.emplace_back(LUNDUKE_CITY_ASSET_DIR);
+#endif
+    const std::string exe = exe_dir();
+    if (!exe.empty()) {
+        candidates.push_back(exe + "/../share/lunduke-city-2/micropolis-assets");
+#ifdef _WIN32
+        candidates.push_back(exe + "\\..\\share\\lunduke-city-2\\micropolis-assets");
+#endif
+        // `meson compile` runs the binary from build/src (or build/tests).
+        // An installed copy does not live under a directory named build.
+        const bool dev_build = exe.find("/build/") != std::string::npos || exe.find("\\build\\") != std::string::npos;
+        if (dev_build) {
+            candidates.push_back(exe + "/../../third_party/micropolis-assets");
+#ifdef _WIN32
+            candidates.push_back(exe + "\\..\\..\\third_party\\micropolis-assets");
+#endif
+        }
+    }
+    return candidates;
+}
+
+std::string asset_missing_text(const std::vector<std::string> &searched)
+{
+    std::string text = "Lunduke City 2 could not find its game data (images/micropolisEngine/tiles.png).\n\nLooked in:\n";
+    if (searched.empty()) {
+        text += "  (nowhere — the install path could not be determined)\n";
+    }
+    for (const std::string &path : searched) {
+        text += "  " + path + "\n";
+    }
+    text += "\nReinstall the game, or set LUNDUKE_CITY_ASSETS to the micropolis-assets folder.";
+    return text;
+}
+
 std::string asset_root()
 {
     static const std::string cached = [] {
-        std::vector<std::string> candidates;
-        // Developer override for the asset tree when the binary is not
-        // installed next to share/lunduke-city-2. This is not a test hook.
-        if (const char *env = std::getenv("LUNDUKE_CITY_ASSETS")) {
-            if (env[0] != '\0') {
-                candidates.emplace_back(env);
-            }
-        }
-#ifdef LUNDUKE_CITY_ASSET_DIR
-        candidates.emplace_back(LUNDUKE_CITY_ASSET_DIR);
-#endif
-        const std::string exe = exe_dir();
-        if (!exe.empty()) {
-            candidates.push_back(exe + "/../share/lunduke-city-2/micropolis-assets");
-            candidates.push_back(exe + "/../../third_party/micropolis-assets");
-#ifdef _WIN32
-            candidates.push_back(exe + "\\..\\share\\lunduke-city-2\\micropolis-assets");
-#endif
-        }
-        candidates.emplace_back("third_party/micropolis-assets");
-        for (const auto &candidate : candidates) {
+        for (const auto &candidate : asset_candidates()) {
             if (is_asset_root(candidate)) {
                 return candidate;
             }
