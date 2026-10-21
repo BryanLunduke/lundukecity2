@@ -366,17 +366,20 @@ review = executable(
 test('review', review)
 
 # Headless checks for the numbered review fixes. The binary drives itself.
-test(
-  'review_ui',
-  lunduke_city_exe,
-  env: [
-    'SDL_VIDEODRIVER=dummy',
-    'SDL_AUDIODRIVER=dummy',
-    'LUNDUKE_CITY2_REVIEW=1',
-  ],
-  timeout: 180,
-  is_parallel: false,
-)
+# Release builds omit the self-test, so this test is not registered there.
+if lunduke_review_checks_on
+  test(
+    'review_ui',
+    lunduke_city_exe,
+    env: [
+      'SDL_VIDEODRIVER=dummy',
+      'SDL_AUDIODRIVER=dummy',
+      'LUNDUKE_CITY2_REVIEW=1',
+    ],
+    timeout: 180,
+    is_parallel: false,
+  )
+endif
 
 # Menu hit-testing, gamepad drag-build, and budget slider keys. Headless.
 test(

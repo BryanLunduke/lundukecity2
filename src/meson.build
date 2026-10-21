@@ -10,7 +10,6 @@ lunduke_city_src = files(
   'shell_actions.cpp',
   'shell_draw.cpp',
   'shell_uitest.cpp',
-  'shell_review.cpp',
   'side_widgets.cpp',
   'sound_player.cpp',
   'sprite_art.cpp',
@@ -50,6 +49,16 @@ lunduke_city_cpp_args = [
 if fontconfig_dep.found()
   lunduke_city_deps += fontconfig_dep
   lunduke_city_cpp_args += '-DLUNDUKE_HAS_FONTCONFIG=1'
+endif
+
+# The review self-test (LUNDUKE_CITY2_REVIEW) is a developer check. Auto
+# leaves it out of release builds so it is not in the shipped binary.
+review_opt = get_option('review_checks')
+lunduke_review_checks_on = review_opt.enabled() or (
+  review_opt.auto() and get_option('buildtype') != 'release')
+if lunduke_review_checks_on
+  lunduke_city_src += files('shell_review.cpp')
+  lunduke_city_cpp_args += '-DCITY_REVIEW_CHECKS=1'
 endif
 
 lunduke_city_exe = executable(

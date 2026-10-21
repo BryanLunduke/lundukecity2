@@ -199,9 +199,11 @@ int Shell::run(int argc, char **argv)
     if (const char *ui = std::getenv("LUNDUKE_CITY2_UI_TEST")) {
         ui_test_ = ui[0] != '\0' && ui[0] != '0';
     }
+#ifdef CITY_REVIEW_CHECKS
     if (const char *review = std::getenv("LUNDUKE_CITY2_REVIEW")) {
         review_ = review[0] != '\0' && review[0] != '0';
     }
+#endif
     if (const char *demo = std::getenv("LUNDUKE_CITY2_DEMO")) {
         demo_ = demo;
     }
@@ -947,10 +949,12 @@ void Shell::loop()
         if (smoke_ && frame_ == 2) {
             arm_smoke_pad();
         }
+#ifdef CITY_REVIEW_CHECKS
         if (review_ && frame_ == 2) {
             run_review_checks();
             quitting_ = true;
         }
+#endif
         if (smoke_ && frame_ > 8 && smoke_phase_ == 0) {
             smoke_phase_ = 1;
             session_.set_speed(0);
