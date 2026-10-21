@@ -83,4 +83,18 @@ void Shell::run_review_checks()
     }
     after_save_ = AfterSave::Nothing;
     close_dialog();
+
+    // H3: a failed save from the quit prompt must not make the next save quit.
+    after_save_ = AfterSave::Quit;
+    save_generation_ = city_generation_;
+    finish_save("/no/such/lunduke-city-dir/city.cty");
+    if (after_save_ != AfterSave::Nothing || dialog_ != Dialog::SaveError || quitting_) {
+        fail("failed quit-save left the game armed to quit");
+        return;
+    }
+    on_dialog_button(kOk);
+    if (quitting_ || after_save_ != AfterSave::Nothing) {
+        fail("dismissing the save error quit the game");
+        return;
+    }
 }

@@ -325,6 +325,8 @@ void Shell::finish_save(const std::string &path)
     if (!session_.save_city_as(path)) {
         info_title_ = "Save City";
         info_body_ = session_.message().empty() ? "Could not save the city." : session_.message();
+        // A failed save must not leave Quit (or New/Load) armed for the next Ctrl+S.
+        after_save_ = AfterSave::Nothing;
         open_dialog(Dialog::SaveError);
         return;
     }
@@ -475,7 +477,10 @@ void Shell::poll_file_dialog()
     }
     if (state == 3) {
         begin_files(files_save_);
+        return;
     }
+    // The player dismissed the system dialog. Do not quit on a later save.
+    after_save_ = AfterSave::Nothing;
 }
 
 void Shell::proceed(AfterSave next)
@@ -552,6 +557,7 @@ void Shell::apply_action(Action action)
         } else if (!session_.save_city_as(session_.save_path())) {
             info_title_ = "Save City";
             info_body_ = session_.message().empty() ? "Could not save the city." : session_.message();
+            after_save_ = AfterSave::Nothing;
             open_dialog(Dialog::SaveError);
         } else {
             remember_saved(session_.save_path());
@@ -983,6 +989,9 @@ void Shell::on_dialog_button(int id)
         hint_until_ = std::chrono::steady_clock::now();
         close_dialog();
         return;
+    }
+    if (dialog_ == Dialog::Files || dialog_ == Dialog::FileWait || dialog_ == Dialog::SaveError) {
+        after_save_ = AfterSave::Nothing;
     }
     close_dialog();
 }
