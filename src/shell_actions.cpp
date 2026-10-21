@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "city_seed.hpp"
+#include "list_scroll.hpp"
 #include "osk_layout.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
@@ -388,6 +389,10 @@ void Shell::refresh_files()
     if (list_index_ >= static_cast<int>(files_.size())) {
         list_index_ = 0;
     }
+    if (list_index_ < 0) {
+        list_index_ = 0;
+    }
+    reveal_file_list();
 }
 
 void Shell::begin_files(bool save)
@@ -401,6 +406,7 @@ void Shell::begin_files(bool save)
         files_dir_ = remembered_city_folder();
     }
     list_index_ = 0;
+    list_scroll_ = 0;
     refresh_files();
     open_dialog(Dialog::Files);
 }
@@ -681,6 +687,7 @@ void Shell::on_dialog_button(int id)
     if (id == kUp) {
         files_dir_ = parent_dir(files_dir_);
         list_index_ = 0;
+        list_scroll_ = 0;
         refresh_files();
         return;
     }
@@ -899,6 +906,7 @@ void Shell::on_dialog_button(int id)
                 if (!name.empty() && name.back() == '/') {
                     files_dir_ = path_join(files_dir_, name.substr(0, name.size() - 1));
                     list_index_ = 0;
+                    list_scroll_ = 0;
                     refresh_files();
                     return;
                 }
@@ -1032,11 +1040,34 @@ void Shell::on_hotspot(int id, double x, double y)
         return;
     }
     if (id >= kListItem && id < kListItem + 64) {
-        list_index_ = id - kListItem;
-        if (dialog_ == Dialog::Scenario) {
-            scenario_index_ = list_index_;
+        const int row = id - kListItem;
+        if (dialog_ == Dialog::Files) {
+            list_index_ = list_scroll_ + row;
+            if (list_index_ >= static_cast<int>(files_.size())) {
+                list_index_ = static_cast<int>(files_.size()) - 1;
+            }
+            if (list_index_ < 0) {
+                list_index_ = 0;
+            }
+            reveal_file_list();
+        } else {
+            list_index_ = row;
+            if (dialog_ == Dialog::Scenario) {
+                scenario_index_ = list_index_;
+            }
         }
         focus_id_ = id;
+        return;
+    }
+    if (id == kListScroll && dialog_ == Dialog::Files) {
+        list_dragging_ = true;
+        const int count = static_cast<int>(files_.size());
+        list_index_ = list_index_from_track(y, list_track_y_, list_track_h_, count);
+        reveal_file_list();
+        const int row = list_index_ - list_scroll_;
+        if (row >= 0 && row < 64) {
+            focus_id_ = kListItem + row;
+        }
         return;
     }
     if (id == kFieldName || id == kFieldSeed) {
@@ -1259,11 +1290,62 @@ void Shell::move_focus(int delta)
     index = (index + delta + static_cast<int>(focus_order_.size())) % static_cast<int>(focus_order_.size());
     focus_id_ = focus_order_[static_cast<std::size_t>(index)];
     if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
-        list_index_ = focus_id_ - kListItem;
-        if (dialog_ == Dialog::Scenario) {
-            scenario_index_ = list_index_;
+        if (dialog_ == Dialog::Files) {
+            list_index_ = list_scroll_ + (focus_id_ - kListItem);
+            if (list_index_ >= static_cast<int>(files_.size())) {
+                list_index_ = static_cast<int>(files_.size()) - 1;
+            }
+            if (list_index_ < 0) {
+                list_index_ = 0;
+            }
+            reveal_file_list();
+        } else {
+            list_index_ = focus_id_ - kListItem;
+            if (dialog_ == Dialog::Scenario) {
+                scenario_index_ = list_index_;
+            }
         }
     }
+}
+
+void Shell::reveal_file_list()
+{
+    const int count = static_cast<int>(files_.size());
+    list_reveal(list_scroll_, list_index_, std::max(1, files_visible_), count);
+}
+
+bool Shell::nudge_file_list(int delta, bool page, bool force)
+{
+    if (dialog_ != Dialog::Files || files_.empty() || delta == 0) {
+        return false;
+    }
+    const bool on_list = focus_id_ >= kListItem && focus_id_ < kListItem + 64;
+    if (!on_list && !force && !page) {
+        return false;
+    }
+    const int count = static_cast<int>(files_.size());
+    const int step = page ? std::max(1, files_visible_ - 1) : std::max(1, std::abs(delta));
+    const int sign = delta < 0 ? -1 : 1;
+    int next = list_index_ + sign * step;
+    if (!page && !force && on_list && (next < 0 || next >= count)) {
+        return false;
+    }
+    if (next < 0) {
+        next = 0;
+    }
+    if (next >= count) {
+        next = count - 1;
+    }
+    list_index_ = next;
+    reveal_file_list();
+    const bool keep_field = focus_id_ == kFieldName || focus_id_ == kFieldSeed;
+    if (!keep_field) {
+        const int row = list_index_ - list_scroll_;
+        if (row >= 0 && row < 64) {
+            focus_id_ = kListItem + row;
+        }
+    }
+    return true;
 }
 
 void Shell::activate_focus()

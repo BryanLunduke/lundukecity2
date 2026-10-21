@@ -22,6 +22,8 @@ enum HotspotId : int {
 
     kHScroll = 50,
     kVScroll = 51,
+    // Scrollbar for the in-window file list (and the scenario list).
+    kListScroll = 52,
 
     // The map inside a power / water / crime overlay dialog.
     kOverlayMap = 90,
@@ -73,7 +75,7 @@ inline bool is_modal_control(int id)
     if (is_dialog_button(id)) {
         return true;
     }
-    if (id == kFieldName || id == kFieldSeed || id == kOverlayMap) {
+    if (id == kFieldName || id == kFieldSeed || id == kOverlayMap || id == kListScroll) {
         return true;
     }
     if (id >= kOsk && id < kOsk + 64) {

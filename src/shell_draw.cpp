@@ -6,6 +6,7 @@
 
 #include "dialog_copy.hpp"
 #include "graph_legend.hpp"
+#include "list_scroll.hpp"
 #include "notice_bar.hpp"
 #include "osk_layout.hpp"
 #include "text_paint.hpp"
@@ -545,21 +546,52 @@ void Shell::draw_dialog(cairo_t *cr)
         label(cr, theme::kUiFont, files_dir_, x + 16, y + 48, static_cast<int>(dw - 32));
         const double list_top = y + 68;
         const double list_h = dh - 160;
-        const int visible = std::max(1, static_cast<int>(list_h / 32));
-        for (int i = 0; i < visible && i < static_cast<int>(files_.size()); ++i) {
-            const double ry = list_top + i * 32;
-            const int id = kListItem + i;
-            push_hot(x + 12, ry, dw - 24, 30, id);
+        const int visible = std::max(1, static_cast<int>(list_h / 32.0));
+        files_visible_ = visible;
+        const int count = static_cast<int>(files_.size());
+        if (count == 0) {
+            list_index_ = 0;
+            list_scroll_ = 0;
+        } else {
+            if (list_index_ < 0) {
+                list_index_ = 0;
+            }
+            if (list_index_ >= count) {
+                list_index_ = count - 1;
+            }
+            list_reveal(list_scroll_, list_index_, visible, count);
+        }
+        const double row_w = dw - 24 - 16;
+        for (int row = 0; row < visible; ++row) {
+            const int i = list_scroll_ + row;
+            if (i < 0 || i >= count) {
+                break;
+            }
+            const double ry = list_top + row * 32.0;
+            const int id = kListItem + row;
+            push_hot(x + 12, ry, row_w, 30, id);
             push_focus(id);
-            if (list_index_ == i) {
-                fill(cr, x + 12, ry, dw - 24, 30, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+            if (list_index_ == i || focus_id_ == id) {
+                fill(cr, x + 12, ry, row_w, 30, theme::kHoverR, theme::kHoverG, theme::kHoverB);
             }
             paint_text(cr, theme::kBodyFont, files_[static_cast<std::size_t>(i)], x + 20, ry + 5, theme::kTextR,
-                       theme::kTextG, theme::kTextB, static_cast<int>(dw - 48));
+                       theme::kTextG, theme::kTextB, static_cast<int>(row_w - 16));
         }
+        const double track_x = x + dw - 26;
+        const double track_y = list_top;
+        const double track_h = visible * 32.0;
+        list_track_y_ = track_y;
+        list_track_h_ = std::max(1.0, track_h);
+        fill(cr, track_x, track_y, 12, track_h, 0.86, 0.86, 0.86);
+        double thumb_y = track_y;
+        double thumb_h = track_h;
+        list_thumb(list_scroll_, count, visible, track_y, track_h, thumb_y, thumb_h);
+        fill(cr, track_x, thumb_y, 12, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        stroke_rect(cr, track_x, track_y, 12, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+        push_hot(track_x - 4, track_y, 20, track_h, kListScroll);
         if (files_.empty()) {
             paint_text(cr, theme::kBodyFont, "No .cty files in this folder.", x + 20, list_top + 6, theme::kAccelR,
-                       theme::kAccelG, theme::kAccelB, static_cast<int>(dw - 40));
+                       theme::kAccelG, theme::kAccelB, static_cast<int>(dw - 56));
         }
         if (files_save_) {
             fill(cr, x + 16, y + dh - 100, dw - 32, 34, 1, 1, 1);

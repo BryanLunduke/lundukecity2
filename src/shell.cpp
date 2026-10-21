@@ -185,6 +185,9 @@ int Shell::run(int argc, char **argv)
     if (const char *ui = std::getenv("LUNDUKE_CITY2_UI_TEST")) {
         ui_test_ = ui[0] != '\0' && ui[0] != '0';
     }
+    if (const char *review = std::getenv("LUNDUKE_CITY2_REVIEW")) {
+        review_ = review[0] != '\0' && review[0] != '0';
+    }
     if (const char *demo = std::getenv("LUNDUKE_CITY2_DEMO")) {
         demo_ = demo;
     }
@@ -232,7 +235,7 @@ int Shell::run(int argc, char **argv)
         speed_ = session_.speed();
         center_on_fraction(0.5, 0.5);
     }
-    if (ui_test_) {
+    if (ui_test_ || review_) {
         welcome_ = false;
         recovery_checked_ = true;
         speed_ = 0;
@@ -251,7 +254,7 @@ int Shell::run(int argc, char **argv)
 #endif
     loop();
     shutdown();
-    if ((smoke_ || ui_test_) && !ran_ok_) {
+    if ((smoke_ || ui_test_ || review_) && !ran_ok_) {
         std::cerr << smoke_error_ << "\n";
         return 2;
     }
@@ -540,6 +543,10 @@ void Shell::loop()
         if (smoke_ && frame_ == 2) {
             arm_smoke_pad();
         }
+        if (review_ && frame_ == 2) {
+            run_review_checks();
+            quitting_ = true;
+        }
         if (smoke_ && frame_ > 8 && smoke_phase_ == 0) {
             smoke_phase_ = 1;
             session_.set_speed(0);
@@ -660,6 +667,8 @@ void Shell::handle_event(const SDL_Event &event)
         }
         if (slider_drag_ != 0) {
             on_hotspot(slider_drag_, pointer_x_, pointer_y_);
+        } else if (list_dragging_ && dialog_ == Dialog::Files) {
+            on_hotspot(kListScroll, pointer_x_, pointer_y_);
         } else if (pointer_on_map_ && dialog_ == Dialog::None && !menu_.open()) {
             map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, pointer_down_);
         } else if (hover_id_ == kPaletteId && !menu_.open()) {
@@ -703,6 +712,7 @@ void Shell::handle_event(const SDL_Event &event)
         if (event.button.button == SDL_BUTTON_LEFT) {
             pointer_down_ = false;
             slider_drag_ = 0;
+            list_dragging_ = false;
             if (pointer_on_map_) {
                 map_.release();
                 pointer_on_map_ = false;
@@ -712,6 +722,11 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     case SDL_EVENT_MOUSE_WHEEL: {
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+        if (dialog_ == Dialog::Files && !ctrl) {
+            const int rows = std::max(1, std::abs(static_cast<int>(event.wheel.y)));
+            nudge_file_list(event.wheel.y > 0 ? -rows : rows, false, true);
+            break;
+        }
         if (ctrl) {
             zoom_by(event.wheel.y > 0 ? 2 : -2);
         } else if (dialog_ == Dialog::None && !menu_.open()) {
@@ -745,6 +760,10 @@ void Shell::handle_event(const SDL_Event &event)
                 backspace_field();
                 break;
             }
+            if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+                nudge_file_list(key == SDLK_PAGEUP ? -1 : 1, true, true);
+                break;
+            }
             if (key == SDLK_TAB) {
                 move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
                 break;
@@ -762,13 +781,21 @@ void Shell::handle_event(const SDL_Event &event)
                     move_focus(direction);
                 }
             } else if (accel == AccelKey::Up) {
+                if (nudge_file_list(-1, false, false)) {
+                    break;
+                }
                 if (!move_osk_vertically(-1)) {
                     move_focus(-1);
                 }
             } else if (accel == AccelKey::Down) {
+                if (nudge_file_list(1, false, false)) {
+                    break;
+                }
                 if (!move_osk_vertically(1)) {
                     move_focus(1);
                 }
+            } else if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+                nudge_file_list(key == SDLK_PAGEUP ? -1 : 1, true, true);
             } else if (key == SDLK_TAB) {
                 move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
             }
@@ -916,6 +943,12 @@ void Shell::handle_event(const SDL_Event &event)
                 adjust_focused_slider(dir == AccelKey::Left ? -1 : 1)) {
                 break;
             }
+            if (dir == AccelKey::Up && nudge_file_list(-1, false, false)) {
+                break;
+            }
+            if (dir == AccelKey::Down && nudge_file_list(1, false, false)) {
+                break;
+            }
             if ((dir == AccelKey::Up && move_osk_vertically(-1)) || (dir == AccelKey::Down && move_osk_vertically(1))) {
                 break;
             }
@@ -1031,9 +1064,20 @@ void Shell::handle_event(const SDL_Event &event)
                 } else {
                     on_hotspot(id, pointer_x_, pointer_y_);
                 }
+                if (dialog_ == Dialog::Files) {
+                    list_touch_y_ = event.tfinger.y * static_cast<float>(win_h_);
+                }
+            } else if (event.type == SDL_EVENT_FINGER_MOTION && dialog_ == Dialog::Files && list_touch_y_ >= 0.0f) {
+                const float ny = event.tfinger.y * static_cast<float>(win_h_);
+                const int rows = static_cast<int>((ny - list_touch_y_) / 32.0f);
+                if (rows != 0) {
+                    nudge_file_list(-rows, false, true);
+                    list_touch_y_ += static_cast<float>(rows) * 32.0f;
+                }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && pointer_on_map_) {
                 map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, true);
             } else if (event.type == SDL_EVENT_FINGER_UP) {
+                list_touch_y_ = -1.0f;
                 pointer_down_ = false;
                 if (pointer_on_map_) {
                     map_.release();

@@ -140,6 +140,9 @@ private:
     void frame_panel(cairo_t *cr, double x, double y, double w, double h, const char *title);
     const char *glyph(SDL_GamepadButton button) const;
     bool adjust_focused_slider(int direction);
+    bool nudge_file_list(int delta, bool page, bool force);
+    void reveal_file_list();
+    void run_review_checks();
     bool attach_test_pad();
     void pump_events();
     void release_pad_drag();
@@ -214,6 +217,12 @@ private:
     int new_lakes_ = -1;
     int new_trees_ = -1;
     int list_index_ = 0;
+    int list_scroll_ = 0;
+    int files_visible_ = 1;
+    double list_track_y_ = 0;
+    double list_track_h_ = 1;
+    bool list_dragging_ = false;
+    float list_touch_y_ = -1.0f;
     int scenario_index_ = 0;
     bool files_save_ = false;
     std::string files_dir_;
@@ -276,6 +285,7 @@ private:
     int pad_repeat_ms_ = 0;
     bool osk_shift_ = false;
     bool ui_test_ = false;
+    bool review_ = false;
     int ui_step_ = 0;
     int ui_column_ = 0;
     int ui_drag_frames_ = 0;

@@ -356,6 +356,27 @@ hotspots = executable(
 
 test('hotspots', hotspots)
 
+review = executable(
+  'review',
+  'review.cpp',
+  include_directories: include_directories('../src'),
+)
+
+test('review', review)
+
+# Headless checks for the numbered review fixes. The binary drives itself.
+test(
+  'review_ui',
+  lunduke_city_exe,
+  env: [
+    'SDL_VIDEODRIVER=dummy',
+    'SDL_AUDIODRIVER=dummy',
+    'LUNDUKE_CITY2_REVIEW=1',
+  ],
+  timeout: 180,
+  is_parallel: false,
+)
+
 # Menu hit-testing, gamepad drag-build, and budget slider keys. Headless.
 test(
   'ui_input',

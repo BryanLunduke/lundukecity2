@@ -10,6 +10,7 @@ lunduke_city_src = files(
   'shell_actions.cpp',
   'shell_draw.cpp',
   'shell_uitest.cpp',
+  'shell_review.cpp',
   'side_widgets.cpp',
   'sound_player.cpp',
   'sprite_art.cpp',
