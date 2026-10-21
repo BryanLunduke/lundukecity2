@@ -155,3 +155,35 @@ inline std::string query_body(const std::string &text)
     }
     return body;
 }
+
+// Which pending action the save prompt is guarding, and which file Replace
+// would overwrite. The city name is quoted when we have one.
+enum class SavePromptKind { Continue, Quit, NewCity, Scenario, Open, Recover };
+
+inline std::string save_changes_question(SavePromptKind kind, const std::string &city)
+{
+    const std::string who = city.empty() ? std::string("this city") : "\"" + city + "\"";
+    switch (kind) {
+    case SavePromptKind::Quit:
+        return "Save changes to " + who + " before quitting?";
+    case SavePromptKind::NewCity:
+        return "Save changes to " + who + " before starting a new city?";
+    case SavePromptKind::Scenario:
+        return "Save changes to " + who + " before playing a scenario?";
+    case SavePromptKind::Open:
+        return "Save changes to " + who + " before opening another city?";
+    case SavePromptKind::Recover:
+        return "Save changes to " + who + " before recovering another city?";
+    case SavePromptKind::Continue:
+        break;
+    }
+    return "Save changes to " + who + " before continuing?";
+}
+
+inline std::string replace_file_question(const std::string &filename)
+{
+    if (filename.empty()) {
+        return "A city file with that name already exists. Replace it?";
+    }
+    return "Replace \"" + filename + "\"? The city saved there will be overwritten.";
+}

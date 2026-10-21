@@ -437,28 +437,29 @@ void Shell::draw_dialog(cairo_t *cr)
         cairo_stroke(cr);
     };
     if (dialog_ == Dialog::Unsaved) {
-        const char *question = "Save changes to this city before continuing?";
+        SavePromptKind prompt = SavePromptKind::Continue;
         switch (after_save_) {
         case AfterSave::Quit:
-            question = "Save changes to this city before quitting?";
+            prompt = SavePromptKind::Quit;
             break;
         case AfterSave::NewCity:
-            question = "Save changes to this city before starting a new city?";
+            prompt = SavePromptKind::NewCity;
             break;
         case AfterSave::Scenario:
-            question = "Save changes to this city before playing a scenario?";
+            prompt = SavePromptKind::Scenario;
             break;
         case AfterSave::Load:
         case AfterSave::OpenPath:
         case AfterSave::FilesLoad:
-            question = "Save changes to this city before opening another city?";
+            prompt = SavePromptKind::Open;
             break;
         case AfterSave::Recover:
-            question = "Save changes to this city before recovering another city?";
+            prompt = SavePromptKind::Recover;
             break;
         case AfterSave::Nothing:
             break;
         }
+        const std::string question = save_changes_question(prompt, session_.city_name());
         const double width = message_width(win_w_, margin, dp(420), dp(520));
         const double body_h = text_block_height(question, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
@@ -841,8 +842,7 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Overwrite) {
         const auto slash = queued_path_.find_last_of("/\\");
         const std::string name = slash == std::string::npos ? queued_path_ : queued_path_.substr(slash + 1);
-        const std::string question = name.empty() ? "A city file with that name already exists. Replace it?"
-                                                  : "Replace \"" + name + "\"? The city saved there will be overwritten.";
+        const std::string question = replace_file_question(name);
         const double width = message_width(win_w_, margin, dp(420), dp(520));
         const double body_h = text_block_height(question, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
