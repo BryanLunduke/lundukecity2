@@ -40,6 +40,76 @@ inline float resolve_ui_scale(float display_scale, float user_override)
     return scale;
 }
 
+inline int scaled_px(int px, float scale);
+
+// True when the menu, tool column, demand gauges, and status/message bars
+// all sit inside the window at this scale. The numbers match Shell::layout.
+inline bool chrome_fits(float scale, int win_w, int win_h, bool welcome)
+{
+    if (!(scale > 0.0f) || win_w < 1 || win_h < 1) {
+        return false;
+    }
+    auto px = [&](int n) { return scaled_px(n, scale); };
+    const int menu = px(36);
+    const int welcome_h = welcome ? px(52) : 0;
+    const int status = px(36);
+    const int message = px(44);
+    const int body = win_h - menu - welcome_h - status - message;
+    if (body < px(32)) {
+        return false;
+    }
+    int cell = px(48);
+    const int floor_cell = px(36);
+    const int step = std::max(1, px(4));
+    auto palette_h = [](int c) { return 8 + 8 * c; };
+    auto palette_w = [](int c) { return 8 + 2 * c; };
+    while (cell > floor_cell && palette_h(cell) + px(210) > body) {
+        cell -= step;
+        if (cell < floor_cell) {
+            cell = floor_cell;
+            break;
+        }
+    }
+    const int side = palette_w(cell);
+    if (px(6) + side + px(8) + px(32) > win_w) {
+        return false;
+    }
+    const int pal_y = menu + welcome_h + px(6);
+    const int mini_y = pal_y + palette_h(cell) + px(8);
+    const int mini_h = std::max(px(64), side * 5 / 6);
+    const int demand_y = mini_y + mini_h + px(8);
+    const int status_y = win_h - status - message;
+    return demand_y + px(72) <= status_y;
+}
+
+// Shrink a requested scale until the chrome fits. The result stays at least 0.5.
+inline float clamp_ui_scale(float scale, int win_w, int win_h, bool welcome)
+{
+    if (!(scale > 0.0f)) {
+        scale = 1.0f;
+    }
+    if (scale < 0.5f) {
+        scale = 0.5f;
+    }
+    if (chrome_fits(scale, win_w, win_h, welcome)) {
+        return scale;
+    }
+    float lo = 0.5f;
+    float hi = scale;
+    if (!chrome_fits(lo, win_w, win_h, welcome)) {
+        return lo;
+    }
+    for (int i = 0; i < 16; ++i) {
+        const float mid = (lo + hi) * 0.5f;
+        if (chrome_fits(mid, win_w, win_h, welcome)) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
 inline int scaled_px(int px, float scale)
 {
     if (!(scale > 0.0f)) {

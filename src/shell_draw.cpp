@@ -77,6 +77,15 @@ void Shell::layout()
     }
     refresh_ui_scale();
     SDL_GetWindowSizeInPixels(window_, &win_w_, &win_h_);
+    const float fitted = ui_scale::clamp_ui_scale(ui_scale_, win_w_, win_h_, welcome_);
+    if (std::fabs(fitted - ui_scale_) > 0.001f) {
+        ui_scale_ = fitted;
+        font_ui_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
+        font_body_ = ui_scale::scaled_font("Sans", 14, ui_scale_);
+        font_title_ = ui_scale::scaled_font("Sans Bold", 18, ui_scale_);
+        font_menu_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
+        font_bold_ = ui_scale::scaled_font("Sans Bold", 13, ui_scale_);
+    }
     if (win_w_ < 1) {
         win_w_ = 1;
     }
@@ -910,9 +919,12 @@ void Shell::draw_dialog(cairo_t *cr)
             push_focus(id);
             next_sliders_.push_back(SliderGeom{id, sx, bar_y - dp(6), sw, static_cast<double>(dp(28)), min, max});
         };
-        const std::string scale_text = scale_percent_ <= 0 ? "Auto" : std::to_string(scale_percent_) + "%";
+        const int auto_percent = std::max(50, std::min(200, static_cast<int>(std::lround(ui_scale_ * 100.0f))));
+        const int scale_shown = scale_percent_ <= 0 ? auto_percent : scale_percent_;
+        const std::string scale_text =
+            scale_percent_ <= 0 ? "Auto " + std::to_string(auto_percent) + "%" : std::to_string(scale_percent_) + "%";
         slider(1, "Volume", std::to_string(volume_) + "%", volume_, 0, 100, y + dp(48));
-        slider(2, "UI scale", scale_text, scale_percent_, 0, 200, y + dp(48) + pitch);
+        slider(2, "UI scale", scale_text, scale_shown, 0, 200, y + dp(48) + pitch);
         const char *pause_label = pause_unfocused_ ? "Pause when unfocused: On" : "Pause when unfocused: Off";
         buttons_at(x, dw, y + dp(48) + pitch * 2 + dp(8), {{pause_label, kReset}});
         buttons_at(x, dw, y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_OK", kOk}});

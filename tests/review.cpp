@@ -147,6 +147,13 @@ int main()
     if (std::abs(ui_scale::resolve_ui_scale(0.0f, 0.0f) - 1.0f) > 0.001f) {
         return fail("a missing display scale should fall back to 1");
     }
+    const float fitted = ui_scale::clamp_ui_scale(1.77f, 1280, 800, true);
+    if (fitted > 1.77f || !ui_scale::chrome_fits(fitted, 1280, 800, true) || ui_scale::chrome_fits(1.77f, 1280, 800, true)) {
+        return fail("UI scale 1.77 does not clamp to a 1280x800 window");
+    }
+    if (std::abs(ui_scale::clamp_ui_scale(1.0f, 1280, 800, true) - 1.0f) > 0.02f) {
+        return fail("a 1x scale in 1280x800 should be left alone");
+    }
     if (ui_scale::scaled_font("Sans", 13, 1.0f) != "Sans 13" || ui_scale::scaled_font("Sans Bold", 18, 2.0f) != "Sans Bold 36") {
         return fail("scaled font string");
     }
