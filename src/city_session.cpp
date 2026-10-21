@@ -1280,6 +1280,11 @@ bool CitySession::sound_enabled() const
     return sound_enabled_;
 }
 
+void CitySession::accept_preferences()
+{
+    dirty_ = false;
+}
+
 std::vector<std::string> CitySession::take_sounds()
 {
     std::vector<std::string> sounds;

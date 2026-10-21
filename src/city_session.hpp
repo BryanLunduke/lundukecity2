@@ -190,6 +190,8 @@ public:
 
     void set_sound_enabled(bool on);
     bool sound_enabled() const;
+    // Startup restores saved preferences. That is not a city edit.
+    void accept_preferences();
     std::vector<std::string> take_sounds();
     bool take_budget_request();
     // A modal dialog deferred the budget window. Ask for it again.

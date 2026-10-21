@@ -278,6 +278,24 @@ void Shell::run_review_checks()
     }
     close_dialog();
 
+    // M9: settings cancel restores volume, and a key clears gamepad glyphs.
+    volume_ = 40;
+    open_volume_ = 80;
+    scale_percent_ = 0;
+    open_scale_percent_ = 0;
+    dialog_ = Dialog::Settings;
+    on_dialog_button(kCancel);
+    if (volume_ != 80 || dialog_ != Dialog::None) {
+        fail("settings cancel did not restore the volume");
+        return;
+    }
+    gamepad_nav_ = true;
+    note_keyboard_input();
+    if (gamepad_nav_) {
+        fail("keyboard input left gamepad hints up");
+        return;
+    }
+
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {

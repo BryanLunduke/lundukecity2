@@ -48,7 +48,9 @@ enum class Dialog : int {
     Overlay,
     Query,
     Info,
-    Overwrite
+    Overwrite,
+    Settings,
+    Controls
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad };
@@ -163,6 +165,8 @@ private:
     void load_window_settings();
     void save_window_settings();
     void note_window_geometry();
+    void apply_loaded_settings();
+    void note_keyboard_input();
     std::string visual_stamp() const;
     redraw::Reasons redraw_reasons() const;
     bool attach_test_pad();
@@ -238,6 +242,15 @@ private:
     bool pointer_down_ = false;
     bool pointer_on_map_ = false;
     int speed_ = 0;
+    int volume_ = 100;
+    int scale_percent_ = 0;
+    bool pause_unfocused_ = false;
+    bool paused_for_unfocus_ = false;
+    int unfocus_speed_ = 0;
+    int open_volume_ = 100;
+    int open_scale_percent_ = 0;
+    bool open_pause_unfocused_ = false;
+    ui_scale::StoredSettings loaded_{};
     int paused_from_ = 2;
     int tool_index_ = 3;
     unsigned city_generation_ = 1;

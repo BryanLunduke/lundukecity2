@@ -98,6 +98,15 @@ struct StoredSettings {
     int h = 0;
     bool maximized = false;
     float user_scale = 0.0f;
+    // -1 means the key was not in the file.
+    int speed = -1;
+    int sound = -1;
+    int volume = -1;
+    int auto_budget = -1;
+    int auto_bulldoze = -1;
+    int disasters = -1;
+    int auto_goto = -1;
+    int pause_unfocused = -1;
 };
 
 inline std::string settings_text(const StoredSettings &settings)
@@ -111,6 +120,19 @@ inline std::string settings_text(const StoredSettings &settings)
         out << "window_h=" << settings.h << '\n';
         out << "maximized=" << (settings.maximized ? 1 : 0) << '\n';
     }
+    auto put = [&](const char *key, int value) {
+        if (value >= 0) {
+            out << key << '=' << value << '\n';
+        }
+    };
+    put("speed", settings.speed);
+    put("sound", settings.sound);
+    put("volume", settings.volume);
+    put("auto_budget", settings.auto_budget);
+    put("auto_bulldoze", settings.auto_bulldoze);
+    put("disasters", settings.disasters);
+    put("auto_goto", settings.auto_goto);
+    put("pause_unfocused", settings.pause_unfocused);
     return out.str();
 }
 
@@ -164,6 +186,30 @@ inline StoredSettings settings_parse(const std::string &text)
             if (saw) {
                 settings.maximized = flag != 0;
             }
+        } else if (key == "speed") {
+            bool saw = false;
+            as_int(settings.speed, saw);
+        } else if (key == "sound") {
+            bool saw = false;
+            as_int(settings.sound, saw);
+        } else if (key == "volume") {
+            bool saw = false;
+            as_int(settings.volume, saw);
+        } else if (key == "auto_budget") {
+            bool saw = false;
+            as_int(settings.auto_budget, saw);
+        } else if (key == "auto_bulldoze") {
+            bool saw = false;
+            as_int(settings.auto_bulldoze, saw);
+        } else if (key == "disasters") {
+            bool saw = false;
+            as_int(settings.disasters, saw);
+        } else if (key == "auto_goto") {
+            bool saw = false;
+            as_int(settings.auto_goto, saw);
+        } else if (key == "pause_unfocused") {
+            bool saw = false;
+            as_int(settings.pause_unfocused, saw);
         }
     }
     if (saw_w && saw_h && settings.w >= 320 && settings.h >= 240) {

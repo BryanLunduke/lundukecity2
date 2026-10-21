@@ -30,7 +30,7 @@ if host_machine.system() == 'windows'
   )
   # The bundled MSYS2 DLLs come from a newer GCC than the cross compiler;
   # keep this exe's own C++ runtime static so the two never mix.
-  lunduke_city_link_args += ['-static-libgcc', '-static-libstdc++']
+  lunduke_city_link_args += ['-static-libgcc', '-static-libstdc++', '-lshell32']
   lunduke_city_win_subsystem = 'windows'
 endif
 

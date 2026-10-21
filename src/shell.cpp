@@ -18,6 +18,14 @@
 
 #include <SDL3/SDL.h>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <shlobj.h>
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -217,6 +225,7 @@ int Shell::run(int argc, char **argv)
     speed_ = 0;
     session_.new_city("New City");
     session_.set_speed(0);
+    apply_loaded_settings();
     bind_session();
     if (!tile_atlas().loaded() && dialog_ == Dialog::None) {
         info_title_ = "Missing game data";
@@ -341,6 +350,7 @@ void Shell::load_window_settings()
     std::stringstream buffer;
     buffer << in.rdbuf();
     const ui_scale::StoredSettings stored = ui_scale::settings_parse(buffer.str());
+    loaded_ = stored;
     user_scale_ = stored.user_scale;
     if (stored.has_geometry && !size_override_ && !deck_) {
         saved_x_ = stored.x;
@@ -360,6 +370,14 @@ void Shell::save_window_settings()
     note_window_geometry();
     ui_scale::StoredSettings stored;
     stored.user_scale = user_scale_;
+    stored.speed = std::max(0, std::min(3, speed_));
+    stored.sound = session_.sound_enabled() ? 1 : 0;
+    stored.volume = std::max(0, std::min(100, volume_));
+    stored.auto_budget = session_.auto_budget() ? 1 : 0;
+    stored.auto_bulldoze = session_.auto_bulldoze() ? 1 : 0;
+    stored.disasters = session_.disasters() ? 1 : 0;
+    stored.auto_goto = session_.auto_goto() ? 1 : 0;
+    stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
     if (deck_ && has_saved_window_) {
         // A fullscreen Deck session must not replace the rectangle a desktop
         // window will restore.
@@ -391,6 +409,44 @@ void Shell::save_window_settings()
     out << ui_scale::settings_text(stored);
 }
 
+void Shell::apply_loaded_settings()
+{
+    const ui_scale::StoredSettings &stored = loaded_;
+    if (stored.speed >= 0) {
+        speed_ = std::max(0, std::min(3, stored.speed));
+        session_.set_speed(speed_);
+    }
+    if (stored.sound >= 0) {
+        session_.set_sound_enabled(stored.sound != 0);
+        sound_.set_muted(!session_.sound_enabled());
+    }
+    if (stored.volume >= 0) {
+        volume_ = std::max(0, std::min(100, stored.volume));
+        sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+    }
+    if (stored.auto_budget >= 0) {
+        session_.set_auto_budget(stored.auto_budget != 0);
+    }
+    if (stored.auto_bulldoze >= 0) {
+        session_.set_auto_bulldoze(stored.auto_bulldoze != 0);
+    }
+    if (stored.disasters >= 0) {
+        session_.set_disasters(stored.disasters != 0);
+    }
+    if (stored.auto_goto >= 0) {
+        session_.set_auto_goto(stored.auto_goto != 0);
+    }
+    if (stored.pause_unfocused >= 0) {
+        pause_unfocused_ = stored.pause_unfocused != 0;
+    }
+    session_.accept_preferences();
+}
+
+void Shell::note_keyboard_input()
+{
+    gamepad_nav_ = false;
+}
+
 void Shell::note_window_geometry()
 {
     if (window_ == nullptr) {
@@ -417,6 +473,9 @@ void Shell::note_window_geometry()
 
 bool Shell::init_video()
 {
+#ifdef _WIN32
+    SetCurrentProcessExplicitAppUserModelID(L"Lunduke.LundukeCity2");
+#endif
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
     // Audio is optional. SDL_Init fails the whole call when any requested
     // subsystem fails, and a machine with no playback device (the argv_open
@@ -589,7 +648,8 @@ std::string Shell::visual_stamp() const
         << list_index_ << ' ' << list_scroll_ << ' ' << scenario_index_ << ' ' << focus_id_ << ' ' << hover_id_ << ' '
         << menu_.open_menu << ' ' << menu_.cursor << ' ' << menu_.recent_open << ' ' << menu_.recent_cursor << ' '
         << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
-        << speed_ << ' ' << session_.map_serial() << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
+        << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << session_.map_serial()
+        << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
         << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
         << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_ << ' ' << shown_message_ << ' '
         << hint_visible << ' ' << query_pinned_ << ' ' << gamepad_nav_ << ' ' << cursor_x_ << ' ' << cursor_y_ << ' '
@@ -963,6 +1023,19 @@ void Shell::handle_event(const SDL_Event &event)
         layout();
         clamp_scroll();
         break;
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+        if (pause_unfocused_ && speed_ > 0) {
+            unfocus_speed_ = speed_;
+            paused_for_unfocus_ = true;
+            set_speed(0);
+        }
+        break;
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+        if (paused_for_unfocus_) {
+            paused_for_unfocus_ = false;
+            set_speed(unfocus_speed_ > 0 ? unfocus_speed_ : 0);
+        }
+        break;
     case SDL_EVENT_MOUSE_MOTION: {
         int ww = 1;
         int wh = 1;
@@ -988,6 +1061,7 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+        note_keyboard_input();
         int ww = 1;
         int wh = 1;
         int pw = 1;
@@ -1032,6 +1106,7 @@ void Shell::handle_event(const SDL_Event &event)
         }
         break;
     case SDL_EVENT_MOUSE_WHEEL: {
+        note_keyboard_input();
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
         if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
             const int rows = std::max(1, std::abs(static_cast<int>(event.wheel.y)));
@@ -1048,6 +1123,7 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_KEY_DOWN: {
+        note_keyboard_input();
         const SDL_Keycode key = event.key.key;
         const int mods = mods_from_sdl(event.key.mod);
         const AccelKey accel = accel_from_key(key);

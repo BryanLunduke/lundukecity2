@@ -18,8 +18,8 @@ int fail(const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 35) {
-        return fail("expected 35 actionable menu rows");
+    if (menu_table::actionable_count() != 37) {
+        return fail("expected 37 actionable menu rows");
     }
     if (menu_table::accel_action(AccelKey::N, static_cast<int>(AccelMod::Ctrl)) != Action::NewCity) {
         return fail("Ctrl+N should start a new city");

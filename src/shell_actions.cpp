@@ -145,6 +145,15 @@ void Shell::open_dialog(Dialog dialog)
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {
         focus_id_ = kSlider + 1;
+    } else if (dialog == Dialog::Settings) {
+        open_volume_ = volume_;
+        open_scale_percent_ = user_scale_ <= 0.05f ? 0 : static_cast<int>(std::lround(user_scale_ * 100.0f));
+        if (open_scale_percent_ < 0) {
+            open_scale_percent_ = 0;
+        }
+        scale_percent_ = open_scale_percent_;
+        open_pause_unfocused_ = pause_unfocused_;
+        focus_id_ = kSlider + 1;
     }
     set_paused_for_dialog();
 }
@@ -629,35 +638,45 @@ void Shell::apply_action(Action action)
         break;
     case Action::AutoBudget:
         session_.set_auto_budget(!session_.auto_budget());
+        save_window_settings();
         break;
     case Action::AutoBulldoze:
         session_.set_auto_bulldoze(!session_.auto_bulldoze());
+        save_window_settings();
         break;
     case Action::DisastersEnabled:
         session_.set_disasters(!session_.disasters());
+        save_window_settings();
         break;
     case Action::AutoGoto:
         session_.set_auto_goto(!session_.auto_goto());
+        save_window_settings();
         break;
     case Action::Mute:
         session_.set_sound_enabled(!session_.sound_enabled());
         sound_.set_muted(!session_.sound_enabled());
+        save_window_settings();
         break;
     case Action::SetPause:
         paused_from_ = speed_ > 0 ? speed_ : paused_from_;
         set_speed(0);
+        save_window_settings();
         break;
     case Action::Slow:
         set_speed(1);
+        save_window_settings();
         break;
     case Action::Medium:
         set_speed(2);
+        save_window_settings();
         break;
     case Action::Fast:
         set_speed(3);
+        save_window_settings();
         break;
     case Action::TogglePause:
         toggle_pause();
+        save_window_settings();
         break;
     case Action::ZoomIn:
         zoom_by(2);
@@ -723,6 +742,12 @@ void Shell::apply_action(Action action)
     case Action::About:
         open_dialog(Dialog::About);
         break;
+    case Action::Settings:
+        open_dialog(Dialog::Settings);
+        break;
+    case Action::Controls:
+        open_dialog(Dialog::Controls);
+        break;
     case Action::RecentIndex:
     case Action::None:
         break;
@@ -731,6 +756,34 @@ void Shell::apply_action(Action action)
 
 void Shell::on_dialog_button(int id)
 {
+    if (dialog_ == Dialog::Settings) {
+        if (id == kReset) {
+            pause_unfocused_ = !pause_unfocused_;
+            return;
+        }
+        if (id == kCancel) {
+            volume_ = open_volume_;
+            scale_percent_ = open_scale_percent_;
+            pause_unfocused_ = open_pause_unfocused_;
+            user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
+            sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+            refresh_ui_scale();
+            close_dialog();
+            return;
+        }
+        if (id == kOk || id == kSave) {
+            user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
+            sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+            refresh_ui_scale();
+            save_window_settings();
+            close_dialog();
+            return;
+        }
+    }
+    if (dialog_ == Dialog::Controls) {
+        close_dialog();
+        return;
+    }
     if (id == kSystemFiles) {
         const bool save = files_save_;
         close_dialog();
@@ -1204,7 +1257,14 @@ void Shell::on_hotspot(int id, double x, double y)
             }
             const double t = std::max(0.0, std::min(1.0, (x - slider.x) / slider.w));
             int value = slider.min + static_cast<int>(std::lround(t * (slider.max - slider.min)));
-            if (id == kSlider + 1) {
+            if (dialog_ == Dialog::Settings) {
+                if (id == kSlider + 1) {
+                    volume_ = value;
+                    sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+                } else if (id == kSlider + 2) {
+                    scale_percent_ = value;
+                }
+            } else if (id == kSlider + 1) {
                 tax_ = value;
                 session_.set_tax(tax_);
             } else if (id == kSlider + 2) {
@@ -1544,9 +1604,17 @@ bool Shell::adjust_focused_slider(int direction)
         if (slider.id != focus_id_) {
             continue;
         }
-        const int step = slider.id == kSlider + 1 ? direction : direction * 5;
+        int step = slider.id == kSlider + 1 ? direction : direction * 5;
         int current = tax_;
-        if (slider.id == kSlider + 2) {
+        if (dialog_ == Dialog::Settings) {
+            if (slider.id == kSlider + 1) {
+                current = volume_;
+                step = direction * 5;
+            } else if (slider.id == kSlider + 2) {
+                current = scale_percent_;
+                step = direction * 25;
+            }
+        } else if (slider.id == kSlider + 2) {
             current = road_;
         } else if (slider.id == kSlider + 3) {
             current = police_;
@@ -1554,7 +1622,14 @@ bool Shell::adjust_focused_slider(int direction)
             current = fire_;
         }
         const int value = std::max(slider.min, std::min(slider.max, current + step));
-        if (slider.id == kSlider + 1) {
+        if (dialog_ == Dialog::Settings) {
+            if (slider.id == kSlider + 1) {
+                volume_ = value;
+                sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+            } else if (slider.id == kSlider + 2) {
+                scale_percent_ = value;
+            }
+        } else if (slider.id == kSlider + 1) {
             tax_ = value;
             session_.set_tax(tax_);
         } else if (slider.id == kSlider + 2) {

@@ -131,6 +131,17 @@ int main()
         std::abs(parsed.user_scale - 1.5f) > 0.001f) {
         return fail("settings did not round-trip");
     }
+    ui_scale::StoredSettings game;
+    game.speed = 2;
+    game.sound = 0;
+    game.volume = 40;
+    game.auto_budget = 1;
+    game.pause_unfocused = 1;
+    const ui_scale::StoredSettings game_parsed = ui_scale::settings_parse(ui_scale::settings_text(game));
+    if (game_parsed.speed != 2 || game_parsed.sound != 0 || game_parsed.volume != 40 || game_parsed.auto_budget != 1 ||
+        game_parsed.pause_unfocused != 1 || game_parsed.auto_bulldoze != -1) {
+        return fail("game settings did not round-trip");
+    }
     const DialogRect budget = place_dialog(1280, 800, 640, 470, 16);
     if (budget.w > 640.5 || budget.h > 470.5 || budget.x < 0 || budget.y < 0 || budget.x + budget.w > 1280 ||
         budget.y + budget.h > 800) {

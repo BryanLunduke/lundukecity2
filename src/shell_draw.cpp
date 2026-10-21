@@ -316,7 +316,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         }
         paint_mnemonic(cr, menu_font(), item.label, drop_x + 28, y + 7, menu_.alt_shown, theme::kTextR,
                        theme::kTextG, theme::kTextB);
-        if (item.accel_text != nullptr) {
+        if (item.accel_text != nullptr && !gamepad_nav_) {
             const TextMetrics accel = measure_text(cr, menu_font(), item.accel_text, -1);
             paint_text(cr, menu_font(), item.accel_text, drop_x + drop_w - accel.width - 12, y + 7, theme::kAccelR,
                        theme::kAccelG, theme::kAccelB, -1);
@@ -842,6 +842,60 @@ void Shell::draw_dialog(cairo_t *cr)
                    {{"Stay _paused", kStay}, {"_Scenario list", kScenarioList}, {"_Keep playing", kKeep}});
         return;
     }
+    if (dialog_ == Dialog::Settings) {
+        const double pitch = dp(64);
+        const double height = dp(40) + margin + pitch * 2 + dp(48) + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, dp(560), height, margin);
+        const double x = panel.x;
+        const double y = panel.y;
+        const double dw = panel.w;
+        frame_panel(cr, x, y, dw, panel.h, "Settings");
+        auto slider = [&](int index, const std::string &caption, const std::string &value_text, int value, int min,
+                          int max, double sy) {
+            paint_text(cr, bold_font(), caption, x + margin, sy, theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(dw - 2 * margin - dp(80)));
+            const TextMetrics value_metrics = measure_text(cr, bold_font(), value_text, -1);
+            paint_text(cr, bold_font(), value_text, x + dw - margin - value_metrics.width, sy, theme::kTextR,
+                       theme::kTextG, theme::kTextB, -1);
+            const double bar_y = sy + dp(28);
+            const double sx = x + margin;
+            const double sw = dw - 2 * margin;
+            fill(cr, sx, bar_y, sw, dp(16), 1, 1, 1);
+            const double t = (value - min) / static_cast<double>(std::max(1, max - min));
+            fill(cr, sx, bar_y, sw * t, dp(16), theme::kSelectR, theme::kSelectG, theme::kSelectB);
+            stroke_rect(cr, sx, bar_y, sw, dp(16), theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+            const int id = kSlider + index;
+            push_hot(sx, bar_y - dp(6), sw, dp(28), id);
+            push_focus(id);
+            next_sliders_.push_back(SliderGeom{id, sx, bar_y - dp(6), sw, static_cast<double>(dp(28)), min, max});
+        };
+        const std::string scale_text = scale_percent_ <= 0 ? "Auto" : std::to_string(scale_percent_) + "%";
+        slider(1, "Volume", std::to_string(volume_) + "%", volume_, 0, 100, y + dp(48));
+        slider(2, "UI scale", scale_text, scale_percent_, 0, 200, y + dp(48) + pitch);
+        const char *pause_label = pause_unfocused_ ? "Pause when unfocused: On" : "Pause when unfocused: Off";
+        buttons_at(x, dw, y + dp(48) + pitch * 2 + dp(8), {{pause_label, kReset}});
+        buttons_at(x, dw, y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_OK", kOk}});
+        return;
+    }
+    if (dialog_ == Dialog::Controls) {
+        const std::string body =
+            gamepad_nav_
+                ? std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " activate    " +
+                      glyph(SDL_GAMEPAD_BUTTON_EAST) + " back\nD-pad moves    LB/RB change tool\nStart opens the menu    " +
+                      glyph(SDL_GAMEPAD_BUTTON_NORTH) + " pauses"
+                : "Ctrl+N new city    Ctrl+O load    Ctrl+S save\n"
+                  "Space pauses    Ctrl+1 slow    Ctrl+2 medium    Ctrl+3 fast\n"
+                  "Arrow keys scroll the map    Ctrl+= zooms\n"
+                  "A connected gamepad uses A, B, and the D-pad";
+        const double width = message_width(win_w_, margin, dp(420), dp(640));
+        const double body_h = text_block_height(body, width - 2 * margin);
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Controls");
+        label(cr, body_font(), body, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kCancel}});
+        return;
+    }
     if (dialog_ == Dialog::Budget) {
         const auto book = session_.budget();
         const BudgetCopy copy = budget_copy(book, budget_is_tax_);
@@ -1116,7 +1170,7 @@ void Shell::draw(cairo_t *cr)
         status += "    " + std::to_string(years) + " years left";
     }
     paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, win_w_ / 2);
-    if (pad_ != nullptr || gamepad_nav_) {
+    if (gamepad_nav_) {
         const std::string hint = std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " build   " +
                                  glyph(SDL_GAMEPAD_BUTTON_EAST) + " cancel   LB/RB tools   Start menu";
         const TextMetrics metrics = measure_text(cr, ui_font(), hint, -1);
