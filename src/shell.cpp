@@ -1124,6 +1124,9 @@ void Shell::handle_event(const SDL_Event &event)
             nudge_file_list(event.wheel.y > 0 ? -rows : rows, false, true);
             break;
         }
+        if (dialog_ != Dialog::None || menu_.open()) {
+            break;
+        }
         if (ctrl) {
             zoom_by(event.wheel.y > 0 ? 2 : -2);
         } else if (dialog_ == Dialog::None && !menu_.open()) {

@@ -303,6 +303,20 @@ void Shell::run_review_checks()
     session_.set_tax(tax_before);
     session_.accept_preferences();
 
+    const int zoom_before = map_.tile_size();
+    dialog_ = Dialog::About;
+    SDL_SetModState(SDL_KMOD_CTRL);
+    SDL_Event wheel{};
+    wheel.type = SDL_EVENT_MOUSE_WHEEL;
+    wheel.wheel.y = 1;
+    handle_event(wheel);
+    SDL_SetModState(SDL_KMOD_NONE);
+    if (map_.tile_size() != zoom_before) {
+        fail("ctrl+wheel zoomed behind a dialog");
+        return;
+    }
+    close_dialog();
+
     gamepad_nav_ = true;
     note_keyboard_input();
     if (gamepad_nav_) {
