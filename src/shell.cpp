@@ -1186,10 +1186,7 @@ void Shell::handle_event(const SDL_Event &event)
         }
         break;
     case SDL_EVENT_GAMEPAD_REMOVED:
-        if (pad_ != nullptr && SDL_GetGamepadID(pad_) == event.gdevice.which) {
-            SDL_CloseGamepad(pad_);
-            pad_ = nullptr;
-        }
+        forget_gamepad(event.gdevice.which);
         break;
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
         gamepad_nav_ = true;

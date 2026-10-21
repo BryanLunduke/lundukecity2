@@ -121,6 +121,48 @@ void Shell::release_pad_drag()
     pad_repeat_ms_ = 0;
 }
 
+void Shell::forget_gamepad(SDL_JoystickID id)
+{
+    if (pad_ == nullptr || id == 0 || SDL_GetGamepadID(pad_) != id) {
+        return;
+    }
+    if (virtual_joy_ != nullptr && SDL_GetGamepadJoystick(pad_) == virtual_joy_) {
+        virtual_joy_ = nullptr;
+    }
+    SDL_CloseGamepad(pad_);
+    pad_ = nullptr;
+    stick_x_ = 0;
+    stick_y_ = 0;
+    pan_x_ = 0;
+    pan_y_ = 0;
+    trig_l_ = 0;
+    trig_r_ = 0;
+    release_pad_drag();
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&count);
+    if (ids != nullptr) {
+        for (int i = 0; i < count; ++i) {
+            if (ids[i] == id) {
+                continue;
+            }
+            pad_ = SDL_OpenGamepad(ids[i]);
+            if (pad_ != nullptr) {
+                break;
+            }
+        }
+        SDL_free(ids);
+    }
+    if (pad_ != nullptr) {
+        return;
+    }
+    if (gamepad_nav_) {
+        set_speed(0);
+        shown_message_ = "Controller disconnected";
+        shown_message_serial_ = session_.message_serial();
+        hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+    }
+}
+
 void Shell::gamepad_use_cursor(bool press)
 {
     if (!press) {

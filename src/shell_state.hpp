@@ -164,6 +164,7 @@ private:
     bool attach_test_pad();
     void pump_events();
     void release_pad_drag();
+    void forget_gamepad(SDL_JoystickID id);
     void gamepad_use_cursor(bool press);
     void drive_ui_test();
     void note_ui_frame(cairo_surface_t *surface);

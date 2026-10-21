@@ -210,6 +210,37 @@ void Shell::run_review_checks()
     close_dialog();
     after_save_ = AfterSave::Nothing;
 
+    // M5: unplugging clears stick drift, adopts another pad, then pauses.
+    if (!attach_test_pad()) {
+        return;
+    }
+    SDL_VirtualJoystickDesc spare;
+    SDL_INIT_INTERFACE(&spare);
+    spare.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    spare.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    spare.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+    spare.name = "Lunduke City 2 Spare";
+    const SDL_JoystickID spare_id = SDL_AttachVirtualJoystick(&spare);
+    const SDL_JoystickID first_id = SDL_GetGamepadID(pad_);
+    stick_x_ = 0.9f;
+    pan_y_ = -0.6f;
+    trig_r_ = 0.5f;
+    pad_dragging_ = true;
+    speed_ = 2;
+    forget_gamepad(first_id);
+    if (spare_id == 0 || pad_ == nullptr || SDL_GetGamepadID(pad_) != spare_id || stick_x_ != 0.0f || pan_y_ != 0.0f ||
+        trig_r_ != 0.0f || pad_dragging_ || speed_ != 2) {
+        fail("unplug did not adopt the spare controller");
+        return;
+    }
+    SDL_DetachVirtualJoystick(first_id);
+    forget_gamepad(spare_id);
+    if (pad_ != nullptr || speed_ != 0 || stick_x_ != 0.0f || shown_message_ != "Controller disconnected") {
+        fail("the last controller unplug did not pause");
+        return;
+    }
+    SDL_DetachVirtualJoystick(spare_id);
+
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {
