@@ -14,6 +14,7 @@
 #include "side_widgets.hpp"
 #include "sound_player.hpp"
 #include "tool_palette.hpp"
+#include "ui_scale.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -143,6 +144,17 @@ private:
     bool nudge_file_list(int delta, bool page, bool force);
     void reveal_file_list();
     void run_review_checks();
+    int dp(int px) const;
+    const char *ui_font() const;
+    const char *body_font() const;
+    const char *title_font() const;
+    const char *menu_font() const;
+    const char *bold_font() const;
+    void refresh_ui_scale();
+    bool allow_saved_settings() const;
+    void load_window_settings();
+    void save_window_settings();
+    void note_window_geometry();
     bool attach_test_pad();
     void pump_events();
     void release_pad_drag();
@@ -169,6 +181,26 @@ private:
 
     int win_w_ = 1280;
     int win_h_ = 800;
+    float ui_scale_ = 1.0f;
+    float user_scale_ = 0.0f;
+    float scale_env_ = 0.0f;
+    std::string font_ui_ = "Sans 13";
+    std::string font_body_ = "Sans 14";
+    std::string font_title_ = "Sans Bold 18";
+    std::string font_menu_ = "Sans 13";
+    std::string font_bold_ = "Sans Bold 13";
+    bool has_saved_window_ = false;
+    bool want_maximized_ = false;
+    bool size_override_ = false;
+    int saved_x_ = 0;
+    int saved_y_ = 0;
+    int saved_w_ = 1280;
+    int saved_h_ = 800;
+    int normal_x_ = 0;
+    int normal_y_ = 0;
+    int normal_w_ = 1280;
+    int normal_h_ = 800;
+    bool normal_valid_ = false;
     int view_x_ = 0;
     int view_y_ = 0;
     int view_w_ = 1;

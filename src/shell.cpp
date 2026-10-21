@@ -19,9 +19,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #ifndef _WIN32
@@ -268,6 +271,149 @@ int Shell::run(int argc, char **argv)
     return 0;
 }
 
+int Shell::dp(int px) const
+{
+    return ui_scale::scaled_px(px, ui_scale_);
+}
+
+const char *Shell::ui_font() const
+{
+    return font_ui_.c_str();
+}
+
+const char *Shell::body_font() const
+{
+    return font_body_.c_str();
+}
+
+const char *Shell::title_font() const
+{
+    return font_title_.c_str();
+}
+
+const char *Shell::menu_font() const
+{
+    return font_menu_.c_str();
+}
+
+const char *Shell::bold_font() const
+{
+    return font_bold_.c_str();
+}
+
+void Shell::refresh_ui_scale()
+{
+    float display = 1.0f;
+    if (window_ != nullptr) {
+        const float reported = SDL_GetWindowDisplayScale(window_);
+        if (reported > 0.0f) {
+            display = reported;
+        }
+    }
+    const float user = scale_env_ > 0.05f ? scale_env_ : user_scale_;
+    ui_scale_ = ui_scale::resolve_ui_scale(display, user);
+    font_ui_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
+    font_body_ = ui_scale::scaled_font("Sans", 14, ui_scale_);
+    font_title_ = ui_scale::scaled_font("Sans Bold", 18, ui_scale_);
+    font_menu_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
+    font_bold_ = ui_scale::scaled_font("Sans Bold", 13, ui_scale_);
+}
+
+bool Shell::allow_saved_settings() const
+{
+    return !headless_ && !size_override_ && !smoke_ && !ui_test_ && !review_ && demo_.empty() && shot_path_.empty();
+}
+
+void Shell::load_window_settings()
+{
+    if (smoke_ || ui_test_ || review_ || !demo_.empty() || !shot_path_.empty() || headless_) {
+        return;
+    }
+    const std::string dir = city_config_dir();
+    if (dir.empty()) {
+        return;
+    }
+    std::ifstream in(dir + "/settings.txt");
+    if (!in) {
+        return;
+    }
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    const ui_scale::StoredSettings stored = ui_scale::settings_parse(buffer.str());
+    user_scale_ = stored.user_scale;
+    if (stored.has_geometry && !size_override_ && !deck_) {
+        saved_x_ = stored.x;
+        saved_y_ = stored.y;
+        saved_w_ = stored.w;
+        saved_h_ = stored.h;
+        want_maximized_ = stored.maximized;
+        has_saved_window_ = true;
+    }
+}
+
+void Shell::save_window_settings()
+{
+    if (!allow_saved_settings() || window_ == nullptr) {
+        return;
+    }
+    note_window_geometry();
+    ui_scale::StoredSettings stored;
+    stored.user_scale = user_scale_;
+    if (deck_ && has_saved_window_) {
+        // A fullscreen Deck session must not replace the rectangle a desktop
+        // window will restore.
+        stored.has_geometry = true;
+        stored.x = saved_x_;
+        stored.y = saved_y_;
+        stored.w = saved_w_;
+        stored.h = saved_h_;
+        stored.maximized = want_maximized_;
+    } else if (!deck_) {
+        stored.has_geometry = normal_valid_;
+        stored.x = normal_x_;
+        stored.y = normal_y_;
+        stored.w = normal_w_;
+        stored.h = normal_h_;
+        const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
+        stored.maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
+    }
+    const std::string dir = city_config_dir();
+    if (dir.empty()) {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir + "/settings.txt", std::ios::trunc);
+    if (!out) {
+        return;
+    }
+    out << ui_scale::settings_text(stored);
+}
+
+void Shell::note_window_geometry()
+{
+    if (window_ == nullptr) {
+        return;
+    }
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
+    if ((flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED)) != 0) {
+        return;
+    }
+    int ww = 0;
+    int hh = 0;
+    int x = 0;
+    int y = 0;
+    SDL_GetWindowSize(window_, &ww, &hh);
+    SDL_GetWindowPosition(window_, &x, &y);
+    if (ww > 0 && hh > 0) {
+        normal_w_ = ww;
+        normal_h_ = hh;
+        normal_x_ = x;
+        normal_y_ = y;
+        normal_valid_ = true;
+    }
+}
+
 bool Shell::init_video()
 {
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
@@ -289,15 +435,83 @@ bool Shell::init_video()
     }
     const char *driver = SDL_GetCurrentVideoDriver();
     headless_ = driver != nullptr && (std::strcmp(driver, "dummy") == 0 || std::strcmp(driver, "offscreen") == 0);
+    if (const char *scale = std::getenv("LUNDUKE_CITY2_SCALE")) {
+        char *end = nullptr;
+        const float parsed = std::strtof(scale, &end);
+        if (end != scale && parsed > 0.0f) {
+            scale_env_ = parsed;
+        }
+    }
+    int size_w = 0;
+    int size_h = 0;
+    if (const char *size = std::getenv("LUNDUKE_CITY2_SIZE")) {
+        int parsed_w = 0;
+        int parsed_h = 0;
+        char sep = 0;
+        if (std::sscanf(size, "%d%c%d", &parsed_w, &sep, &parsed_h) == 3 && (sep == 'x' || sep == 'X') && parsed_w >= 320 &&
+            parsed_h >= 240) {
+            size_w = parsed_w;
+            size_h = parsed_h;
+            size_override_ = true;
+        }
+    }
+    load_window_settings();
+    int req_w = 1280;
+    int req_h = 800;
+    int req_x = 0;
+    int req_y = 0;
+    bool place = false;
+    SDL_Rect usable{};
+    const SDL_DisplayID display = SDL_GetPrimaryDisplay();
+    const bool have_bounds = display != 0 && SDL_GetDisplayUsableBounds(display, &usable);
+    if (size_override_) {
+        req_w = size_w;
+        req_h = size_h;
+    } else if (headless_) {
+        req_w = 1280;
+        req_h = 800;
+    } else if (have_bounds && has_saved_window_ && !deck_) {
+        const ui_scale::Placement saved =
+            ui_scale::clamp_saved_window(saved_x_, saved_y_, saved_w_, saved_h_, usable.x, usable.y, usable.w, usable.h);
+        req_w = saved.w;
+        req_h = saved.h;
+        req_x = saved.x;
+        req_y = saved.y;
+        place = true;
+    } else if (have_bounds && !deck_) {
+        const ui_scale::Placement fitted = ui_scale::fit_default_window(1280, 800, usable.x, usable.y, usable.w, usable.h);
+        req_w = fitted.w;
+        req_h = fitted.h;
+        req_x = fitted.x;
+        req_y = fitted.y;
+        place = true;
+    } else if (have_bounds && deck_) {
+        req_w = std::max(640, usable.w);
+        req_h = std::max(480, usable.h);
+    }
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
-    window_ = SDL_CreateWindow(kProductName, 1280, 800, flags);
+    if (!headless_) {
+        flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    }
+    window_ = SDL_CreateWindow(kProductName, req_w, req_h, flags);
     if (window_ == nullptr) {
         std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << "\n";
         return false;
     }
+    if (place) {
+        SDL_SetWindowPosition(window_, req_x, req_y);
+    }
+    normal_x_ = req_x;
+    normal_y_ = req_y;
+    normal_w_ = req_w;
+    normal_h_ = req_h;
+    normal_valid_ = true;
     if (deck_) {
         SDL_SetWindowFullscreen(window_, true);
+    } else if (want_maximized_) {
+        SDL_MaximizeWindow(window_);
     }
+    refresh_ui_scale();
     renderer_ = SDL_CreateRenderer(window_, nullptr);
     if (renderer_ == nullptr) {
         std::cerr << "SDL_CreateRenderer failed: " << SDL_GetError() << "\n";
@@ -334,6 +548,7 @@ void Shell::bind_session()
 
 void Shell::shutdown()
 {
+    save_window_settings();
     if (pad_ != nullptr) {
         SDL_CloseGamepad(pad_);
         pad_ = nullptr;
@@ -656,6 +871,11 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
     case SDL_EVENT_WINDOW_RESIZED:
+    case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+    case SDL_EVENT_WINDOW_MOVED:
+    case SDL_EVENT_WINDOW_MAXIMIZED:
+    case SDL_EVENT_WINDOW_RESTORED:
+        note_window_geometry();
         layout();
         clamp_scroll();
         break;

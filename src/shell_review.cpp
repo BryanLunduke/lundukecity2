@@ -6,6 +6,7 @@
 
 #include "list_scroll.hpp"
 #include "tile_atlas.hpp"
+#include "ui_scale.hpp"
 
 #include <string>
 
@@ -109,6 +110,32 @@ void Shell::run_review_checks()
     }
     if (!tile_atlas().loaded() && tile_atlas().load_error().find("tiles.png") == std::string::npos) {
         fail("missing tiles did not name tiles.png");
+        return;
+    }
+
+    // H5: headless play stays at the classic size and a 1x scale. A saved
+    // window must not be written from the test, and a short laptop work area
+    // must shrink the default window.
+    if (std::abs(ui_scale_ - 1.0f) > 0.01f || font_ui_ != "Sans 13") {
+        fail("headless UI scale should stay 1, got " + font_ui_);
+        return;
+    }
+    if (win_w_ != 1280 || win_h_ != 800) {
+        fail("headless window should stay 1280x800");
+        return;
+    }
+    if (allow_saved_settings()) {
+        fail("review run would persist window settings");
+        return;
+    }
+    const ui_scale::Placement laptop = ui_scale::fit_default_window(1280, 800, 0, 0, 1366, 768);
+    if (laptop.h + window_fit::kFrameTop + window_fit::kFrameBottom > 768 || laptop.w + 2 * window_fit::kFrameSide > 1366) {
+        fail("default window does not fit a 1366x768 work area");
+        return;
+    }
+    const ui_scale::Placement desktop = ui_scale::fit_default_window(1280, 800, 0, 0, 1920, 1080);
+    if (desktop.w < 1280 || desktop.h < 800) {
+        fail("a 1080p display should not shrink the classic window");
         return;
     }
 }
