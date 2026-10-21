@@ -464,13 +464,17 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Welcome) {
         const std::string heading = "Welcome to Lunduke City 2";
         const std::string blurb = "Start a new city, load one you saved, or take on a scenario.";
+        const std::string hint = std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " Select    " +
+                                 glyph(SDL_GAMEPAD_BUTTON_EAST) + " Back";
         const double width = message_width(win_w_, margin, dp(440), dp(520));
         const double column = std::max(1.0, width - 2.0 * margin);
         const double heading_h = line_height(title_font(), heading, column);
         const double blurb_h = text_block_height(blurb, column);
+        const double hint_h = line_height(ui_font(), hint, column);
         const double bh = dp(44);
         const double gap = dp(10);
-        const double height = dp(40) + margin + heading_h + dp(8) + blurb_h + dp(16) + bh * 3.0 + gap * 2.0 + margin;
+        const double height = dp(40) + margin + heading_h + dp(8) + blurb_h + dp(16) + bh * 4.0 + gap * 3.0 + dp(12) +
+                              hint_h + margin;
         const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Welcome");
         double text_y = panel.y + dp(40) + dp(12);
@@ -486,6 +490,31 @@ void Shell::draw_dialog(cairo_t *cr)
         button(cr, panel.x + margin, by, bw, bh, "_Load a Saved City", kWelcomeLoad, focus_id_ == kWelcomeLoad);
         by += bh + gap;
         button(cr, panel.x + margin, by, bw, bh, "Select a _Scenario", kWelcomeScenario, focus_id_ == kWelcomeScenario);
+        by += bh + gap;
+        button(cr, panel.x + margin, by, bw, bh, "_Quit", kWelcomeQuit, focus_id_ == kWelcomeQuit);
+        const TextMetrics hint_metrics = measure_text(cr, ui_font(), hint, -1);
+        const double hint_x = panel.x + (panel.w - hint_metrics.width) / 2.0;
+        paint_text(cr, ui_font(), hint, hint_x, by + bh + dp(10), theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
+        return;
+    }
+    if (dialog_ == Dialog::QuitConfirm) {
+        const std::string question = "Quit Lunduke City 2?";
+        const std::string hint = std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " Select    " +
+                                 glyph(SDL_GAMEPAD_BUTTON_EAST) + " Back";
+        const double width = message_width(win_w_, margin, dp(420), dp(520));
+        const double column = std::max(1.0, width - 2.0 * margin);
+        const double body_h = text_block_height(question, column);
+        const double hint_h = line_height(ui_font(), hint, column);
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + dp(8) + hint_h + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Quit");
+        place_line(body_font(), question, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
+                   theme::kTextG, theme::kTextB);
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - hint_h - dp(8) - dp(36),
+                   {{"_Cancel", kCancel}, {"_Quit", kOk}}, 0, focus_id_);
+        const TextMetrics hint_metrics = measure_text(cr, ui_font(), hint, -1);
+        paint_text(cr, ui_font(), hint, panel.x + (panel.w - hint_metrics.width) / 2.0,
+                   panel.y + panel.h - margin - hint_h, theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
         return;
     }
     if (dialog_ == Dialog::Unsaved) {
@@ -1400,9 +1429,17 @@ void Shell::draw(cairo_t *cr)
     paint_text(cr, body_font(), bar, 8, win_h_ - message_h_ + 10, theme::kTextR, theme::kTextG, theme::kTextB,
                win_w_ - 16);
     const std::string goal = session_.scenario_progress();
-    if (!goal.empty() && dialog_ == Dialog::None) {
-        paint_text(cr, ui_font(), goal, view_x_ + 8, view_y_ + 8, theme::kTextR, theme::kTextG, theme::kTextB,
-                   view_w_ - 16);
+    if (!goal.empty() && dialog_ == Dialog::None && view_w_ > dp(32)) {
+        const int pad = dp(8);
+        const int wrap = std::max(1, view_w_ - pad * 4);
+        const TextMetrics metrics = measure_text(cr, ui_font(), goal, wrap);
+        const double gx = view_x_ + pad;
+        const double gy = view_y_ + pad;
+        const double gw = std::min(static_cast<double>(view_w_ - pad * 2), static_cast<double>(metrics.width + pad * 2));
+        const double gh = static_cast<double>(metrics.height + pad * 2);
+        fill(cr, gx, gy, gw, gh, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
+        stroke_rect(cr, gx, gy, gw, gh, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+        paint_text(cr, ui_font(), goal, gx + pad, gy + pad, theme::kTextR, theme::kTextG, theme::kTextB, wrap);
     }
     if (dialog_ != Dialog::None) {
         draw_dialog(cr);

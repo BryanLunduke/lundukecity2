@@ -50,10 +50,12 @@ enum HotspotId : int {
     kSystemFiles = 119,
     kShortScale = 120,
     kLongScale = 121,
-    // Launch screen. B / Escape on that screen quits; these three start a city.
+    // Launch screen. B / Escape asks before quitting. These start a city,
+    // and Quit opens that confirmation.
     kWelcomeNew = 122,
     kWelcomeLoad = 123,
     kWelcomeScenario = 124,
+    kWelcomeQuit = 125,
 
     kMenuItem = 1000,
     kRecentItem = 2000,
@@ -67,7 +69,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kWelcomeScenario;
+    return id >= kCancel && id <= kWelcomeQuit;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

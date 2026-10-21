@@ -51,7 +51,8 @@ enum class Dialog : int {
     Overwrite,
     Settings,
     Controls,
-    Welcome
+    Welcome,
+    QuitConfirm
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };

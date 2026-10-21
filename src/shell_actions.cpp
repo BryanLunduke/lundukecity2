@@ -154,6 +154,9 @@ void Shell::open_dialog(Dialog dialog)
         focus_id_ = kPlay;
     } else if (dialog == Dialog::Welcome) {
         focus_id_ = kWelcomeNew;
+    } else if (dialog == Dialog::QuitConfirm) {
+        // Cancel is the focused button, so a stray A does not leave the game.
+        focus_id_ = kCancel;
     } else if (dialog == Dialog::Outcome) {
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {
@@ -841,11 +844,19 @@ void Shell::on_dialog_button(int id)
             open_dialog(Dialog::Scenario);
             return;
         }
-        // B and Escape leave the game. The launch city has not been edited,
-        // so this must not ask to save it.
-        welcome_gate_ = false;
-        close_dialog();
-        request_with_save(AfterSave::Quit);
+        // Quit, B, and Escape ask first. A second B from New City or the
+        // scenario list must not leave the game.
+        open_dialog(Dialog::QuitConfirm);
+        return;
+    }
+    if (dialog_ == Dialog::QuitConfirm) {
+        if (id == kOk) {
+            welcome_gate_ = false;
+            close_dialog();
+            request_with_save(AfterSave::Quit);
+            return;
+        }
+        dismiss_dialog();
         return;
     }
     if (id == kSystemFiles) {

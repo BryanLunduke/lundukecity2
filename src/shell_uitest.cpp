@@ -440,6 +440,40 @@ void Shell::drive_ui_test()
                 fail("toolbar icons are still flat blocks (" + std::to_string(colors) + " colors)");
                 return;
             }
+            // The sprite is authored to fill the button face. A 24px icon
+            // centered in this slot covers about 60% and leaves a grey margin.
+            const int slot = std::max(8, cell - 8);
+            const int face_origin = 8;
+            int min_x = slot;
+            int min_y = slot;
+            int max_x = -1;
+            int max_y = -1;
+            int colored = 0;
+            for (int y = 0; y < slot; ++y) {
+                for (int x = 0; x < slot; ++x) {
+                    int r = 0;
+                    int g = 0;
+                    int b = 0;
+                    if (!channel_at(frame_surface_, side_x_ + face_origin + x, pal_y_ + face_origin + y, r, g, b)) {
+                        continue;
+                    }
+                    if (std::abs(r - g) < 14 && std::abs(g - b) < 14 && r > 170) {
+                        continue;
+                    }
+                    ++colored;
+                    min_x = std::min(min_x, x);
+                    min_y = std::min(min_y, y);
+                    max_x = std::max(max_x, x);
+                    max_y = std::max(max_y, y);
+                }
+            }
+            const int span_x = max_x >= min_x ? max_x - min_x + 1 : 0;
+            const int span_y = max_y >= min_y ? max_y - min_y + 1 : 0;
+            if (colored < (slot * slot) / 4 || span_x * 4 < slot * 3 || span_y * 4 < slot * 3) {
+                fail("toolbar icons do not fill the button (" + std::to_string(span_x) + "x" + std::to_string(span_y) +
+                     ")");
+                return;
+            }
         }
         g_menu_rows = 0;
         g_menu_seen = false;
@@ -961,7 +995,7 @@ void Shell::drive_ui_test()
             return;
         }
         if (find_hot(hot_, kWelcomeNew, 0) == nullptr || find_hot(hot_, kWelcomeLoad, 0) == nullptr ||
-            find_hot(hot_, kWelcomeScenario, 0) == nullptr) {
+            find_hot(hot_, kWelcomeScenario, 0) == nullptr || find_hot(hot_, kWelcomeQuit, 0) == nullptr) {
             fail("the welcome screen is missing a button");
             return;
         }
@@ -977,6 +1011,16 @@ void Shell::drive_ui_test()
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeLoad; });
         if (focus_id_ != kWelcomeScenario) {
             fail("D-pad Down did not move to Select a Scenario");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeScenario; });
+        if (focus_id_ != kWelcomeQuit) {
+            fail("D-pad Down did not move to Quit");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeQuit; });
+        if (focus_id_ != kWelcomeScenario) {
+            fail("D-pad Up did not return to Select a Scenario");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return dialog_ == Dialog::Welcome; });
@@ -1071,8 +1115,109 @@ void Shell::drive_ui_test()
             fail("leaving the welcome screen asked to save an untouched city");
             return;
         }
+        if (quitting_) {
+            fail("B on the welcome screen quit without confirmation");
+            return;
+        }
+        if (dialog_ != Dialog::QuitConfirm) {
+            fail("B on the welcome screen did not ask to quit");
+            return;
+        }
+        if (focus_id_ != kCancel) {
+            fail("the quit confirmation did not focus Cancel");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return dialog_ == Dialog::QuitConfirm; });
+        if (quitting_ || dialog_ != Dialog::Welcome) {
+            fail("B on the quit confirmation did not return to the welcome screen");
+            return;
+        }
+        welcome_gate_ = false;
+        close_dialog();
+        session_.load_scenario(CitySession::scenario_def(0).id);
+        speed_ = 0;
+        session_.set_speed(0);
+        ui_step_ = 24;
+        return;
+    }
+    case 24: {
+        if (dialog_ != Dialog::None) {
+            fail("the scenario goal was covered by a dialog");
+            return;
+        }
+        const std::string goal = session_.scenario_progress();
+        if (goal.empty()) {
+            fail("a running scenario has no goal text");
+            return;
+        }
+        int pr = 0;
+        int pg = 0;
+        int pb = 0;
+        int mr = 0;
+        int mg = 0;
+        int mb = 0;
+        const int px = view_x_ + 16;
+        const int py = view_y_ + 12;
+        if (!channel_at(frame_surface_, px, py, pr, pg, pb) || !channel_at(frame_surface_, px, view_y_ + 2, mr, mg, mb)) {
+            fail("could not sample the scenario goal");
+            return;
+        }
+        const bool panel = pr > 230 && pg > 230 && pb > 150 && pb < 210;
+        const bool map_same = std::abs(pr - mr) < 12 && std::abs(pg - mg) < 12 && std::abs(pb - mb) < 12;
+        if (!panel || map_same) {
+            fail("scenario goal text has no backing panel");
+            return;
+        }
+        int dark = 0;
+        for (int x = view_x_ + 20; x < view_x_ + 220 && x < win_w_; x += 2) {
+            int r = 0;
+            int g = 0;
+            int b = 0;
+            if (channel_at(frame_surface_, x, view_y_ + 22, r, g, b) && r < 80 && g < 80 && b < 80) {
+                ++dark;
+            }
+        }
+        if (dark < 2) {
+            fail("scenario goal text is not drawn on the panel");
+            return;
+        }
+        session_.new_city("New City");
+        if (session_.needs_save_prompt()) {
+            fail("an untouched generated city still wants to be saved");
+            return;
+        }
+        welcome_gate_ = true;
+        open_dialog(Dialog::Welcome);
+        ui_step_ = 25;
+        return;
+    }
+    case 25: {
+        const Hotspot *quit = find_hot(hot_, kWelcomeQuit, 0);
+        if (quit == nullptr || dialog_ != Dialog::Welcome) {
+            fail("Quit is not on the welcome screen");
+            return;
+        }
+        click_at(quit->x + quit->w * 0.5, quit->y + quit->h * 0.5);
+        if (dialog_ != Dialog::QuitConfirm) {
+            fail("Quit did not ask for confirmation");
+            return;
+        }
+        ui_step_ = 26;
+        return;
+    }
+    case 26: {
+        const Hotspot *confirm = find_hot(hot_, kOk, 0);
+        if (confirm == nullptr) {
+            fail("the quit confirmation has no Quit button");
+            return;
+        }
+        click_at(confirm->x + confirm->w * 0.5, confirm->y + confirm->h * 0.5);
+        if (dialog_ == Dialog::Unsaved) {
+            fail("confirming quit asked to save an untouched city");
+            return;
+        }
         if (!quitting_) {
-            fail("B did not leave the welcome screen");
+            fail("confirming quit did not leave the game");
             return;
         }
         return;

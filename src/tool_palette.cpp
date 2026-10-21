@@ -21,8 +21,9 @@ void box(cairo_t *cr, double x, double y, double w, double h, double r, double g
     cairo_fill(cr);
 }
 
-// Original 24px sprites in data/tool-icons. Nearest-neighbor only, and only
-// at an integer multiple, so a larger toolbar stays crisp.
+// Original 40px sprites in data/tool-icons. Nearest-neighbor only. The
+// sprite is authored to fill a Deck-size button; icon_pixel_scale grows or
+// shrinks it to the slot so it is not left tiny and not clipped.
 struct ToolIcons {
     bool tried = false;
     cairo_surface_t *image[16] = {};
@@ -65,22 +66,24 @@ ToolIcons &tool_icons()
     return icons;
 }
 
-void paint_icon(cairo_t *cr, cairo_surface_t *icon, double x, double y, double s)
+void paint_icon(cairo_t *cr, cairo_surface_t *icon, int index, double x, double y, double s)
 {
-    if (icon == nullptr || s < 4.0) {
+    if (s < 4.0) {
+        return;
+    }
+    if (icon == nullptr) {
+        paint_tool_fallback(cr, index, x, y, s);
         return;
     }
     const int iw = cairo_image_surface_get_width(icon);
     const int ih = cairo_image_surface_get_height(icon);
     if (iw < 1 || ih < 1) {
+        paint_tool_fallback(cr, index, x, y, s);
         return;
     }
-    int scale = std::max(1, static_cast<int>(s) / iw);
-    while (scale > 1 && (scale * iw > s || scale * ih > s)) {
-        --scale;
-    }
-    const double dw = static_cast<double>(iw * scale);
-    const double dh = static_cast<double>(ih * scale);
+    const double scale = icon_pixel_scale(std::max(iw, ih), static_cast<int>(s));
+    const double dw = static_cast<double>(iw) * scale;
+    const double dh = static_cast<double>(ih) * scale;
     cairo_save(cr);
     cairo_rectangle(cr, x, y, s, s);
     cairo_clip(cr);
@@ -212,6 +215,8 @@ void ToolPalette::draw(cairo_t *cr) const
 
         const double shift = pressed ? 1.0 : 0.0;
         cairo_surface_t *icon = (i >= 0 && i < 16) ? tool_icons().image[i] : nullptr;
-        paint_icon(cr, icon, x + 4 + shift, y + 4 + shift, bs - 10);
+        // 3px inside the bevel. At the default 48px cell the slot is 40px,
+        // which is the authored sprite size, so the icon fills the face.
+        paint_icon(cr, icon, i, x + 3 + shift, y + 3 + shift, bs - 6);
     }
 }

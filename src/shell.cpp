@@ -269,7 +269,8 @@ int Shell::run(int argc, char **argv)
     } else if (launched_with_file && dialog_ == Dialog::LoadError) {
         welcome_gate_ = true;
     }
-    if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario") {
+    if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
+        demo_ != "quit") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -1033,6 +1034,14 @@ void Shell::loop()
             } else if (demo_ == "welcome") {
                 welcome_gate_ = true;
                 open_dialog(Dialog::Welcome);
+            } else if (demo_ == "quit") {
+                welcome_gate_ = true;
+                open_dialog(Dialog::QuitConfirm);
+            } else if (demo_ == "goal") {
+                session_.load_scenario(CitySession::scenario_def(0).id);
+                speed_ = 0;
+                session_.set_speed(0);
+                close_dialog();
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);

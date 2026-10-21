@@ -30,7 +30,7 @@ int main()
     static_assert(kWelcomeNew != kMapId, "Start a New City must not share the map id");
     static_assert(kClose != kMenuTitle, "Close must not share the System menu id");
     static_assert(kCancel > kMenuTitle + 5, "dialog buttons overlap menu titles");
-    static_assert(kWelcomeScenario < kMenuItem, "dialog buttons overlap menu items");
+    static_assert(kWelcomeQuit < kMenuItem, "dialog buttons overlap menu items");
     static_assert(kMenuItem + 5 * 40 < kRecentItem, "menu items overlap recent files");
     static_assert(kRecentItem + 32 < kFieldName, "recent files overlap text fields");
     static_assert(kFieldSeed < kOsk && kOsk + 64 < kListItem, "OSK overlaps a neighbour range");
@@ -42,6 +42,7 @@ int main()
         kOk,          kDiscard,   kSave,         kBack,      kNext,         kGenerate,     kPlay,        kRename,
         kClose,       kReset,     kCollect,      kKeep,      kStay,         kScenarioList, kRecover,     kNotNow,
         kDelete,      kUp,        kSystemFiles,  kShortScale, kLongScale,   kWelcomeNew,   kWelcomeLoad, kWelcomeScenario,
+        kWelcomeQuit,
         kMenuItem,    kRecentItem,
         kFieldName,   kFieldSeed, kOsk,          kListItem,  kSlider,       kChoice,
     };
@@ -59,7 +60,7 @@ int main()
     }
     if (!is_modal_control(kCancel) || !is_modal_control(kSave) || !is_modal_control(kClose) || !is_modal_control(kOsk) ||
         !is_modal_control(kSlider + 1) || !is_modal_control(kFieldName) || !is_dialog_button(kLongScale) ||
-        !is_dialog_button(kWelcomeNew) || !is_dialog_button(kWelcomeScenario)) {
+        !is_dialog_button(kWelcomeNew) || !is_dialog_button(kWelcomeQuit)) {
         return fail("dialog controls are not recognised");
     }
 
