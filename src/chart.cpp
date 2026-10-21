@@ -4,8 +4,6 @@
 
 #include "chart.hpp"
 
-#include <cairomm/context.h>
-
 #include "city_session.hpp"
 #include "graph_legend.hpp"
 #include "graph_palette.hpp"
@@ -29,14 +27,14 @@ struct SeriesSpec {
     CitySession::HistorySeries history;
 };
 
-void apply_dash(const Cairo::RefPtr<Cairo::Context> &cr, double on, double off)
+void apply_dash(cairo_t *cr, double on, double off)
 {
     if (on <= 0.0 || off <= 0.0) {
-        cr->unset_dash();
+        cairo_set_dash(cr, nullptr, 0, 0.0);
         return;
     }
-    const std::vector<double> pattern{on, off};
-    cr->set_dash(pattern, 0.0);
+    const double pattern[2] = {on, off};
+    cairo_set_dash(cr, pattern, 2, 0.0);
 }
 
 long population_at(const CitySession &session, CitySession::HistoryScale scale, int index)
@@ -140,15 +138,14 @@ std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale)
     return out;
 }
 
-void draw_history_chart(const Cairo::RefPtr<Cairo::Context> &cr, CitySession *session, bool long_scale, int width,
-                        int height)
+void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int width, int height)
 {
     if (width < 20 || height < 20) {
         return;
     }
-    cr->set_source_rgb(1, 1, 1);
-    cr->rectangle(0, 0, width, height);
-    cr->fill();
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_rectangle(cr, 0, 0, width, height);
+    cairo_fill(cr);
     const int left = 16;
     const int right = 16;
     const int top = 12;
@@ -156,18 +153,18 @@ void draw_history_chart(const Cairo::RefPtr<Cairo::Context> &cr, CitySession *se
     const double plot_w = std::max(1, width - left - right);
     const double plot_h = std::max(1, height - top - bottom);
     const double plot_bottom = top + plot_h;
-    cr->set_source_rgba(0, 0, 0, 0.18);
-    cr->set_line_width(1);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
+    cairo_set_line_width(cr, 1);
     for (int i = 0; i <= 4; ++i) {
         const double y = top + plot_h * (i / 4.0);
-        cr->move_to(left, y);
-        cr->line_to(left + plot_w, y);
+        cairo_move_to(cr, left, y);
+        cairo_line_to(cr, left + plot_w, y);
     }
-    cr->stroke();
-    cr->move_to(left, top);
-    cr->line_to(left, plot_bottom);
-    cr->line_to(left + plot_w, plot_bottom);
-    cr->stroke();
+    cairo_stroke(cr);
+    cairo_move_to(cr, left, top);
+    cairo_line_to(cr, left, plot_bottom);
+    cairo_line_to(cr, left + plot_w, plot_bottom);
+    cairo_stroke(cr);
     if (session == nullptr) {
         return;
     }
@@ -187,9 +184,9 @@ void draw_history_chart(const Cairo::RefPtr<Cairo::Context> &cr, CitySession *se
         if (flat) {
             max_v = min_v + 1.0;
         }
-        cr->set_source_rgb(item.r, item.g, item.b);
-        cr->set_line_width(item.population ? 2.6 : 2.0);
-        cr->set_line_cap(Cairo::LINE_CAP_ROUND);
+        cairo_set_source_rgb(cr, item.r, item.g, item.b);
+        cairo_set_line_width(cr, item.population ? 2.6 : 2.0);
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
         apply_dash(cr, item.dash_on, item.dash_off);
         for (int i = 0; i < n; ++i) {
             const int index = (n - 1) - i;
@@ -198,11 +195,11 @@ void draw_history_chart(const Cairo::RefPtr<Cairo::Context> &cr, CitySession *se
             const double y = flat ? (top + plot_h / 2.0)
                                   : (plot_bottom - ((value - min_v) / (max_v - min_v)) * plot_h);
             if (i == 0) {
-                cr->move_to(x, y);
+                cairo_move_to(cr, x, y);
             } else {
-                cr->line_to(x, y);
+                cairo_line_to(cr, x, y);
             }
         }
-        cr->stroke();
+        cairo_stroke(cr);
     }
 }

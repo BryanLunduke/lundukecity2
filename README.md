@@ -22,7 +22,7 @@ The default window is **1280×800** (Steam Deck native). It is resizable. When `
 
 ```sh
 sudo apt install build-essential meson ninja-build pkg-config \
-  libsdl3-dev libcairo2-dev libcairomm-1.0-dev libpango1.0-dev libpng-dev
+  libsdl3-dev libcairo2-dev libpango1.0-dev libpng-dev
 meson setup build
 meson compile -C build
 meson test -C build
@@ -35,12 +35,12 @@ Pango uses fontconfig. Install a UI font such as `fonts-dejavu-core` or Noto San
 
 ## Steam Linux Runtime (sniper)
 
-The sniper runtime has SDL3 and does not have gtkmm, which is why this port exists. Build inside the sniper SDK so the binary links a glibc the runtime can load:
+The sniper runtime has SDL3, cairo, and pango, and does not have gtkmm, which is why this port exists. It also does not ship cairomm or sigc++; the game draws with the cairo C API so a sniper SDK build needs no extra packages. Build inside the sniper SDK so the binary links a glibc the runtime can load:
 
 ```sh
 # From the Steam Runtime SDK, after the sniper chroot is entered:
 apt install build-essential meson ninja-build pkg-config \
-  libsdl3-dev libcairo2-dev libcairomm-1.0-dev libpango1.0-dev libpng-dev
+  libsdl3-dev libcairo2-dev libpango1.0-dev libpng-dev
 meson setup build --buildtype=release
 meson compile -C build
 ```

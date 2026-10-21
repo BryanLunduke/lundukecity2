@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <cairomm/context.h>
+#include <cairo.h>
 
 #include <functional>
 
@@ -29,7 +29,7 @@ public:
     bool press(double x, double y);
     void motion(double x, double y);
     void leave();
-    void draw(const Cairo::RefPtr<Cairo::Context> &cr) const;
+    void draw(cairo_t *cr) const;
 
     std::function<void(int)> on_selected;
 

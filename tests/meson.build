@@ -326,6 +326,28 @@ menu_model = executable(
 
 test('menu_model', menu_model)
 
+# Evaluation / Budget wording restored from 0.9.5, and the query em dash.
+dialog_copy = executable(
+  'dialog_copy',
+  'dialog_copy.cpp',
+  include_directories: include_directories('../src'),
+)
+
+test('dialog_copy', dialog_copy)
+
+# Menu hit-testing, gamepad drag-build, and budget slider keys. Headless.
+test(
+  'ui_input',
+  lunduke_city_exe,
+  env: [
+    'SDL_VIDEODRIVER=dummy',
+    'SDL_AUDIODRIVER=dummy',
+    'LUNDUKE_CITY2_UI_TEST=1',
+  ],
+  timeout: 180,
+  is_parallel: false,
+)
+
 # Headless SDL: start, load Dullsville, tick, draw a frame, cycle a tool
 # from a virtual gamepad, accept a synthetic tap.
 test(

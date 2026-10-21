@@ -11,7 +11,9 @@ project(
 lunduke_package_version = '2.0.0'
 
 sdl3_dep = dependency('sdl3', version: '>= 3.2.0')
-cairomm_dep = dependency('cairomm-1.0')
+# Plain cairo. The Steam Linux Runtime 3.0 (sniper) ships cairo and pango
+# but not cairomm or sigc++.
+cairo_dep = dependency('cairo')
 pangocairo_dep = dependency('pangocairo')
 thread_dep = dependency('threads')
 lunduke_asset_dir = meson.project_source_root() / 'third_party' / 'micropolis-assets'

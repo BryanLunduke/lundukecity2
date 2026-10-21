@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include <cairomm/surface.h>
+#include <cairo.h>
 
 // obj<type>-<frame>.png sprite frames. type is the engine sprite id
 // (1 train .. 8 bus). frame is 1-based, matching SimSprite::frame.
-Cairo::RefPtr<Cairo::ImageSurface> sprite_frame(int type, int frame);
+// The returned surface is owned by the sprite cache. Do not destroy it.
+cairo_surface_t *sprite_frame(int type, int frame);

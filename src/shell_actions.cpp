@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "city_seed.hpp"
+#include "osk_layout.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
 #include "tools.hpp"
@@ -98,17 +99,6 @@ bool ends_with_ci(const std::string &text, const char *suffix)
     return true;
 }
 
-const char *osk_key(int index)
-{
-    static const char *keys[] = {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h",
-                                 "j", "k", "l", "z", "x", "c", "v", "b", "n", "m", "space", "bksp", "0", "1",
-                                 "2", "3", "4", "5", "6", "7", "8", "9", "auto"};
-    if (index < 0 || index >= static_cast<int>(sizeof(keys) / sizeof(keys[0]))) {
-        return nullptr;
-    }
-    return keys[index];
-}
-
 } // namespace
 
 bool Shell::dialog_pauses() const
@@ -137,6 +127,7 @@ void Shell::close_dialog()
     const Dialog closing = dialog_;
     dialog_ = Dialog::None;
     dialog_error_.clear();
+    osk_shift_ = false;
     if (text_input_on_ && window_ != nullptr) {
         SDL_StopTextInput(window_);
         text_input_on_ = false;
@@ -178,7 +169,7 @@ void Shell::open_dialog(Dialog dialog)
     } else if (dialog == Dialog::Outcome) {
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {
-        focus_id_ = budget_is_tax_ ? kCollect : kOk;
+        focus_id_ = kSlider + 1;
     }
     set_paused_for_dialog();
 }
@@ -1087,20 +1078,27 @@ void Shell::on_hotspot(int id, double x, double y)
         return;
     }
     if (id >= kOsk && id < kOsk + 64) {
-        const char *key = osk_key(id - kOsk);
-        if (key == nullptr) {
+        int count = 0;
+        const OskKey *keys = osk_keys(count);
+        const int index = id - kOsk;
+        if (index < 0 || index >= count) {
             return;
         }
-        if (std::strcmp(key, "bksp") == 0) {
+        const OskKey &key = keys[index];
+        focus_id_ = id;
+        if (key.kind == OskKind::Backspace) {
             backspace_field();
-        } else if (std::strcmp(key, "space") == 0) {
+        } else if (key.kind == OskKind::Space) {
             type_text(" ");
-        } else if (std::strcmp(key, "auto") == 0) {
+        } else if (key.kind == OskKind::Auto) {
             if (active_field() != nullptr) {
                 *active_field() = "auto";
             }
-        } else {
-            type_text(key);
+        } else if (key.kind == OskKind::Shift) {
+            osk_shift_ = !osk_shift_;
+        } else if (key.text != nullptr) {
+            const char *insert = (osk_shift_ && key.text_shift != nullptr) ? key.text_shift : key.text;
+            type_text(insert);
         }
         return;
     }
@@ -1295,38 +1293,45 @@ void Shell::activate_focus()
     }
 }
 
+bool Shell::adjust_focused_slider(int direction)
+{
+    for (const SliderGeom &slider : sliders_) {
+        if (slider.id != focus_id_) {
+            continue;
+        }
+        const int step = slider.id == kSlider + 1 ? direction : direction * 5;
+        int current = tax_;
+        if (slider.id == kSlider + 2) {
+            current = road_;
+        } else if (slider.id == kSlider + 3) {
+            current = police_;
+        } else if (slider.id == kSlider + 4) {
+            current = fire_;
+        }
+        const int value = std::max(slider.min, std::min(slider.max, current + step));
+        if (slider.id == kSlider + 1) {
+            tax_ = value;
+            session_.set_tax(tax_);
+        } else if (slider.id == kSlider + 2) {
+            road_ = value;
+            session_.set_road_funding(road_);
+        } else if (slider.id == kSlider + 3) {
+            police_ = value;
+            session_.set_police_funding(police_);
+        } else if (slider.id == kSlider + 4) {
+            fire_ = value;
+            session_.set_fire_funding(fire_);
+        }
+        return true;
+    }
+    return false;
+}
+
 void Shell::arm_smoke_pad()
 {
-    SDL_VirtualJoystickDesc desc;
-    SDL_INIT_INTERFACE(&desc);
-    desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
-    desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
-    desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
-    desc.button_mask = (1u << SDL_GAMEPAD_BUTTON_SOUTH) | (1u << SDL_GAMEPAD_BUTTON_EAST) |
-                       (1u << SDL_GAMEPAD_BUTTON_WEST) | (1u << SDL_GAMEPAD_BUTTON_NORTH) |
-                       (1u << SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) | (1u << SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) |
-                       (1u << SDL_GAMEPAD_BUTTON_START) | (1u << SDL_GAMEPAD_BUTTON_DPAD_UP) |
-                       (1u << SDL_GAMEPAD_BUTTON_DPAD_DOWN) | (1u << SDL_GAMEPAD_BUTTON_DPAD_LEFT) |
-                       (1u << SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
-    desc.axis_mask = (1u << SDL_GAMEPAD_AXIS_LEFTX) | (1u << SDL_GAMEPAD_AXIS_LEFTY) |
-                     (1u << SDL_GAMEPAD_AXIS_RIGHTX) | (1u << SDL_GAMEPAD_AXIS_RIGHTY) |
-                     (1u << SDL_GAMEPAD_AXIS_LEFT_TRIGGER) | (1u << SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
-    desc.name = "Lunduke City 2 Pad";
-    const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
-    if (id == 0) {
-        ran_ok_ = false;
-        smoke_error_ = "virtual gamepad did not attach";
+    if (!attach_test_pad()) {
         return;
     }
-    if (pad_ == nullptr) {
-        pad_ = SDL_OpenGamepad(id);
-    }
-    if (pad_ == nullptr) {
-        ran_ok_ = false;
-        smoke_error_ = "virtual gamepad did not open";
-        return;
-    }
-    virtual_joy_ = SDL_GetGamepadJoystick(pad_);
     const int before = tool_index_;
     if (virtual_joy_ != nullptr) {
         SDL_SetJoystickVirtualButton(virtual_joy_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, true);

@@ -101,7 +101,7 @@ int main()
         struct stat st;
         check(stat(real.c_str(), &st) == 0 && (st.st_mode & 0777) == 0640, "the real file keeps 0640");
         int temps = 0;
-        for (const std::string d : {real_dir, link_dir}) {
+        for (const std::string &d : {real_dir, link_dir}) {
             if (DIR *dp = opendir(d.c_str())) {
                 while (dirent *e = readdir(dp)) {
                     if (std::strstr(e->d_name, ".save-") != nullptr) ++temps;

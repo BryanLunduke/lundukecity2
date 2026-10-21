@@ -6,8 +6,7 @@
 
 #include "city_session.hpp"
 
-#include <cairomm/context.h>
-#include <cairomm/surface.h>
+#include <cairo.h>
 
 #include <chrono>
 #include <functional>
@@ -23,6 +22,8 @@ class MapView {
 public:
     MapView();
     ~MapView();
+    MapView(const MapView &) = delete;
+    MapView &operator=(const MapView &) = delete;
 
     void set_session(CitySession *session);
     void set_tool(int engine_tool);
@@ -46,7 +47,7 @@ public:
     // Advance the unpowered-zone blink. Call from the frame loop.
     void tick(int elapsed_ms);
 
-    void draw(const Cairo::RefPtr<Cairo::Context> &cr);
+    void draw(cairo_t *cr);
 
     // Coordinates are map-local pixels (after subtracting the scroll origin).
     bool press(double x, double y);
@@ -64,7 +65,7 @@ public:
 
 private:
     bool tile_at(double x, double y, int &tx, int &ty) const;
-    void draw_footprint(const Cairo::RefPtr<Cairo::Context> &cr) const;
+    void draw_footprint(cairo_t *cr) const;
     void ensure_surface();
     int display_tile(int raw, const TileAtlas &atlas) const;
     void blit_tile(int x, int y, int shown, const TileAtlas &atlas);
@@ -88,5 +89,5 @@ private:
     bool active_ = true;
     std::vector<int> cached_raw_;
     std::vector<int> cached_shown_;
-    Cairo::RefPtr<Cairo::ImageSurface> map_pixels_;
+    cairo_surface_t *map_pixels_ = nullptr;
 };
