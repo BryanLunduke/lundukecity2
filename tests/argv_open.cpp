@@ -81,7 +81,9 @@ Child launch(const std::string &binary, const std::string &path)
         unsetenv("DBUS_SESSION_BUS_ADDRESS");
         execlp("dbus-run-session", "dbus-run-session", "--", binary.c_str(), path.c_str(),
                static_cast<char *>(nullptr));
-        _exit(127);
+        // 77 is meson's skip code. The parent turns this into a skipped test
+        // when dbus-run-session is not on PATH (the sniper SDK).
+        _exit(77);
     }
     setpgid(pid, pid);
     close(pipes[1]);
@@ -142,6 +144,9 @@ int wait_for_title(Child &child, const std::string &title, std::string &err)
         int status = 0;
         if (!still_running(child.pid, &status)) {
             err = read_fd(child.stderr_fd);
+            if (WIFEXITED(status) && WEXITSTATUS(status) == 77) {
+                return 77;
+            }
             std::cerr << "exited early status " << status << " stderr " << err << "\n";
             if (WIFEXITED(status) && WEXITSTATUS(status) == 1) {
                 return 2;
@@ -162,6 +167,30 @@ int wait_for_title(Child &child, const std::string &title, std::string &err)
     return 4;
 }
 
+bool program_on_path(const char *name)
+{
+    const char *path = std::getenv("PATH");
+    if (path == nullptr || name == nullptr || name[0] == '\0') {
+        return false;
+    }
+    const std::string paths(path);
+    std::size_t start = 0;
+    while (start <= paths.size()) {
+        const std::size_t colon = paths.find(':', start);
+        const std::size_t stop = colon == std::string::npos ? paths.size() : colon;
+        const std::string dir = paths.substr(start, stop - start);
+        const std::string full = dir.empty() ? std::string(name) : dir + "/" + name;
+        if (access(full.c_str(), X_OK) == 0) {
+            return true;
+        }
+        if (colon == std::string::npos) {
+            break;
+        }
+        start = colon + 1;
+    }
+    return false;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -169,6 +198,10 @@ int main(int argc, char **argv)
     const char *display = std::getenv("DISPLAY");
     if (display == nullptr || display[0] == '\0') {
         return fail(1, "no DISPLAY; this GUI test must fail rather than skip or start its own server");
+    }
+    if (!program_on_path("dbus-run-session")) {
+        std::cerr << "skip: dbus-run-session is not on PATH\n";
+        return 77;
     }
     if (argc < 2) {
         return fail(1, "usage: argv_open <lunduke-city>");
@@ -206,6 +239,10 @@ int main(int argc, char **argv)
     std::string err;
     const int loaded_rc = wait_for_title(loaded, "Lunduke City 2 - Harbor Town", err);
     stop_child(loaded);
+    if (loaded_rc == 77) {
+        std::cerr << "skip: dbus-run-session is not available\n";
+        return 77;
+    }
     if (loaded_rc == 2 || err.find("can not open files") != std::string::npos) {
         return fail(4, "lunduke-city rejected a saved city on the command line");
     }

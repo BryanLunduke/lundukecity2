@@ -23,39 +23,6 @@
 
 namespace {
 
-constexpr int kWelcomeDismiss = 4;
-constexpr int kCancel = 1;
-constexpr int kOk = 2;
-constexpr int kDiscard = 3;
-constexpr int kSave = 4;
-constexpr int kBack = 5;
-constexpr int kNext = 6;
-constexpr int kGenerate = 7;
-constexpr int kPlay = 8;
-constexpr int kRename = 9;
-constexpr int kClose = 10;
-constexpr int kReset = 11;
-constexpr int kCollect = 12;
-constexpr int kKeep = 13;
-constexpr int kStay = 14;
-constexpr int kScenarioList = 15;
-constexpr int kRecover = 16;
-constexpr int kNotNow = 17;
-constexpr int kDelete = 18;
-constexpr int kUp = 19;
-constexpr int kSystemFiles = 20;
-constexpr int kShortScale = 21;
-constexpr int kLongScale = 22;
-constexpr int kMenuTitle = 10;
-constexpr int kMenuItem = 1000;
-constexpr int kRecentItem = 2000;
-constexpr int kListItem = 7000;
-constexpr int kFieldName = 6001;
-constexpr int kFieldSeed = 6002;
-constexpr int kOsk = 6100;
-constexpr int kSlider = 8000;
-constexpr int kChoice = 8300;
-
 std::string path_join(const std::string &dir, const std::string &name)
 {
     if (dir.empty()) {
@@ -143,6 +110,8 @@ void Shell::open_dialog(Dialog dialog)
     menu_.close();
     dialog_ = dialog;
     dialog_error_.clear();
+    // A hover left over from the map must not light a dialog button.
+    hover_id_ = 0;
     focus_id_ = kOk;
     if (dialog == Dialog::NewCity) {
         field_a_ = "New City";
@@ -1002,15 +971,12 @@ void Shell::on_dialog_button(int id)
         close_dialog();
         return;
     }
-    if (id == kWelcomeDismiss) {
-        return;
-    }
     close_dialog();
 }
 
 void Shell::on_hotspot(int id, double x, double y)
 {
-    if (id == 90 && dialog_ == Dialog::Overlay) {
+    if (id == kOverlayMap && dialog_ == Dialog::Overlay) {
         double fx = 0;
         double fy = 0;
         if (overlay_.click(x - overlay_x_, y - overlay_y_, static_cast<int>(overlay_w_), static_cast<int>(overlay_h_), fx,
@@ -1019,7 +985,7 @@ void Shell::on_hotspot(int id, double x, double y)
         }
         return;
     }
-    if (id == kWelcomeDismiss) {
+    if (id == kWelcomeId) {
         welcome_ = false;
         const std::string dir = city_config_dir();
         if (!dir.empty()) {
@@ -1149,11 +1115,12 @@ void Shell::on_hotspot(int id, double x, double y)
         focus_id_ = id;
         return;
     }
-    if (dialog_ != Dialog::None && id >= kCancel && id < 40) {
+    if (dialog_ != Dialog::None && is_dialog_button(id)) {
         on_dialog_button(id);
         return;
     }
-    if (menu_.open() && dialog_ == Dialog::None && (id == 0 || id == 1 || id == 2 || id == 3)) {
+    if (menu_.open() && dialog_ == Dialog::None &&
+        (id == kHotNone || id == kMapId || id == kPaletteId || id == kMinimapId)) {
         menu_.close();
         return;
     }
@@ -1237,7 +1204,44 @@ void Shell::push_hot(double x, double y, double w, double h, int id)
 
 void Shell::push_focus(int id)
 {
+    // The welcome bar, menu, and map stay on screen under a modal. They must
+    // not join the D-pad cycle.
+    if (dialog_ != Dialog::None && !is_modal_control(id)) {
+        return;
+    }
     next_focus_.push_back(id);
+}
+
+bool Shell::move_osk_vertically(int direction)
+{
+    if (direction == 0 || focus_id_ < kOsk || focus_id_ >= kOsk + 64) {
+        return false;
+    }
+    int count = 0;
+    const OskKey *keys = osk_keys(count);
+    const int index = focus_id_ - kOsk;
+    if (index < 0 || index >= count || count > 64) {
+        return false;
+    }
+    double center[64] = {};
+    char present[64] = {};
+    for (const Hotspot &hot : hot_) {
+        if (hot.id < kOsk || hot.id >= kOsk + count) {
+            continue;
+        }
+        const int key = hot.id - kOsk;
+        center[key] = hot.x + hot.w * 0.5;
+        present[key] = 1;
+    }
+    if (present[index] == 0) {
+        return false;
+    }
+    const int target = osk_vertical_target(keys, count, index, direction, center, present);
+    if (target < 0) {
+        return false;
+    }
+    focus_id_ = kOsk + target;
+    return true;
 }
 
 void Shell::move_focus(int delta)
@@ -1272,7 +1276,7 @@ void Shell::activate_focus()
         on_hotspot(focus_id_, 0, 0);
         return;
     }
-    if (dialog_ != Dialog::None && focus_id_ > 0 && focus_id_ < 40) {
+    if (dialog_ != Dialog::None && is_dialog_button(focus_id_)) {
         on_dialog_button(focus_id_);
         return;
     }

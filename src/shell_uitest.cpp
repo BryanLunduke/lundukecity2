@@ -19,14 +19,6 @@
 
 namespace {
 
-constexpr int kMapId = 1;
-constexpr int kPaletteId = 2;
-constexpr int kMinimapId = 3;
-constexpr int kMenuItem = 1000;
-constexpr int kOsk = 6100;
-constexpr int kSlider = 8000;
-constexpr int kClose = 10;
-
 int g_menu_rows = 0;
 bool g_menu_seen = false;
 
@@ -235,6 +227,52 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
             ran_ok_ = false;
             smoke_error_ = "graphs legend overlaps Close (" + std::to_string(r) + "," + std::to_string(g) + "," +
                            std::to_string(b) + ")";
+            quitting_ = true;
+        }
+    }
+    if (ui_step_ == 18 && dialog_ == Dialog::Unsaved) {
+        auto sample = [&](const Hotspot *hot, int &r, int &g, int &b) {
+            // Top-left padding, so the sample is the button fill and not the label.
+            return hot != nullptr &&
+                   channel_at(surface, static_cast<int>(hot->x + 8), static_cast<int>(hot->y + 4), r, g, b);
+        };
+        const Hotspot *cancel = find_hot(hot_, kCancel, 0);
+        const Hotspot *save = find_hot(hot_, kSave, 0);
+        const Hotspot *dismiss = find_hot(hot_, kWelcomeId, 0);
+        int cr = 0;
+        int cg = 0;
+        int cb = 0;
+        int sr = 0;
+        int sg = 0;
+        int sb = 0;
+        int dr = 0;
+        int dg = 0;
+        int db = 0;
+        if (!sample(cancel, cr, cg, cb) || !sample(save, sr, sg, sb) || !sample(dismiss, dr, dg, db)) {
+            ran_ok_ = false;
+            smoke_error_ = "save dialog is missing Cancel, Save, or Dismiss";
+            quitting_ = true;
+            return;
+        }
+        // Map hover must not turn Cancel blue, and Save's focus must not turn
+        // the welcome Dismiss blue. Save itself stays the focused blue.
+        if (cb > cr + 20 || cr < 180) {
+            ran_ok_ = false;
+            smoke_error_ = "Cancel lit up while the pointer was over the map (" + std::to_string(cr) + "," +
+                           std::to_string(cg) + "," + std::to_string(cb) + ")";
+            quitting_ = true;
+            return;
+        }
+        if (sb < sr + 20) {
+            ran_ok_ = false;
+            smoke_error_ = "Save is not the focused button";
+            quitting_ = true;
+            return;
+        }
+        if (db > dr + 20) {
+            ran_ok_ = false;
+            smoke_error_ = "Dismiss lit up behind the save dialog (" + std::to_string(dr) + "," + std::to_string(dg) +
+                           "," + std::to_string(db) + ")";
             quitting_ = true;
         }
     }
@@ -471,6 +509,60 @@ void Shell::drive_ui_test()
             fail("on-screen keyboard is not QWERTY");
             return;
         }
+        const double field_w = std::min(860.0, win_w_ - 48.0);
+        const double field_right = (win_w_ - field_w) / 2.0 + field_w - 16.0;
+        for (const Hotspot &key : keys) {
+            if (key.x + key.w > field_right + 0.75) {
+                fail("on-screen keyboard key " + std::to_string(key.id) + " extends past the field");
+                return;
+            }
+        }
+        int key_n = 0;
+        const OskKey *okeys = osk_keys(key_n);
+        std::vector<double> center(static_cast<std::size_t>(key_n), 0);
+        std::vector<char> present(static_cast<std::size_t>(key_n), 0);
+        for (const Hotspot &key : keys) {
+            const int index = key.id - kOsk;
+            if (index < 0 || index >= key_n) {
+                continue;
+            }
+            center[static_cast<std::size_t>(index)] = key.x + key.w * 0.5;
+            present[static_cast<std::size_t>(index)] = 1;
+        }
+        if (osk_vertical_target(okeys, key_n, 0, 1, center.data(), present.data()) != 10 ||
+            osk_vertical_target(okeys, key_n, 9, 1, center.data(), present.data()) != 18) {
+            fail("OSK rows do not line up q-above-a and p-above-l");
+            return;
+        }
+        focus_id_ = kOsk;
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kOsk; });
+        if (focus_id_ != kOsk + 10) {
+            fail("D-pad Down from q went to " + std::to_string(focus_id_) + " instead of a");
+            return;
+        }
+        focus_id_ = kOsk + 9;
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kOsk + 9; });
+        if (focus_id_ != kOsk + 18) {
+            fail("D-pad Down from p went to " + std::to_string(focus_id_) + " instead of l");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kOsk + 18; });
+        if (focus_id_ != kOsk + 9) {
+            fail("D-pad Up from l went to " + std::to_string(focus_id_) + " instead of p");
+            return;
+        }
+        focus_id_ = kOsk;
+        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kOsk; });
+        if (focus_id_ != kFieldName) {
+            fail("D-pad Up from the top OSK row did not return to the text field");
+            return;
+        }
+        focus_id_ = kOsk + key_n - 1;
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kOsk + key_n - 1; });
+        if (focus_id_ != kCancel) {
+            fail("D-pad Down from the last OSK row did not reach Cancel");
+            return;
+        }
         close_dialog();
         ui_step_ = 9;
         return;
@@ -535,6 +627,70 @@ void Shell::drive_ui_test()
             return;
         }
         close_dialog();
+        ui_step_ = 17;
+        return;
+    }
+    case 17:
+        welcome_ = true;
+        open_dialog(Dialog::Unsaved);
+        // Stale map hover. Cancel used to share this id and light up.
+        hover_id_ = kMapId;
+        ui_step_ = 18;
+        return;
+    case 18: {
+        if (dialog_ != Dialog::Unsaved) {
+            fail("save dialog did not open");
+            return;
+        }
+        if (kCancel == kMapId || kOk == kPaletteId || kDiscard == kMinimapId || kSave == kWelcomeId ||
+            kClose == kMenuTitle) {
+            fail("dialog button id still matches a screen region");
+            return;
+        }
+        std::vector<int> seen;
+        for (const Hotspot &hot : hot_) {
+            if (hot.id == kHotNone) {
+                continue;
+            }
+            if (std::find(seen.begin(), seen.end(), hot.id) != seen.end()) {
+                fail("duplicate hotspot id " + std::to_string(hot.id));
+                return;
+            }
+            seen.push_back(hot.id);
+        }
+        bool saw_cancel = false;
+        bool saw_discard = false;
+        bool saw_save = false;
+        for (int id : focus_order_) {
+            if (!is_modal_control(id)) {
+                fail("modal focus includes background id " + std::to_string(id));
+                return;
+            }
+            saw_cancel = saw_cancel || id == kCancel;
+            saw_discard = saw_discard || id == kDiscard;
+            saw_save = saw_save || id == kSave;
+        }
+        if (!saw_cancel || !saw_discard || !saw_save) {
+            fail("save dialog is missing a button in the focus cycle");
+            return;
+        }
+        if (std::find(focus_order_.begin(), focus_order_.end(), kWelcomeId) != focus_order_.end() ||
+            std::find(focus_order_.begin(), focus_order_.end(), kMapId) != focus_order_.end() ||
+            std::find(focus_order_.begin(), focus_order_.end(), kMenuTitle) != focus_order_.end()) {
+            fail("background hotspot joined the modal focus cycle");
+            return;
+        }
+        const int steps = static_cast<int>(focus_order_.size()) + 1;
+        for (int i = 0; i < steps; ++i) {
+            const int before = focus_id_;
+            tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == before; });
+            if (!is_modal_control(focus_id_)) {
+                fail("D-pad left the dialog onto id " + std::to_string(focus_id_));
+                return;
+            }
+        }
+        close_dialog();
+        welcome_ = false;
         ui_step_ = 12;
         return;
     }

@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
 // On-screen keyboard for gamepad and touch text fields. Rows are QWERTY.
 // span is a width in letter-key units so wide keys (shift, bksp, space)
 // do not overlap the next key.
@@ -76,3 +79,99 @@ inline const OskKey *osk_keys(int &count)
 
 inline constexpr int kOskRows = 5;
 inline constexpr double kOskGap = 4;
+
+struct OskPlacement {
+    int index = 0;
+    double x = 0;
+    double y = 0;
+    double w = 0;
+    double h = 0;
+};
+
+// Lay the keys out inside [origin, origin + width]. A wide key's span
+// includes the gaps between the letter-widths it covers. Counting only the
+// gaps between keys (and not those internal gaps) shifts the row right, and
+// the last key — "auto" — runs past the text field.
+inline int osk_place(double origin_x, double origin_y, double width, double max_h, OskPlacement *out, int out_cap)
+{
+    int count = 0;
+    const OskKey *keys = osk_keys(count);
+    if (out == nullptr || width < 80 || max_h < 40 || count > out_cap) {
+        return 0;
+    }
+    const double gap = kOskGap;
+    const double unit = std::max(8.0, (width - gap * 9.0) / 10.0);
+    double key_h = 52;
+    key_h = std::floor((max_h - gap * (kOskRows - 1)) / kOskRows);
+    if (key_h > 56) {
+        key_h = 56;
+    }
+    if (key_h < 28) {
+        key_h = 28;
+    }
+    const double row_pitch = key_h + gap;
+    const double full_w = 10.0 * unit + 9.0 * gap;
+    const double right = origin_x + width;
+    int placed = 0;
+    for (int row = 0; row < kOskRows; ++row) {
+        double spans = 0;
+        for (int i = 0; i < count; ++i) {
+            if (keys[i].row == row) {
+                spans += keys[i].span;
+            }
+        }
+        if (spans <= 0) {
+            continue;
+        }
+        const double row_w = spans * unit + (spans - 1.0) * gap;
+        double kx = origin_x + std::max(0.0, (full_w - row_w) / 2.0);
+        const double ky = origin_y + row * row_pitch;
+        for (int i = 0; i < count; ++i) {
+            if (keys[i].row != row) {
+                continue;
+            }
+            double kw = keys[i].span * unit + (keys[i].span - 1.0) * gap;
+            if (kw > right - kx) {
+                kw = right - kx;
+            }
+            if (kw < 0) {
+                kw = 0;
+            }
+            out[placed++] = OskPlacement{i, kx, ky, kw, key_h};
+            kx += kw + gap;
+        }
+    }
+    return placed;
+}
+
+// Key on the next row (direction > 0) or the previous row whose horizontal
+// center is nearest. -1 when that row has no key. Keys within a pixel of the
+// nearest are tied; the later (right-hand) key wins, so the end of a shorter
+// row moves to the end of the row above. `present` may be null; a zero entry
+// skips a key that was not drawn.
+inline int osk_vertical_target(const OskKey *keys, int count, int index, int direction, const double *center_x,
+                               const char *present)
+{
+    if (keys == nullptr || center_x == nullptr || index < 0 || index >= count || direction == 0) {
+        return -1;
+    }
+    const int row = keys[index].row + (direction > 0 ? 1 : -1);
+    int best = -1;
+    double best_dist = 0;
+    for (int i = 0; i < count; ++i) {
+        if (keys[i].row != row) {
+            continue;
+        }
+        if (present != nullptr && present[i] == 0) {
+            continue;
+        }
+        const double dist = std::fabs(center_x[i] - center_x[index]);
+        if (best < 0 || dist < best_dist) {
+            best = i;
+            best_dist = dist;
+        } else if (dist - best_dist <= 1.0) {
+            best = i;
+        }
+    }
+    return best;
+}
