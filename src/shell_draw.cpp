@@ -485,12 +485,19 @@ void Shell::draw_dialog(cairo_t *cr)
             break;
         }
         const std::string question = save_changes_question(prompt, session_.city_name());
-        const double width = message_width(win_w_, margin, dp(420), dp(520));
-        const double body_h = text_block_height(question, width - 2 * margin);
+        const int natural = measure_text(cr, body_font(), question, -1).width;
+        // Wide enough for the usual "…another city?" sentence on one line.
+        // A longer name that still overflows breaks near the middle.
+        const double fitted = static_cast<double>(natural) + 2.0 * margin + static_cast<double>(dp(8));
+        const double width = message_width(win_w_, margin, dp(420), std::max(static_cast<double>(dp(560)), fitted));
+        const int column = static_cast<int>(std::max(1.0, width - 2.0 * margin));
+        const std::string shown = natural > column ? balance_save_question(question) : question;
+        const double body_h = text_block_height(shown, column);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
         const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Save changes?");
-        label(cr, body_font(), question, panel.x + margin, panel.y + dp(40) + dp(8), static_cast<int>(panel.w - 2 * margin));
+        place_line(body_font(), shown, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
+                   theme::kTextG, theme::kTextB);
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
                    {{"_Discard", kDiscard}, {"_Cancel", kCancel}, {"_Save", kSave}}, 1);
         return;

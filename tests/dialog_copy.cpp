@@ -140,6 +140,12 @@ int main()
                "Replace \"harbor.cty\"? The city saved there will be overwritten.",
            replace_file_question("harbor.cty"));
     expect(replace_file_question("").find("already exists") != std::string::npos, "unnamed replace");
+    const std::string open_q = save_changes_question(SavePromptKind::Open, "Dullsville");
+    const std::string balanced = balance_save_question(open_q);
+    expect(balanced.find("\ncity?") == std::string::npos, "city? is not left on its own line: " + balanced);
+    expect(balanced.find('\n') != std::string::npos, "a long save question breaks");
+    const std::string tail = balanced.substr(balanced.find('\n') + 1);
+    expect(tail.find(' ') != std::string::npos, "the second line keeps more than one word: " + tail);
 
     const std::string body = query_body("Residential zone — population 120, land value 40, powered");
     expect(body.find(" — ") == std::string::npos, "em dash stayed on the first line: " + body);

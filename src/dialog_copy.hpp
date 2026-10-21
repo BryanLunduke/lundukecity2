@@ -180,6 +180,34 @@ inline std::string save_changes_question(SavePromptKind kind, const std::string 
     return "Save changes to " + who + " before continuing?";
 }
 
+// Break a save question near the middle when it cannot fit on one line.
+// A trailing word such as "city?" then stays with the words in front of it.
+inline std::string balance_save_question(const std::string &question)
+{
+    const std::size_t mid = question.size() / 2;
+    if (mid == 0) {
+        return question;
+    }
+    const std::size_t left = question.rfind(' ', mid);
+    const std::size_t right = question.find(' ', mid);
+    std::size_t at = std::string::npos;
+    if (left == std::string::npos) {
+        at = right;
+    } else if (right == std::string::npos) {
+        at = left;
+    } else if (mid - left <= right - mid) {
+        at = left;
+    } else {
+        at = right;
+    }
+    if (at == std::string::npos || at == 0 || at + 1 >= question.size()) {
+        return question;
+    }
+    std::string out = question;
+    out[at] = '\n';
+    return out;
+}
+
 inline std::string replace_file_question(const std::string &filename)
 {
     if (filename.empty()) {

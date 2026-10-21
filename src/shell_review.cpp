@@ -544,6 +544,21 @@ void Shell::run_review_checks()
         std::filesystem::remove_all(root);
     }
 
+    // The save question is one line at 1280, or a balanced break. "city?" is
+    // not left on a line by itself.
+    {
+        dialog_ = Dialog::Unsaved;
+        after_save_ = AfterSave::Load;
+        presented_ = false;
+        render();
+        if (text_spans_.empty() || text_spans_[0].h > static_cast<double>(dp(36))) {
+            fail("save prompt left \"city?\" on its own line");
+            return;
+        }
+        close_dialog();
+        after_save_ = AfterSave::Nothing;
+    }
+
     // M10: an autosave or recent-list failure stays until the player dismisses it,
     // and the next failure after that is shown again.
     note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
