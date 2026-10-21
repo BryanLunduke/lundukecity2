@@ -176,6 +176,8 @@ private:
     void save_window_settings();
     void note_window_geometry();
     void apply_loaded_settings();
+    // Put the global speed and disasters back after a city file's own options.
+    void restore_play_preferences();
     void note_keyboard_input();
     void note_background_write_failed(const char *text);
     std::string visual_stamp() const;
@@ -253,6 +255,9 @@ private:
     bool pointer_down_ = false;
     bool pointer_on_map_ = false;
     int speed_ = 0;
+    // Global preferences. A loaded city does not replace these.
+    int pref_speed_ = -1;
+    int pref_disasters_ = -1;
     int volume_ = 100;
     int scale_percent_ = 0;
     bool pause_unfocused_ = false;

@@ -186,6 +186,7 @@ void Shell::set_speed(int speed)
         session_.resume_after_outcome();
         speed_ = session_.speed();
     }
+    pref_speed_ = speed_;
 }
 
 void Shell::toggle_pause()
@@ -408,7 +409,7 @@ void Shell::finish_open(const std::string &path)
         return;
     }
     ++city_generation_;
-    speed_ = session_.speed();
+    restore_play_preferences();
     center_on_fraction(0.5, 0.5);
     const std::string folder = parent_dir(path);
     if (!folder.empty()) {
@@ -672,6 +673,7 @@ void Shell::apply_action(Action action)
         break;
     case Action::DisastersEnabled:
         session_.set_disasters(!session_.disasters());
+        pref_disasters_ = session_.disasters() ? 1 : 0;
         save_window_settings();
         break;
     case Action::AutoGoto:
@@ -935,7 +937,7 @@ void Shell::on_dialog_button(int id)
             ++city_generation_;
             session_.new_city(spec);
             if (session_.message_serial() == serial) {
-                session_.set_speed(speed_);
+                restore_play_preferences();
             }
             center_on_fraction(0.5, 0.5);
             sync_title();

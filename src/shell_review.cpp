@@ -494,6 +494,18 @@ void Shell::run_review_checks()
         presented_ = false;
     }
 
+    // M9: a loaded city's speed and disasters do not become the global preferences.
+    pref_speed_ = 1;
+    pref_disasters_ = 0;
+    session_.set_speed(3);
+    session_.set_disasters(true);
+    restore_play_preferences();
+    if (session_.speed() != 1 || session_.disasters() || pref_speed_ != 1 || pref_disasters_ != 0) {
+        fail("loading a city replaced the global speed or disasters preference");
+        return;
+    }
+    session_.set_speed(0);
+
 #ifndef _WIN32
     const auto previous_sigint = std::signal(SIGINT, SIG_DFL);
     std::signal(SIGINT, previous_sigint);

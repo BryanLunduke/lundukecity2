@@ -376,12 +376,12 @@ void Shell::save_window_settings()
     note_window_geometry();
     ui_scale::StoredSettings stored;
     stored.user_scale = user_scale_;
-    stored.speed = std::max(0, std::min(3, speed_));
+    stored.speed = std::max(0, std::min(3, pref_speed_ >= 0 ? pref_speed_ : speed_));
     stored.sound = session_.sound_enabled() ? 1 : 0;
     stored.volume = std::max(0, std::min(100, volume_));
     stored.auto_budget = session_.auto_budget() ? 1 : 0;
     stored.auto_bulldoze = session_.auto_bulldoze() ? 1 : 0;
-    stored.disasters = session_.disasters() ? 1 : 0;
+    stored.disasters = pref_disasters_ >= 0 ? (pref_disasters_ != 0 ? 1 : 0) : (session_.disasters() ? 1 : 0);
     stored.auto_goto = session_.auto_goto() ? 1 : 0;
     stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
     {
@@ -432,6 +432,21 @@ void Shell::apply_loaded_settings()
     }
     if (stored.pause_unfocused >= 0) {
         pause_unfocused_ = stored.pause_unfocused != 0;
+    }
+    // These are the global preferences. A city file must not replace them.
+    pref_speed_ = speed_;
+    pref_disasters_ = session_.disasters() ? 1 : 0;
+    session_.accept_preferences();
+}
+
+void Shell::restore_play_preferences()
+{
+    if (pref_speed_ >= 0) {
+        session_.set_speed(pref_speed_);
+        speed_ = session_.speed();
+    }
+    if (pref_disasters_ >= 0) {
+        session_.set_disasters(pref_disasters_ != 0);
     }
     session_.accept_preferences();
 }
