@@ -78,10 +78,26 @@ int main()
     // process's current directory. A relative third_party/ fallback used to
     // load whatever tree happened to be in the launch folder.
     const std::vector<std::string> candidates = asset_candidates();
+    bool saw_source_tree = false;
+    const std::string source_rel = "third_party/micropolis-assets";
+    const std::string source_win = "third_party\\micropolis-assets";
     for (const std::string &candidate : candidates) {
-        if (candidate == "third_party/micropolis-assets" || candidate == "third_party\\micropolis-assets") {
+        if (candidate == source_rel || candidate == source_win) {
             return fail("asset search still probes the current directory");
         }
+        const bool source = (candidate.size() > source_rel.size() &&
+                             candidate.compare(candidate.size() - source_rel.size(), source_rel.size(), source_rel) == 0) ||
+                            (candidate.size() > source_win.size() &&
+                             candidate.compare(candidate.size() - source_win.size(), source_win.size(), source_win) == 0);
+        if (source) {
+            saw_source_tree = true;
+        }
+    }
+    if (!saw_source_tree) {
+        return fail("asset search does not walk up to the source tree");
+    }
+    if (asset_root().empty()) {
+        return fail("asset root was not found beside the executable");
     }
     const std::string missing = asset_missing_text(candidates.empty() ? std::vector<std::string>{"/nowhere/tiles"} : candidates);
     if (missing.find("tiles.png") == std::string::npos || missing.find("Looked in:") == std::string::npos) {

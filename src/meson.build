@@ -39,7 +39,14 @@ endif
 # the leak suppressions in tests/lsan.supp still cover that case.
 fontconfig_dep = dependency('fontconfig', required: false)
 lunduke_city_deps = [sdl3_dep, cairo_dep, pangocairo_dep, micropolis_dep, thread_dep]
-lunduke_city_cpp_args = ['-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"']
+# Install prefix data directory. The macro is CITY_DATA_DIR, not a
+# LUNDUKE_CITY_* string, and the value is the prefix rather than the
+# source tree (a source path must not land in the release binary).
+city_data_dir = get_option('prefix') / get_option('datadir') / 'lunduke-city-2' / 'micropolis-assets'
+lunduke_city_cpp_args = [
+  '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  '-DCITY_DATA_DIR="' + city_data_dir + '"',
+]
 if fontconfig_dep.found()
   lunduke_city_deps += fontconfig_dep
   lunduke_city_cpp_args += '-DLUNDUKE_HAS_FONTCONFIG=1'

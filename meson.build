@@ -63,3 +63,13 @@ install_data(
   'COPYING',
   install_dir: get_option('datadir') / 'doc' / 'lunduke-city-2',
 )
+
+# Every test looks up tiles.png. The default setup points at the source
+# tree so a build directory not named "build" still finds the assets.
+# LeakSanitizer runs also load tests/lsan.supp (fontconfig / pango / Mesa).
+lunduke_test_env = ['LUNDUKE_CITY_ASSETS=' + lunduke_asset_dir]
+lunduke_sanitize = get_option('b_sanitize')
+if lunduke_sanitize.contains('address') or lunduke_sanitize.contains('leak')
+  lunduke_test_env += ['LSAN_OPTIONS=suppressions=' + meson.project_source_root() / 'tests' / 'lsan.supp']
+endif
+add_test_setup('default', env: lunduke_test_env, is_default: true)

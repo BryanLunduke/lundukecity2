@@ -7,9 +7,11 @@
 #include <string>
 #include <vector>
 
-// Places the game looks for images/ and res/. Packaged builds search the
-// install tree and LUNDUKE_CITY_ASSETS. They do not search the process's
-// current directory or a source-tree path.
+// Places the game looks for images/ and res/. Search order is the
+// LUNDUKE_CITY_ASSETS override, the configured install directory, then
+// exe-relative install and source-tree layouts (share/ next to bin/, and
+// third_party/ above the executable). The process's current directory is
+// never searched, and the lookup does not require a directory named build.
 std::vector<std::string> asset_candidates();
 
 // Directory that contains images/ and res/ from the vendored Micropolis assets.

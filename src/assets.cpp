@@ -67,6 +67,46 @@ std::string exe_dir()
 #endif
 }
 
+std::string parent_dir(std::string path)
+{
+    while (path.size() > 1 && (path.back() == '/' || path.back() == '\\')) {
+        const bool drive = path.size() == 3 && path[1] == ':';
+        if (drive) {
+            break;
+        }
+        path.pop_back();
+    }
+    const auto slash = path.find_last_of("/\\");
+    if (slash == std::string::npos) {
+        return {};
+    }
+    if (slash == 0) {
+        return "/";
+    }
+    if (slash == 2 && path[1] == ':') {
+        return path.substr(0, slash + 1);
+    }
+    return path.substr(0, slash);
+}
+
+void add_layout(std::vector<std::string> &candidates, const std::string &dir, const char *relative)
+{
+    if (dir.empty()) {
+        return;
+    }
+    const bool trailed = dir.back() == '/' || dir.back() == '\\';
+    candidates.push_back(trailed ? dir + relative : dir + "/" + relative);
+#ifdef _WIN32
+    std::string win = relative;
+    for (char &ch : win) {
+        if (ch == '/') {
+            ch = '\\';
+        }
+    }
+    candidates.push_back(trailed ? dir + win : dir + "\\" + win);
+#endif
+}
+
 } // namespace
 
 std::vector<std::string> asset_candidates()
@@ -84,21 +124,27 @@ std::vector<std::string> asset_candidates()
     // with a source-tree path, so a package cannot fall back into a build.
     candidates.emplace_back(LUNDUKE_CITY_ASSET_DIR);
 #endif
-    const std::string exe = exe_dir();
-    if (!exe.empty()) {
-        candidates.push_back(exe + "/../share/lunduke-city-2/micropolis-assets");
-#ifdef _WIN32
-        candidates.push_back(exe + "\\..\\share\\lunduke-city-2\\micropolis-assets");
+#if defined(CITY_DATA_DIR)
+    // Prefix data dir from the build (share/lunduke-city-2/micropolis-assets).
+    // The macro name is not a LUNDUKE_CITY_* string; the value is the
+    // install prefix, not the source tree.
+    if (CITY_DATA_DIR[0] != '\0') {
+        candidates.emplace_back(CITY_DATA_DIR);
+    }
 #endif
-        // `meson compile` runs the binary from build/src (or build/tests).
-        // An installed copy does not live under a directory named build.
-        const bool dev_build = exe.find("/build/") != std::string::npos || exe.find("\\build\\") != std::string::npos;
-        if (dev_build) {
-            candidates.push_back(exe + "/../../third_party/micropolis-assets");
-#ifdef _WIN32
-            candidates.push_back(exe + "\\..\\..\\third_party\\micropolis-assets");
-#endif
+    // Install/dist: <root>/bin/<exe> beside <root>/share/lunduke-city-2/.
+    // Source tree: <repo>/<any-build-dir>/src/<exe> beside
+    // <repo>/third_party/micropolis-assets. Walk parents so a directory
+    // named build is not required (build-x, build-sniper, build-windows/build).
+    std::string dir = exe_dir();
+    for (int level = 0; level < 6 && !dir.empty(); ++level) {
+        add_layout(candidates, dir, "share/lunduke-city-2/micropolis-assets");
+        add_layout(candidates, dir, "third_party/micropolis-assets");
+        const std::string up = parent_dir(dir);
+        if (up.empty() || up == dir) {
+            break;
         }
+        dir = up;
     }
     return candidates;
 }
