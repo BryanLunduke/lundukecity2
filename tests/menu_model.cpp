@@ -18,8 +18,27 @@ int fail(const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 35) {
-        return fail("expected 35 actionable menu rows");
+    if (menu_table::actionable_count() != 37) {
+        return fail("expected 37 actionable menu rows");
+    }
+    if (mnemonic_of("Rename Cit_y…") != 'y') {
+        return fail("Rename should use Y");
+    }
+    for (int column = 0; column < menu_table::kColumnCount; ++column) {
+        bool used[26] = {};
+        const MenuEntry *items = menu_table::column_items(column);
+        const int count = menu_table::column_count(column);
+        for (int i = 0; i < count; ++i) {
+            const char mark = mnemonic_of(items[i].label);
+            if (mark < 'a' || mark > 'z') {
+                continue;
+            }
+            const int slot = mark - 'a';
+            if (used[slot]) {
+                return fail("a menu column reuses a mnemonic");
+            }
+            used[slot] = true;
+        }
     }
     if (menu_table::accel_action(AccelKey::N, static_cast<int>(AccelMod::Ctrl)) != Action::NewCity) {
         return fail("Ctrl+N should start a new city");

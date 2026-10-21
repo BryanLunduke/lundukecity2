@@ -121,6 +121,48 @@ void Shell::release_pad_drag()
     pad_repeat_ms_ = 0;
 }
 
+void Shell::forget_gamepad(SDL_JoystickID id)
+{
+    if (pad_ == nullptr || id == 0 || SDL_GetGamepadID(pad_) != id) {
+        return;
+    }
+    if (virtual_joy_ != nullptr && SDL_GetGamepadJoystick(pad_) == virtual_joy_) {
+        virtual_joy_ = nullptr;
+    }
+    SDL_CloseGamepad(pad_);
+    pad_ = nullptr;
+    stick_x_ = 0;
+    stick_y_ = 0;
+    pan_x_ = 0;
+    pan_y_ = 0;
+    trig_l_ = 0;
+    trig_r_ = 0;
+    release_pad_drag();
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&count);
+    if (ids != nullptr) {
+        for (int i = 0; i < count; ++i) {
+            if (ids[i] == id) {
+                continue;
+            }
+            pad_ = SDL_OpenGamepad(ids[i]);
+            if (pad_ != nullptr) {
+                break;
+            }
+        }
+        SDL_free(ids);
+    }
+    if (pad_ != nullptr) {
+        return;
+    }
+    if (gamepad_nav_) {
+        set_speed(0);
+        shown_message_ = "Controller disconnected";
+        shown_message_serial_ = session_.message_serial();
+        hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+    }
+}
+
 void Shell::gamepad_use_cursor(bool press)
 {
     if (!press) {
@@ -135,7 +177,7 @@ void Shell::gamepad_use_cursor(bool press)
         pointer_down_ = true;
         pointer_on_map_ = true;
         pad_repeat_ms_ = 0;
-        pad_dragging_ = map_.press(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_);
+        pad_dragging_ = map_.press(map_local_x(pointer_x_), map_local_y(pointer_y_));
         if (!pad_dragging_) {
             pointer_on_map_ = false;
             pointer_down_ = false;
@@ -450,17 +492,14 @@ void Shell::drive_ui_test()
         return;
     }
     case 7: {
-        const double dw = std::min(860.0, win_w_ - 48.0);
-        const double dh = std::min(640.0, win_h_ - 48.0);
-        const double x = (win_w_ - dw) / 2.0;
-        const double y = (win_h_ - dh) / 2.0;
-        const double pw = std::min(520.0, dw);
-        const double px = x + (dw - pw) / 2.0;
-        const double ph = std::min(300.0, dh);
-        const Hotspot *close = find_hot(hot_, kClose, y);
-        if (close == nullptr || close->x < px - 1 || close->x + close->w > px + pw + 1 || close->y < y ||
-            close->y + close->h > y + ph + 1) {
-            fail("query Close is outside the query panel");
+        const Hotspot *close = find_hot(hot_, kClose, 0);
+        if (close == nullptr || close->x < 0 || close->y < menu_h_ || close->x + close->w > win_w_ ||
+            close->y + close->h > win_h_) {
+            fail("query Close is outside the window");
+            return;
+        }
+        if (close->w > 220) {
+            fail("query Close is stretched across the dialog");
             return;
         }
         close_dialog();

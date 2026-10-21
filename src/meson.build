@@ -29,8 +29,36 @@ if host_machine.system() == 'windows'
   )
   # The bundled MSYS2 DLLs come from a newer GCC than the cross compiler;
   # keep this exe's own C++ runtime static so the two never mix.
-  lunduke_city_link_args += ['-static-libgcc', '-static-libstdc++']
+  lunduke_city_link_args += ['-static-libgcc', '-static-libstdc++', '-lshell32']
   lunduke_city_win_subsystem = 'windows'
+endif
+
+# Pango uses fontconfig, but --as-needed will not link it unless this
+# binary calls FcFini itself. Sniper and Windows may lack the .pc file;
+# the leak suppressions in tests/lsan.supp still cover that case.
+fontconfig_dep = dependency('fontconfig', required: false)
+lunduke_city_deps = [sdl3_dep, cairo_dep, pangocairo_dep, micropolis_dep, thread_dep]
+# Install prefix data directory. The macro is CITY_DATA_DIR, not a
+# LUNDUKE_CITY_* string, and the value is the prefix rather than the
+# source tree (a source path must not land in the release binary).
+city_data_dir = get_option('prefix') / get_option('datadir') / 'lunduke-city-2' / 'micropolis-assets'
+lunduke_city_cpp_args = [
+  '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  '-DCITY_DATA_DIR="' + city_data_dir + '"',
+]
+if fontconfig_dep.found()
+  lunduke_city_deps += fontconfig_dep
+  lunduke_city_cpp_args += '-DLUNDUKE_HAS_FONTCONFIG=1'
+endif
+
+# The review self-test (LUNDUKE_CITY2_REVIEW) is a developer check. Auto
+# leaves it out of release builds so it is not in the shipped binary.
+review_opt = get_option('review_checks')
+lunduke_review_checks_on = review_opt.enabled() or (
+  review_opt.auto() and get_option('buildtype') != 'release')
+if lunduke_review_checks_on
+  lunduke_city_src += files('shell_review.cpp')
+  lunduke_city_cpp_args += '-DCITY_REVIEW_CHECKS=1'
 endif
 
 lunduke_city_exe = executable(
@@ -38,9 +66,7 @@ lunduke_city_exe = executable(
   lunduke_city_src,
   link_args: lunduke_city_link_args,
   win_subsystem: lunduke_city_win_subsystem,
-  dependencies: [sdl3_dep, cairo_dep, pangocairo_dep, micropolis_dep, thread_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-  ],
+  dependencies: lunduke_city_deps,
+  cpp_args: lunduke_city_cpp_args,
   install: true,
 )

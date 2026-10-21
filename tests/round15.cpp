@@ -90,7 +90,7 @@ int main()
         chmod(real.c_str(), 0640);
         const std::string before = slurp(real);
         const std::string link = link_dir + "/main.cty";
-        symlink(real.c_str(), link.c_str());
+        check(symlink(real.c_str(), link.c_str()) == 0, "create the city symlink");
         sim.map[2][2] = static_cast<unsigned short>(sim.map[2][2] ^ 1);
         const bool ok = sim.saveCityAs(link.c_str());
         std::printf("save via link: ok=%d detail='%s'\n", ok ? 1 : 0, sim.saveErrorDetail.c_str());
@@ -114,7 +114,7 @@ int main()
         check(back.loadCity(link.c_str()) && back.cityName == "Linked Town", "the saved city loads through the link");
 
         const std::string dangling = link_dir + "/gone.cty";
-        symlink("/nonexistent/lunduke/gone.cty", dangling.c_str());
+        check(symlink("/nonexistent/lunduke/gone.cty", dangling.c_str()) == 0, "create the dangling symlink");
         const bool bad = sim.saveFile(dangling.c_str());
         std::printf("dangling: ok=%d detail='%s'\n", bad ? 1 : 0, sim.saveErrorDetail.c_str());
         check(!bad, "a dangling link is refused");
@@ -160,7 +160,7 @@ int main()
         make_old(other_tmp, 2 * 24 * 3600);
         make_old(user_file, 2 * 24 * 3600);
         const std::string link_tmp = d + "/.town.cty.save-Lk00Lk";
-        symlink(user_file.c_str(), link_tmp.c_str());
+        check(symlink(user_file.c_str(), link_tmp.c_str()) == 0, "create the temp-file symlink");
         const std::string town = d + "/town.cty";
         check(sim.saveFile(town.c_str()), "save town.cty");
         check(!exists(old_tmp), "a day-old leftover temp of town.cty is removed");
@@ -259,7 +259,8 @@ int main()
         // A symlinked recovery folder is refused.
         const std::string evil_state = root + "/evil-state";
         mkdir(evil_state.c_str(), 0700);
-        symlink(real_dir.c_str(), (evil_state + "/lunduke-city-2").c_str());
+        check(symlink(real_dir.c_str(), (evil_state + "/lunduke-city-2").c_str()) == 0,
+              "create the recovery-folder symlink");
         setenv("XDG_STATE_HOME", evil_state.c_str(), 1);
         check(city_recovery::dir(true).empty(), "a symlinked recovery folder is not used");
         setenv("XDG_STATE_HOME", state.c_str(), 1);

@@ -742,7 +742,9 @@ static int test_hostile_review()
         huge.write(chunk.data(), 64);
     }
     std::remove(linked.c_str());
-    symlink(small_wav.c_str(), linked.c_str());
+    if (symlink(small_wav.c_str(), linked.c_str()) != 0) {
+        return fail(78, "could not create the wav symlink");
+    }
     if (preview_wav_file(huge_wav) || preview_wav_file(linked) || !preview_wav_file(small_wav)) {
         return fail(77, "wav decode did not reject an oversized file or a symlink");
     }

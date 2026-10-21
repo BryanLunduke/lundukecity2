@@ -1,0 +1,6 @@
+option(
+  'review_checks',
+  type: 'feature',
+  value: 'auto',
+  description: 'Compile the in-game review self-test. Auto is off for release builds.',
+)

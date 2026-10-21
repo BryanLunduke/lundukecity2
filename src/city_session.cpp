@@ -6,6 +6,7 @@
 #include "city_session.hpp"
 
 #include "assets.hpp"
+#include "city_tail.hpp"
 #include "messages.hpp"
 
 #include "micropolis.h"
@@ -645,6 +646,15 @@ void CitySession::new_city(const NewCitySpec &spec)
     message_.clear();
     dirty_ = false;
     mark_clean_time();
+    fresh_generated_ = true;
+    birth_month_ = static_cast<int>(sim.cityMonth);
+    if (birth_month_ < 0 || birth_month_ > 11) {
+        birth_month_ = 0;
+    }
+    {
+        const long year = static_cast<long>(sim.cityYear);
+        birth_year_ = static_cast<int>(year > 0 ? year : sim.startingYear);
+    }
     eval_month_ = -1;
     eval_month_pending_ = false;
     ready_ = true;
@@ -742,6 +752,9 @@ std::string CitySession::load_problem(const std::string &path)
         return "The file is too short to be a city file (" + std::to_string(static_cast<long long>(st.st_size)) +
                " bytes; a city file is at least 27,120 bytes). It may be damaged or a different kind of file.";
     }
+    if (classify_city_path(path) == CityFileKind::AllZero) {
+        return "The file is all zeros and is not a city. It may be damaged.";
+    }
     return std::string();
 }
 
@@ -778,10 +791,15 @@ bool CitySession::load_city(const std::string &path)
     save_path_ = path;
     ready_ = true;
     dirty_ = false;
+    fresh_generated_ = false;
     mark_clean_time();
     eval_month_ = -1;
     eval_month_pending_ = false;
-    post_message("Loaded a saved city.");
+    if (classify_city_path(path) == CityFileKind::Incomplete) {
+        post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
+    } else {
+        post_message("Loaded a saved city.");
+    }
     return true;
 }
 
@@ -807,7 +825,11 @@ bool CitySession::load_scenario(int id)
     in.seekg(0, std::ios::end);
     const auto bytes = in.good() ? static_cast<long>(in.tellg()) : -1L;
     if (bytes != 27120) {
-        message_ = "Could not start that scenario.";
+        if (root.empty()) {
+            message_ = "Could not start that scenario. The game data files were not found.";
+        } else {
+            message_ = "Could not start that scenario.\n" + file + " is missing or the wrong size.";
+        }
         notify();
         return false;
     }
@@ -839,6 +861,7 @@ bool CitySession::load_scenario(int id)
     save_path_.clear();
     ready_ = true;
     dirty_ = false;
+    fresh_generated_ = false;
     mark_clean_time();
     eval_month_ = -1;
     eval_month_pending_ = false;
@@ -863,6 +886,7 @@ bool CitySession::save_city_as(const std::string &path)
     }
     save_path_ = path;
     dirty_ = false;
+    fresh_generated_ = false;
     mark_clean_time();
     post_message("City saved.");
     return true;
@@ -1276,6 +1300,11 @@ bool CitySession::sound_enabled() const
     return sound_enabled_;
 }
 
+void CitySession::accept_preferences()
+{
+    dirty_ = false;
+}
+
 std::vector<std::string> CitySession::take_sounds()
 {
     std::vector<std::string> sounds;
@@ -1369,7 +1398,26 @@ bool CitySession::time_advanced_since_save() const
 
 bool CitySession::needs_save_prompt() const
 {
-    return dirty_ || budget_pending() || time_advanced_since_save();
+    if (dirty_ || budget_pending()) {
+        return true;
+    }
+    if (!time_advanced_since_save()) {
+        return false;
+    }
+    // The clock moving inside the month a city was generated is not a
+    // change. A saved city, a loaded city, and a scenario still prompt.
+    if (fresh_generated_ && engine_ != nullptr) {
+        int month = static_cast<int>(engine_->sim.cityMonth);
+        if (month < 0 || month > 11) {
+            month = 0;
+        }
+        const long year = static_cast<long>(engine_->sim.cityYear);
+        const int shown = static_cast<int>(year > 0 ? year : engine_->sim.startingYear);
+        if (month == birth_month_ && shown == birth_year_) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool CitySession::take_view_target(int &tile_x, int &tile_y)

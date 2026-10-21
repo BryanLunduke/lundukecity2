@@ -68,6 +68,7 @@
 #include "stdafx.h"
 #include "micropolis.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
@@ -498,6 +499,31 @@ static void clear_wide_city(Micropolis *sim)
 // can put anything there, and evaluate.cpp multiplies the census, so clamp
 // to ranges far beyond any real 120x100 city but well inside 64 bits.
 static const long long kWideMaxFunds = 1000000000000LL;     // 1e12
+
+// 64-bit money for load errors: "-$1,520,143,731", never "$-1520143731".
+static std::string format_funds(long long value)
+{
+    const bool neg = value < 0;
+    unsigned long long mag;
+    if (neg) {
+        mag = static_cast<unsigned long long>(-(value + 1)) + 1ull;
+    } else {
+        mag = static_cast<unsigned long long>(value);
+    }
+    const std::string digits = std::to_string(mag);
+    std::string grouped;
+    grouped.reserve(digits.size() + digits.size() / 3);
+    int count = 0;
+    for (int i = static_cast<int>(digits.size()) - 1; i >= 0; --i) {
+        if (count > 0 && count % 3 == 0) {
+            grouped.push_back(',');
+        }
+        grouped.push_back(digits[static_cast<std::size_t>(i)]);
+        ++count;
+    }
+    std::reverse(grouped.begin(), grouped.end());
+    return (neg ? std::string("-$") : std::string("$")) + grouped;
+}
 static const long long kWideMaxPopulation = 10000000LL;     // 1e7 per class
 static const long long kWideMaxReceipt = 1000000000000LL;   // 1e12
 
@@ -643,15 +669,17 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
     // City files have no magic number, so check that the contents are
     // plausible before anything touches the live city.
     bool hasWideFunds = false;
-    for (std::size_t i = 27120; i + 8 <= data.size(); i++) {
+    long long wideFundsRaw = 0;
+    for (std::size_t i = 27120; i + 16 <= data.size(); i++) {
         if (std::memcmp(data.data() + i, kWideCityMagic, 4) == 0 && data[i + 4] == 1 &&
             data[i + 5] == 0 && (data[i + 6] & kWideFlagFunds) != 0) {
             hasWideFunds = true;
+            wideFundsRaw = static_cast<long long>(read_le_i64(data.data() + i + 8));
             break;
         }
     }
     loadErrorDetail = checkCityContents(misc.data(), tiles.data(), mapCount, loadingSavedCity,
-                                        hasWideFunds, data.size() == 27120);
+                                        hasWideFunds, data.size() == 27120, wideFundsRaw);
     if (!loadErrorDetail.empty()) {
         return false;
     }
@@ -703,15 +731,20 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
  * @return Empty when plausible, otherwise a short reason for the user.
  */
 std::string Micropolis::checkCityContents(const short *misc, const short *tiles, int tileCount,
-                                          bool checkMisc, bool hasWideFunds, bool classicOnly)
+                                          bool checkMisc, bool hasWideFunds, bool classicOnly,
+                                          long long wideFundsRaw)
 {
     // Scenario files carry no meaningful funds or date; loadScenario() sets them.
     if (checkMisc) {
-        // Debt is allowed. The saver only writes a saturated classic field
-        // (below -1e9) together with the wide-funds trailer.
+        // Debt is allowed inside ±1e12. A wide trailer outside that range is
+        // rejected with the raw 64-bit amount. Without a trailer, a classic
+        // field below -1e9 is the same kind of damage.
+        if (hasWideFunds && (wideFundsRaw > kWideMaxFunds || wideFundsRaw < -kWideMaxFunds)) {
+            return "The city's funds are out of range (" + format_funds(wideFundsRaw) + ").";
+        }
         const Quad funds = get_mac_long(misc + 50);
         if (!hasWideFunds && funds < -1000000000L) {
-            return "The city's funds are out of range ($" + std::to_string((long long)funds) + ").";
+            return "The city's funds are out of range (" + format_funds(static_cast<long long>(funds)) + ").";
         }
         const Quad time = get_mac_long(misc + 8);
         const Quad kMaxTime = (Quad)(9999 - 1900) * 48;

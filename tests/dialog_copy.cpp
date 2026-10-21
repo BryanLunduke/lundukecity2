@@ -122,6 +122,31 @@ int main()
     expect_has(collected.road, "cut to 40%");
     expect_has(collected.cash_flow, "Cash flow:");
 
+    expect(save_changes_question(SavePromptKind::Quit, "Harbor") ==
+               "Save changes to \"Harbor\" before quitting?",
+           save_changes_question(SavePromptKind::Quit, "Harbor"));
+    expect(save_changes_question(SavePromptKind::NewCity, "") ==
+               "Save changes to this city before starting a new city?",
+           save_changes_question(SavePromptKind::NewCity, ""));
+    expect(save_changes_question(SavePromptKind::Scenario, "Harbor").find("scenario") != std::string::npos,
+           "scenario prompt");
+    expect(save_changes_question(SavePromptKind::Open, "Harbor").find("opening another city") != std::string::npos,
+           "open prompt");
+    expect(save_changes_question(SavePromptKind::Recover, "Harbor").find("recovering") != std::string::npos,
+           "recover prompt");
+    expect(save_changes_question(SavePromptKind::Continue, "Harbor").find("continuing") != std::string::npos,
+           "continue prompt");
+    expect(replace_file_question("harbor.cty") ==
+               "Replace \"harbor.cty\"? The city saved there will be overwritten.",
+           replace_file_question("harbor.cty"));
+    expect(replace_file_question("").find("already exists") != std::string::npos, "unnamed replace");
+    const std::string open_q = save_changes_question(SavePromptKind::Open, "Dullsville");
+    const std::string balanced = balance_save_question(open_q);
+    expect(balanced.find("\ncity?") == std::string::npos, "city? is not left on its own line: " + balanced);
+    expect(balanced.find('\n') != std::string::npos, "a long save question breaks");
+    const std::string tail = balanced.substr(balanced.find('\n') + 1);
+    expect(tail.find(' ') != std::string::npos, "the second line keeps more than one word: " + tail);
+
     const std::string body = query_body("Residential zone — population 120, land value 40, powered");
     expect(body.find(" — ") == std::string::npos, "em dash stayed on the first line: " + body);
     expect(body.find("Residential zone\n") == 0, "heading split: " + body);

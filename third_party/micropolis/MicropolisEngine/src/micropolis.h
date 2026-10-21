@@ -1922,7 +1922,8 @@ public:
     std::string loadErrorDetail;
 
     static std::string checkCityContents(const short *misc, const short *tiles, int tileCount,
-                                         bool checkMisc, bool hasWideFunds, bool classicOnly);
+                                         bool checkMisc, bool hasWideFunds, bool classicOnly,
+                                         long long wideFundsRaw = 0);
 
     /** True while loadFile() reads a saved city (scenarios set their own funds and date). */
     bool loadingSavedCity = false;

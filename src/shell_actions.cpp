@@ -4,8 +4,12 @@
 
 #include "shell_state.hpp"
 
+#include "atomic_write.hpp"
 #include "city_seed.hpp"
+#include "file_list.hpp"
+#include "list_scroll.hpp"
 #include "osk_layout.hpp"
+#include "text_edit.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
 #include "tools.hpp"
@@ -123,21 +127,35 @@ void Shell::open_dialog(Dialog dialog)
         new_lakes_ = CitySession::kTerrainDefault;
         new_trees_ = CitySession::kTerrainDefault;
         focus_id_ = kFieldName;
+        field_select_all(field_a_, field_caret_, field_anchor_);
     } else if (dialog == Dialog::Rename) {
         field_a_ = session_.city_name();
         focus_id_ = kFieldName;
+        field_select_all(field_a_, field_caret_, field_anchor_);
     } else if (dialog == Dialog::Files && files_save_) {
         field_a_ = proposed_city_filename(session_.city_name(), session_.save_path());
         focus_id_ = kFieldName;
+        field_select_all(field_a_, field_caret_, field_anchor_);
     } else if (dialog == Dialog::Unsaved) {
         focus_id_ = kSave;
     } else if (dialog == Dialog::Disaster || dialog == Dialog::RecoveryDelete || dialog == Dialog::Overwrite) {
         focus_id_ = kCancel;
     } else if (dialog == Dialog::Recovery) {
         focus_id_ = kRecover;
+    } else if (dialog == Dialog::Scenario) {
+        focus_id_ = kPlay;
     } else if (dialog == Dialog::Outcome) {
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {
+        focus_id_ = kSlider + 1;
+    } else if (dialog == Dialog::Settings) {
+        open_volume_ = volume_;
+        open_scale_percent_ = user_scale_ <= 0.05f ? 0 : static_cast<int>(std::lround(user_scale_ * 100.0f));
+        if (open_scale_percent_ < 0) {
+            open_scale_percent_ = 0;
+        }
+        scale_percent_ = open_scale_percent_;
+        open_pause_unfocused_ = pause_unfocused_;
         focus_id_ = kSlider + 1;
     }
     set_paused_for_dialog();
@@ -149,7 +167,8 @@ void Shell::sync_title()
         return;
     }
     if (dialog_ == Dialog::LoadError) {
-        SDL_SetWindowTitle(window_, "Could not load city");
+        const std::string failed = std::string(kProductName) + " - Could not load city";
+        SDL_SetWindowTitle(window_, failed.c_str());
         return;
     }
     const std::string title = std::string(kProductName) + " - " + session_.city_name();
@@ -169,6 +188,7 @@ void Shell::set_speed(int speed)
         session_.resume_after_outcome();
         speed_ = session_.speed();
     }
+    pref_speed_ = speed_;
 }
 
 void Shell::toggle_pause()
@@ -205,6 +225,34 @@ void Shell::clamp_scroll()
     const double max_y = std::max(0, map_.pixel_height() - view_h_);
     scroll_x_ = std::max(0.0, std::min(max_x, scroll_x_));
     scroll_y_ = std::max(0.0, std::min(max_y, scroll_y_));
+}
+
+void Shell::fit_map_to_view()
+{
+    const int cover = tile_size_to_cover(view_w_, view_h_, CitySession::kWorldW, CitySession::kWorldH, map_.tile_size(),
+                                         kMinMapTile, kMaxMapTile);
+    if (cover != map_.tile_size()) {
+        const double mw = std::max(1, map_.pixel_width());
+        const double mh = std::max(1, map_.pixel_height());
+        const double cx = (scroll_x_ + view_w_ * 0.5) / mw;
+        const double cy = (scroll_y_ + view_h_ * 0.5) / mh;
+        map_.set_tile_size(cover);
+        scroll_x_ = cx * std::max(1, map_.pixel_width()) - view_w_ / 2.0;
+        scroll_y_ = cy * std::max(1, map_.pixel_height()) - view_h_ / 2.0;
+        clamp_scroll();
+    }
+    map_ox_ = map_letterbox(view_w_, map_.pixel_width());
+    map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+}
+
+double Shell::map_local_x(double x) const
+{
+    return x - view_x_ - map_ox_ + scroll_x_;
+}
+
+double Shell::map_local_y(double y) const
+{
+    return y - view_y_ - map_oy_ + scroll_y_;
 }
 
 void Shell::center_on_fraction(double fx, double fy)
@@ -267,9 +315,13 @@ void Shell::remember_recent(const std::string &path)
     }
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/recent.txt", std::ios::trunc);
+    std::string body;
     for (const std::string &item : recent_) {
-        out << item << '\n';
+        body += item;
+        body += '\n';
+    }
+    if (!write_text_atomic(dir + "/recent.txt", body)) {
+        note_background_write_failed("Could not update the recent-cities list.");
     }
 }
 
@@ -292,10 +344,12 @@ void Shell::autosave(bool force)
     if (own_recovery_.empty()) {
         own_recovery_ = city_recovery::new_recovery_path();
         if (own_recovery_.empty()) {
+            note_background_write_failed("Autosave is off. This city will not be recovered if the game closes.");
             return;
         }
     }
     if (!session_.write_recovery(own_recovery_)) {
+        note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
         return;
     }
     city_recovery::write_info(own_recovery_, session_.city_name(), session_.save_path(), session_.date_text());
@@ -324,6 +378,8 @@ void Shell::finish_save(const std::string &path)
     if (!session_.save_city_as(path)) {
         info_title_ = "Save City";
         info_body_ = session_.message().empty() ? "Could not save the city." : session_.message();
+        // A failed save must not leave Quit (or New/Load) armed for the next Ctrl+S.
+        after_save_ = AfterSave::Nothing;
         open_dialog(Dialog::SaveError);
         return;
     }
@@ -352,7 +408,7 @@ void Shell::finish_open(const std::string &path)
         return;
     }
     ++city_generation_;
-    speed_ = session_.speed();
+    restore_play_preferences();
     center_on_fraction(0.5, 0.5);
     const std::string folder = parent_dir(path);
     if (!folder.empty()) {
@@ -368,26 +424,41 @@ void Shell::refresh_files()
     std::error_code ec;
     if (files_dir_.empty() || !std::filesystem::is_directory(files_dir_, ec)) {
         const std::string remembered = remembered_city_folder();
-        files_dir_ = remembered.empty() ? std::filesystem::current_path(ec).string() : remembered;
-    }
-    for (const auto &entry : std::filesystem::directory_iterator(files_dir_, ec)) {
-        if (ec) {
-            break;
-        }
-        const std::string name = entry.path().filename().string();
-        if (name.empty() || name == ".") {
-            continue;
-        }
-        if (entry.is_directory(ec)) {
-            files_.push_back(name + "/");
-        } else if (ends_with_ci(name, ".cty")) {
-            files_.push_back(name);
+        if (!remembered.empty()) {
+            files_dir_ = remembered;
+        } else {
+            files_dir_ = default_cities_dir();
         }
     }
-    std::sort(files_.begin(), files_.end());
+    if (!files_dir_.empty() && !std::filesystem::is_directory(files_dir_, ec) && !headless_ && !smoke_ && !ui_test_ &&
+        !review_) {
+        std::filesystem::create_directories(files_dir_, ec);
+    }
+    files_.push_back("..");
+    if (std::filesystem::is_directory(files_dir_, ec)) {
+        for (const auto &entry : std::filesystem::directory_iterator(files_dir_, ec)) {
+            if (ec) {
+                break;
+            }
+            const std::string name = entry.path().filename().string();
+            if (name.empty() || name == "." || name == ".." || file_name_hidden(name)) {
+                continue;
+            }
+            if (entry.is_directory(ec)) {
+                files_.push_back(name + "/");
+            } else if (ends_with_ci(name, ".cty")) {
+                files_.push_back(name);
+            }
+        }
+    }
+    std::sort(files_.begin(), files_.end(), file_row_less);
     if (list_index_ >= static_cast<int>(files_.size())) {
         list_index_ = 0;
     }
+    if (list_index_ < 0) {
+        list_index_ = 0;
+    }
+    reveal_file_list();
 }
 
 void Shell::begin_files(bool save)
@@ -401,6 +472,7 @@ void Shell::begin_files(bool save)
         files_dir_ = remembered_city_folder();
     }
     list_index_ = 0;
+    list_scroll_ = 0;
     refresh_files();
     open_dialog(Dialog::Files);
 }
@@ -469,7 +541,10 @@ void Shell::poll_file_dialog()
     }
     if (state == 3) {
         begin_files(files_save_);
+        return;
     }
+    // The player dismissed the system dialog. Do not quit on a later save.
+    after_save_ = AfterSave::Nothing;
 }
 
 void Shell::proceed(AfterSave next)
@@ -486,6 +561,8 @@ void Shell::proceed(AfterSave next)
         break;
     case AfterSave::Scenario:
         scenario_index_ = 0;
+        list_index_ = 0;
+        list_scroll_ = 0;
         open_dialog(Dialog::Scenario);
         break;
     case AfterSave::Quit:
@@ -495,6 +572,21 @@ void Shell::proceed(AfterSave next)
     case AfterSave::OpenPath:
         finish_open(queued_path_);
         queued_path_.clear();
+        break;
+    case AfterSave::Recover:
+        if (!session_.load_recovery(recovery_.path, recovery_.origin)) {
+            info_title_ = "Recover city";
+            info_body_ = session_.last_load_error().empty() ? "The recovery file could not be read."
+                                                            : session_.last_load_error();
+            open_dialog(Dialog::Info);
+            break;
+        }
+        own_recovery_ = recovery_.path;
+        ++city_generation_;
+        autosave_fingerprint_ = session_.change_fingerprint();
+        set_speed(0);
+        center_on_fraction(0.5, 0.5);
+        sync_title();
         break;
     case AfterSave::Nothing:
         break;
@@ -540,11 +632,13 @@ void Shell::apply_action(Action action)
         break;
     case Action::Save:
         if (session_.save_path().empty()) {
-            after_save_ = AfterSave::Nothing;
+            // A Save from "Save changes?" has no file yet. Keep the pending
+            // Quit / New / Load so it still runs after Save As succeeds.
             begin_save_as();
         } else if (!session_.save_city_as(session_.save_path())) {
             info_title_ = "Save City";
             info_body_ = session_.message().empty() ? "Could not save the city." : session_.message();
+            after_save_ = AfterSave::Nothing;
             open_dialog(Dialog::SaveError);
         } else {
             remember_saved(session_.save_path());
@@ -570,35 +664,46 @@ void Shell::apply_action(Action action)
         break;
     case Action::AutoBudget:
         session_.set_auto_budget(!session_.auto_budget());
+        save_window_settings();
         break;
     case Action::AutoBulldoze:
         session_.set_auto_bulldoze(!session_.auto_bulldoze());
+        save_window_settings();
         break;
     case Action::DisastersEnabled:
         session_.set_disasters(!session_.disasters());
+        pref_disasters_ = session_.disasters() ? 1 : 0;
+        save_window_settings();
         break;
     case Action::AutoGoto:
         session_.set_auto_goto(!session_.auto_goto());
+        save_window_settings();
         break;
     case Action::Mute:
         session_.set_sound_enabled(!session_.sound_enabled());
         sound_.set_muted(!session_.sound_enabled());
+        save_window_settings();
         break;
     case Action::SetPause:
         paused_from_ = speed_ > 0 ? speed_ : paused_from_;
         set_speed(0);
+        save_window_settings();
         break;
     case Action::Slow:
         set_speed(1);
+        save_window_settings();
         break;
     case Action::Medium:
         set_speed(2);
+        save_window_settings();
         break;
     case Action::Fast:
         set_speed(3);
+        save_window_settings();
         break;
     case Action::TogglePause:
         toggle_pause();
+        save_window_settings();
         break;
     case Action::ZoomIn:
         zoom_by(2);
@@ -664,6 +769,12 @@ void Shell::apply_action(Action action)
     case Action::About:
         open_dialog(Dialog::About);
         break;
+    case Action::Settings:
+        open_dialog(Dialog::Settings);
+        break;
+    case Action::Controls:
+        open_dialog(Dialog::Controls);
+        break;
     case Action::RecentIndex:
     case Action::None:
         break;
@@ -672,6 +783,34 @@ void Shell::apply_action(Action action)
 
 void Shell::on_dialog_button(int id)
 {
+    if (dialog_ == Dialog::Settings) {
+        if (id == kReset) {
+            pause_unfocused_ = !pause_unfocused_;
+            return;
+        }
+        if (id == kCancel) {
+            volume_ = open_volume_;
+            scale_percent_ = open_scale_percent_;
+            pause_unfocused_ = open_pause_unfocused_;
+            user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
+            sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+            refresh_ui_scale();
+            close_dialog();
+            return;
+        }
+        if (id == kOk || id == kSave) {
+            user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
+            sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+            refresh_ui_scale();
+            save_window_settings();
+            close_dialog();
+            return;
+        }
+    }
+    if (dialog_ == Dialog::Controls) {
+        close_dialog();
+        return;
+    }
     if (id == kSystemFiles) {
         const bool save = files_save_;
         close_dialog();
@@ -681,6 +820,7 @@ void Shell::on_dialog_button(int id)
     if (id == kUp) {
         files_dir_ = parent_dir(files_dir_);
         list_index_ = 0;
+        list_scroll_ = 0;
         refresh_files();
         return;
     }
@@ -796,7 +936,7 @@ void Shell::on_dialog_button(int id)
             ++city_generation_;
             session_.new_city(spec);
             if (session_.message_serial() == serial) {
-                session_.set_speed(speed_);
+                restore_play_preferences();
             }
             center_on_fraction(0.5, 0.5);
             sync_title();
@@ -843,24 +983,8 @@ void Shell::on_dialog_button(int id)
         if (id == kRecover) {
             const city_recovery::Entry entry = recovery_;
             close_dialog();
-            if (!session_.needs_save_prompt() || true) {
-                if (session_.needs_save_prompt()) {
-                    queued_path_.clear();
-                }
-            }
-            if (!session_.load_recovery(entry.path, entry.origin)) {
-                info_title_ = "Recover city";
-                info_body_ = session_.last_load_error().empty() ? "The recovery file could not be read."
-                                                                : session_.last_load_error();
-                open_dialog(Dialog::Info);
-                return;
-            }
-            own_recovery_ = entry.path;
-            ++city_generation_;
-            autosave_fingerprint_ = session_.change_fingerprint();
-            set_speed(0);
-            center_on_fraction(0.5, 0.5);
-            sync_title();
+            recovery_ = entry;
+            request_with_save(AfterSave::Recover);
             return;
         }
         if (id == kDelete) {
@@ -883,6 +1007,10 @@ void Shell::on_dialog_button(int id)
     if (dialog_ == Dialog::Files) {
         if (id == kOk || id == kSave || id == kPlay) {
             if (files_save_) {
+                if (text_has_path_separator(field_a_)) {
+                    dialog_error_ = "That name cannot contain / or \\.";
+                    return;
+                }
                 const std::string path = with_cty_suffix(path_join(files_dir_, field_a_));
                 std::error_code ec;
                 if (std::filesystem::exists(path, ec) && path != session_.save_path()) {
@@ -896,9 +1024,17 @@ void Shell::on_dialog_button(int id)
             }
             if (list_index_ >= 0 && list_index_ < static_cast<int>(files_.size())) {
                 const std::string name = files_[static_cast<std::size_t>(list_index_)];
+                if (name == "..") {
+                    files_dir_ = parent_dir(files_dir_);
+                    list_index_ = 0;
+                    list_scroll_ = 0;
+                    refresh_files();
+                    return;
+                }
                 if (!name.empty() && name.back() == '/') {
                     files_dir_ = path_join(files_dir_, name.substr(0, name.size() - 1));
                     list_index_ = 0;
+                    list_scroll_ = 0;
                     refresh_files();
                     return;
                 }
@@ -918,7 +1054,21 @@ void Shell::on_dialog_button(int id)
             finish_save(path);
             return;
         }
+        // Cancel returns to Save As with the name and folder the player typed.
+        const std::string typed = field_a_;
+        const std::string dir = files_dir_;
+        const AfterSave pending = after_save_;
         begin_files(true);
+        after_save_ = pending;
+        if (!dir.empty()) {
+            files_dir_ = dir;
+            list_index_ = 0;
+            list_scroll_ = 0;
+            refresh_files();
+        }
+        field_a_ = typed;
+        field_select_all(field_a_, field_caret_, field_anchor_);
+        focus_id_ = kFieldName;
         return;
     }
     if (dialog_ == Dialog::Budget) {
@@ -940,9 +1090,13 @@ void Shell::on_dialog_button(int id)
             close_dialog();
             return;
         }
-        if (budget_is_tax_) {
-            session_.restore_budget_rates(open_tax_, open_road_, open_police_, open_fire_);
-        }
+        // Cancel outside a tax year used to keep the live slider edits.
+        // Both paths restore the rates the window opened with.
+        session_.restore_budget_rates(open_tax_, open_road_, open_police_, open_fire_);
+        tax_ = open_tax_;
+        road_ = open_road_;
+        police_ = open_police_;
+        fire_ = open_fire_;
         close_dialog();
         return;
     }
@@ -971,6 +1125,9 @@ void Shell::on_dialog_button(int id)
         close_dialog();
         return;
     }
+    if (dialog_ == Dialog::Files || dialog_ == Dialog::FileWait || dialog_ == Dialog::SaveError) {
+        after_save_ = AfterSave::Nothing;
+    }
     close_dialog();
 }
 
@@ -991,8 +1148,9 @@ void Shell::on_hotspot(int id, double x, double y)
         if (!dir.empty()) {
             std::error_code ec;
             std::filesystem::create_directories(dir, ec);
-            std::ofstream out(dir + "/welcome-dismissed", std::ios::trunc);
-            out << "dismissed\n";
+            if (!write_text_atomic(dir + "/welcome-dismissed", "dismissed\n")) {
+                note_background_write_failed("Could not remember that the welcome was dismissed.");
+            }
         }
         return;
     }
@@ -1032,11 +1190,46 @@ void Shell::on_hotspot(int id, double x, double y)
         return;
     }
     if (id >= kListItem && id < kListItem + 64) {
-        list_index_ = id - kListItem;
-        if (dialog_ == Dialog::Scenario) {
-            scenario_index_ = list_index_;
+        const int row = id - kListItem;
+        if (dialog_ == Dialog::Files) {
+            list_index_ = list_scroll_ + row;
+            if (list_index_ >= static_cast<int>(files_.size())) {
+                list_index_ = static_cast<int>(files_.size()) - 1;
+            }
+            if (list_index_ < 0) {
+                list_index_ = 0;
+            }
+            reveal_file_list();
+        } else if (dialog_ == Dialog::Scenario) {
+            scenario_index_ = list_scroll_ + row;
+            if (scenario_index_ >= CitySession::kScenarioCount) {
+                scenario_index_ = CitySession::kScenarioCount - 1;
+            }
+            if (scenario_index_ < 0) {
+                scenario_index_ = 0;
+            }
+            list_index_ = scenario_index_;
+            reveal_file_list();
+        } else {
+            list_index_ = row;
         }
         focus_id_ = id;
+        return;
+    }
+    if (id == kListScroll && (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario)) {
+        list_dragging_ = true;
+        const int count =
+            dialog_ == Dialog::Scenario ? CitySession::kScenarioCount : static_cast<int>(files_.size());
+        const int index = list_index_from_track(y, list_track_y_, list_track_h_, count);
+        if (dialog_ == Dialog::Scenario) {
+            scenario_index_ = index;
+        }
+        list_index_ = dialog_ == Dialog::Scenario ? scenario_index_ : index;
+        reveal_file_list();
+        const int row = list_index_ - list_scroll_;
+        if (row >= 0 && row < 64) {
+            focus_id_ = kListItem + row;
+        }
         return;
     }
     if (id == kFieldName || id == kFieldSeed) {
@@ -1076,7 +1269,14 @@ void Shell::on_hotspot(int id, double x, double y)
             }
             const double t = std::max(0.0, std::min(1.0, (x - slider.x) / slider.w));
             int value = slider.min + static_cast<int>(std::lround(t * (slider.max - slider.min)));
-            if (id == kSlider + 1) {
+            if (dialog_ == Dialog::Settings) {
+                if (id == kSlider + 1) {
+                    volume_ = value;
+                    sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+                } else if (id == kSlider + 2) {
+                    scale_percent_ = value;
+                }
+            } else if (id == kSlider + 1) {
                 tax_ = value;
                 session_.set_tax(tax_);
             } else if (id == kSlider + 2) {
@@ -1165,16 +1365,30 @@ std::string *Shell::active_field()
     return nullptr;
 }
 
-void Shell::type_text(const std::string &text)
+void Shell::select_field()
 {
     std::string *field = active_field();
     if (field == nullptr) {
         return;
     }
-    if (field->size() + text.size() > 64) {
+    field_select_all(*field, field_caret_, field_anchor_);
+}
+
+void Shell::type_text(const std::string &text)
+{
+    std::string *field = active_field();
+    if (field == nullptr || text.empty()) {
         return;
     }
-    *field += text;
+    if (field == &field_a_ && text_has_path_separator(text)) {
+        dialog_error_ = "That name cannot contain / or \\.";
+        return;
+    }
+    if (!field_insert(*field, field_caret_, field_anchor_, text, 64)) {
+        dialog_error_ = "That name is too long.";
+    } else if (dialog_error_ == "That name cannot contain / or \\." || dialog_error_ == "That name is too long.") {
+        dialog_error_.clear();
+    }
 }
 
 void Shell::backspace_field()
@@ -1183,7 +1397,34 @@ void Shell::backspace_field()
     if (field == nullptr || field->empty()) {
         return;
     }
-    field->pop_back();
+    field_backspace(*field, field_caret_, field_anchor_);
+}
+
+void Shell::move_field_caret(int direction, bool extend, bool home, bool end)
+{
+    std::string *field = active_field();
+    if (field == nullptr) {
+        return;
+    }
+    if (home) {
+        field_home(*field, field_caret_, field_anchor_, extend);
+        return;
+    }
+    if (end) {
+        field_end(*field, field_caret_, field_anchor_, extend);
+        return;
+    }
+    field_move(*field, field_caret_, field_anchor_, direction, extend);
+}
+
+void Shell::paste_field()
+{
+    char *clip = SDL_GetClipboardText();
+    if (clip == nullptr) {
+        return;
+    }
+    type_text(clip);
+    SDL_free(clip);
 }
 
 int Shell::hit(double x, double y) const
@@ -1258,12 +1499,105 @@ void Shell::move_focus(int delta)
     }
     index = (index + delta + static_cast<int>(focus_order_.size())) % static_cast<int>(focus_order_.size());
     focus_id_ = focus_order_[static_cast<std::size_t>(index)];
+    if (focus_id_ == kFieldName || focus_id_ == kFieldSeed) {
+        select_field();
+    }
     if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
-        list_index_ = focus_id_ - kListItem;
-        if (dialog_ == Dialog::Scenario) {
-            scenario_index_ = list_index_;
+        if (dialog_ == Dialog::Files) {
+            list_index_ = list_scroll_ + (focus_id_ - kListItem);
+            if (list_index_ >= static_cast<int>(files_.size())) {
+                list_index_ = static_cast<int>(files_.size()) - 1;
+            }
+            if (list_index_ < 0) {
+                list_index_ = 0;
+            }
+            reveal_file_list();
+        } else if (dialog_ == Dialog::Scenario) {
+            scenario_index_ = list_scroll_ + (focus_id_ - kListItem);
+            if (scenario_index_ >= CitySession::kScenarioCount) {
+                scenario_index_ = CitySession::kScenarioCount - 1;
+            }
+            if (scenario_index_ < 0) {
+                scenario_index_ = 0;
+            }
+            list_index_ = scenario_index_;
+            reveal_file_list();
+        } else {
+            list_index_ = focus_id_ - kListItem;
         }
     }
+}
+
+void Shell::reveal_file_list()
+{
+    const bool scenarios = dialog_ == Dialog::Scenario;
+    const int count = scenarios ? CitySession::kScenarioCount : static_cast<int>(files_.size());
+    const int index = scenarios ? scenario_index_ : list_index_;
+    list_reveal(list_scroll_, index, std::max(1, files_visible_), count);
+    if (scenarios) {
+        list_index_ = scenario_index_;
+    }
+}
+
+bool Shell::nudge_file_list(int delta, bool page, bool force)
+{
+    const bool files = dialog_ == Dialog::Files && !files_.empty();
+    const bool scenarios = dialog_ == Dialog::Scenario;
+    if ((!files && !scenarios) || delta == 0) {
+        return false;
+    }
+    const bool on_list = focus_id_ >= kListItem && focus_id_ < kListItem + 64;
+    if (!on_list && !force && !page) {
+        return false;
+    }
+    const int count = scenarios ? CitySession::kScenarioCount : static_cast<int>(files_.size());
+    int index = scenarios ? scenario_index_ : list_index_;
+    const int step = page ? std::max(1, files_visible_ - 1) : std::max(1, std::abs(delta));
+    const int sign = delta < 0 ? -1 : 1;
+    int next = index + sign * step;
+    if (!page && !force && on_list && (next < 0 || next >= count)) {
+        return false;
+    }
+    if (next < 0) {
+        next = 0;
+    }
+    if (next >= count) {
+        next = count - 1;
+    }
+    if (scenarios) {
+        scenario_index_ = next;
+    }
+    list_index_ = next;
+    reveal_file_list();
+    const bool keep_field = focus_id_ == kFieldName || focus_id_ == kFieldSeed;
+    if (!keep_field) {
+        const int row = list_index_ - list_scroll_;
+        if (row >= 0 && row < 64) {
+            focus_id_ = kListItem + row;
+        }
+    }
+    return true;
+}
+
+void Shell::activate_file_row()
+{
+    if (dialog_ != Dialog::Files) {
+        return;
+    }
+    if (list_index_ >= 0 && list_index_ < static_cast<int>(files_.size()) &&
+        file_row_is_dir(files_[static_cast<std::size_t>(list_index_)])) {
+        const std::string name = files_[static_cast<std::size_t>(list_index_)];
+        if (name == "..") {
+            files_dir_ = parent_dir(files_dir_);
+        } else {
+            files_dir_ = path_join(files_dir_, name.substr(0, name.size() - 1));
+        }
+        list_index_ = 0;
+        list_scroll_ = 0;
+        refresh_files();
+        return;
+    }
+    on_dialog_button(files_save_ ? kSave : kOk);
 }
 
 void Shell::activate_focus()
@@ -1285,7 +1619,11 @@ void Shell::activate_focus()
         return;
     }
     if (dialog_ == Dialog::Files) {
-        on_dialog_button(files_save_ ? kSave : kOk);
+        if (files_save_ && focus_id_ == kFieldName) {
+            on_dialog_button(kSave);
+            return;
+        }
+        activate_file_row();
         return;
     }
     if (dialog_ == Dialog::NewCity) {
@@ -1303,9 +1641,17 @@ bool Shell::adjust_focused_slider(int direction)
         if (slider.id != focus_id_) {
             continue;
         }
-        const int step = slider.id == kSlider + 1 ? direction : direction * 5;
+        int step = slider.id == kSlider + 1 ? direction : direction * 5;
         int current = tax_;
-        if (slider.id == kSlider + 2) {
+        if (dialog_ == Dialog::Settings) {
+            if (slider.id == kSlider + 1) {
+                current = volume_;
+                step = direction * 5;
+            } else if (slider.id == kSlider + 2) {
+                current = scale_percent_;
+                step = direction * 25;
+            }
+        } else if (slider.id == kSlider + 2) {
             current = road_;
         } else if (slider.id == kSlider + 3) {
             current = police_;
@@ -1313,7 +1659,14 @@ bool Shell::adjust_focused_slider(int direction)
             current = fire_;
         }
         const int value = std::max(slider.min, std::min(slider.max, current + step));
-        if (slider.id == kSlider + 1) {
+        if (dialog_ == Dialog::Settings) {
+            if (slider.id == kSlider + 1) {
+                volume_ = value;
+                sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+            } else if (slider.id == kSlider + 2) {
+                scale_percent_ = value;
+            }
+        } else if (slider.id == kSlider + 1) {
             tax_ = value;
             session_.set_tax(tax_);
         } else if (slider.id == kSlider + 2) {

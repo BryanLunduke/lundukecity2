@@ -4,22 +4,36 @@
 
 #include "shell_state.hpp"
 
+#include "assets.hpp"
 #include "city_seed.hpp"
 #include "dialog_copy.hpp"
 #include "notice_bar.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
+#include "text_paint.hpp"
+#include "tile_atlas.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 #include "zoom_keys.hpp"
 
 #include <SDL3/SDL.h>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <shlobj.h>
+#endif
+
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #ifndef _WIN32
@@ -185,6 +199,11 @@ int Shell::run(int argc, char **argv)
     if (const char *ui = std::getenv("LUNDUKE_CITY2_UI_TEST")) {
         ui_test_ = ui[0] != '\0' && ui[0] != '0';
     }
+#ifdef CITY_REVIEW_CHECKS
+    if (const char *review = std::getenv("LUNDUKE_CITY2_REVIEW")) {
+        review_ = review[0] != '\0' && review[0] != '0';
+    }
+#endif
     if (const char *demo = std::getenv("LUNDUKE_CITY2_DEMO")) {
         demo_ = demo;
     }
@@ -208,7 +227,13 @@ int Shell::run(int argc, char **argv)
     speed_ = 0;
     session_.new_city("New City");
     session_.set_speed(0);
+    apply_loaded_settings();
     bind_session();
+    if (!tile_atlas().loaded() && dialog_ == Dialog::None) {
+        info_title_ = "Missing game data";
+        info_body_ = tile_atlas().load_error().empty() ? asset_missing_text(asset_candidates()) : tile_atlas().load_error();
+        open_dialog(Dialog::Info);
+    }
     welcome_ = true;
     const std::string dismissed = city_config_dir().empty() ? std::string() : city_config_dir() + "/welcome-dismissed";
     if (!dismissed.empty()) {
@@ -232,7 +257,7 @@ int Shell::run(int argc, char **argv)
         speed_ = session_.speed();
         center_on_fraction(0.5, 0.5);
     }
-    if (ui_test_) {
+    if (ui_test_ || review_) {
         welcome_ = false;
         recovery_checked_ = true;
         speed_ = 0;
@@ -248,18 +273,248 @@ int Shell::run(int argc, char **argv)
 #ifndef _WIN32
     std::signal(SIGTERM, on_terminate);
     std::signal(SIGHUP, on_terminate);
+    // A terminal Ctrl+C should autosave, the same as SIGTERM.
+    std::signal(SIGINT, on_terminate);
 #endif
     loop();
     shutdown();
-    if ((smoke_ || ui_test_) && !ran_ok_) {
+    if ((smoke_ || ui_test_ || review_) && !ran_ok_) {
         std::cerr << smoke_error_ << "\n";
         return 2;
     }
     return 0;
 }
 
+int Shell::dp(int px) const
+{
+    return ui_scale::scaled_px(px, ui_scale_);
+}
+
+const char *Shell::ui_font() const
+{
+    return font_ui_.c_str();
+}
+
+const char *Shell::body_font() const
+{
+    return font_body_.c_str();
+}
+
+const char *Shell::title_font() const
+{
+    return font_title_.c_str();
+}
+
+const char *Shell::menu_font() const
+{
+    return font_menu_.c_str();
+}
+
+const char *Shell::bold_font() const
+{
+    return font_bold_.c_str();
+}
+
+void Shell::refresh_ui_scale()
+{
+    float display = 1.0f;
+    if (window_ != nullptr) {
+        const float reported = SDL_GetWindowDisplayScale(window_);
+        if (reported > 0.0f) {
+            display = reported;
+        }
+    }
+    const float user = scale_env_ > 0.05f ? scale_env_ : user_scale_;
+    ui_scale_ = ui_scale::resolve_ui_scale(display, user);
+    font_ui_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
+    font_body_ = ui_scale::scaled_font("Sans", 14, ui_scale_);
+    font_title_ = ui_scale::scaled_font("Sans Bold", 18, ui_scale_);
+    font_menu_ = ui_scale::scaled_font("Sans", 13, ui_scale_);
+    font_bold_ = ui_scale::scaled_font("Sans Bold", 13, ui_scale_);
+}
+
+bool Shell::allow_saved_settings() const
+{
+    return !headless_ && !size_override_ && !smoke_ && !ui_test_ && !review_ && demo_.empty() && shot_path_.empty();
+}
+
+void Shell::load_window_settings()
+{
+    if (smoke_ || ui_test_ || review_ || !demo_.empty() || !shot_path_.empty() || headless_) {
+        return;
+    }
+    const std::string dir = city_config_dir();
+    if (dir.empty()) {
+        return;
+    }
+    std::ifstream in(dir + "/settings.txt");
+    if (!in) {
+        return;
+    }
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    const ui_scale::StoredSettings stored = ui_scale::settings_parse(buffer.str());
+    loaded_ = stored;
+    user_scale_ = stored.user_scale;
+    // Remember the desktop rectangle even on Deck. The window itself stays
+    // fullscreen; the rectangle is written back when the session ends.
+    if (stored.has_geometry && !size_override_) {
+        saved_x_ = stored.x;
+        saved_y_ = stored.y;
+        saved_w_ = stored.w;
+        saved_h_ = stored.h;
+        if (!deck_) {
+            want_maximized_ = stored.maximized;
+        }
+        has_saved_window_ = true;
+    }
+}
+
+void Shell::save_window_settings()
+{
+    if (!allow_saved_settings() || window_ == nullptr) {
+        return;
+    }
+    note_window_geometry();
+    ui_scale::StoredSettings stored;
+    stored.user_scale = user_scale_;
+    stored.speed = std::max(0, std::min(3, pref_speed_ >= 0 ? pref_speed_ : speed_));
+    stored.sound = session_.sound_enabled() ? 1 : 0;
+    stored.volume = std::max(0, std::min(100, volume_));
+    stored.auto_budget = session_.auto_budget() ? 1 : 0;
+    stored.auto_bulldoze = session_.auto_bulldoze() ? 1 : 0;
+    stored.disasters = pref_disasters_ >= 0 ? (pref_disasters_ != 0 ? 1 : 0) : (session_.disasters() ? 1 : 0);
+    stored.auto_goto = session_.auto_goto() ? 1 : 0;
+    stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
+    {
+        const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
+        const bool maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
+        ui_scale::keep_desktop_geometry(stored, loaded_, deck_, normal_valid_, normal_x_, normal_y_, normal_w_, normal_h_,
+                                        deck_ ? loaded_.maximized : maximized);
+    }
+    const std::string dir = city_config_dir();
+    if (dir.empty()) {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir + "/settings.txt", std::ios::trunc);
+    if (!out) {
+        return;
+    }
+    out << ui_scale::settings_text(stored);
+}
+
+void Shell::apply_loaded_settings()
+{
+    const ui_scale::StoredSettings &stored = loaded_;
+    if (stored.speed >= 0) {
+        speed_ = std::max(0, std::min(3, stored.speed));
+        session_.set_speed(speed_);
+    }
+    if (stored.sound >= 0) {
+        session_.set_sound_enabled(stored.sound != 0);
+        sound_.set_muted(!session_.sound_enabled());
+    }
+    if (stored.volume >= 0) {
+        volume_ = std::max(0, std::min(100, stored.volume));
+        sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+    }
+    if (stored.auto_budget >= 0) {
+        session_.set_auto_budget(stored.auto_budget != 0);
+    }
+    if (stored.auto_bulldoze >= 0) {
+        session_.set_auto_bulldoze(stored.auto_bulldoze != 0);
+    }
+    if (stored.disasters >= 0) {
+        session_.set_disasters(stored.disasters != 0);
+    }
+    if (stored.auto_goto >= 0) {
+        session_.set_auto_goto(stored.auto_goto != 0);
+    }
+    if (stored.pause_unfocused >= 0) {
+        pause_unfocused_ = stored.pause_unfocused != 0;
+    }
+    // These are the global preferences. A city file must not replace them.
+    pref_speed_ = speed_;
+    pref_disasters_ = session_.disasters() ? 1 : 0;
+    session_.accept_preferences();
+}
+
+void Shell::restore_play_preferences()
+{
+    if (pref_speed_ >= 0) {
+        session_.set_speed(pref_speed_);
+        speed_ = session_.speed();
+    }
+    if (pref_disasters_ >= 0) {
+        session_.set_disasters(pref_disasters_ != 0);
+    }
+    session_.accept_preferences();
+}
+
+void Shell::note_keyboard_input()
+{
+    gamepad_nav_ = false;
+}
+
+void Shell::note_background_write_failed(const char *text)
+{
+    if (text == nullptr || text[0] == '\0') {
+        return;
+    }
+    // Stay up until the player clicks the message bar. A failure after that
+    // click is shown again; the same text does not restart the notice.
+    if (notice_sticky_ && shown_message_ == text) {
+        return;
+    }
+    notice_sticky_ = true;
+    autosave_warned_ = true;
+    shown_message_ = text;
+    shown_message_serial_ = session_.message_serial();
+    hint_until_ = std::chrono::steady_clock::now() + std::chrono::hours(24 * 365);
+}
+
+void Shell::dismiss_background_notice()
+{
+    if (!notice_sticky_) {
+        return;
+    }
+    notice_sticky_ = false;
+    autosave_warned_ = false;
+    shown_message_.clear();
+    hint_until_ = std::chrono::steady_clock::now();
+}
+
+void Shell::note_window_geometry()
+{
+    if (window_ == nullptr) {
+        return;
+    }
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
+    if ((flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED)) != 0) {
+        return;
+    }
+    int ww = 0;
+    int hh = 0;
+    int x = 0;
+    int y = 0;
+    SDL_GetWindowSize(window_, &ww, &hh);
+    SDL_GetWindowPosition(window_, &x, &y);
+    if (ww > 0 && hh > 0) {
+        normal_w_ = ww;
+        normal_h_ = hh;
+        normal_x_ = x;
+        normal_y_ = y;
+        normal_valid_ = true;
+    }
+}
+
 bool Shell::init_video()
 {
+#ifdef _WIN32
+    SetCurrentProcessExplicitAppUserModelID(L"Lunduke.LundukeCity2");
+#endif
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
     // Audio is optional. SDL_Init fails the whole call when any requested
     // subsystem fails, and a machine with no playback device (the argv_open
@@ -279,15 +534,87 @@ bool Shell::init_video()
     }
     const char *driver = SDL_GetCurrentVideoDriver();
     headless_ = driver != nullptr && (std::strcmp(driver, "dummy") == 0 || std::strcmp(driver, "offscreen") == 0);
+    if (const char *scale = std::getenv("LUNDUKE_CITY2_SCALE")) {
+        char *end = nullptr;
+        const float parsed = std::strtof(scale, &end);
+        if (end != scale && parsed > 0.0f) {
+            scale_env_ = parsed;
+        }
+    }
+    int size_w = 0;
+    int size_h = 0;
+    if (const char *size = std::getenv("LUNDUKE_CITY2_SIZE")) {
+        int parsed_w = 0;
+        int parsed_h = 0;
+        char sep = 0;
+        if (std::sscanf(size, "%d%c%d", &parsed_w, &sep, &parsed_h) == 3 && (sep == 'x' || sep == 'X') && parsed_w >= 320 &&
+            parsed_h >= 240) {
+            size_w = parsed_w;
+            size_h = parsed_h;
+            size_override_ = true;
+        }
+    }
+    load_window_settings();
+    int req_w = 1280;
+    int req_h = 800;
+    int req_x = 0;
+    int req_y = 0;
+    bool place = false;
+    SDL_Rect usable{};
+    const SDL_DisplayID display = SDL_GetPrimaryDisplay();
+    const bool have_bounds = display != 0 && SDL_GetDisplayUsableBounds(display, &usable);
+    if (size_override_) {
+        req_w = size_w;
+        req_h = size_h;
+    } else if (headless_) {
+        req_w = 1280;
+        req_h = 800;
+    } else if (have_bounds && has_saved_window_ && !deck_) {
+        const ui_scale::Placement saved =
+            ui_scale::clamp_saved_window(saved_x_, saved_y_, saved_w_, saved_h_, usable.x, usable.y, usable.w, usable.h);
+        req_w = saved.w;
+        req_h = saved.h;
+        req_x = saved.x;
+        req_y = saved.y;
+        place = true;
+    } else if (have_bounds && !deck_) {
+        const ui_scale::Placement fitted = ui_scale::fit_default_window(1280, 800, usable.x, usable.y, usable.w, usable.h);
+        req_w = fitted.w;
+        req_h = fitted.h;
+        req_x = fitted.x;
+        req_y = fitted.y;
+        place = true;
+    } else if (have_bounds && deck_) {
+        req_w = std::max(640, usable.w);
+        req_h = std::max(480, usable.h);
+    }
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
-    window_ = SDL_CreateWindow(kProductName, 1280, 800, flags);
+    if (!headless_) {
+        flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    }
+    window_ = SDL_CreateWindow(kProductName, req_w, req_h, flags);
     if (window_ == nullptr) {
         std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << "\n";
         return false;
     }
+    int min_w = 960;
+    int min_h = 600;
+    ui_scale::window_minimum(have_bounds ? usable.w : 0, have_bounds ? usable.h : 0, min_w, min_h);
+    SDL_SetWindowMinimumSize(window_, min_w, min_h);
+    if (place) {
+        SDL_SetWindowPosition(window_, req_x, req_y);
+    }
+    normal_x_ = req_x;
+    normal_y_ = req_y;
+    normal_w_ = req_w;
+    normal_h_ = req_h;
+    normal_valid_ = true;
     if (deck_) {
         SDL_SetWindowFullscreen(window_, true);
+    } else if (want_maximized_) {
+        SDL_MaximizeWindow(window_);
     }
+    refresh_ui_scale();
     renderer_ = SDL_CreateRenderer(window_, nullptr);
     if (renderer_ == nullptr) {
         std::cerr << "SDL_CreateRenderer failed: " << SDL_GetError() << "\n";
@@ -324,6 +651,15 @@ void Shell::bind_session()
 
 void Shell::shutdown()
 {
+    // The mixer thread uses SDL audio. Join it before SDL_Quit.
+    sound_.shutdown();
+    save_window_settings();
+    release_text_cache();
+    release_fontconfig();
+    if (frame_surface_ != nullptr) {
+        cairo_surface_destroy(frame_surface_);
+        frame_surface_ = nullptr;
+    }
     if (pad_ != nullptr) {
         SDL_CloseGamepad(pad_);
         pad_ = nullptr;
@@ -343,6 +679,41 @@ void Shell::shutdown()
     SDL_Quit();
 }
 
+std::string Shell::visual_stamp() const
+{
+    const auto now = std::chrono::steady_clock::now();
+    const bool hint_visible = !shown_message_.empty() && hint_until_ > now;
+    std::ostringstream out;
+    out << win_w_ << 'x' << win_h_ << ' ' << ui_scale_ << ' ' << static_cast<int>(dialog_) << ' ' << new_page_ << ' '
+        << list_index_ << ' ' << list_scroll_ << ' ' << scenario_index_ << ' ' << focus_id_ << ' ' << hover_id_ << ' '
+        << menu_.open_menu << ' ' << menu_.cursor << ' ' << menu_.recent_open << ' ' << menu_.recent_cursor << ' '
+        << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
+        << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << session_.map_serial()
+        << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
+        << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
+        << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_ << ' ' << shown_message_ << ' '
+        << hint_visible << ' ' << query_pinned_ << ' ' << gamepad_nav_ << ' ' << cursor_x_ << ' ' << cursor_y_ << ' '
+        << pointer_x_ << ' ' << pointer_y_ << ' ' << field_a_ << ' ' << field_b_ << ' ' << field_caret_ << ' ' << field_anchor_
+        << ' ' << dialog_error_ << ' '
+        << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
+        << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
+        << static_cast<int>(files_.size());
+    return out.str();
+}
+
+redraw::Reasons Shell::redraw_reasons() const
+{
+    redraw::Reasons reasons;
+    reasons.forced = !presented_ || ui_test_ || smoke_ || !demo_.empty() || !shot_path_.empty();
+    reasons.sim_running = speed_ > 0 && !dialog_pauses();
+    reasons.quake = quake_strength_ > 0;
+    reasons.navigating = pointer_down_ || pad_dragging_ || std::fabs(stick_x_) > 0.05f || std::fabs(stick_y_) > 0.05f ||
+                         std::fabs(pan_x_) > 0.05f || std::fabs(pan_y_) > 0.05f;
+    reasons.blink = blink_drew_;
+    reasons.stamp_changed = visual_stamp() != visual_stamp_;
+    return reasons;
+}
+
 void Shell::loop()
 {
     bool running = true;
@@ -355,7 +726,39 @@ void Shell::loop()
             std::_Exit(0);
         }
 #endif
+        const bool spin = ui_test_ || smoke_ || review_ || !demo_.empty() || !shot_path_.empty();
+        const bool animate = (speed_ > 0 && !dialog_pauses()) || quake_strength_ > 0 || pad_dragging_ || pointer_down_ ||
+                             std::fabs(stick_x_) > 0.05f || std::fabs(stick_y_) > 0.05f || std::fabs(pan_x_) > 0.05f ||
+                             std::fabs(pan_y_) > 0.05f;
         SDL_Event event;
+        // A paused city waits for input. WaitEventTimeout sleeps the thread;
+        // a NULL event would drop the input, so the event is handled here.
+        if (!spin && presented_ && !animate) {
+            int timeout = 500;
+            const auto now_wait = std::chrono::steady_clock::now();
+            if (hint_until_ > now_wait) {
+                const int ms = static_cast<int>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(hint_until_ - now_wait).count());
+                timeout = std::max(1, std::min(timeout, ms));
+            }
+            if (next_autosave_ <= now_wait) {
+                timeout = 1;
+            } else {
+                const int ms = static_cast<int>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(next_autosave_ - now_wait).count());
+                timeout = std::max(1, std::min(timeout, ms));
+            }
+            if (dialog_ == Dialog::FileWait) {
+                timeout = std::min(timeout, 30);
+            }
+            if (SDL_WaitEventTimeout(&event, timeout)) {
+                if (event.type == SDL_EVENT_QUIT) {
+                    request_with_save(AfterSave::Quit);
+                } else {
+                    handle_event(event);
+                }
+            }
+        }
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT) {
                 request_with_save(AfterSave::Quit);
@@ -368,12 +771,14 @@ void Shell::loop()
         if (elapsed < 0) {
             elapsed = 0;
         }
-        if (elapsed > 100) {
-            elapsed = 100;
+        if (elapsed > 2000) {
+            elapsed = 2000;
         }
         last = now;
-        sim_acc += elapsed;
-        map_.tick(elapsed);
+        // Simulation does not fast-forward through a long idle sleep. The
+        // blink clock does, or a paused city would flash late.
+        sim_acc += std::min(elapsed, 100);
+        blink_drew_ = map_.tick(elapsed);
         if (zoom_cool_ > 0) {
             zoom_cool_ -= elapsed;
         }
@@ -448,7 +853,7 @@ void Shell::loop()
         if (pad_dragging_) {
             pointer_x_ = cursor_x_;
             pointer_y_ = cursor_y_;
-            map_.motion(cursor_x_ - view_x_ + scroll_x_, cursor_y_ - view_y_ + scroll_y_, true);
+            map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), true);
         }
         if (pointer_down_ && pointer_on_map_ && map_.dragging()) {
             double dx = 0;
@@ -459,7 +864,7 @@ void Shell::loop()
                 scroll_x_ += dx;
                 scroll_y_ += dy;
                 clamp_scroll();
-                map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, true);
+                map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
             }
         }
         if (quake_strength_ > 0) {
@@ -530,6 +935,10 @@ void Shell::loop()
                 query_pinned_ = true;
                 info_body_ = query_body(text);
                 if (dialog_ == Dialog::None || dialog_ == Dialog::Query) {
+                    query_anchored_ = pointer_x_ >= view_x_ && pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ &&
+                                      pointer_y_ < view_y_ + view_h_;
+                    query_anchor_x_ = pointer_x_;
+                    query_anchor_y_ = pointer_y_;
                     open_dialog(Dialog::Query);
                 }
             }
@@ -540,6 +949,12 @@ void Shell::loop()
         if (smoke_ && frame_ == 2) {
             arm_smoke_pad();
         }
+#ifdef CITY_REVIEW_CHECKS
+        if (review_ && frame_ == 2) {
+            run_review_checks();
+            quitting_ = true;
+        }
+#endif
         if (smoke_ && frame_ > 8 && smoke_phase_ == 0) {
             smoke_phase_ = 1;
             session_.set_speed(0);
@@ -618,7 +1033,8 @@ void Shell::loop()
         if (!demo_.empty() && frame_ >= 3) {
             quitting_ = true;
         }
-        if (headless_ || deck_) {
+        write_final_shot();
+        if (headless_ && (spin || animate)) {
             SDL_Delay(1);
         }
     }
@@ -642,8 +1058,26 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
     case SDL_EVENT_WINDOW_RESIZED:
+    case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+    case SDL_EVENT_WINDOW_MOVED:
+    case SDL_EVENT_WINDOW_MAXIMIZED:
+    case SDL_EVENT_WINDOW_RESTORED:
+        note_window_geometry();
         layout();
         clamp_scroll();
+        break;
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+        if (pause_unfocused_ && speed_ > 0) {
+            unfocus_speed_ = speed_;
+            paused_for_unfocus_ = true;
+            set_speed(0);
+        }
+        break;
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+        if (paused_for_unfocus_) {
+            paused_for_unfocus_ = false;
+            set_speed(unfocus_speed_ > 0 ? unfocus_speed_ : 0);
+        }
         break;
     case SDL_EVENT_MOUSE_MOTION: {
         int ww = 1;
@@ -660,14 +1094,17 @@ void Shell::handle_event(const SDL_Event &event)
         }
         if (slider_drag_ != 0) {
             on_hotspot(slider_drag_, pointer_x_, pointer_y_);
+        } else if (list_dragging_ && (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario)) {
+            on_hotspot(kListScroll, pointer_x_, pointer_y_);
         } else if (pointer_on_map_ && dialog_ == Dialog::None && !menu_.open()) {
-            map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, pointer_down_);
+            map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), pointer_down_);
         } else if (hover_id_ == kPaletteId && !menu_.open()) {
             palette_.motion(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         }
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+        note_keyboard_input();
         int ww = 1;
         int wh = 1;
         int pw = 1;
@@ -677,6 +1114,10 @@ void Shell::handle_event(const SDL_Event &event)
         pointer_x_ = event.button.x * (pw / static_cast<double>(std::max(ww, 1)));
         pointer_y_ = event.button.y * (ph / static_cast<double>(std::max(wh, 1)));
         if (event.button.button != SDL_BUTTON_LEFT) {
+            break;
+        }
+        if (notice_sticky_ && pointer_y_ >= win_h_ - message_h_) {
+            dismiss_background_notice();
             break;
         }
         pointer_down_ = true;
@@ -689,7 +1130,7 @@ void Shell::handle_event(const SDL_Event &event)
         if (id == kMapId && dialog_ == Dialog::None && !menu_.open()) {
             pointer_on_map_ = true;
             SDL_CaptureMouse(true);
-            map_.press(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_);
+            map_.press(map_local_x(pointer_x_), map_local_y(pointer_y_));
         } else if (id == kPaletteId && dialog_ == Dialog::None) {
             palette_.press(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         } else if (id == kMinimapId && dialog_ == Dialog::None) {
@@ -703,6 +1144,7 @@ void Shell::handle_event(const SDL_Event &event)
         if (event.button.button == SDL_BUTTON_LEFT) {
             pointer_down_ = false;
             slider_drag_ = 0;
+            list_dragging_ = false;
             if (pointer_on_map_) {
                 map_.release();
                 pointer_on_map_ = false;
@@ -711,7 +1153,16 @@ void Shell::handle_event(const SDL_Event &event)
         }
         break;
     case SDL_EVENT_MOUSE_WHEEL: {
+        note_keyboard_input();
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+        if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
+            const int rows = std::max(1, std::abs(static_cast<int>(event.wheel.y)));
+            nudge_file_list(event.wheel.y > 0 ? -rows : rows, false, true);
+            break;
+        }
+        if (dialog_ != Dialog::None || menu_.open()) {
+            break;
+        }
         if (ctrl) {
             zoom_by(event.wheel.y > 0 ? 2 : -2);
         } else if (dialog_ == Dialog::None && !menu_.open()) {
@@ -722,6 +1173,7 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_KEY_DOWN: {
+        note_keyboard_input();
         const SDL_Keycode key = event.key.key;
         const int mods = mods_from_sdl(event.key.mod);
         const AccelKey accel = accel_from_key(key);
@@ -731,25 +1183,56 @@ void Shell::handle_event(const SDL_Event &event)
             SDL_SetWindowFullscreen(window_, !full);
             break;
         }
-        if (active_field() != nullptr && (mods & static_cast<int>(AccelMod::Ctrl)) == 0 &&
-            (mods & static_cast<int>(AccelMod::Alt)) == 0) {
-            if (accel == AccelKey::Escape) {
-                on_dialog_button(kCancel);
-                break;
-            }
-            if (accel == AccelKey::Return) {
-                activate_focus();
-                break;
-            }
-            if (key == SDLK_BACKSPACE) {
-                backspace_field();
-                break;
-            }
-            if (key == SDLK_TAB) {
-                move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
-                break;
-            }
+        if (dialog_ == Dialog::Files && accel == AccelKey::Return && (event.key.mod & SDL_KMOD_ALT) == 0 &&
+            !(files_save_ && focus_id_ == kFieldName)) {
+            activate_file_row();
             break;
+        }
+        if (active_field() != nullptr) {
+            const bool ctrl = (mods & static_cast<int>(AccelMod::Ctrl)) != 0;
+            const bool alt = (mods & static_cast<int>(AccelMod::Alt)) != 0;
+            const bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+            // Letter keycodes are the Unicode values ('a' is 0x61, 'v' is 0x76).
+            // The SDLK_a / SDLK_v old-name macros do not compile with this SDL.
+            if (ctrl && key == static_cast<SDL_Keycode>('a')) {
+                select_field();
+                break;
+            }
+            if (ctrl && key == static_cast<SDL_Keycode>('v')) {
+                paste_field();
+                break;
+            }
+            if (!ctrl && !alt) {
+                if (accel == AccelKey::Escape) {
+                    on_dialog_button(kCancel);
+                    break;
+                }
+                if (accel == AccelKey::Return) {
+                    activate_focus();
+                    break;
+                }
+                if (key == SDLK_BACKSPACE) {
+                    backspace_field();
+                    break;
+                }
+                if (accel == AccelKey::Left || accel == AccelKey::Right) {
+                    move_field_caret(accel == AccelKey::Left ? -1 : 1, shift, false, false);
+                    break;
+                }
+                if (key == SDLK_HOME || key == SDLK_END) {
+                    move_field_caret(0, shift, key == SDLK_HOME, key == SDLK_END);
+                    break;
+                }
+                if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+                    nudge_file_list(key == SDLK_PAGEUP ? -1 : 1, true, true);
+                    break;
+                }
+                if (key == SDLK_TAB) {
+                    move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
+                    break;
+                }
+                break;
+            }
         }
         if (dialog_ != Dialog::None) {
             if (accel == AccelKey::Escape) {
@@ -762,13 +1245,21 @@ void Shell::handle_event(const SDL_Event &event)
                     move_focus(direction);
                 }
             } else if (accel == AccelKey::Up) {
+                if (nudge_file_list(-1, false, false)) {
+                    break;
+                }
                 if (!move_osk_vertically(-1)) {
                     move_focus(-1);
                 }
             } else if (accel == AccelKey::Down) {
+                if (nudge_file_list(1, false, false)) {
+                    break;
+                }
                 if (!move_osk_vertically(1)) {
                     move_focus(1);
                 }
+            } else if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+                nudge_file_list(key == SDLK_PAGEUP ? -1 : 1, true, true);
             } else if (key == SDLK_TAB) {
                 move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
             }
@@ -832,10 +1323,7 @@ void Shell::handle_event(const SDL_Event &event)
         }
         break;
     case SDL_EVENT_GAMEPAD_REMOVED:
-        if (pad_ != nullptr && SDL_GetGamepadID(pad_) == event.gdevice.which) {
-            SDL_CloseGamepad(pad_);
-            pad_ = nullptr;
-        }
+        forget_gamepad(event.gdevice.which);
         break;
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
         gamepad_nav_ = true;
@@ -914,6 +1402,12 @@ void Shell::handle_event(const SDL_Event &event)
         } else if (dialog_ != Dialog::None) {
             if ((dir == AccelKey::Left || dir == AccelKey::Right) &&
                 adjust_focused_slider(dir == AccelKey::Left ? -1 : 1)) {
+                break;
+            }
+            if (dir == AccelKey::Up && nudge_file_list(-1, false, false)) {
+                break;
+            }
+            if (dir == AccelKey::Down && nudge_file_list(1, false, false)) {
                 break;
             }
             if ((dir == AccelKey::Up && move_osk_vertically(-1)) || (dir == AccelKey::Down && move_osk_vertically(1))) {
@@ -1027,13 +1521,25 @@ void Shell::handle_event(const SDL_Event &event)
                     on_hotspot(id, pointer_x_, pointer_y_);
                 } else if (id == kMapId && dialog_ == Dialog::None) {
                     pointer_on_map_ = true;
-                    map_.press(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_);
+                    map_.press(map_local_x(pointer_x_), map_local_y(pointer_y_));
                 } else {
                     on_hotspot(id, pointer_x_, pointer_y_);
                 }
+                if (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) {
+                    list_touch_y_ = event.tfinger.y * static_cast<float>(win_h_);
+                }
+            } else if (event.type == SDL_EVENT_FINGER_MOTION &&
+                       (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && list_touch_y_ >= 0.0f) {
+                const float ny = event.tfinger.y * static_cast<float>(win_h_);
+                const int rows = static_cast<int>((ny - list_touch_y_) / 32.0f);
+                if (rows != 0) {
+                    nudge_file_list(-rows, false, true);
+                    list_touch_y_ += static_cast<float>(rows) * 32.0f;
+                }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && pointer_on_map_) {
-                map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, true);
+                map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
             } else if (event.type == SDL_EVENT_FINGER_UP) {
+                list_touch_y_ = -1.0f;
                 pointer_down_ = false;
                 if (pointer_on_map_) {
                     map_.release();

@@ -116,6 +116,23 @@ int main()
         cases.push_back({"funds -1,995,955,278", d, "funds"});
     }
     {
+        // The classic field is a signed 32-bit value. The error names it as
+        // 64-bit money ("-$1,520,143,731"), not "$-1520143731".
+        std::vector<unsigned char> d(base.begin(), base.begin() + 27120);
+        put_long(d, 50, -1520143731L);
+        const std::string p = std::string(dir) + "/funds64.cty";
+        spit(p, d);
+        Micropolis bad;
+        bad.setFunds(123456);
+        const int before_tile = bad.map[10][10];
+        if (bad.loadFile(p.c_str()) || bad.loadErrorDetail.find("-$1,520,143,731") == std::string::npos ||
+            bad.loadErrorDetail.find("$-") != std::string::npos || bad.totalFunds != 123456 ||
+            bad.map[10][10] != before_tile) {
+            return fail(15, "funds were not shown as 64-bit money: " + bad.loadErrorDetail);
+        }
+        std::remove(p.c_str());
+    }
+    {
         auto d = base;
         put_long(d, 8, (9999 - 1900) * 48 + 1);
         cases.push_back({"year past 9999", d, "date"});

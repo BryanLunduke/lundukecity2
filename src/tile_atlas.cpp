@@ -31,21 +31,24 @@ TileAtlas &tile_atlas()
 
 bool TileAtlas::ensure_loaded()
 {
-    if (count_ > 0 || pixels_ != nullptr) {
+    if (tried_) {
         return count_ > 0;
     }
-    pixels_ = reinterpret_cast<const std::uint32_t *>(1);
+    tried_ = true;
+    ++attempts_;
 
     const std::string path = asset_file("images/micropolisEngine/tiles.png");
     if (path.empty()) {
-        std::cerr << "Lunduke City 2: map tiles not found (images/micropolisEngine/tiles.png)\n";
+        error_ = asset_missing_text(asset_candidates());
+        std::cerr << error_ << "\n";
         pixels_ = nullptr;
         return false;
     }
 
     cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
     if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
-        std::cerr << "Lunduke City 2: could not read map tiles\n";
+        error_ = "Lunduke City 2 could not read map tiles:\n" + path;
+        std::cerr << error_ << "\n";
         if (surface != nullptr) {
             cairo_surface_destroy(surface);
         }
@@ -55,7 +58,8 @@ bool TileAtlas::ensure_loaded()
     cairo_surface_flush(surface);
     if (cairo_image_surface_get_format(surface) != CAIRO_FORMAT_ARGB32 &&
         cairo_image_surface_get_format(surface) != CAIRO_FORMAT_RGB24) {
-        std::cerr << "Lunduke City 2: map tiles are not 8-bit RGB\n";
+        error_ = "Lunduke City 2 map tiles are not 8-bit RGB:\n" + path;
+        std::cerr << error_ << "\n";
         cairo_surface_destroy(surface);
         pixels_ = nullptr;
         return false;
@@ -66,6 +70,8 @@ bool TileAtlas::ensure_loaded()
     columns_ = width / kSize;
     const int rows = height / kSize;
     if (columns_ < 1 || rows < 1) {
+        error_ = "Lunduke City 2 map tiles are the wrong size:\n" + path;
+        std::cerr << error_ << "\n";
         cairo_surface_destroy(surface);
         pixels_ = nullptr;
         return false;

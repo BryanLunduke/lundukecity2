@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -267,12 +268,12 @@ struct SoundPlayer::Mixer {
 
     std::mutex mu;
     std::condition_variable cv;
-    std::vector<Voice> voices;
     std::vector<std::string> pending;
     std::mutex clip_mu;
     std::unordered_map<std::string, std::shared_ptr<const std::vector<std::int16_t>>> clips;
     std::thread thread;
     std::atomic<bool> stop{false};
+    std::atomic<float> gain{1.0f};
     bool muted = false;
     bool started = false;
 
@@ -329,7 +330,6 @@ struct SoundPlayer::Mixer {
         std::lock_guard<std::mutex> lock(mu);
         muted = on;
         if (on) {
-            voices.clear();
             pending.clear();
         }
         cv.notify_all();
@@ -337,29 +337,62 @@ struct SoundPlayer::Mixer {
 
     void loop()
     {
-        SDL_AudioStream *stream = nullptr;
-        if (!open_device(kMixRate, stream)) {
+        if (!ensure_audio()) {
             return;
         }
-        constexpr std::size_t kChunk = 512;
-        std::vector<std::int32_t> acc(kChunk);
-        std::vector<std::int16_t> out(kChunk);
+        SDL_AudioSpec spec{};
+        spec.format = SDL_AUDIO_S16LE;
+        spec.channels = 1;
+        spec.freq = kMixRate;
+        const SDL_AudioDeviceID device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
+        if (device == 0) {
+            return;
+        }
+        if (!SDL_ResumeAudioDevice(device)) {
+            SDL_CloseAudioDevice(device);
+            return;
+        }
+        struct Playing {
+            Voice voice;
+            SDL_AudioStream *stream = nullptr;
+        };
+        std::vector<Playing> playing;
+        const int limit = audio_queue_limit_bytes(kMixRate, 1, static_cast<int>(sizeof(std::int16_t)), kAudioLatencyMs);
+        auto drop_playing = [&]() {
+            for (Playing &item : playing) {
+                if (item.stream != nullptr) {
+                    SDL_UnbindAudioStream(item.stream);
+                    SDL_DestroyAudioStream(item.stream);
+                    item.stream = nullptr;
+                }
+            }
+            playing.clear();
+        };
         while (!stop.load()) {
             std::vector<std::string> todo;
+            bool quiet = false;
             {
                 std::unique_lock<std::mutex> lock(mu);
-                if (voices.empty() && pending.empty()) {
-                    cv.wait(lock, [&] { return stop.load() || !pending.empty(); });
+                if (playing.empty() && pending.empty()) {
+                    if (muted) {
+                        cv.wait(lock, [&] { return stop.load() || !muted; });
+                    } else {
+                        cv.wait(lock, [&] { return stop.load() || !pending.empty() || muted; });
+                    }
                 }
                 if (stop.load()) {
                     break;
                 }
                 if (muted) {
-                    voices.clear();
                     pending.clear();
-                    continue;
+                    quiet = true;
+                } else {
+                    todo.swap(pending);
                 }
-                todo.swap(pending);
+            }
+            if (quiet) {
+                drop_playing();
+                continue;
             }
             for (const auto &path : todo) {
                 if (stop.load()) {
@@ -369,60 +402,59 @@ struct SoundPlayer::Mixer {
                 if (!clip) {
                     continue;
                 }
-                std::lock_guard<std::mutex> lock(mu);
-                if (muted || stop.load()) {
-                    break;
+                SDL_AudioStream *stream = SDL_CreateAudioStream(&spec, &spec);
+                if (stream == nullptr || !SDL_BindAudioStream(device, stream)) {
+                    if (stream != nullptr) {
+                        SDL_DestroyAudioStream(stream);
+                    }
+                    continue;
                 }
-                voices.push_back(Voice{std::move(clip), 0});
+                SDL_SetAudioStreamGain(stream, gain.load());
+                playing.push_back(Playing{Voice{std::move(clip), 0}, stream});
             }
-            bool have = false;
-            {
-                std::lock_guard<std::mutex> lock(mu);
+            bool fed = false;
+            for (auto it = playing.begin(); it != playing.end();) {
                 if (stop.load()) {
                     break;
                 }
-                if (muted) {
-                    voices.clear();
-                    continue;
-                }
-                if (voices.empty()) {
-                    continue;
-                }
-                std::fill(acc.begin(), acc.end(), 0);
-                for (auto it = voices.begin(); it != voices.end();) {
-                    const auto &samples = *it->samples;
-                    for (std::size_t i = 0; i < acc.size() && it->pos < samples.size(); ++i, ++it->pos) {
-                        acc[i] += samples[it->pos];
+                SDL_SetAudioStreamGain(it->stream, gain.load());
+                const int queued = SDL_GetAudioStreamQueued(it->stream);
+                const auto &samples = *it->voice.samples;
+                const int available =
+                    static_cast<int>((samples.size() - it->voice.pos) * sizeof(std::int16_t));
+                int bytes = audio_bytes_to_write(queued, limit, available);
+                bytes -= bytes % static_cast<int>(sizeof(std::int16_t));
+                if (bytes > 0) {
+                    if (!SDL_PutAudioStreamData(it->stream, samples.data() + it->voice.pos, bytes)) {
+                        SDL_UnbindAudioStream(it->stream);
+                        SDL_DestroyAudioStream(it->stream);
+                        it = playing.erase(it);
+                        continue;
                     }
-                    if (it->pos >= samples.size()) {
-                        it = voices.erase(it);
-                    } else {
-                        ++it;
-                    }
+                    it->voice.pos += static_cast<std::size_t>(bytes / static_cast<int>(sizeof(std::int16_t)));
+                    fed = true;
                 }
-                for (std::size_t i = 0; i < out.size(); ++i) {
-                    int sample = acc[i];
-                    if (sample > 32767) {
-                        sample = 32767;
-                    }
-                    if (sample < -32768) {
-                        sample = -32768;
-                    }
-                    out[i] = static_cast<std::int16_t>(sample);
+                const bool finished = it->voice.pos >= samples.size() && SDL_GetAudioStreamQueued(it->stream) <= 0;
+                if (finished) {
+                    SDL_UnbindAudioStream(it->stream);
+                    SDL_DestroyAudioStream(it->stream);
+                    it = playing.erase(it);
+                } else {
+                    ++it;
                 }
-                have = true;
             }
-            if (!have || stop.load()) {
-                continue;
-            }
-            if (!SDL_PutAudioStreamData(stream, out.data(),
-                                        static_cast<int>(out.size() * sizeof(std::int16_t)))) {
+            if (stop.load()) {
                 break;
             }
+            if (!fed) {
+                std::unique_lock<std::mutex> lock(mu);
+                if (pending.empty() && !muted) {
+                    cv.wait_for(lock, std::chrono::milliseconds(10), [&] { return stop.load() || !pending.empty() || muted; });
+                }
+            }
         }
-        if (stream != nullptr) {
-            SDL_DestroyAudioStream(stream);
-        }
+        drop_playing();
+        SDL_CloseAudioDevice(device);
     }
 };
 
@@ -432,11 +464,38 @@ SoundPlayer::~SoundPlayer() = default;
 
 void SoundPlayer::set_muted(bool muted)
 {
-    const bool was = muted_.exchange(muted);
+    muted_.store(muted);
     if (mixer_) {
         mixer_->set_muted(muted);
     }
-    (void)was;
+}
+
+void SoundPlayer::set_volume(float volume)
+{
+    if (volume < 0.0f) {
+        volume = 0.0f;
+    }
+    if (volume > 1.0f) {
+        volume = 1.0f;
+    }
+    volume_.store(volume);
+    if (mixer_) {
+        mixer_->gain.store(volume);
+        mixer_->cv.notify_all();
+    }
+}
+
+void SoundPlayer::shutdown()
+{
+    if (!mixer_) {
+        return;
+    }
+    mixer_->stop.store(true);
+    mixer_->cv.notify_all();
+    if (mixer_->thread.joinable()) {
+        mixer_->thread.join();
+    }
+    mixer_.reset();
 }
 
 bool SoundPlayer::probe()
@@ -463,6 +522,7 @@ void SoundPlayer::ensure_mixer()
     }
     mixer_->started = true;
     mixer_->muted = muted_.load();
+    mixer_->gain.store(volume_.load());
     Mixer *mixer = mixer_.get();
     mixer_->thread = std::thread([mixer] { mixer->loop(); });
 }

@@ -1,0 +1,20 @@
+# LeakSanitizer noise from libraries, not from Lunduke City.
+# Point sanitizer runs at this file:
+#   LSAN_OPTIONS=suppressions=${srcdir}/tests/lsan.supp
+#
+# Fontconfig and Pango keep a one-time font cache (FcFontRenderPrepare,
+# FcValueSave, FcLangSetCopy) reached from paint_text / measure_text.
+# Mesa's GLX loader allocates once from SDL_CreateRenderer. RSS stays flat.
+
+leak:libfontconfig
+leak:FcFontRenderPrepare
+leak:FcValueSave
+leak:FcLangSetCopy
+leak:FcConfig
+leak:libpango
+leak:pango_font_map
+leak:pango_cairo
+leak:libGLX_mesa
+leak:libGL.so
+leak:Mesa
+leak:dri

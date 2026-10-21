@@ -4,8 +4,9 @@
 
 #pragma once
 
-// Menu model for the SDL shell. The 0.9.5-2 gtkmm bar has 35 actionable
-// rows (8 System, 11 Options, 6 Disasters, 9 Windows, 1 Help), 4 separators
+// Menu model for the SDL shell. The 0.9.5-2 gtkmm bar had 35 actionable
+// rows. Settings and Controls bring that to 37 (8 System, 12 Options,
+// 6 Disasters, 9 Windows, 2 Help), 4 separators
 // and 5 titles. Hidden zoom accelerators (Ctrl+plus, Ctrl+keypad plus,
 // Ctrl+keypad minus) are extra bindings, not extra rows. Together with the
 // two hidden zoom-in bindings that is the "37" figure in the migration note.
@@ -44,7 +45,7 @@ enum class Action {
     Fire, Flood, Tornado, Earthquake, Monster, Meltdown,
     Budget, Graphs, Evaluation,
     Power, Water, Pollution, Crime, LandValue, Traffic,
-    About,
+    About, Settings, Controls,
     RecentIndex
 };
 
@@ -104,7 +105,7 @@ inline constexpr MenuEntry kSystem[] = {
     {"Save City _As...", "Ctrl+Shift+S", ItemKind::Normal, Action::SaveAs, AccelKey::S,
      static_cast<int>(AccelMod::Ctrl) | static_cast<int>(AccelMod::Shift), 0},
     {"Play _Scenario…", nullptr, ItemKind::Normal, Action::Scenario, AccelKey::None, 0, 0},
-    {"_Rename City…", nullptr, ItemKind::Normal, Action::Rename, AccelKey::None, 0, 0},
+    {"Rename Cit_y…", nullptr, ItemKind::Normal, Action::Rename, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Quit", "Ctrl+Q", ItemKind::Normal, Action::Quit, AccelKey::Q, static_cast<int>(AccelMod::Ctrl), 0},
 };
@@ -115,6 +116,7 @@ inline constexpr MenuEntry kOptions[] = {
     {"Enable _disasters", nullptr, ItemKind::Check, Action::DisastersEnabled, AccelKey::None, 0, 0},
     {"Auto-_goto", nullptr, ItemKind::Check, Action::AutoGoto, AccelKey::None, 0, 0},
     {"_Mute sound", nullptr, ItemKind::Check, Action::Mute, AccelKey::None, 0, 0},
+    {"_Settings…", nullptr, ItemKind::Normal, Action::Settings, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Pause", "Ctrl+P", ItemKind::Radio, Action::SetPause, AccelKey::None, 0, 1},
     {"Slo_w", "Ctrl+1", ItemKind::Radio, Action::Slow, AccelKey::D1, static_cast<int>(AccelMod::Ctrl), 1},
@@ -148,6 +150,7 @@ inline constexpr MenuEntry kWindows[] = {
 };
 
 inline constexpr MenuEntry kHelp[] = {
+    {"_Controls", nullptr, ItemKind::Normal, Action::Controls, AccelKey::None, 0, 0},
     {"_About Lunduke City 2", nullptr, ItemKind::Normal, Action::About, AccelKey::None, 0, 0},
 };
 

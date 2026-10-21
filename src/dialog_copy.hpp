@@ -155,3 +155,63 @@ inline std::string query_body(const std::string &text)
     }
     return body;
 }
+
+// Which pending action the save prompt is guarding, and which file Replace
+// would overwrite. The city name is quoted when we have one.
+enum class SavePromptKind { Continue, Quit, NewCity, Scenario, Open, Recover };
+
+inline std::string save_changes_question(SavePromptKind kind, const std::string &city)
+{
+    const std::string who = city.empty() ? std::string("this city") : "\"" + city + "\"";
+    switch (kind) {
+    case SavePromptKind::Quit:
+        return "Save changes to " + who + " before quitting?";
+    case SavePromptKind::NewCity:
+        return "Save changes to " + who + " before starting a new city?";
+    case SavePromptKind::Scenario:
+        return "Save changes to " + who + " before playing a scenario?";
+    case SavePromptKind::Open:
+        return "Save changes to " + who + " before opening another city?";
+    case SavePromptKind::Recover:
+        return "Save changes to " + who + " before recovering another city?";
+    case SavePromptKind::Continue:
+        break;
+    }
+    return "Save changes to " + who + " before continuing?";
+}
+
+// Break a save question near the middle when it cannot fit on one line.
+// A trailing word such as "city?" then stays with the words in front of it.
+inline std::string balance_save_question(const std::string &question)
+{
+    const std::size_t mid = question.size() / 2;
+    if (mid == 0) {
+        return question;
+    }
+    const std::size_t left = question.rfind(' ', mid);
+    const std::size_t right = question.find(' ', mid);
+    std::size_t at = std::string::npos;
+    if (left == std::string::npos) {
+        at = right;
+    } else if (right == std::string::npos) {
+        at = left;
+    } else if (mid - left <= right - mid) {
+        at = left;
+    } else {
+        at = right;
+    }
+    if (at == std::string::npos || at == 0 || at + 1 >= question.size()) {
+        return question;
+    }
+    std::string out = question;
+    out[at] = '\n';
+    return out;
+}
+
+inline std::string replace_file_question(const std::string &filename)
+{
+    if (filename.empty()) {
+        return "A city file with that name already exists. Replace it?";
+    }
+    return "Replace \"" + filename + "\"? The city saved there will be overwritten.";
+}

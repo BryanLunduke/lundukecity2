@@ -100,6 +100,70 @@ int main()
         }
     }
 
+    // A brand-new city, still in the month it was generated, does not ask
+    // to be saved just because the clock moved. An edit does, and so does
+    // play that reaches the next month. A saved city still asks.
+    {
+        CitySession fresh;
+        fresh.new_city("New City", 4);
+        // The saved speed is applied and then accepted, the same as startup.
+        // That is not an edit.
+        fresh.set_speed(3);
+        fresh.accept_preferences();
+        const std::string born = fresh.date_text();
+        if (fresh.needs_save_prompt()) {
+            return fail(20, "a new city asks to be saved before the clock moves");
+        }
+        for (int i = 0; i < 30; ++i) {
+            fresh.tick();
+        }
+        if (fresh.date_text() != born) {
+            std::cerr << born << " -> " << fresh.date_text() << "\n";
+            return fail(21, "the first month ended before the untouched-city check");
+        }
+        if (fresh.needs_save_prompt()) {
+            return fail(22, "an untouched new city asks to be saved in its first month");
+        }
+        fresh.set_tax(9);
+        if (!fresh.needs_save_prompt()) {
+            return fail(23, "editing a new city did not ask to save");
+        }
+    }
+    {
+        CitySession played;
+        played.new_city("New City", 4);
+        played.set_speed(3);
+        played.accept_preferences();
+        const std::string born = played.date_text();
+        for (int i = 0; i < 4000 && played.date_text() == born; ++i) {
+            played.tick();
+        }
+        if (played.date_text() == born || !played.needs_save_prompt()) {
+            std::cerr << born << " -> " << played.date_text() << "\n";
+            return fail(24, "play past the first month is not unsaved work");
+        }
+    }
+    {
+        CitySession kept;
+        kept.new_city("New City", 4);
+        if (!kept.save_city_as(city)) {
+            return fail(25, "could not save the new city");
+        }
+        kept.set_speed(3);
+        kept.accept_preferences();
+        const std::string born = kept.date_text();
+        for (int i = 0; i < 30; ++i) {
+            kept.tick();
+        }
+        if (kept.date_text() != born) {
+            std::cerr << born << " -> " << kept.date_text() << "\n";
+            return fail(26, "the saved city's first month ended too soon");
+        }
+        if (!kept.needs_save_prompt()) {
+            return fail(27, "a saved city did not ask to save time in its first month");
+        }
+    }
+
     // C-5's historyInitialized fix is a default member initialiser; the
     // UBSan build of this suite is what checks it (no invalid bool loads).
 

@@ -4,6 +4,8 @@
 
 #include "map_view.hpp"
 
+#include "map_fit.hpp"
+
 #include "sprite_art.hpp"
 #include "tile_atlas.hpp"
 #include "tools.hpp"
@@ -27,18 +29,19 @@ MapView::~MapView()
     }
 }
 
-void MapView::tick(int elapsed_ms)
+bool MapView::tick(int elapsed_ms)
 {
     if (!active_) {
-        return;
+        return false;
     }
     blink_ms_ += elapsed_ms;
     if (blink_ms_ < 500) {
-        return;
+        return false;
     }
     blink_ms_ = 0;
     blink_on_ = !blink_on_;
     sync();
+    return last_sync_blits_ > 0;
 }
 
 void MapView::invalidate_all()
@@ -79,7 +82,7 @@ void MapView::clear_hover()
 
 void MapView::set_tile_size(int pixels)
 {
-    tile_size_ = std::max(6, std::min(16, pixels));
+    tile_size_ = std::max(kMinMapTile, std::min(kMaxMapTile, pixels));
 }
 
 void MapView::set_shake(int dx, int dy)

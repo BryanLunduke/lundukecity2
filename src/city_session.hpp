@@ -190,6 +190,8 @@ public:
 
     void set_sound_enabled(bool on);
     bool sound_enabled() const;
+    // Startup restores saved preferences. That is not a city edit.
+    void accept_preferences();
     std::vector<std::string> take_sounds();
     bool take_budget_request();
     // A modal dialog deferred the budget window. Ask for it again.
@@ -212,6 +214,8 @@ public:
     // cityAssessedValue as stored on the engine, not the preview copy.
     std::int64_t stored_assessed_value() const;
     // Unsaved tools, budget, disasters, rename, or a tax year still open.
+    // A generated city that has never been saved, still in the month it
+    // was created, does not count the clock alone as a change.
     bool needs_save_prompt() const;
     bool time_advanced_since_save() const;
     long long city_time() const;
@@ -356,6 +360,11 @@ private:
     bool simulation_paused_ = false;
     int speed_ = 2;
     bool dirty_ = false;
+    // True only after new_city(), until the city is saved, loaded, or a
+    // scenario starts. birth_* is the month shown at that moment.
+    bool fresh_generated_ = false;
+    int birth_month_ = 0;
+    int birth_year_ = 1900;
     long long saved_city_time_ = 0;
     void mark_clean_time();
     bool in_callback_ = false;
