@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "assets.hpp"
+#include "dialog_layout.hpp"
 #include "list_scroll.hpp"
 #include "redraw.hpp"
 #include "ui_scale.hpp"
@@ -123,6 +124,26 @@ int main()
     if (!parsed.has_geometry || parsed.x != 40 || parsed.y != 50 || parsed.w != 1280 || parsed.h != 800 || !parsed.maximized ||
         std::abs(parsed.user_scale - 1.5f) > 0.001f) {
         return fail("settings did not round-trip");
+    }
+    const DialogRect budget = place_dialog(1280, 800, 640, 470, 16);
+    if (budget.w > 640.5 || budget.h > 470.5 || budget.x < 0 || budget.y < 0 || budget.x + budget.w > 1280 ||
+        budget.y + budget.h > 800) {
+        return fail("budget dialog does not fit 1280x800");
+    }
+    const DialogRect deck = place_dialog(1024, 640, 700, 420, 16);
+    if (deck.w > 1024 - 32 || deck.h > 640 - 32 || deck.y + deck.h > 640) {
+        return fail("evaluation dialog does not fit 1024x640");
+    }
+    if (std::abs(message_width(1920, 16, 420, 560) - 560) > 0.1 || std::abs(message_width(800, 16, 420, 560) - 560) > 0.1 ||
+        std::abs(message_width(400, 16, 420, 560) - 368) > 0.1) {
+        return fail("message width was not clamped");
+    }
+    if (std::abs(button_width(40, 32, 120) - 120) > 0.1 || std::abs(button_width(200, 32, 120) - 232) > 0.1) {
+        return fail("button width");
+    }
+    const DialogRect popped = place_near(1280, 800, 480, 160, 1200, 700, 16);
+    if (popped.x < 16 || popped.y < 16 || popped.x + popped.w > 1280 - 16 || popped.y + popped.h > 800 - 16) {
+        return fail("query popup escaped the window");
     }
     redraw::Reasons idle;
     if (redraw::needed(idle)) {

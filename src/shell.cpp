@@ -828,6 +828,10 @@ void Shell::loop()
                 query_pinned_ = true;
                 info_body_ = query_body(text);
                 if (dialog_ == Dialog::None || dialog_ == Dialog::Query) {
+                    query_anchored_ = pointer_x_ >= view_x_ && pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ &&
+                                      pointer_y_ < view_y_ + view_h_;
+                    query_anchor_x_ = pointer_x_;
+                    query_anchor_y_ = pointer_y_;
                     open_dialog(Dialog::Query);
                 }
             }

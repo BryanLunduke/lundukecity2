@@ -280,6 +280,9 @@ private:
     double overlay_w_ = 0;
     double overlay_h_ = 0;
     bool query_pinned_ = false;
+    bool query_anchored_ = false;
+    double query_anchor_x_ = 0;
+    double query_anchor_y_ = 0;
     int shown_message_serial_ = 0;
     int shown_query_serial_ = 0;
     std::string shown_message_;

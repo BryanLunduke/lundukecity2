@@ -4,6 +4,7 @@
 
 #include "shell_state.hpp"
 
+#include "dialog_layout.hpp"
 #include "list_scroll.hpp"
 #include "redraw.hpp"
 #include "text_paint.hpp"
@@ -163,6 +164,14 @@ void Shell::run_review_checks()
     running.sim_running = true;
     if (!redraw::needed(running)) {
         fail("a running simulation did not ask for a redraw");
+        return;
+    }
+
+    // M1: content-sized dialogs stay inside a Steam Deck and a short laptop window.
+    const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
+    const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
+    if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {
+        fail("a content-sized dialog does not fit the small window");
         return;
     }
 }

@@ -450,17 +450,14 @@ void Shell::drive_ui_test()
         return;
     }
     case 7: {
-        const double dw = std::min(860.0, win_w_ - 48.0);
-        const double dh = std::min(640.0, win_h_ - 48.0);
-        const double x = (win_w_ - dw) / 2.0;
-        const double y = (win_h_ - dh) / 2.0;
-        const double pw = std::min(520.0, dw);
-        const double px = x + (dw - pw) / 2.0;
-        const double ph = std::min(300.0, dh);
-        const Hotspot *close = find_hot(hot_, kClose, y);
-        if (close == nullptr || close->x < px - 1 || close->x + close->w > px + pw + 1 || close->y < y ||
-            close->y + close->h > y + ph + 1) {
-            fail("query Close is outside the query panel");
+        const Hotspot *close = find_hot(hot_, kClose, 0);
+        if (close == nullptr || close->x < 0 || close->y < menu_h_ || close->x + close->w > win_w_ ||
+            close->y + close->h > win_h_) {
+            fail("query Close is outside the window");
+            return;
+        }
+        if (close->w > 220) {
+            fail("query Close is stretched across the dialog");
             return;
         }
         close_dialog();
