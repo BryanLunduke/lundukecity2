@@ -8,6 +8,7 @@
 #include "file_list.hpp"
 #include "list_scroll.hpp"
 #include "osk_layout.hpp"
+#include "text_edit.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
 #include "tools.hpp"
@@ -125,12 +126,15 @@ void Shell::open_dialog(Dialog dialog)
         new_lakes_ = CitySession::kTerrainDefault;
         new_trees_ = CitySession::kTerrainDefault;
         focus_id_ = kFieldName;
+        field_select_all(field_a_, field_caret_, field_anchor_);
     } else if (dialog == Dialog::Rename) {
         field_a_ = session_.city_name();
         focus_id_ = kFieldName;
+        field_select_all(field_a_, field_caret_, field_anchor_);
     } else if (dialog == Dialog::Files && files_save_) {
         field_a_ = proposed_city_filename(session_.city_name(), session_.save_path());
         focus_id_ = kFieldName;
+        field_select_all(field_a_, field_caret_, field_anchor_);
     } else if (dialog == Dialog::Unsaved) {
         focus_id_ = kSave;
     } else if (dialog == Dialog::Disaster || dialog == Dialog::RecoveryDelete || dialog == Dialog::Overwrite) {
@@ -909,6 +913,10 @@ void Shell::on_dialog_button(int id)
     if (dialog_ == Dialog::Files) {
         if (id == kOk || id == kSave || id == kPlay) {
             if (files_save_) {
+                if (text_has_path_separator(field_a_)) {
+                    dialog_error_ = "That name cannot contain / or \\.";
+                    return;
+                }
                 const std::string path = with_cty_suffix(path_join(files_dir_, field_a_));
                 std::error_code ec;
                 if (std::filesystem::exists(path, ec) && path != session_.save_path()) {
@@ -1229,16 +1237,30 @@ std::string *Shell::active_field()
     return nullptr;
 }
 
-void Shell::type_text(const std::string &text)
+void Shell::select_field()
 {
     std::string *field = active_field();
     if (field == nullptr) {
         return;
     }
-    if (field->size() + text.size() > 64) {
+    field_select_all(*field, field_caret_, field_anchor_);
+}
+
+void Shell::type_text(const std::string &text)
+{
+    std::string *field = active_field();
+    if (field == nullptr || text.empty()) {
         return;
     }
-    *field += text;
+    if (field == &field_a_ && text_has_path_separator(text)) {
+        dialog_error_ = "That name cannot contain / or \\.";
+        return;
+    }
+    if (!field_insert(*field, field_caret_, field_anchor_, text, 64)) {
+        dialog_error_ = "That name is too long.";
+    } else if (dialog_error_ == "That name cannot contain / or \\." || dialog_error_ == "That name is too long.") {
+        dialog_error_.clear();
+    }
 }
 
 void Shell::backspace_field()
@@ -1247,7 +1269,34 @@ void Shell::backspace_field()
     if (field == nullptr || field->empty()) {
         return;
     }
-    field->pop_back();
+    field_backspace(*field, field_caret_, field_anchor_);
+}
+
+void Shell::move_field_caret(int direction, bool extend, bool home, bool end)
+{
+    std::string *field = active_field();
+    if (field == nullptr) {
+        return;
+    }
+    if (home) {
+        field_home(*field, field_caret_, field_anchor_, extend);
+        return;
+    }
+    if (end) {
+        field_end(*field, field_caret_, field_anchor_, extend);
+        return;
+    }
+    field_move(*field, field_caret_, field_anchor_, direction, extend);
+}
+
+void Shell::paste_field()
+{
+    char *clip = SDL_GetClipboardText();
+    if (clip == nullptr) {
+        return;
+    }
+    type_text(clip);
+    SDL_free(clip);
 }
 
 int Shell::hit(double x, double y) const
@@ -1322,6 +1371,9 @@ void Shell::move_focus(int delta)
     }
     index = (index + delta + static_cast<int>(focus_order_.size())) % static_cast<int>(focus_order_.size());
     focus_id_ = focus_order_[static_cast<std::size_t>(index)];
+    if (focus_id_ == kFieldName || focus_id_ == kFieldSeed) {
+        select_field();
+    }
     if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
         if (dialog_ == Dialog::Files) {
             list_index_ = list_scroll_ + (focus_id_ - kListItem);

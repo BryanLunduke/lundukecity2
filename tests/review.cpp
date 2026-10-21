@@ -5,6 +5,7 @@
 #include "assets.hpp"
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
+#include "text_edit.hpp"
 #include "list_scroll.hpp"
 #include "redraw.hpp"
 #include "ui_scale.hpp"
@@ -152,6 +153,25 @@ int main()
     }
     if (!file_name_hidden(".git") || file_name_hidden("city.cty")) {
         return fail("dotfile filter");
+    }
+    std::string word = "caf\xc3\xa9";
+    int caret = static_cast<int>(word.size());
+    int anchor = caret;
+    field_backspace(word, caret, anchor);
+    if (word != "caf" || caret != 3) {
+        return fail("backspace removed a byte of a UTF-8 character");
+    }
+    field_insert(word, caret, anchor, "\xc3\xa9s", 64);
+    field_select_all(word, caret, anchor);
+    if (field_insert(word, caret, anchor, std::string(80, 'x'), 64) || word != "caf\xc3\xa9s") {
+        return fail("an over-long insert erased the selection");
+    }
+    field_insert(word, caret, anchor, "Z", 64);
+    if (word != "Z" || caret != 1) {
+        return fail("typing did not replace the selection");
+    }
+    if (!text_has_path_separator("a/b") || text_has_path_separator("ab")) {
+        return fail("path separator check");
     }
     if (default_cities_dir().find("Lunduke City 2") == std::string::npos) {
         return fail("default city folder is not under Documents");

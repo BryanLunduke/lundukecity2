@@ -587,7 +587,8 @@ std::string Shell::visual_stamp() const
         << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
         << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_ << ' ' << shown_message_ << ' '
         << hint_visible << ' ' << query_pinned_ << ' ' << gamepad_nav_ << ' ' << cursor_x_ << ' ' << cursor_y_ << ' '
-        << pointer_x_ << ' ' << pointer_y_ << ' ' << field_a_ << ' ' << field_b_ << ' ' << dialog_error_ << ' '
+        << pointer_x_ << ' ' << pointer_y_ << ' ' << field_a_ << ' ' << field_b_ << ' ' << field_caret_ << ' ' << field_anchor_
+        << ' ' << dialog_error_ << ' '
         << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
         << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
         << static_cast<int>(files_.size());
@@ -1050,29 +1051,51 @@ void Shell::handle_event(const SDL_Event &event)
             SDL_SetWindowFullscreen(window_, !full);
             break;
         }
-        if (active_field() != nullptr && (mods & static_cast<int>(AccelMod::Ctrl)) == 0 &&
-            (mods & static_cast<int>(AccelMod::Alt)) == 0) {
-            if (accel == AccelKey::Escape) {
-                on_dialog_button(kCancel);
+        if (active_field() != nullptr) {
+            const bool ctrl = (mods & static_cast<int>(AccelMod::Ctrl)) != 0;
+            const bool alt = (mods & static_cast<int>(AccelMod::Alt)) != 0;
+            const bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+            // Letter keycodes are the Unicode values ('a' is 0x61, 'v' is 0x76).
+            // The SDLK_a / SDLK_v old-name macros do not compile with this SDL.
+            if (ctrl && key == static_cast<SDL_Keycode>('a')) {
+                select_field();
                 break;
             }
-            if (accel == AccelKey::Return) {
-                activate_focus();
+            if (ctrl && key == static_cast<SDL_Keycode>('v')) {
+                paste_field();
                 break;
             }
-            if (key == SDLK_BACKSPACE) {
-                backspace_field();
+            if (!ctrl && !alt) {
+                if (accel == AccelKey::Escape) {
+                    on_dialog_button(kCancel);
+                    break;
+                }
+                if (accel == AccelKey::Return) {
+                    activate_focus();
+                    break;
+                }
+                if (key == SDLK_BACKSPACE) {
+                    backspace_field();
+                    break;
+                }
+                if (accel == AccelKey::Left || accel == AccelKey::Right) {
+                    move_field_caret(accel == AccelKey::Left ? -1 : 1, shift, false, false);
+                    break;
+                }
+                if (key == SDLK_HOME || key == SDLK_END) {
+                    move_field_caret(0, shift, key == SDLK_HOME, key == SDLK_END);
+                    break;
+                }
+                if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+                    nudge_file_list(key == SDLK_PAGEUP ? -1 : 1, true, true);
+                    break;
+                }
+                if (key == SDLK_TAB) {
+                    move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
+                    break;
+                }
                 break;
             }
-            if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
-                nudge_file_list(key == SDLK_PAGEUP ? -1 : 1, true, true);
-                break;
-            }
-            if (key == SDLK_TAB) {
-                move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
-                break;
-            }
-            break;
         }
         if (dialog_ != Dialog::None) {
             if (accel == AccelKey::Escape) {

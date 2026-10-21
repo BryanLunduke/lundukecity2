@@ -129,6 +129,9 @@ private:
     std::string *active_field();
     void type_text(const std::string &text);
     void backspace_field();
+    void select_field();
+    void move_field_caret(int direction, bool extend, bool home, bool end);
+    void paste_field();
     int hit(double x, double y) const;
     void push_hot(double x, double y, double w, double h, int id);
     void push_focus(int id);
@@ -242,6 +245,8 @@ private:
 
     std::string field_a_;
     std::string field_b_;
+    int field_caret_ = 0;
+    int field_anchor_ = 0;
     std::string dialog_error_;
     std::string info_title_;
     std::string info_body_;

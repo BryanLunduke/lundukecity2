@@ -6,6 +6,7 @@
 
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
+#include "text_edit.hpp"
 #include "list_scroll.hpp"
 #include "redraw.hpp"
 #include "text_paint.hpp"
@@ -169,6 +170,24 @@ void Shell::run_review_checks()
     }
 
     // M1: content-sized dialogs stay inside a Steam Deck and a short laptop window.
+    dialog_ = Dialog::NewCity;
+    new_page_ = 0;
+    focus_id_ = kFieldName;
+    field_a_ = "caf\xc3\xa9";
+    field_caret_ = static_cast<int>(field_a_.size());
+    field_anchor_ = field_caret_;
+    backspace_field();
+    if (field_a_ != "caf") {
+        fail("field backspace split a UTF-8 character");
+        return;
+    }
+    type_text("/");
+    if (field_a_ != "caf" || dialog_error_.find("/") == std::string::npos) {
+        fail("a slash was accepted in a city name");
+        return;
+    }
+    dialog_error_.clear();
+    close_dialog();
     files_.clear();
     files_.push_back("..");
     files_.push_back(".git/");

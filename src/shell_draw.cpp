@@ -7,6 +7,7 @@
 #include "dialog_copy.hpp"
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
+#include "text_edit.hpp"
 #include "graph_legend.hpp"
 #include "list_scroll.hpp"
 #include "notice_bar.hpp"
@@ -394,6 +395,27 @@ void Shell::draw_dialog(cairo_t *cr)
     auto text_block_height = [&](const std::string &text, double width) {
         return static_cast<double>(std::max(dp(18), measure_text(cr, body_font(), text, static_cast<int>(width)).height));
     };
+    auto paint_caret = [&](double tx, double ty, double th, const std::string &text, bool focused) {
+        if (!focused) {
+            return;
+        }
+        field_clamp(text, field_caret_, field_anchor_);
+        const int from = std::min(field_caret_, field_anchor_);
+        const int to = std::max(field_caret_, field_anchor_);
+        if (from != to) {
+            const int x0 = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(from)), -1).width;
+            const int x1 = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(to)), -1).width;
+            cairo_set_source_rgba(cr, theme::kSelectR, theme::kSelectG, theme::kSelectB, 0.28);
+            cairo_rectangle(cr, tx + x0, ty - dp(2), std::max(1, x1 - x0), th);
+            cairo_fill(cr);
+        }
+        const int cx = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(field_caret_)), -1).width;
+        cairo_set_source_rgb(cr, theme::kTextR, theme::kTextG, theme::kTextB);
+        cairo_set_line_width(cr, 1);
+        cairo_move_to(cr, tx + cx + 0.5, ty - dp(2));
+        cairo_line_to(cr, tx + cx + 0.5, ty + th);
+        cairo_stroke(cr);
+    };
     if (dialog_ == Dialog::Unsaved) {
         const char *question = "Save changes to this city before continuing?";
         switch (after_save_) {
@@ -492,6 +514,7 @@ void Shell::draw_dialog(cairo_t *cr)
             push_focus(kFieldName);
             paint_text(cr, body_font(), field_a_.empty() ? " " : field_a_, x + margin + dp(8), field_y + dp(8),
                        theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(16)));
+            paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, focus_id_ == kFieldName);
             double below = field_y + dp(36);
             if (!dialog_error_.empty()) {
                 paint_text(cr, ui_font(), dialog_error_, x + margin, below + dp(4), 0.6, 0.1, 0.1,
@@ -539,6 +562,7 @@ void Shell::draw_dialog(cairo_t *cr)
             push_focus(kFieldSeed);
             paint_text(cr, body_font(), field_b_, seed_x + dp(8), seed_y + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(seed_w - dp(16)));
+            paint_caret(seed_x + dp(8), seed_y + dp(6), dp(18), field_b_, focus_id_ == kFieldSeed);
             if (!dialog_error_.empty()) {
                 paint_text(cr, ui_font(), dialog_error_, x + margin, seed_y + dp(36), 0.6, 0.1, 0.1,
                            static_cast<int>(dw - 2 * margin));
@@ -605,6 +629,7 @@ void Shell::draw_dialog(cairo_t *cr)
         push_focus(kFieldName);
         paint_text(cr, body_font(), field_a_, x + margin + dp(8), field_y + dp(8), theme::kTextR, theme::kTextG,
                    theme::kTextB, static_cast<int>(dw - 2 * margin - dp(16)));
+        paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, focus_id_ == kFieldName);
         double below = field_y + dp(36);
         if (!dialog_error_.empty()) {
             paint_text(cr, ui_font(), dialog_error_, x + margin, below + dp(4), 0.6, 0.1, 0.1,
@@ -742,6 +767,7 @@ void Shell::draw_dialog(cairo_t *cr)
             push_focus(kFieldName);
             paint_text(cr, body_font(), field_a_, x + 24, y + dh - 92, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 48));
+            paint_caret(x + 24, y + dh - 92, dp(18), field_a_, focus_id_ == kFieldName);
         }
         bool folder_row = false;
         if (!files_save_ && list_index_ >= 0 && list_index_ < static_cast<int>(files_.size())) {
