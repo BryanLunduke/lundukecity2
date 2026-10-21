@@ -11,6 +11,7 @@
 #include "list_scroll.hpp"
 #include "map_fit.hpp"
 #include "redraw.hpp"
+#include "view_math.hpp"
 #include "text_wrap.hpp"
 #include "sound_player.hpp"
 #include "ui_scale.hpp"
@@ -315,20 +316,59 @@ int main()
         map_letterbox(1000, 1440) != 0) {
         return fail("large windows do not cover the map");
     }
-    // Drawn tiles stay on the 16px grid. 12px was the old default and is what
-    // broke the road dashes. Zoom notches move one whole multiple at a time.
-    if (kMapTileSource != 16 || kMinMapTile != 16 || snap_map_tile(1) != 16 || snap_map_tile(12) != 16 ||
-        snap_map_tile(16) != 16 || snap_map_tile(17) != 32 || snap_map_tile(48) != 48 || snap_map_tile(64) != 64 ||
-        snap_map_tile(80) != 64) {
-        return fail("map zoom is not a whole multiple of the 16px tile");
+    // 16 and up are whole multiples of the atlas. 8 is the filtered overview.
+    // 12px was the old default and is what broke the road dashes.
+    if (kMapTileSource != 16 || kMapTileOverview != 8 || kMinMapTile != 8 || snap_map_tile(1) != 8 ||
+        snap_map_tile(8) != 8 || snap_map_tile(9) != 16 || snap_map_tile(12) != 16 || snap_map_tile(16) != 16 ||
+        snap_map_tile(17) != 32 || snap_map_tile(48) != 48 || snap_map_tile(64) != 64 || snap_map_tile(80) != 64) {
+        return fail("map zoom is not 8 or a whole multiple of the 16px tile");
     }
-    if (step_map_tile(16, 2) != 32 || step_map_tile(32, -2) != 16 || step_map_tile(48, 2) != 64 ||
-        step_map_tile(64, 2) != 64 || step_map_tile(16, -2) != 16 || step_map_tile(12, -2) != 16) {
-        return fail("zoom step left the 16px grid");
+    if (step_map_tile(8, 2) != 16 || step_map_tile(8, -2) != 8 || step_map_tile(16, 2) != 32 ||
+        step_map_tile(16, -2) != 8 || step_map_tile(32, -2) != 16 || step_map_tile(48, 2) != 64 ||
+        step_map_tile(64, 2) != 64 || step_map_tile(12, -2) != 8) {
+        return fail("zoom step left the 8/16/32/48/64 grid");
+    }
+    bool latched = false;
+    if (!trigger_zoom_edge(0.9f, latched) || !latched || trigger_zoom_edge(1.0f, latched) ||
+        trigger_zoom_edge(0.5f, latched) || !latched || trigger_zoom_edge(0.2f, latched) || latched ||
+        !trigger_zoom_edge(0.6f, latched)) {
+        return fail("holding the trigger repeated the zoom");
+    }
+    float pinch = 100.0f;
+    if (pinch_zoom_step(108.0f, pinch) != 0 || pinch != 100.0f || pinch_zoom_step(141.0f, pinch) != 1 ||
+        pinch != 141.0f || pinch_zoom_step(120.0f, pinch) != 0 || pinch_zoom_step(98.0f, pinch) != -1) {
+        return fail("a small pinch changed the zoom");
     }
     const double map_origin = snapped_map_origin(118, 0, 10.7);
     if (map_origin != std::floor(map_origin) || map_origin != 107.0) {
         return fail("the scrolled map is not aligned to a device pixel");
+    }
+    int hit_x = -1;
+    int hit_y = -1;
+    // Device pixel 107 is the snapped origin. At 8px that pixel is tile 0,
+    // and the next tile starts 8 device pixels later.
+    const double at_origin = 107.0 - map_origin;
+    const double next_tile = 107.0 + 8.0 - map_origin;
+    if (!map_tile_at(at_origin + 7.9, 3.0, 0, 0, 8, 120, 100, hit_x, hit_y) || hit_x != 0 || hit_y != 0 ||
+        !map_tile_at(next_tile, 8.0 * 40.0, 0, 0, 8, 120, 100, hit_x, hit_y) || hit_x != 1 || hit_y != 40 ||
+        map_tile_at(at_origin - 0.1, 0.0, 0, 0, 8, 120, 100, hit_x, hit_y)) {
+        return fail("an 8px click missed the tile under the cursor");
+    }
+    double fx = 0;
+    double fy = 0;
+    double fw = 0;
+    double fh = 0;
+    // 8px city is 960x800. A 1154x684 port sees every column and a vertical slice.
+    map_viewport_fraction(0.0, 58.0, 120 * 8, 100 * 8, 1154, 684, fx, fy, fw, fh);
+    clamp_viewport_span(fx, fw);
+    clamp_viewport_span(fy, fh);
+    if (fx != 0.0 || fw != 1.0 || std::abs(fy - 58.0 / 800.0) > 0.0001 || std::abs(fh - 684.0 / 800.0) > 0.0001) {
+        return fail("the minimap rectangle is wrong at 8px");
+    }
+    map_viewport_fraction(383.0, 458.0, 120 * 16, 100 * 16, 1154, 684, fx, fy, fw, fh);
+    if (std::abs(fx - 383.0 / 1920.0) > 0.0001 || std::abs(fw - 1154.0 / 1920.0) > 0.0001 ||
+        std::abs(fy - 458.0 / 1600.0) > 0.0001 || std::abs(fh - 684.0 / 1600.0) > 0.0001) {
+        return fail("the minimap rectangle is wrong at 16px");
     }
     double origin = 0;
     double span = 1.4;

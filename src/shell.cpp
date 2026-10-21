@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -203,6 +204,17 @@ int Shell::run(int argc, char **argv)
 #ifdef CITY_REVIEW_CHECKS
     if (const char *review = std::getenv("LUNDUKE_CITY2_REVIEW")) {
         review_ = review[0] != '\0' && review[0] != '0';
+    }
+    // The self-test locks a 1280x800 window. A Deck flag or a size override
+    // inherited from the environment must not change that.
+    if (review_) {
+#ifdef _WIN32
+        _putenv_s("SteamDeck", "");
+        _putenv_s("LUNDUKE_CITY2_SIZE", "");
+#else
+        unsetenv("SteamDeck");
+        unsetenv("LUNDUKE_CITY2_SIZE");
+#endif
     }
 #endif
     if (const char *demo = std::getenv("LUNDUKE_CITY2_DEMO")) {
@@ -740,12 +752,8 @@ void Shell::bind_session()
     };
     palette_.on_selected = [this](int index) { select_tool(index); };
     minimap_.set_viewport_provider([this](double &fx, double &fy, double &fw, double &fh) {
-        const double mw = std::max(1, map_.pixel_width());
-        const double mh = std::max(1, map_.pixel_height());
-        fx = scroll_x_ / mw;
-        fy = scroll_y_ / mh;
-        fw = view_w_ / mw;
-        fh = view_h_ / mh;
+        map_viewport_fraction(scroll_x_, scroll_y_, map_.pixel_width(), map_.pixel_height(), view_w_, view_h_, fx, fy, fw,
+                              fh);
     });
     minimap_.on_jump = [this](double fx, double fy) { center_on_fraction(fx, fy); };
     session_.set_listener([this] { note_message(); });
@@ -883,9 +891,6 @@ void Shell::loop()
         // blink clock does, or a paused city would flash late.
         sim_acc += std::min(elapsed, 100);
         blink_drew_ = map_.tick(elapsed);
-        if (zoom_cool_ > 0) {
-            zoom_cool_ -= elapsed;
-        }
         while (sim_acc >= 100) {
             sim_acc -= 100;
             tick_sim(100);
@@ -917,13 +922,11 @@ void Shell::loop()
             scroll_x_ += pan_x_ * step;
             scroll_y_ += pan_y_ * step;
             clamp_scroll();
-            if (zoom_cool_ <= 0 && trig_r_ > 0.6f) {
+            if (trigger_zoom_edge(trig_r_, zoom_r_latched_)) {
                 zoom_by(2);
-                zoom_cool_ = 180;
             }
-            if (zoom_cool_ <= 0 && trig_l_ > 0.6f) {
+            if (trigger_zoom_edge(trig_l_, zoom_l_latched_)) {
                 zoom_by(-2);
-                zoom_cool_ = 180;
             }
         }
         if (pad_dragging_ && pad_ != nullptr && dialog_ == Dialog::None && !menu_.open()) {
@@ -1681,19 +1684,19 @@ void Shell::handle_event(const SDL_Event &event)
             const float dist = std::sqrt(dx * dx + dy * dy);
             const float cx = (fingers_[0].x + fingers_[1].x) * 0.5f;
             const float cy = (fingers_[0].y + fingers_[1].y) * 0.5f;
-            if (event.type == SDL_EVENT_FINGER_MOTION && pinch_dist_ > 1.0f) {
+            if (!(pinch_dist_ > 1.0f)) {
+                pinch_dist_ = dist;
+            } else if (event.type == SDL_EVENT_FINGER_MOTION) {
                 scroll_x_ -= (cx - pointer_x_);
                 scroll_y_ -= (cy - pointer_y_);
                 clamp_scroll();
-                if (pinch_dist_ > 0 && dist > pinch_dist_ * 1.08f) {
+                const int pinch = pinch_zoom_step(dist, pinch_dist_);
+                if (pinch > 0) {
                     zoom_by(2);
-                    pinch_dist_ = dist;
-                } else if (dist < pinch_dist_ * 0.92f) {
+                } else if (pinch < 0) {
                     zoom_by(-2);
-                    pinch_dist_ = dist;
                 }
             }
-            pinch_dist_ = dist;
             pointer_x_ = cx;
             pointer_y_ = cy;
         } else if (fingers_.size() == 1) {

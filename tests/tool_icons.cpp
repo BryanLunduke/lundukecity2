@@ -352,13 +352,21 @@ int main()
         const unsigned char *badge_px = cairo_image_surface_get_data(badge);
         const int badge_stride = cairo_image_surface_get_stride(badge);
         int letters = 0;
+        int min_x = 40;
+        int min_y = 40;
+        int max_x = -1;
+        int max_y = -1;
         bool touches = false;
-        for (int y = 0; y < 40 && !touches; ++y) {
+        for (int y = 0; y < 40; ++y) {
             for (int x = 0; x < 40; ++x) {
                 if (!is_letter(at(badge_px, badge_stride, x, y))) {
                     continue;
                 }
                 ++letters;
+                min_x = std::min(min_x, x);
+                min_y = std::min(min_y, y);
+                max_x = std::max(max_x, x);
+                max_y = std::max(max_y, y);
                 for (int dy = -1; dy <= 1 && !touches; ++dy) {
                     for (int dx = -1; dx <= 1; ++dx) {
                         const int xx = x + dx;
@@ -374,6 +382,9 @@ int main()
         cairo_surface_destroy(badge);
         if (letters < 20 || touches) {
             return fail(std::string(name) + " letters touch the badge rim");
+        }
+        if (max_x - min_x + 1 < 14 || max_y - min_y + 1 < 9) {
+            return fail(std::string(name) + " letters are smaller than 14x9");
         }
     }
     return 0;

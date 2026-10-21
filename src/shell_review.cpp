@@ -253,17 +253,24 @@ void Shell::run_review_checks()
     }
     SDL_DetachVirtualJoystick(spare_id);
 
-    // M7: a closer zoom is kept, a too-small zoom grows to cover, gauges stay short.
+    // M7: a closer zoom is kept, the 16px zoom still covers, and the 8px
+    // overview is allowed to letterbox so the whole city stays on screen.
     map_.set_tile_size(kMaxMapTile);
     layout();
     if (map_.tile_size() != kMaxMapTile) {
         fail("fitting the map shrank a closer zoom");
         return;
     }
-    map_.set_tile_size(kMinMapTile);
+    map_.set_tile_size(kMapTileSource);
     layout();
     if (map_.pixel_width() < view_w_ && map_.tile_size() < kMaxMapTile) {
         fail("the map left an empty band beside the city");
+        return;
+    }
+    map_.set_tile_size(kMapTileOverview);
+    layout();
+    if (map_.tile_size() != kMapTileOverview || map_.pixel_width() != CitySession::kWorldW * kMapTileOverview) {
+        fail("the overview zoom was snapped away from 8px");
         return;
     }
     if (demand_h_ > dp(kMaxDemandPx)) {

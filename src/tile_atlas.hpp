@@ -12,6 +12,9 @@
 class TileAtlas {
 public:
     static constexpr int kSize = 16;
+    // Half of kSize. Built once at load with a 2×2 box filter and drawn 1:1
+    // for the overview zoom, so an 8px scale does not drop atlas pixels.
+    static constexpr int kOverview = 8;
 
     bool loaded() const { return count_ > 0; }
     int count() const { return count_; }
@@ -22,6 +25,8 @@ public:
     // Copy one tile into a Cairo-style ARGB32 buffer (native endian, opaque).
     // dest points at the top-left pixel; stride is bytes per row.
     void blit(int tile, unsigned char *dest, int stride) const;
+    // The same tile at kOverview, box-filtered from the 16px art at load.
+    void blit_overview(int tile, unsigned char *dest, int stride) const;
 
     bool ensure_loaded();
     // Empty when the tiles loaded. Otherwise the dialog body (searched paths).
@@ -38,6 +43,7 @@ private:
     // Tightly packed opaque pixels, 16*16 per tile, native ARGB32.
     // Held as bytes so the header stays free of containers' noise in TUs.
     const std::uint32_t *pixels_ = nullptr;
+    const std::uint32_t *overview_ = nullptr;
     const unsigned char *average_ = nullptr; // count * 3, RGB
 };
 

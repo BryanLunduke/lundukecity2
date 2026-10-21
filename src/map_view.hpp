@@ -67,6 +67,8 @@ public:
 private:
     bool tile_at(double x, double y, int &tx, int &ty) const;
     void draw_footprint(cairo_t *cr) const;
+    // 8 for the overview atlas, 16 for every larger zoom.
+    int source_px() const;
     void ensure_surface();
     int display_tile(int raw, const TileAtlas &atlas) const;
     void blit_tile(int x, int y, int shown, const TileAtlas &atlas);
@@ -75,7 +77,7 @@ private:
 
     CitySession *session_ = nullptr;
     int engine_tool_ = 6;
-    // 1:1 with the 16px atlas. Zoom steps are 16, 32, 48, and 64.
+    // Default is 1:1 with the 16px atlas. Steps are 8, 16, 32, 48, and 64.
     int tile_size_ = 16;
     int shake_x_ = 0;
     int shake_y_ = 0;

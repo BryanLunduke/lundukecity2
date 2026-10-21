@@ -317,8 +317,13 @@ void Shell::clamp_scroll()
 
 void Shell::fit_map_to_view()
 {
-    const int cover = tile_size_to_cover(view_w_, view_h_, CitySession::kWorldW, CitySession::kWorldH, map_.tile_size(),
-                                         kMinMapTile, kMaxMapTile);
+    // 8px is the overview. It is allowed to letterbox so the whole city stays
+    // in view. Every larger zoom still grows until the window is covered, and
+    // a closer zoom is never shrunk.
+    const int cover = map_.tile_size() <= kMapTileOverview
+                          ? map_.tile_size()
+                          : tile_size_to_cover(view_w_, view_h_, CitySession::kWorldW, CitySession::kWorldH,
+                                               map_.tile_size(), kMapTileSource, kMaxMapTile);
     if (cover != map_.tile_size()) {
         const double mw = std::max(1, map_.pixel_width());
         const double mh = std::max(1, map_.pixel_height());
@@ -335,12 +340,15 @@ void Shell::fit_map_to_view()
 
 double Shell::map_local_x(double x) const
 {
-    return x - view_x_ - map_ox_ + scroll_x_;
+    // Same device pixel the map was drawn on. A fractional scroll is floored
+    // at paint time; hit testing has to follow that or an 8px tile boundary
+    // lands on the neighbour.
+    return x - snapped_map_origin(view_x_, map_ox_, scroll_x_);
 }
 
 double Shell::map_local_y(double y) const
 {
-    return y - view_y_ - map_oy_ + scroll_y_;
+    return y - snapped_map_origin(view_y_, map_oy_, scroll_y_);
 }
 
 void Shell::center_on_fraction(double fx, double fy)
