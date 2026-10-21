@@ -60,7 +60,9 @@ inline bool chrome_fits(float scale, int win_w, int win_h)
     int cell = px(48);
     const int floor_cell = px(36);
     const int step = std::max(1, px(4));
-    auto palette_h = [](int c) { return 8 + 8 * c; };
+    // Nine rows: 17 tools, two columns. This has to match
+    // ToolPalette::height_for, which is pad plus rows times the cell.
+    auto palette_h = [](int c) { return 8 + 9 * c; };
     auto palette_w = [](int c) { return 8 + 2 * c; };
     while (cell > floor_cell && palette_h(cell) + px(210) > body) {
         cell -= step;

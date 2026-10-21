@@ -75,9 +75,21 @@ install_data(
     'data/tool-icons/coal.png',
     'data/tool-icons/nuclear.png',
     'data/tool-icons/airport.png',
+    'data/tool-icons/special.png',
     'data/tool-icons/query.png',
+    'data/tool-icons/zoo.png',
+    'data/tool-icons/bigpark.png',
+    'data/tool-icons/library.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'tool-icons',
+)
+install_data(
+  [
+    'data/special-tiles/zoo.png',
+    'data/special-tiles/big-park.png',
+    'data/special-tiles/library.png',
+  ],
+  install_dir: get_option('datadir') / 'lunduke-city-2' / 'special-tiles',
 )
 install_data(
   'NOTICE',

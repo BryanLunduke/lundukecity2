@@ -50,6 +50,10 @@ public:
         std::string road_note;
         std::string police_note;
         std::string fire_note;
+        // Annual income from intact special buildings. Zero hides the line.
+        std::int64_t special_income = 0;
+        // True when special_income is last January's payment, not a preview.
+        bool special_collected = false;
         // False until a January in this version has collected, or a save
         // carried an LCW1 receipt. The book then shows estimates.
         bool taxes_known = false;
@@ -161,6 +165,8 @@ public:
     void tick();
     void use_tool(int engine_tool, int tile_x, int tile_y);
     void drag_tool(int engine_tool, int from_x, int from_y, int to_x, int to_y);
+    // index is a row in the special-building table. The click is the center tile.
+    bool place_special(int index, int tile_x, int tile_y);
 
     void set_speed(int speed);
     int speed() const;

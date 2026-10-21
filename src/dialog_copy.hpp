@@ -97,6 +97,7 @@ struct BudgetCopy {
     std::string road;
     std::string police;
     std::string fire;
+    std::string specials;
 };
 
 inline BudgetCopy budget_copy(const CitySession::BudgetBook &book, bool tax_year)
@@ -132,6 +133,14 @@ inline BudgetCopy budget_copy(const CitySession::BudgetBook &book, bool tax_year
     copy.road = funding_line(book.road_need, book.road_percent, book.road_spent, book.road_note);
     copy.police = funding_line(book.police_need, book.police_percent, book.police_spent, book.police_note);
     copy.fire = funding_line(book.fire_need, book.fire_percent, book.fire_spent, book.fire_note);
+    if (book.special_income != 0) {
+        const std::string money = (book.special_income > 0 ? "+" : "") + graph_money(book.special_income);
+        if (book.special_collected) {
+            copy.specials = "Special buildings: " + money;
+        } else {
+            copy.specials = "Special buildings (not yet collected): " + money;
+        }
+    }
     return copy;
 }
 

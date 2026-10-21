@@ -320,6 +320,11 @@ void Micropolis::pollutionTerrainLandValueScan()
     newMapFlags[MAP_TYPE_POLLUTION] = 1;
     newMapFlags[MAP_TYPE_LAND_VALUE] = 1;
     newMapFlags[MAP_TYPE_DYNAMIC] = 1;
+
+    // Once per scan, not once per tick, so the bonus does not stack.
+    if (specialLandFn != NULL) {
+        specialLandFn(this);
+    }
 }
 
 

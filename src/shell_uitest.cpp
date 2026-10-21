@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "osk_layout.hpp"
+#include "special_buildings.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -1184,6 +1185,75 @@ void Shell::drive_ui_test()
         session_.new_city("New City");
         if (session_.needs_save_prompt()) {
             fail("an untouched generated city still wants to be saved");
+            return;
+        }
+        ui_step_ = 27;
+        return;
+    }
+    case 27: {
+        const int slot = special_tool_index();
+        const int cell = palette_.cell();
+        const double x = side_x_ + 4 + (slot % 2) * cell + cell / 2.0;
+        const double y = pal_y_ + 4 + (slot / 2) * cell + cell / 2.0;
+        click_at(x, y);
+        if (tool_index_ != slot || !special_open_) {
+            fail("the special buildings button did not open the list");
+            return;
+        }
+        ui_step_ = 28;
+        return;
+    }
+    case 28: {
+        for (int i = 0; i < special_building_count(); ++i) {
+            if (find_hot(hot_, kSpecialItem + i, 0) == nullptr) {
+                fail("a special building row was not drawn");
+                return;
+            }
+        }
+        const int before = special_cursor_;
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return special_cursor_ == before; });
+        if (special_cursor_ == before) {
+            fail("the D-pad did not move the special building list");
+            return;
+        }
+        const int chosen = special_cursor_;
+        tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return special_open_; });
+        if (special_open_ || special_choice_ != chosen) {
+            fail("A did not choose the highlighted special building");
+            return;
+        }
+        if (special_status_text(special_choice_).find('$') == std::string::npos) {
+            fail("the status line does not name the special building cost");
+            return;
+        }
+        special_open_ = true;
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return special_open_; });
+        if (special_open_) {
+            fail("B did not close the special building list");
+            return;
+        }
+        select_tool(special_tool_index() - 1);
+        cycle_tool(1);
+        if (tool_index_ != special_tool_index() || !special_open_) {
+            fail("the shoulder button did not open special buildings");
+            return;
+        }
+        cycle_tool(1);
+        if (tool_index_ == special_tool_index() || special_open_) {
+            fail("the shoulder button left the special list open");
+            return;
+        }
+        select_tool(special_tool_index());
+        special_open_ = true;
+        special_cursor_ = 0;
+        key_down(SDLK_DOWN);
+        if (special_cursor_ != 1) {
+            fail("the down key did not move the special building list");
+            return;
+        }
+        key_down(SDLK_RETURN);
+        if (special_open_ || special_choice_ != 1) {
+            fail("return did not choose the special building");
             return;
         }
         welcome_gate_ = true;

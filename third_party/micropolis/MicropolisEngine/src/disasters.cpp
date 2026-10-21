@@ -282,7 +282,7 @@ void Micropolis::setFire()
 
     if ((z & ZONEBIT) == 0) {
         z = z & LOMASK;
-        if (z > LHTHR && z < LASTZONE) {
+        if (z == SPECIAL_BODY || (z > LHTHR && z < LASTZONE)) {
             map[x][y] = randomFire();
             sendMessage(MESSAGE_FIRE_REPORTED, x, y, true);
         }
@@ -302,7 +302,7 @@ void Micropolis::makeFire()
 
         if ((!(z & ZONEBIT)) && (z & BURNBIT)) {
             z = z & LOMASK;
-            if ((z > 21) && (z < LASTZONE)) {
+            if (z == SPECIAL_BODY || ((z > 21) && (z < LASTZONE))) {
                 map[x][y] = randomFire();
                 sendMessage(MESSAGE_FIRE_REPORTED, x, y);
                 return;
@@ -320,6 +320,12 @@ void Micropolis::makeFire()
 bool Micropolis::vulnerable(int tem)
 {
     int tem2 = tem & LOMASK;
+
+    // Zone centers are skipped, same as any other building center. The
+    // body tiles sit above LASTZONE, so they need their own check.
+    if (tem2 == SPECIAL_BODY && (tem & ZONEBIT) == 0) {
+        return true;
+    }
 
     if (tem2 < RESBASE || tem2 > LASTZONE || (tem & ZONEBIT)) {
         return false;

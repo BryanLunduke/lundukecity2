@@ -26,8 +26,12 @@ int fail(const std::string &message)
 
 const char *kNames[] = {
     "bulldozer", "road",    "rail",    "wire",     "park",      "residential", "commercial", "industrial",
-    "police",    "fire",    "stadium", "seaport",  "coal",      "nuclear",     "airport",    "query",
+    "police",    "fire",    "stadium", "seaport",  "coal",      "nuclear",     "airport",    "special",
+    "query",
 };
+
+const char *kMenuIcons[] = {"zoo", "bigpark", "library"};
+const char *kMapTiles[] = {"zoo", "big-park", "library"};
 
 } // namespace
 
@@ -128,6 +132,75 @@ int main()
     }
     if (tool_icon_fallback_label(3)[0] == '\0' || tool_icon_fallback_label(16)[0] != '?') {
         return fail("missing-icon labels are empty");
+    }
+    auto load_png = [&](const std::string &rel) -> cairo_surface_t * {
+        const std::string path = ui_data_file(rel);
+        if (path.empty()) {
+            return nullptr;
+        }
+        cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
+        if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+            if (surface != nullptr) {
+                cairo_surface_destroy(surface);
+            }
+            return nullptr;
+        }
+        return surface;
+    };
+    for (const char *name : kMenuIcons) {
+        cairo_surface_t *surface = load_png(std::string("tool-icons/") + name + ".png");
+        if (surface == nullptr || cairo_image_surface_get_width(surface) != 40 ||
+            cairo_image_surface_get_height(surface) != 40) {
+            if (surface != nullptr) {
+                cairo_surface_destroy(surface);
+            }
+            return fail(std::string("missing special-building icon ") + name);
+        }
+        cairo_surface_destroy(surface);
+    }
+    for (const char *name : kMapTiles) {
+        cairo_surface_t *surface = load_png(std::string("special-tiles/") + name + ".png");
+        if (surface == nullptr || cairo_image_surface_get_width(surface) != 48 ||
+            cairo_image_surface_get_height(surface) != 48) {
+            if (surface != nullptr) {
+                cairo_surface_destroy(surface);
+            }
+            return fail(std::string("missing special-building map tile ") + name);
+        }
+        cairo_surface_destroy(surface);
+    }
+    cairo_surface_t *coal = load_png("tool-icons/coal.png");
+    cairo_surface_t *nuclear = load_png("tool-icons/nuclear.png");
+    if (coal == nullptr || nuclear == nullptr) {
+        if (coal != nullptr) {
+            cairo_surface_destroy(coal);
+        }
+        if (nuclear != nullptr) {
+            cairo_surface_destroy(nuclear);
+        }
+        return fail("coal and nuclear icons did not load together");
+    }
+    cairo_surface_flush(coal);
+    cairo_surface_flush(nuclear);
+    const unsigned char *coal_px = cairo_image_surface_get_data(coal);
+    const unsigned char *nuclear_px = cairo_image_surface_get_data(nuclear);
+    const int coal_stride = cairo_image_surface_get_stride(coal);
+    const int nuclear_stride = cairo_image_surface_get_stride(nuclear);
+    bool hall_matches = true;
+    for (int y = 0; y < 40 && hall_matches; ++y) {
+        for (int x = 0; x < 22; ++x) {
+            const unsigned char *a = coal_px + y * coal_stride + x * 4;
+            const unsigned char *b = nuclear_px + y * nuclear_stride + x * 4;
+            if (a[0] != b[0] || a[1] != b[1] || a[2] != b[2] || a[3] != b[3]) {
+                hall_matches = false;
+                break;
+            }
+        }
+    }
+    cairo_surface_destroy(coal);
+    cairo_surface_destroy(nuclear);
+    if (!hall_matches) {
+        return fail("coal and nuclear do not share the same power hall");
     }
     return 0;
 }

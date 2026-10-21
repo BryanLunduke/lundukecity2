@@ -103,6 +103,7 @@ private:
     void draw(cairo_t *cr);
     void draw_menubar(cairo_t *cr);
     void draw_menu_dropdown(cairo_t *cr);
+    void draw_special_menu(cairo_t *cr);
     void draw_dialog(cairo_t *cr);
     void draw_osk(cairo_t *cr, double x, double y, double w, double max_h);
 
@@ -143,6 +144,11 @@ private:
     void toggle_pause();
     void cycle_tool(int delta);
     void select_tool(int index);
+    void press_palette(double x, double y);
+    int special_tool_index() const;
+    void choose_special(int index);
+    void move_special_cursor(int delta);
+    void demo_place_gifts(bool query_one);
     void sync_title();
     void note_message();
     void arm_smoke_pad();
@@ -275,6 +281,9 @@ private:
     ui_scale::StoredSettings loaded_{};
     int paused_from_ = 2;
     int tool_index_ = 3;
+    bool special_open_ = false;
+    int special_cursor_ = 0;
+    int special_choice_ = -1;
     unsigned city_generation_ = 1;
     unsigned save_generation_ = 0;
 

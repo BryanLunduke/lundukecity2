@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <functional>
 
-// Two-by-eight tool grid. Icons are original drawings, not imported artwork.
+// Two-by-nine tool grid. Icons are original drawings, not imported artwork.
 
 // Nearest-neighbor scale that fits a square sprite into a slot.
 // An integer multiple is used when it already fills the slot. Otherwise the
@@ -33,10 +33,10 @@ inline double icon_pixel_scale(int source, int slot)
 // Short name drawn when the sprite file is missing, so the button is not blank.
 inline const char *tool_icon_fallback_label(int index)
 {
-    static const char *labels[16] = {
-        "BD", "RD", "RL", "PW", "PK", "R", "C", "I", "PO", "FD", "ST", "SP", "CO", "NU", "AP", "?",
+    static const char *labels[17] = {
+        "BD", "RD", "RL", "PW", "PK", "R", "C", "I", "PO", "FD", "ST", "SP", "CO", "NU", "AP", "*", "?",
     };
-    if (index < 0 || index >= 16) {
+    if (index < 0 || index >= 17) {
         return "?";
     }
     return labels[index];
@@ -47,13 +47,14 @@ inline void paint_tool_fallback(cairo_t *cr, int index, double x, double y, doub
     if (cr == nullptr || size < 4.0) {
         return;
     }
-    static const double colors[16][3] = {
+    static const double colors[17][3] = {
         {0.85, 0.62, 0.12}, {0.25, 0.25, 0.28}, {0.45, 0.28, 0.14}, {0.55, 0.55, 0.15},
         {0.18, 0.55, 0.22}, {0.20, 0.62, 0.28}, {0.16, 0.32, 0.72}, {0.72, 0.40, 0.12},
         {0.15, 0.28, 0.70}, {0.75, 0.16, 0.14}, {0.20, 0.55, 0.28}, {0.12, 0.40, 0.62},
-        {0.22, 0.22, 0.24}, {0.15, 0.55, 0.58}, {0.35, 0.45, 0.62}, {0.25, 0.25, 0.28},
+        {0.22, 0.22, 0.24}, {0.15, 0.55, 0.58}, {0.35, 0.45, 0.62}, {0.85, 0.65, 0.12},
+        {0.25, 0.25, 0.28},
     };
-    const int clamped = std::max(0, std::min(index, 15));
+    const int clamped = std::max(0, std::min(index, 16));
     cairo_set_source_rgb(cr, colors[clamped][0], colors[clamped][1], colors[clamped][2]);
     cairo_rectangle(cr, x, y, size, size);
     cairo_fill(cr);
@@ -103,3 +104,6 @@ private:
     int selected_ = 0;
     int hover_ = -1;
 };
+
+// Toolbar and menu sprites, loaded by file stem under tool-icons/.
+cairo_surface_t *tool_icon_named(const char *stem);

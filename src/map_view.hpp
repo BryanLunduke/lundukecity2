@@ -70,6 +70,7 @@ private:
     void ensure_surface();
     int display_tile(int raw, const TileAtlas &atlas) const;
     void blit_tile(int x, int y, int shown, const TileAtlas &atlas);
+    void blit_special(int x, int y, int index, int cell);
     void follow_local_pointer(double x, double y, bool drag);
 
     CitySession *session_ = nullptr;

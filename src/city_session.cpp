@@ -8,6 +8,7 @@
 #include "assets.hpp"
 #include "city_tail.hpp"
 #include "messages.hpp"
+#include "special_buildings.hpp"
 
 #include "micropolis.h"
 
@@ -398,6 +399,8 @@ CitySession::CitySession()
         self->on_callback(name, params, args);
     };
     engine_->sim.callbackData = this;
+    engine_->sim.specialIncomeFn = special_annual_income;
+    engine_->sim.specialLandFn = boost_special_land_value;
     engine_->sim.setEnableSound(sound_enabled_);
 }
 
@@ -405,6 +408,8 @@ CitySession::~CitySession()
 {
     engine_->sim.callbackHook = nullptr;
     engine_->sim.callbackData = nullptr;
+    engine_->sim.specialIncomeFn = nullptr;
+    engine_->sim.specialLandFn = nullptr;
     delete engine_;
 }
 
@@ -500,8 +505,19 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
         }
         if (*p == 'd') {
             s4 = take_int();
+            ++p;
         }
-        message_ = zone_status_text(category, s0, s1, s2, s3, s4);
+        int qx = 0;
+        int qy = 0;
+        if (*p == 'd') {
+            qx = take_int();
+            ++p;
+        }
+        if (*p == 'd') {
+            qy = take_int();
+        }
+        const std::string special = special_query_at(&engine_->sim, qx, qy);
+        message_ = special.empty() ? zone_status_text(category, s0, s1, s2, s3, s4) : special;
         ++query_serial_;
         notify();
         return;
@@ -949,6 +965,14 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
     if (!ready_) {
         return;
     }
+    if (engine_tool == kSpecialEngineId) {
+        return;
+    }
+    if (engine_tool == TOOL_BULLDOZER && bulldoze_special_at(&engine_->sim, tile_x, tile_y)) {
+        dirty_ = true;
+        notify();
+        return;
+    }
     const ToolResult result = engine_->sim.toolDown(static_cast<EditingTool>(engine_tool),
                                                     static_cast<short>(tile_x), static_cast<short>(tile_y));
     if (result == TOOLRESULT_OK && engine_tool != TOOL_QUERY) {
@@ -957,9 +981,26 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
     notify();
 }
 
-void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, int to_y)
+bool CitySession::place_special(int index, int tile_x, int tile_y)
 {
     if (!ready_) {
+        return false;
+    }
+    std::string error;
+    if (!place_special_building(&engine_->sim, index, tile_x, tile_y, error)) {
+        if (!error.empty()) {
+            post_message(error);
+        }
+        return false;
+    }
+    dirty_ = true;
+    notify();
+    return true;
+}
+
+void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, int to_y)
+{
+    if (!ready_ || engine_tool == kSpecialEngineId) {
         return;
     }
     const bool placed = engine_->sim.toolDrag(static_cast<EditingTool>(engine_tool),
@@ -1205,6 +1246,14 @@ CitySession::BudgetBook CitySession::budget() const
     book.police_need = static_cast<std::int64_t>(sim.policeFund);
     book.fire_need = static_cast<std::int64_t>(sim.fireFund);
     book.taxes_known = sim.taxReceiptKnown;
+    const int live_special = special_annual_income(&sim);
+    if (sim.taxReceiptKnown && sim.specialIncome > 0) {
+        book.special_income = static_cast<std::int64_t>(sim.specialIncome);
+        book.special_collected = true;
+    } else {
+        book.special_income = live_special;
+        book.special_collected = false;
+    }
 
     // A new city, a scenario, and a classic file have no January receipt.
     // roadFund stays 0 until collectTax, which is not the same as a

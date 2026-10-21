@@ -746,7 +746,14 @@ enum MapTileCharacters {
     CHURCH7        = 1014,
     CHURCH7LAST    = 1018,
 
-    // Tiles 1020-1023 unused
+    // Special buildings. The center tile names the building. The other
+    // eight cells of every special building share SPECIAL_BODY. These are
+    // the only ids the classic tileset left free. Another building needs
+    // a new center id before TILE_COUNT can grow.
+    SPECIAL_ZOO      = 1020,
+    SPECIAL_PARK     = 1021,
+    SPECIAL_LIBRARY  = 1022,
+    SPECIAL_BODY     = 1023,
 
     TILE_COUNT     = 1024,
 
@@ -983,6 +990,11 @@ typedef void (*CallbackFunction)(
     const char *name,
     const char *params,
     va_list arglist);
+
+// Front-end hooks. Null in a bare engine. The city session points them
+// at the special-building table.
+typedef int (*SpecialIncomeFunction)(const Micropolis *micropolis);
+typedef void (*SpecialLandFunction)(Micropolis *micropolis);
 
 
 ////////////////////////////////////////////////////////////////////////
@@ -2789,6 +2801,15 @@ public:
      * (i.e. a function that calls back into the Python interpreter.)
      */
     CallbackFunction callbackHook;
+
+    SpecialIncomeFunction specialIncomeFn;
+    SpecialLandFunction specialLandFn;
+
+    /**
+     * Special-building income paid the last time taxes were collected.
+     * Not stored in the city file. The buildings themselves are map tiles.
+     */
+    Quad specialIncome;
 
     /**
      * Hook for scripting language to store scripted callback function.
