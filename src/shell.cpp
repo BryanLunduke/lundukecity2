@@ -1005,6 +1005,7 @@ void Shell::loop()
         if (!demo_.empty() && frame_ >= 3) {
             quitting_ = true;
         }
+        write_final_shot();
         if (headless_ && (spin || animate)) {
             SDL_Delay(1);
         }

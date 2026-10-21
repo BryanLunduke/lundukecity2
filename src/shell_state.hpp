@@ -87,6 +87,7 @@ private:
     void handle_event(const SDL_Event &event);
     void tick_sim(int elapsed_ms);
     void render();
+    void write_final_shot();
     void layout();
     void draw(cairo_t *cr);
     void draw_menubar(cairo_t *cr);

@@ -419,6 +419,26 @@ void Shell::run_review_checks()
     }
 #endif
 
+    const auto shot = std::filesystem::temp_directory_path() / "lunduke-city2-l10.png";
+    std::filesystem::remove(shot);
+    shot_path_ = shot.string();
+    render();
+    render();
+    if (std::filesystem::exists(shot)) {
+        std::filesystem::remove(shot);
+        fail("a screenshot was written before the last frame");
+        return;
+    }
+    quitting_ = true;
+    write_final_shot();
+    const bool wrote_shot = std::filesystem::exists(shot);
+    std::filesystem::remove(shot);
+    quitting_ = false;
+    if (!wrote_shot) {
+        fail("the last frame was not written to the screenshot");
+        return;
+    }
+
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {

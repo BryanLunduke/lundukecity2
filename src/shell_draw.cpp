@@ -1243,6 +1243,15 @@ void Shell::draw(cairo_t *cr)
     draw_menu_dropdown(cr);
 }
 
+void Shell::write_final_shot()
+{
+    if (!quitting_ || shot_path_.empty() || frame_surface_ == nullptr) {
+        return;
+    }
+    cairo_surface_write_to_png(frame_surface_, shot_path_.c_str());
+    shot_path_.clear();
+}
+
 void Shell::render()
 {
     layout();
@@ -1278,9 +1287,6 @@ void Shell::render()
     }
     cairo_surface_flush(frame_surface_);
     note_ui_frame(frame_surface_);
-    if (!shot_path_.empty()) {
-        cairo_surface_write_to_png(frame_surface_, shot_path_.c_str());
-    }
     if (texture_ == nullptr || tex_w_ != win_w_ || tex_h_ != win_h_) {
         if (texture_ != nullptr) {
             SDL_DestroyTexture(texture_);
