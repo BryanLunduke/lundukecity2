@@ -48,6 +48,7 @@ int main()
     expect_has(vacant.yes, "Yes:");
     expect_has(vacant.no, "No:");
     expect(vacant.yes_percent < 0, "no poll percent");
+    expect(vacant.opinion_bar == "No poll yet", vacant.opinion_bar);
     expect(!vacant.problems.empty(), "empty-city problem line");
     expect_has(vacant.problems[0], "nobody lives here");
     expect_has(vacant.migration, "Net migration");
@@ -71,6 +72,7 @@ int main()
     expect_has(live.score_delta, "Change since the last evaluation: +12");
     expect(live.yes == "Yes: 62%", live.yes);
     expect(live.no == "No: 38%", live.no);
+    expect(live.opinion_bar.empty(), "poll repeats the yes percent: " + live.opinion_bar);
     expect(live.yes_percent == 62, "yes percent");
     expect_has(live.population, "18,060");
     expect_has(live.migration, "-40");

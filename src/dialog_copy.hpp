@@ -64,7 +64,9 @@ inline EvaluationCopy evaluation_copy(const CitySession::Evaluation &report, con
         copy.yes = "Yes: " + std::to_string(report.yes_percent) + "%";
         copy.no = "No: " + std::to_string(no_percent) + "%";
         copy.yes_percent = report.yes_percent;
-        copy.opinion_bar = "Yes " + std::to_string(report.yes_percent) + "%";
+        // The yes/no line already states the percent. A second "Yes N%"
+        // under the bar repeats it.
+        copy.opinion_bar.clear();
         if (report.problems.empty()) {
             copy.problems.push_back("No complaints recorded.");
         } else {
