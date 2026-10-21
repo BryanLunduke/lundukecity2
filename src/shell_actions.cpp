@@ -948,9 +948,13 @@ void Shell::on_dialog_button(int id)
             close_dialog();
             return;
         }
-        if (budget_is_tax_) {
-            session_.restore_budget_rates(open_tax_, open_road_, open_police_, open_fire_);
-        }
+        // Cancel outside a tax year used to keep the live slider edits.
+        // Both paths restore the rates the window opened with.
+        session_.restore_budget_rates(open_tax_, open_road_, open_police_, open_fire_);
+        tax_ = open_tax_;
+        road_ = open_road_;
+        police_ = open_police_;
+        fire_ = open_fire_;
         close_dialog();
         return;
     }
