@@ -1404,5 +1404,6 @@ void Shell::render()
     cairo_destroy(context);
     visual_stamp_ = visual_stamp();
     presented_ = true;
+    window_exposed_ = false;
     ++redraws_;
 }

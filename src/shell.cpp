@@ -712,6 +712,7 @@ redraw::Reasons Shell::redraw_reasons() const
                          std::fabs(pan_x_) > 0.05f || std::fabs(pan_y_) > 0.05f;
     reasons.blink = blink_drew_;
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
+    reasons.exposed = window_exposed_;
     return reasons;
 }
 
@@ -1066,6 +1067,12 @@ void Shell::handle_event(const SDL_Event &event)
         note_window_geometry();
         layout();
         clamp_scroll();
+        break;
+    case SDL_EVENT_WINDOW_EXPOSED:
+    case SDL_EVENT_WINDOW_SHOWN:
+    case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+        // The pixels under a newly uncovered area are not ours until we paint.
+        window_exposed_ = true;
         break;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         if (pause_unfocused_ && speed_ > 0) {
