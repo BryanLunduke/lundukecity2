@@ -4,6 +4,7 @@
 
 #include "shell_state.hpp"
 
+#include "city_tail.hpp"
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
 #include "text_edit.hpp"
@@ -15,7 +16,10 @@
 #include "ui_scale.hpp"
 
 #include <csignal>
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <vector>
 
 void Shell::run_review_checks()
 {
@@ -363,6 +367,48 @@ void Shell::run_review_checks()
     }
     menu_.close();
     recent_.clear();
+
+    const auto saved_city = std::filesystem::temp_directory_path() / "lunduke-city2-l6.cty";
+    std::filesystem::remove(saved_city);
+    if (!session_.save_city_as(saved_city.string()) ||
+        !session_.load_city(saved_city.string()) || session_.message() != "Loaded a saved city.") {
+        fail("a complete save did not load cleanly");
+        return;
+    }
+    std::ifstream saved_in(saved_city, std::ios::binary);
+    std::vector<char> saved_bytes((std::istreambuf_iterator<char>(saved_in)), std::istreambuf_iterator<char>());
+    saved_in.close();
+    if (saved_bytes.size() <= 27120 || classify_city_path(saved_city.string()) != CityFileKind::Complete) {
+        fail("a City 2 save was not recognised as complete");
+        return;
+    }
+    {
+        std::ofstream trimmed(saved_city, std::ios::binary | std::ios::trunc);
+        trimmed.write(saved_bytes.data(), static_cast<std::streamsize>(saved_bytes.size() - 10));
+    }
+    if (!session_.load_city(saved_city.string()) || session_.message() == "Loaded a saved city." ||
+        session_.message().find("missing") == std::string::npos) {
+        fail("a short City 2 tail loaded without a warning");
+        return;
+    }
+    {
+        std::ofstream classic(saved_city, std::ios::binary | std::ios::trunc);
+        classic.write(saved_bytes.data(), 27120);
+    }
+    if (!session_.load_city(saved_city.string()) || session_.message() != "Loaded a saved city.") {
+        fail("a classic 27120-byte city warned about a missing tail");
+        return;
+    }
+    {
+        std::ofstream blank(saved_city, std::ios::binary | std::ios::trunc);
+        const std::vector<char> zeros(27120, 0);
+        blank.write(zeros.data(), static_cast<std::streamsize>(zeros.size()));
+    }
+    if (session_.load_city(saved_city.string()) || session_.message().find("Loaded a saved city.") != std::string::npos) {
+        fail("an all-zero file loaded as a city");
+        return;
+    }
+    std::filesystem::remove(saved_city);
 
 #ifndef _WIN32
     const auto previous_sigint = std::signal(SIGINT, SIG_DFL);

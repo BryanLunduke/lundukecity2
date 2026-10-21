@@ -4,6 +4,7 @@
 
 #include "assets.hpp"
 #include "atomic_write.hpp"
+#include "city_tail.hpp"
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
 #include "text_edit.hpp"
@@ -174,6 +175,40 @@ int main()
     }
     if (std::abs(button_width(40, 32, 120) - 120) > 0.1 || std::abs(button_width(200, 32, 120) - 232) > 0.1) {
         return fail("button width");
+    }
+    std::vector<unsigned char> classic(kClassicCityBytes, 1);
+    std::vector<unsigned char> zeros(kClassicCityBytes, 0);
+    std::vector<unsigned char> complete = classic;
+    const char *name = "Town";
+    complete.push_back('L');
+    complete.push_back('C');
+    complete.push_back('N');
+    complete.push_back('1');
+    complete.push_back(4);
+    complete.push_back(0);
+    complete.insert(complete.end(), name, name + 4);
+    complete.push_back('L');
+    complete.push_back('C');
+    complete.push_back('F');
+    complete.push_back('1');
+    complete.resize(complete.size() + 240 * 8 + 240, 0);
+    complete.push_back('L');
+    complete.push_back('C');
+    complete.push_back('W');
+    complete.push_back('1');
+    complete.push_back(1);
+    complete.push_back(0);
+    complete.push_back(3);
+    complete.push_back(0);
+    complete.resize(complete.size() + 8 + 24, 0);
+    std::vector<unsigned char> short_tail = complete;
+    short_tail.resize(short_tail.size() - 10);
+    if (classify_city_bytes(classic.data(), classic.size()) != CityFileKind::Classic ||
+        classify_city_bytes(zeros.data(), zeros.size()) != CityFileKind::AllZero ||
+        classify_city_bytes(complete.data(), complete.size()) != CityFileKind::Complete ||
+        classify_city_bytes(short_tail.data(), short_tail.size()) != CityFileKind::Incomplete ||
+        classify_city_bytes(nullptr, 0) != CityFileKind::TooShort) {
+        return fail("city file tail was classified wrong");
     }
     const DialogRect fly = place_submenu(8, 320, 180, 32, 3, 480, 1280, 800, 180);
     const DialogRect low = place_submenu(8, 320, 760, 32, 4, 200, 1280, 800, 180);

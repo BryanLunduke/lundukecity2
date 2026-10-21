@@ -6,6 +6,7 @@
 #include "city_session.hpp"
 
 #include "assets.hpp"
+#include "city_tail.hpp"
 #include "messages.hpp"
 
 #include "micropolis.h"
@@ -742,6 +743,9 @@ std::string CitySession::load_problem(const std::string &path)
         return "The file is too short to be a city file (" + std::to_string(static_cast<long long>(st.st_size)) +
                " bytes; a city file is at least 27,120 bytes). It may be damaged or a different kind of file.";
     }
+    if (classify_city_path(path) == CityFileKind::AllZero) {
+        return "The file is all zeros and is not a city. It may be damaged.";
+    }
     return std::string();
 }
 
@@ -781,7 +785,11 @@ bool CitySession::load_city(const std::string &path)
     mark_clean_time();
     eval_month_ = -1;
     eval_month_pending_ = false;
-    post_message("Loaded a saved city.");
+    if (classify_city_path(path) == CityFileKind::Incomplete) {
+        post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
+    } else {
+        post_message("Loaded a saved city.");
+    }
     return true;
 }
 
