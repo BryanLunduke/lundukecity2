@@ -105,7 +105,7 @@ inline constexpr MenuEntry kSystem[] = {
     {"Save City _As...", "Ctrl+Shift+S", ItemKind::Normal, Action::SaveAs, AccelKey::S,
      static_cast<int>(AccelMod::Ctrl) | static_cast<int>(AccelMod::Shift), 0},
     {"Play _Scenario…", nullptr, ItemKind::Normal, Action::Scenario, AccelKey::None, 0, 0},
-    {"_Rename City…", nullptr, ItemKind::Normal, Action::Rename, AccelKey::None, 0, 0},
+    {"Re_name City…", nullptr, ItemKind::Normal, Action::Rename, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Quit", "Ctrl+Q", ItemKind::Normal, Action::Quit, AccelKey::Q, static_cast<int>(AccelMod::Ctrl), 0},
 };

@@ -21,6 +21,12 @@ int main()
     if (menu_table::actionable_count() != 37) {
         return fail("expected 37 actionable menu rows");
     }
+    if (mnemonic_of("Open _Recent") == mnemonic_of("Re_name City…")) {
+        return fail("Open Recent and Rename still share a mnemonic");
+    }
+    if (mnemonic_of("Re_name City…") != 'n') {
+        return fail("Rename should use N");
+    }
     if (menu_table::accel_action(AccelKey::N, static_cast<int>(AccelMod::Ctrl)) != Action::NewCity) {
         return fail("Ctrl+N should start a new city");
     }
