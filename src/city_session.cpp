@@ -646,6 +646,15 @@ void CitySession::new_city(const NewCitySpec &spec)
     message_.clear();
     dirty_ = false;
     mark_clean_time();
+    fresh_generated_ = true;
+    birth_month_ = static_cast<int>(sim.cityMonth);
+    if (birth_month_ < 0 || birth_month_ > 11) {
+        birth_month_ = 0;
+    }
+    {
+        const long year = static_cast<long>(sim.cityYear);
+        birth_year_ = static_cast<int>(year > 0 ? year : sim.startingYear);
+    }
     eval_month_ = -1;
     eval_month_pending_ = false;
     ready_ = true;
@@ -782,6 +791,7 @@ bool CitySession::load_city(const std::string &path)
     save_path_ = path;
     ready_ = true;
     dirty_ = false;
+    fresh_generated_ = false;
     mark_clean_time();
     eval_month_ = -1;
     eval_month_pending_ = false;
@@ -851,6 +861,7 @@ bool CitySession::load_scenario(int id)
     save_path_.clear();
     ready_ = true;
     dirty_ = false;
+    fresh_generated_ = false;
     mark_clean_time();
     eval_month_ = -1;
     eval_month_pending_ = false;
@@ -875,6 +886,7 @@ bool CitySession::save_city_as(const std::string &path)
     }
     save_path_ = path;
     dirty_ = false;
+    fresh_generated_ = false;
     mark_clean_time();
     post_message("City saved.");
     return true;
@@ -1386,7 +1398,26 @@ bool CitySession::time_advanced_since_save() const
 
 bool CitySession::needs_save_prompt() const
 {
-    return dirty_ || budget_pending() || time_advanced_since_save();
+    if (dirty_ || budget_pending()) {
+        return true;
+    }
+    if (!time_advanced_since_save()) {
+        return false;
+    }
+    // The clock moving inside the month a city was generated is not a
+    // change. A saved city, a loaded city, and a scenario still prompt.
+    if (fresh_generated_ && engine_ != nullptr) {
+        int month = static_cast<int>(engine_->sim.cityMonth);
+        if (month < 0 || month > 11) {
+            month = 0;
+        }
+        const long year = static_cast<long>(engine_->sim.cityYear);
+        const int shown = static_cast<int>(year > 0 ? year : engine_->sim.startingYear);
+        if (month == birth_month_ && shown == birth_year_) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool CitySession::take_view_target(int &tile_x, int &tile_y)
