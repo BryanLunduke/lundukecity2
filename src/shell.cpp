@@ -271,6 +271,8 @@ int Shell::run(int argc, char **argv)
 #ifndef _WIN32
     std::signal(SIGTERM, on_terminate);
     std::signal(SIGHUP, on_terminate);
+    // A terminal Ctrl+C should autosave, the same as SIGTERM.
+    std::signal(SIGINT, on_terminate);
 #endif
     loop();
     shutdown();

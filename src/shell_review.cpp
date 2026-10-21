@@ -14,6 +14,7 @@
 #include "version.hpp"
 #include "ui_scale.hpp"
 
+#include <csignal>
 #include <string>
 
 void Shell::run_review_checks()
@@ -362,6 +363,15 @@ void Shell::run_review_checks()
     }
     menu_.close();
     recent_.clear();
+
+#ifndef _WIN32
+    const auto previous_sigint = std::signal(SIGINT, SIG_DFL);
+    std::signal(SIGINT, previous_sigint);
+    if (previous_sigint == SIG_ERR || previous_sigint == SIG_DFL || previous_sigint == SIG_IGN) {
+        fail("SIGINT is not hooked for autosave");
+        return;
+    }
+#endif
 
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
