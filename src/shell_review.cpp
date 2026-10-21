@@ -494,6 +494,56 @@ void Shell::run_review_checks()
         presented_ = false;
     }
 
+    // Enter opens the highlighted folder or file in the in-window browser.
+    {
+        const auto root = std::filesystem::temp_directory_path() / "lunduke-city2-enter";
+        std::filesystem::remove_all(root);
+        std::filesystem::create_directories(root / "towns");
+        {
+            std::ofstream city(root / "Alpha.cty", std::ios::binary);
+            city << "not-a-city";
+        }
+        files_save_ = false;
+        files_dir_ = root.string();
+        refresh_files();
+        dialog_ = Dialog::Files;
+        int folder = -1;
+        int file = -1;
+        for (int i = 0; i < static_cast<int>(files_.size()); ++i) {
+            if (files_[static_cast<std::size_t>(i)] == "towns/") {
+                folder = i;
+            }
+            if (files_[static_cast<std::size_t>(i)] == "Alpha.cty") {
+                file = i;
+            }
+        }
+        if (folder < 0 || file < 0) {
+            std::filesystem::remove_all(root);
+            fail("file browser did not list the folder and the city");
+            return;
+        }
+        list_index_ = folder;
+        focus_id_ = kListItem;
+        activate_file_row();
+        if (files_dir_.find("towns") == std::string::npos) {
+            std::filesystem::remove_all(root);
+            fail("Enter did not open the selected folder");
+            return;
+        }
+        files_dir_ = root.string();
+        refresh_files();
+        list_index_ = file;
+        focus_id_ = kListItem;
+        activate_file_row();
+        if (dialog_ == Dialog::Files) {
+            std::filesystem::remove_all(root);
+            fail("Enter did not open the selected file");
+            return;
+        }
+        close_dialog();
+        std::filesystem::remove_all(root);
+    }
+
     // M10: an autosave or recent-list failure stays until the player dismisses it,
     // and the next failure after that is shown again.
     note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");

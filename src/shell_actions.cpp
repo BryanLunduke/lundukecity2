@@ -1579,6 +1579,27 @@ bool Shell::nudge_file_list(int delta, bool page, bool force)
     return true;
 }
 
+void Shell::activate_file_row()
+{
+    if (dialog_ != Dialog::Files) {
+        return;
+    }
+    if (list_index_ >= 0 && list_index_ < static_cast<int>(files_.size()) &&
+        file_row_is_dir(files_[static_cast<std::size_t>(list_index_)])) {
+        const std::string name = files_[static_cast<std::size_t>(list_index_)];
+        if (name == "..") {
+            files_dir_ = parent_dir(files_dir_);
+        } else {
+            files_dir_ = path_join(files_dir_, name.substr(0, name.size() - 1));
+        }
+        list_index_ = 0;
+        list_scroll_ = 0;
+        refresh_files();
+        return;
+    }
+    on_dialog_button(files_save_ ? kSave : kOk);
+}
+
 void Shell::activate_focus()
 {
     if (focus_id_ >= kOsk) {
@@ -1598,7 +1619,11 @@ void Shell::activate_focus()
         return;
     }
     if (dialog_ == Dialog::Files) {
-        on_dialog_button(files_save_ ? kSave : kOk);
+        if (files_save_ && focus_id_ == kFieldName) {
+            on_dialog_button(kSave);
+            return;
+        }
+        activate_file_row();
         return;
     }
     if (dialog_ == Dialog::NewCity) {

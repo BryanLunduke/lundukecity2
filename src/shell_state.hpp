@@ -156,6 +156,7 @@ private:
     // key, or the adjacent row does not exist (the caller then moves linearly).
     bool move_osk_vertically(int direction);
     void activate_focus();
+    void activate_file_row();
     void button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary);
     void label(cairo_t *cr, const char *font, const std::string &text, double x, double y, int wrap);
     void frame_panel(cairo_t *cr, double x, double y, double w, double h, const char *title);

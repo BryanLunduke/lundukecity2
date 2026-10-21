@@ -1179,6 +1179,11 @@ void Shell::handle_event(const SDL_Event &event)
             SDL_SetWindowFullscreen(window_, !full);
             break;
         }
+        if (dialog_ == Dialog::Files && accel == AccelKey::Return && (event.key.mod & SDL_KMOD_ALT) == 0 &&
+            !(files_save_ && focus_id_ == kFieldName)) {
+            activate_file_row();
+            break;
+        }
         if (active_field() != nullptr) {
             const bool ctrl = (mods & static_cast<int>(AccelMod::Ctrl)) != 0;
             const bool alt = (mods & static_cast<int>(AccelMod::Alt)) != 0;
