@@ -494,6 +494,35 @@ void Shell::run_review_checks()
         presented_ = false;
     }
 
+    // M10: an autosave or recent-list failure stays until the player dismisses it,
+    // and the next failure after that is shown again.
+    note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
+    if (!notice_sticky_ || shown_message_.find("Autosave failed") == std::string::npos) {
+        fail("autosave failure was not shown");
+        return;
+    }
+    const auto held = hint_until_;
+    if (held < std::chrono::steady_clock::now() + std::chrono::hours(1)) {
+        fail("autosave failure notice expires on its own");
+        return;
+    }
+    note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
+    if (hint_until_ != held) {
+        fail("repeating the same failure restarted the notice");
+        return;
+    }
+    dismiss_background_notice();
+    if (notice_sticky_ || !shown_message_.empty()) {
+        fail("dismiss did not clear the failure notice");
+        return;
+    }
+    note_background_write_failed("Could not update the recent-cities list.");
+    if (!notice_sticky_ || shown_message_.find("recent-cities") == std::string::npos) {
+        fail("a later failure was not shown again");
+        return;
+    }
+    dismiss_background_notice();
+
     // M9: a loaded city's speed and disasters do not become the global preferences.
     pref_speed_ = 1;
     pref_disasters_ = 0;

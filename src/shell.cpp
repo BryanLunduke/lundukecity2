@@ -458,13 +458,30 @@ void Shell::note_keyboard_input()
 
 void Shell::note_background_write_failed(const char *text)
 {
-    if (autosave_warned_ || text == nullptr) {
+    if (text == nullptr || text[0] == '\0') {
         return;
     }
+    // Stay up until the player clicks the message bar. A failure after that
+    // click is shown again; the same text does not restart the notice.
+    if (notice_sticky_ && shown_message_ == text) {
+        return;
+    }
+    notice_sticky_ = true;
     autosave_warned_ = true;
     shown_message_ = text;
     shown_message_serial_ = session_.message_serial();
-    hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+    hint_until_ = std::chrono::steady_clock::now() + std::chrono::hours(24 * 365);
+}
+
+void Shell::dismiss_background_notice()
+{
+    if (!notice_sticky_) {
+        return;
+    }
+    notice_sticky_ = false;
+    autosave_warned_ = false;
+    shown_message_.clear();
+    hint_until_ = std::chrono::steady_clock::now();
 }
 
 void Shell::note_window_geometry()
@@ -1093,6 +1110,10 @@ void Shell::handle_event(const SDL_Event &event)
         pointer_x_ = event.button.x * (pw / static_cast<double>(std::max(ww, 1)));
         pointer_y_ = event.button.y * (ph / static_cast<double>(std::max(wh, 1)));
         if (event.button.button != SDL_BUTTON_LEFT) {
+            break;
+        }
+        if (notice_sticky_ && pointer_y_ >= win_h_ - message_h_) {
+            dismiss_background_notice();
             break;
         }
         pointer_down_ = true;

@@ -1284,10 +1284,12 @@ void Shell::draw(cairo_t *cr)
                    theme::kTextB, -1);
     }
     const auto now = std::chrono::steady_clock::now();
-    const bool expired = hint_until_.time_since_epoch().count() == 0 || now >= hint_until_;
+    const bool expired = !notice_sticky_ && (hint_until_.time_since_epoch().count() == 0 || now >= hint_until_);
     const NoticeDecision notice = decide_notice(session_.message_serial(), shown_message_serial_, expired, query_pinned_);
     std::string bar;
-    if (notice.show_notice && !session_.message().empty()) {
+    if (notice_sticky_ && !shown_message_.empty()) {
+        bar = shown_message_;
+    } else if (notice.show_notice && !session_.message().empty()) {
         shown_message_serial_ = session_.message_serial();
         shown_message_ = session_.message();
         hint_until_ = now + std::chrono::seconds(4);

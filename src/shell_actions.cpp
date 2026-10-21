@@ -318,11 +318,8 @@ void Shell::remember_recent(const std::string &path)
         body += item;
         body += '\n';
     }
-    if (!write_text_atomic(dir + "/recent.txt", body) && !autosave_warned_) {
-        autosave_warned_ = true;
-        shown_message_ = "Could not update the recent-cities list.";
-        shown_message_serial_ = session_.message_serial();
-        hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+    if (!write_text_atomic(dir + "/recent.txt", body)) {
+        note_background_write_failed("Could not update the recent-cities list.");
     }
 }
 
