@@ -77,11 +77,11 @@ void Shell::layout()
     }
     refresh_ui_scale();
     SDL_GetWindowSizeInPixels(window_, &win_w_, &win_h_);
-    if (win_w_ < dp(640)) {
-        win_w_ = dp(640);
+    if (win_w_ < 1) {
+        win_w_ = 1;
     }
-    if (win_h_ < dp(480)) {
-        win_h_ = dp(480);
+    if (win_h_ < 1) {
+        win_h_ = 1;
     }
     menu_h_ = dp(36);
     welcome_h_ = welcome_ ? dp(52) : 0;
@@ -587,22 +587,49 @@ void Shell::draw_dialog(cairo_t *cr)
         label(cr, ui_font(), "Choose a scenario. Playing it replaces the city on the map.", x + 16, y + 42,
               static_cast<int>(dw - 32));
         const double row_h = 56;
-        const int visible = std::min(CitySession::kScenarioCount, static_cast<int>((dh - 140) / row_h));
-        for (int i = 0; i < visible; ++i) {
+        const int count = CitySession::kScenarioCount;
+        const int visible = std::max(1, std::min(count, static_cast<int>((dh - 140) / row_h)));
+        files_visible_ = visible;
+        if (scenario_index_ < 0) {
+            scenario_index_ = 0;
+        }
+        if (scenario_index_ >= count) {
+            scenario_index_ = count - 1;
+        }
+        list_index_ = scenario_index_;
+        list_reveal(list_scroll_, scenario_index_, visible, count);
+        const double list_top = y + 78;
+        const double row_w = dw - 24 - 16;
+        for (int row = 0; row < visible; ++row) {
+            const int i = list_scroll_ + row;
+            if (i < 0 || i >= count) {
+                break;
+            }
             const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
-            const double ry = y + 78 + i * row_h;
-            const int id = kListItem + i;
-            push_hot(x + 12, ry, dw - 24, row_h - 4, id);
+            const double ry = list_top + row * row_h;
+            const int id = kListItem + row;
+            push_hot(x + 12, ry, row_w, row_h - 4, id);
             push_focus(id);
             if (scenario_index_ == i || focus_id_ == id) {
-                fill(cr, x + 12, ry, dw - 24, row_h - 4, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+                fill(cr, x + 12, ry, row_w, row_h - 4, theme::kHoverR, theme::kHoverG, theme::kHoverB);
             }
             const std::string line = std::string(def.name) + " (" + std::to_string(def.year) + ")";
             paint_text(cr, body_font(), line, x + 20, ry + 4, theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(dw - 40));
+                       static_cast<int>(row_w - 16));
             paint_text(cr, ui_font(), def.goal, x + 20, ry + 26, theme::kAccelR, theme::kAccelG, theme::kAccelB,
-                       static_cast<int>(dw - 40));
+                       static_cast<int>(row_w - 16));
         }
+        const double track_x = x + dw - 26;
+        const double track_h = visible * row_h;
+        list_track_y_ = list_top;
+        list_track_h_ = std::max(1.0, track_h);
+        fill(cr, track_x, list_top, 12, track_h, 0.86, 0.86, 0.86);
+        double thumb_y = list_top;
+        double thumb_h = track_h;
+        list_thumb(list_scroll_, count, visible, list_top, track_h, thumb_y, thumb_h);
+        fill(cr, track_x, thumb_y, 12, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        stroke_rect(cr, track_x, list_top, 12, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+        push_hot(track_x - 4, list_top, 20, track_h, kListScroll);
         buttons_at(x, dw, y + dh - margin - dp(36), {{"_Cancel", kCancel}, {"_Play", kPlay}});
         return;
     }

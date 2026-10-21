@@ -172,6 +172,15 @@ int main()
     if (word != "Z" || caret != 1) {
         return fail("typing did not replace the selection");
     }
+    int min_w = 0;
+    int min_h = 0;
+    ui_scale::window_minimum(1920, 1080, min_w, min_h);
+    int tiny_w = 0;
+    int tiny_h = 0;
+    ui_scale::window_minimum(800, 500, tiny_w, tiny_h);
+    if (min_w != 960 || min_h != 600 || tiny_w != 800 || tiny_h != 500) {
+        return fail("window minimum");
+    }
     if (tile_size_to_cover(1800, 900, 120, 100, 12, 6, 64) < 15 || tile_size_to_cover(1800, 900, 120, 100, 20, 6, 64) != 20 ||
         tile_size_to_cover(8000, 4000, 120, 100, 12, 6, 64) != 64 || map_letterbox(1800, 1440) != 180 ||
         map_letterbox(1000, 1440) != 0) {

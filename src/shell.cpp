@@ -499,6 +499,10 @@ bool Shell::init_video()
         std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << "\n";
         return false;
     }
+    int min_w = 960;
+    int min_h = 600;
+    ui_scale::window_minimum(have_bounds ? usable.w : 0, have_bounds ? usable.h : 0, min_w, min_h);
+    SDL_SetWindowMinimumSize(window_, min_w, min_h);
     if (place) {
         SDL_SetWindowPosition(window_, req_x, req_y);
     }
@@ -974,7 +978,7 @@ void Shell::handle_event(const SDL_Event &event)
         }
         if (slider_drag_ != 0) {
             on_hotspot(slider_drag_, pointer_x_, pointer_y_);
-        } else if (list_dragging_ && dialog_ == Dialog::Files) {
+        } else if (list_dragging_ && (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario)) {
             on_hotspot(kListScroll, pointer_x_, pointer_y_);
         } else if (pointer_on_map_ && dialog_ == Dialog::None && !menu_.open()) {
             map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), pointer_down_);
@@ -1029,7 +1033,7 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     case SDL_EVENT_MOUSE_WHEEL: {
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
-        if (dialog_ == Dialog::Files && !ctrl) {
+        if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
             const int rows = std::max(1, std::abs(static_cast<int>(event.wheel.y)));
             nudge_file_list(event.wheel.y > 0 ? -rows : rows, false, true);
             break;
@@ -1390,10 +1394,11 @@ void Shell::handle_event(const SDL_Event &event)
                 } else {
                     on_hotspot(id, pointer_x_, pointer_y_);
                 }
-                if (dialog_ == Dialog::Files) {
+                if (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) {
                     list_touch_y_ = event.tfinger.y * static_cast<float>(win_h_);
                 }
-            } else if (event.type == SDL_EVENT_FINGER_MOTION && dialog_ == Dialog::Files && list_touch_y_ >= 0.0f) {
+            } else if (event.type == SDL_EVENT_FINGER_MOTION &&
+                       (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && list_touch_y_ >= 0.0f) {
                 const float ny = event.tfinger.y * static_cast<float>(win_h_);
                 const int rows = static_cast<int>((ny - list_touch_y_) / 32.0f);
                 if (rows != 0) {

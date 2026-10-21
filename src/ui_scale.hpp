@@ -178,4 +178,18 @@ inline StoredSettings settings_parse(const std::string &text)
     return settings;
 }
 
+// The window may not be dragged smaller than 960×600, unless the display
+// itself is smaller. The floor stays large enough to show the side panel.
+inline void window_minimum(int usable_w, int usable_h, int &min_w, int &min_h)
+{
+    min_w = 960;
+    min_h = 600;
+    if (usable_w > 0 && usable_w < min_w) {
+        min_w = std::max(320, usable_w);
+    }
+    if (usable_h > 0 && usable_h < min_h) {
+        min_h = std::max(240, usable_h);
+    }
+}
+
 } // namespace ui_scale

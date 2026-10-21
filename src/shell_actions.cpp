@@ -541,6 +541,8 @@ void Shell::proceed(AfterSave next)
         break;
     case AfterSave::Scenario:
         scenario_index_ = 0;
+        list_index_ = 0;
+        list_scroll_ = 0;
         open_dialog(Dialog::Scenario);
         break;
     case AfterSave::Quit:
@@ -1133,19 +1135,31 @@ void Shell::on_hotspot(int id, double x, double y)
                 list_index_ = 0;
             }
             reveal_file_list();
+        } else if (dialog_ == Dialog::Scenario) {
+            scenario_index_ = list_scroll_ + row;
+            if (scenario_index_ >= CitySession::kScenarioCount) {
+                scenario_index_ = CitySession::kScenarioCount - 1;
+            }
+            if (scenario_index_ < 0) {
+                scenario_index_ = 0;
+            }
+            list_index_ = scenario_index_;
+            reveal_file_list();
         } else {
             list_index_ = row;
-            if (dialog_ == Dialog::Scenario) {
-                scenario_index_ = list_index_;
-            }
         }
         focus_id_ = id;
         return;
     }
-    if (id == kListScroll && dialog_ == Dialog::Files) {
+    if (id == kListScroll && (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario)) {
         list_dragging_ = true;
-        const int count = static_cast<int>(files_.size());
-        list_index_ = list_index_from_track(y, list_track_y_, list_track_h_, count);
+        const int count =
+            dialog_ == Dialog::Scenario ? CitySession::kScenarioCount : static_cast<int>(files_.size());
+        const int index = list_index_from_track(y, list_track_y_, list_track_h_, count);
+        if (dialog_ == Dialog::Scenario) {
+            scenario_index_ = index;
+        }
+        list_index_ = dialog_ == Dialog::Scenario ? scenario_index_ : index;
         reveal_file_list();
         const int row = list_index_ - list_scroll_;
         if (row >= 0 && row < 64) {
@@ -1426,34 +1440,49 @@ void Shell::move_focus(int delta)
                 list_index_ = 0;
             }
             reveal_file_list();
+        } else if (dialog_ == Dialog::Scenario) {
+            scenario_index_ = list_scroll_ + (focus_id_ - kListItem);
+            if (scenario_index_ >= CitySession::kScenarioCount) {
+                scenario_index_ = CitySession::kScenarioCount - 1;
+            }
+            if (scenario_index_ < 0) {
+                scenario_index_ = 0;
+            }
+            list_index_ = scenario_index_;
+            reveal_file_list();
         } else {
             list_index_ = focus_id_ - kListItem;
-            if (dialog_ == Dialog::Scenario) {
-                scenario_index_ = list_index_;
-            }
         }
     }
 }
 
 void Shell::reveal_file_list()
 {
-    const int count = static_cast<int>(files_.size());
-    list_reveal(list_scroll_, list_index_, std::max(1, files_visible_), count);
+    const bool scenarios = dialog_ == Dialog::Scenario;
+    const int count = scenarios ? CitySession::kScenarioCount : static_cast<int>(files_.size());
+    const int index = scenarios ? scenario_index_ : list_index_;
+    list_reveal(list_scroll_, index, std::max(1, files_visible_), count);
+    if (scenarios) {
+        list_index_ = scenario_index_;
+    }
 }
 
 bool Shell::nudge_file_list(int delta, bool page, bool force)
 {
-    if (dialog_ != Dialog::Files || files_.empty() || delta == 0) {
+    const bool files = dialog_ == Dialog::Files && !files_.empty();
+    const bool scenarios = dialog_ == Dialog::Scenario;
+    if ((!files && !scenarios) || delta == 0) {
         return false;
     }
     const bool on_list = focus_id_ >= kListItem && focus_id_ < kListItem + 64;
     if (!on_list && !force && !page) {
         return false;
     }
-    const int count = static_cast<int>(files_.size());
+    const int count = scenarios ? CitySession::kScenarioCount : static_cast<int>(files_.size());
+    int index = scenarios ? scenario_index_ : list_index_;
     const int step = page ? std::max(1, files_visible_ - 1) : std::max(1, std::abs(delta));
     const int sign = delta < 0 ? -1 : 1;
-    int next = list_index_ + sign * step;
+    int next = index + sign * step;
     if (!page && !force && on_list && (next < 0 || next >= count)) {
         return false;
     }
@@ -1462,6 +1491,9 @@ bool Shell::nudge_file_list(int delta, bool page, bool force)
     }
     if (next >= count) {
         next = count - 1;
+    }
+    if (scenarios) {
+        scenario_index_ = next;
     }
     list_index_ = next;
     reveal_file_list();

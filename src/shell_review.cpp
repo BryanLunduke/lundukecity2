@@ -259,6 +259,25 @@ void Shell::run_review_checks()
         return;
     }
 
+    // M8: scenarios past the first screen are reachable.
+    dialog_ = Dialog::Scenario;
+    scenario_index_ = 0;
+    list_index_ = 0;
+    list_scroll_ = 0;
+    files_visible_ = 3;
+    focus_id_ = kListItem;
+    if (!nudge_file_list(1, true, true) || scenario_index_ != 2) {
+        fail("scenario list did not page");
+        return;
+    }
+    nudge_file_list(20, false, true);
+    if (scenario_index_ != CitySession::kScenarioCount - 1 || scenario_index_ < list_scroll_ ||
+        scenario_index_ >= list_scroll_ + files_visible_) {
+        fail("the last scenario is not on screen");
+        return;
+    }
+    close_dialog();
+
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {
