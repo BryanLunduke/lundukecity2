@@ -19,12 +19,21 @@
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "win_compat.hpp"
 
 static int fail(int code, const char *msg)
 {
     std::cerr << "round14: " << msg << "\n";
     return code;
 }
+
+// Windows has no POSIX permission bits; the mode checks only run elsewhere.
+// The temp-file and leftover checks still run there.
+#ifdef _WIN32
+static constexpr bool kModes = false;
+#else
+static constexpr bool kModes = true;
+#endif
 
 static mode_t mode_of(const std::string &p)
 {
@@ -63,7 +72,7 @@ int main()
     // New file: umask 027 -> 0640.
     const mode_t old_mask = umask(027);
     if (!sim.saveFile(city.c_str())) rc = fail(2, "first save failed");
-    else if (mode_of(city) != 0640) rc = fail(3, "new file did not respect the umask");
+    else if (kModes && mode_of(city) != 0640) rc = fail(3, "new file did not respect the umask");
     umask(old_mask);
 
     // Existing 0600 file stays 0600.
@@ -71,7 +80,7 @@ int main()
         chmod(city.c_str(), 0600);
         { std::ofstream(user_tmp) << "keep"; }
         if (!sim.saveFile(city.c_str())) rc = fail(4, "second save failed");
-        else if (mode_of(city) != 0600) rc = fail(5, "save changed a 0600 file's mode");
+        else if (kModes && mode_of(city) != 0600) rc = fail(5, "save changed a 0600 file's mode");
     }
     // The user's .tmp file is untouched.
     if (rc == 0) {
@@ -88,7 +97,7 @@ int main()
         const mode_t m = umask(077);
         const bool ok = sim.saveFile(city.c_str());
         umask(m);
-        if (!ok || mode_of(city) != 0640) rc = fail(8, "save did not keep 0640");
+        if (!ok || (kModes && mode_of(city) != 0640)) rc = fail(8, "save did not keep 0640");
     }
 
     std::remove(user_tmp.c_str());

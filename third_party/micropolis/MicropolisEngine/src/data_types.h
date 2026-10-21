@@ -69,8 +69,12 @@ typedef unsigned char Byte;
 
 typedef Byte *Ptr;
 
-typedef long Quad;
+#include <cstdint>
 
-typedef unsigned long UQuad;
+// 64 bits everywhere. A plain long is only 32 bits on Windows (LLP64),
+// which would wrap a treasury above $2,147,483,647 into debt.
+typedef std::int64_t Quad;
+
+typedef std::uint64_t UQuad;
 
 #endif

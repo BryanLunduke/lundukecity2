@@ -2,6 +2,7 @@
 // Copyright (C) 2026 The Lunduke City authors
 // See COPYING and NOTICE.
 
+#include <cstdint>
 #include "city_session.hpp"
 
 #include "assets.hpp"
@@ -22,10 +23,10 @@
 
 namespace {
 
-std::string with_commas(long value)
+std::string with_commas(std::int64_t value)
 {
     const bool neg = value < 0;
-    unsigned long mag = static_cast<unsigned long>(neg ? -value : value);
+    std::uint64_t mag = static_cast<std::uint64_t>(neg ? -value : value);
     std::string digits = std::to_string(mag);
     std::string grouped;
     int count = 0;
@@ -334,9 +335,9 @@ int hostile_review_session_probe(CitySession &session, int op)
         const Micropolis::BudgetBases bases =
             sim.projectBudget(roads, rails, police, fire, pop, sim.landValueAverage, sim.cityTax);
         const CitySession::BudgetBook book = session.budget();
-        if (!book.estimates || book.taxes_known || book.road_need != static_cast<long>(bases.road) ||
-            book.police_need != static_cast<long>(bases.police) || book.fire_need != static_cast<long>(bases.fire) ||
-            book.taxes != static_cast<long>(bases.tax)) {
+        if (!book.estimates || book.taxes_known || book.road_need != static_cast<std::int64_t>(bases.road) ||
+            book.police_need != static_cast<std::int64_t>(bases.police) || book.fire_need != static_cast<std::int64_t>(bases.fire) ||
+            book.taxes != static_cast<std::int64_t>(bases.tax)) {
             return 0;
         }
         if (!snap || sim.roadTotal != sim.snapRoadTotal || sim.railTotal != sim.snapRailTotal) {
@@ -345,7 +346,7 @@ int hostile_review_session_probe(CitySession &session, int op)
         const Micropolis::BudgetBases january = sim.projectBudget(
             sim.roadTotal, sim.railTotal, sim.policeStationPop, sim.fireStationPop, pop, sim.landValueAverage,
             sim.cityTax);
-        if (book.road_need != static_cast<long>(january.road)) {
+        if (book.road_need != static_cast<std::int64_t>(january.road)) {
             return 0;
         }
         // 2 when the census has a real road bill. 1 when the formula
@@ -692,9 +693,9 @@ int CitySession::difficulty() const
     return static_cast<int>(engine_->sim.gameLevel);
 }
 
-long CitySession::funds() const
+std::int64_t CitySession::funds() const
 {
-    return static_cast<long>(engine_->sim.totalFunds);
+    return static_cast<std::int64_t>(engine_->sim.totalFunds);
 }
 
 int CitySession::generated_seed() const
@@ -1148,9 +1149,9 @@ int percent_of(float fraction)
     return n;
 }
 
-long funded(Quad need, int percent)
+std::int64_t funded(Quad need, int percent)
 {
-    return static_cast<long>(need) * percent / 100;
+    return static_cast<std::int64_t>(need) * percent / 100;
 }
 
 } // namespace
@@ -1159,14 +1160,14 @@ CitySession::BudgetBook CitySession::budget() const
 {
     const Micropolis &sim = engine_->sim;
     BudgetBook book;
-    book.taxes = static_cast<long>(sim.taxFund);
+    book.taxes = static_cast<std::int64_t>(sim.taxFund);
     book.tax_percent = sim.cityTax;
     book.road_percent = percent_of(sim.roadPercent);
     book.police_percent = percent_of(sim.policePercent);
     book.fire_percent = percent_of(sim.firePercent);
-    book.road_need = static_cast<long>(sim.roadFund);
-    book.police_need = static_cast<long>(sim.policeFund);
-    book.fire_need = static_cast<long>(sim.fireFund);
+    book.road_need = static_cast<std::int64_t>(sim.roadFund);
+    book.police_need = static_cast<std::int64_t>(sim.policeFund);
+    book.fire_need = static_cast<std::int64_t>(sim.fireFund);
     book.taxes_known = sim.taxReceiptKnown;
 
     // A new city, a scenario, and a classic file have no January receipt.
@@ -1188,27 +1189,27 @@ CitySession::BudgetBook CitySession::budget() const
         const Quad pop = static_cast<Quad>(normalized + static_cast<float>(com) + static_cast<float>(ind));
         const Micropolis::BudgetBases bases =
             sim.projectBudget(roads, rails, police, fire, pop, sim.landValueAverage, sim.cityTax);
-        book.taxes = static_cast<long>(bases.tax);
-        book.road_need = static_cast<long>(bases.road);
-        book.police_need = static_cast<long>(bases.police);
-        book.fire_need = static_cast<long>(bases.fire);
+        book.taxes = static_cast<std::int64_t>(bases.tax);
+        book.road_need = static_cast<std::int64_t>(bases.road);
+        book.police_need = static_cast<std::int64_t>(bases.police);
+        book.fire_need = static_cast<std::int64_t>(bases.fire);
         book.estimates = true;
     }
 
     if (sim.budgetAwaitingAccept) {
         const Micropolis::BudgetCharge charge = sim.budgetCharge();
-        book.road_spent = static_cast<long>(charge.roadTaken);
-        book.police_spent = static_cast<long>(charge.policeTaken);
-        book.fire_spent = static_cast<long>(charge.fireTaken);
-        book.cash_flow = static_cast<long>(charge.posted);
-        book.previous_funds = sim.budgetAnchorValid ? static_cast<long>(sim.budgetAnchorFunds)
-                                                    : static_cast<long>(sim.totalFunds);
-        book.funds = static_cast<long>(sim.totalFunds) + book.cash_flow;
+        book.road_spent = static_cast<std::int64_t>(charge.roadTaken);
+        book.police_spent = static_cast<std::int64_t>(charge.policeTaken);
+        book.fire_spent = static_cast<std::int64_t>(charge.fireTaken);
+        book.cash_flow = static_cast<std::int64_t>(charge.posted);
+        book.previous_funds = sim.budgetAnchorValid ? static_cast<std::int64_t>(sim.budgetAnchorFunds)
+                                                    : static_cast<std::int64_t>(sim.totalFunds);
+        book.funds = static_cast<std::int64_t>(sim.totalFunds) + book.cash_flow;
         // budgetCharge spends taxFund + cash, roads first, then fire, then
         // police. The sentence names that same money. A later department
         // that gets nothing because an earlier one used the pool says so.
-        const long taxes = static_cast<long>(sim.taxFund);
-        const long cash = static_cast<long>(sim.totalFunds);
+        const std::int64_t taxes = static_cast<std::int64_t>(sim.taxFund);
+        const std::int64_t cash = static_cast<std::int64_t>(sim.totalFunds);
         // Roads are paid first. Once one department is short, every later
         // short department was left short because that earlier one took
         // the taxes and cash that remained.
@@ -1248,7 +1249,7 @@ CitySession::BudgetBook CitySession::budget() const
         return book;
     }
 
-    book.funds = static_cast<long>(sim.totalFunds);
+    book.funds = static_cast<std::int64_t>(sim.totalFunds);
     book.previous_funds = book.funds;
     // Needs are the stored January bill, or the estimate filled in above.
     // Spending the stored fund here would print $0 for a city that has
@@ -1345,9 +1346,9 @@ bool CitySession::note_evaluation_month(int month_index)
     return true;
 }
 
-long CitySession::stored_assessed_value() const
+std::int64_t CitySession::stored_assessed_value() const
 {
-    return static_cast<long>(engine_->sim.cityAssessedValue);
+    return static_cast<std::int64_t>(engine_->sim.cityAssessedValue);
 }
 
 void CitySession::mark_clean_time()
@@ -1528,7 +1529,7 @@ std::string CitySession::city_name() const
 
 std::string CitySession::funds_text() const
 {
-    return "Funds: " + with_commas(static_cast<long>(engine_->sim.totalFunds));
+    return "Funds: " + with_commas(static_cast<std::int64_t>(engine_->sim.totalFunds));
 }
 
 std::string CitySession::date_text() const
@@ -1563,9 +1564,9 @@ int CitySession::history_value(HistorySeries series, HistoryScale scale, int ind
     return engine_->sim.getHistory(static_cast<int>(series), static_cast<int>(scale), index);
 }
 
-long CitySession::cash_flow_history(HistoryScale scale, int index) const
+std::int64_t CitySession::cash_flow_history(HistoryScale scale, int index) const
 {
-    return static_cast<long>(engine_->sim.cashFlowHistory(static_cast<int>(scale), index));
+    return static_cast<std::int64_t>(engine_->sim.cashFlowHistory(static_cast<int>(scale), index));
 }
 
 bool CitySession::cash_flow_history_exact(HistoryScale scale, int index) const
@@ -1689,10 +1690,10 @@ CitySession::Evaluation CitySession::evaluation() const
         report.yes_percent = 100;
     }
     const Quad live_population = live_population_count(sim);
-    report.population = live_population < 0 ? 0 : static_cast<long>(live_population);
+    report.population = live_population < 0 ? 0 : static_cast<std::int64_t>(live_population);
     // cityPopDelta is the last tax year. A mid-year preview does not replace it.
-    report.migration = static_cast<long>(sim.cityPopDelta);
-    report.assessed_value = static_cast<long>(sim.evalPreviewValid ? sim.evalPreviewAssessed : sim.cityAssessedValue);
+    report.migration = static_cast<std::int64_t>(sim.cityPopDelta);
+    report.assessed_value = static_cast<std::int64_t>(sim.evalPreviewValid ? sim.evalPreviewAssessed : sim.cityAssessedValue);
     report.category = city_class_name(live_city_class(live_population < 0 ? 0 : live_population));
     report.year = static_cast<int>(sim.cityYear > 0 ? sim.cityYear : sim.startingYear);
     switch (sim.gameLevel) {

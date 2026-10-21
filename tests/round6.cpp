@@ -8,6 +8,7 @@
 #include "city_session.hpp"
 #include "tools.hpp"
 
+#include <cinttypes>
 #include <cstdio>
 #include <string>
 
@@ -102,7 +103,7 @@ int main()
         const CitySession::BudgetBook book = fresh.budget();
         const int projected = hostile_review_session_probe(fresh, 20);
         if (book.taxes_known || !book.estimates || (projected != 1 && projected != 2)) {
-            std::fprintf(stderr, "known %d estimates %d road %ld tax %ld\n", book.taxes_known ? 1 : 0,
+            std::fprintf(stderr, "known %d estimates %d road %" PRId64 " tax %" PRId64 "\n", book.taxes_known ? 1 : 0,
                          book.estimates ? 1 : 0, book.road_need, book.taxes);
             return fail(8, "a new city still treats a missing January as a zero receipt");
         }
@@ -115,7 +116,7 @@ int main()
         const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
         if (!city.load_scenario(def.id) || hostile_review_session_probe(city, 20) != 2) {
             const CitySession::BudgetBook book = city.budget();
-            std::fprintf(stderr, "%s known %d est %d road %ld police %ld fire %ld tax %ld\n", def.name,
+            std::fprintf(stderr, "%s known %d est %d road %" PRId64 " police %" PRId64 " fire %" PRId64 " tax %" PRId64 "\n", def.name,
                          book.taxes_known ? 1 : 0, book.estimates ? 1 : 0, book.road_need, book.police_need,
                          book.fire_need, book.taxes);
             return fail(10, "a scenario priced its departments at the empty receipt");

@@ -10,6 +10,7 @@
 
 #include "micropolis.h"
 
+#include <cinttypes>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -76,7 +77,7 @@ int main()
     if (paused.funds() != 5000 || paused.difficulty() != CitySession::kLevelHard || paused.speed() != 0 ||
         !paused.save_city_as(path) || file_slot(path, 15) != CitySession::kLevelHard ||
         file_slot(path, 64) != 1) {
-        std::fprintf(stderr, "hard funds %ld level %d slot %d disasters %d\n", paused.funds(), paused.difficulty(),
+        std::fprintf(stderr, "hard funds %" PRId64 " level %d slot %d disasters %d\n", paused.funds(), paused.difficulty(),
                      file_slot(path, 15), file_slot(path, 64));
         return fail(1, "a paused Hard city was not saved as Hard");
     }
@@ -85,7 +86,7 @@ int main()
     if (!loaded_hard.load_city(path) || loaded_hard.difficulty() != CitySession::kLevelHard ||
         loaded_hard.funds() != 5000 || loaded_hard.speed() != 0 ||
         loaded_hard.evaluation().difficulty != "Hard" || !loaded_hard.disasters()) {
-        std::fprintf(stderr, "reloaded level %d funds %ld speed %d diff '%s'\n", loaded_hard.difficulty(),
+        std::fprintf(stderr, "reloaded level %d funds %" PRId64 " speed %d diff '%s'\n", loaded_hard.difficulty(),
                      loaded_hard.funds(), loaded_hard.speed(), loaded_hard.evaluation().difficulty.c_str());
         return fail(2, "reloading the paused Hard city did not keep Hard, $5,000, and pause");
     }
@@ -94,7 +95,7 @@ int main()
     if (loaded_hard.speed() != 0 || loaded_hard.funds() != 20000 ||
         loaded_hard.difficulty() != CitySession::kLevelEasy || !loaded_hard.save_city_as(path) ||
         file_slot(path, 15) != CitySession::kLevelEasy) {
-        std::fprintf(stderr, "easy slot %d level %d funds %ld\n", file_slot(path, 15), loaded_hard.difficulty(),
+        std::fprintf(stderr, "easy slot %d level %d funds %" PRId64 "\n", file_slot(path, 15), loaded_hard.difficulty(),
                      loaded_hard.funds());
         return fail(3, "a paused Easy city after a Hard one was saved as the old level");
     }
@@ -109,7 +110,7 @@ int main()
     medium.new_city(spec_for("Hard Again", 6, CitySession::kLevelHard));
     medium.new_city(spec_for("Midville", 7, CitySession::kLevelMedium));
     if (!medium.save_city_as(path) || file_slot(path, 15) != CitySession::kLevelMedium || medium.funds() != 10000) {
-        std::fprintf(stderr, "medium slot %d funds %ld\n", file_slot(path, 15), medium.funds());
+        std::fprintf(stderr, "medium slot %d funds %" PRId64 "\n", file_slot(path, 15), medium.funds());
         return fail(5, "a paused Medium city was not saved as Medium");
     }
     CitySession loaded_medium;
@@ -230,7 +231,7 @@ int main()
     if (open_book.road_note.find("cut to " + std::to_string(open_book.road_percent) + "%") == std::string::npos ||
         open_book.fire_note.find("cut to") == std::string::npos || !open_book.police_note.empty() ||
         open_book.road_percent >= 100 || broke.funds() != 100 || !dollars_match(open_book, 100)) {
-        std::fprintf(stderr, "road '%s' fire '%s' police '%s' pct %d flow %ld current %ld\n",
+        std::fprintf(stderr, "road '%s' fire '%s' police '%s' pct %d flow %" PRId64 " current %" PRId64 "\n",
                      open_book.road_note.c_str(), open_book.fire_note.c_str(), open_book.police_note.c_str(),
                      open_book.road_percent, open_book.cash_flow, open_book.funds);
         return fail(23, "an untouched broke budget hid the cut or mismatched the dollars");
@@ -245,13 +246,13 @@ int main()
     broke.set_road_funding(100);
     const CitySession::BudgetBook dragged = broke.budget();
     if (dragged.road_note.find("cut to") == std::string::npos || !dollars_match(dragged, 100)) {
-        std::fprintf(stderr, "dragged '%s' flow %ld\n", dragged.road_note.c_str(), dragged.cash_flow);
+        std::fprintf(stderr, "dragged '%s' flow %" PRId64 "\n", dragged.road_note.c_str(), dragged.cash_flow);
         return fail(25, "raising the road slider above the treasury did not say it was cut");
     }
     const long projected = dragged.funds;
     broke.finish_budget_edit();
     if (broke.budget_pending() || broke.funds() != projected) {
-        std::fprintf(stderr, "projected %ld actual %ld\n", projected, broke.funds());
+        std::fprintf(stderr, "projected %ld actual %" PRId64 "\n", projected, broke.funds());
         return fail(26, "closing the broke year did not post the dollars on screen");
     }
 
@@ -262,7 +263,7 @@ int main()
     }
     menu_tax.set_tax(20);
     if (menu_tax.tax() != 20 || menu_tax.budget().taxes != 2000) {
-        std::fprintf(stderr, "menu tax %d collected %ld\n", menu_tax.tax(), menu_tax.budget().taxes);
+        std::fprintf(stderr, "menu tax %d collected %" PRId64 "\n", menu_tax.tax(), menu_tax.budget().taxes);
         return fail(28, "a menu budget recomputed last January's taxes from the slider");
     }
     menu_tax.set_tax(0);
@@ -288,18 +289,18 @@ int main()
     const int rail_serial = crossing.message_serial();
     crossing.use_tool(TOOL_RAILROAD, 5, 5);
     if (crossing.funds() != rail_start - 20 || crossing.message().find("Rail bridge") != std::string::npos) {
-        std::fprintf(stderr, "dry rail funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+        std::fprintf(stderr, "dry rail funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(32, "rail on land did not cost $20, or it claimed a bridge");
     }
     crossing.use_tool(TOOL_RAILROAD, 10, 12);
     if (crossing.funds() != rail_start - 120 || crossing.message().find("Rail bridge: $100") == std::string::npos ||
         crossing.message_serial() <= rail_serial) {
-        std::fprintf(stderr, "h rail funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+        std::fprintf(stderr, "h rail funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(33, "horizontal rail across water did not cost $100 or stay silent");
     }
     crossing.use_tool(TOOL_RAILROAD, 30, 16);
     if (crossing.funds() != rail_start - 220 || crossing.message().find("Rail bridge: $100") == std::string::npos) {
-        std::fprintf(stderr, "v rail funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+        std::fprintf(stderr, "v rail funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(34, "vertical rail across water did not cost $100");
     }
     if (hostile_review_session_probe(crossing, 13) != 0) {
@@ -308,17 +309,17 @@ int main()
     const long wire_start = crossing.funds();
     crossing.use_tool(TOOL_WIRE, 6, 6);
     if (crossing.funds() != wire_start - 5 || crossing.message().find("Underwater wire") != std::string::npos) {
-        std::fprintf(stderr, "dry wire funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+        std::fprintf(stderr, "dry wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(36, "a power line on land did not cost $5, or it claimed water");
     }
     crossing.use_tool(TOOL_WIRE, 10, 14);
     if (crossing.funds() != wire_start - 30 || crossing.message().find("Underwater wire: $25") == std::string::npos) {
-        std::fprintf(stderr, "h wire funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+        std::fprintf(stderr, "h wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(37, "a horizontal power line across water did not cost $25 or stay silent");
     }
     crossing.use_tool(TOOL_WIRE, 14, 10);
     if (crossing.funds() != wire_start - 55 || crossing.message().find("Underwater wire: $25") == std::string::npos) {
-        std::fprintf(stderr, "v wire funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+        std::fprintf(stderr, "v wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(38, "a vertical power line across water did not cost $25");
     }
     if (hostile_review_session_probe(crossing, 11) != 0) {
@@ -333,7 +334,7 @@ int main()
         crossing.message().find("power line") == std::string::npos ||
         crossing.message().find("bridge") != std::string::npos ||
         crossing.needs_save_prompt() != dirty_before) {
-        std::fprintf(stderr, "miss rail '%s' wire '%s' funds %ld\n", rail_miss.c_str(), crossing.message().c_str(),
+        std::fprintf(stderr, "miss rail '%s' wire '%s' funds %" PRId64 "\n", rail_miss.c_str(), crossing.message().c_str(),
                      crossing.funds());
         return fail(40, "rail or power with nowhere to land was silent, charged the city, or used the other tool's words");
     }

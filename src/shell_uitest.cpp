@@ -700,7 +700,7 @@ void Shell::drive_ui_test()
         return;
     }
     case 13: {
-        const long funds = session_.funds();
+        const std::int64_t funds = session_.funds();
         const int tool = tool_index_;
         const double side_x = side_x_ + 8;
         const double side_y = menu_h_ + 420.0;
@@ -720,7 +720,7 @@ void Shell::drive_ui_test()
         return;
     }
     case 16: {
-        const long funds = session_.funds();
+        const std::int64_t funds = session_.funds();
         const int tool = tool_index_;
         const double map_x = static_cast<double>(win_w_ - 40);
         const double map_y = view_y_ + view_h_ * 0.5;

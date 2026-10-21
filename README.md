@@ -47,17 +47,18 @@ meson compile -C build
 
 Ship `lunduke-city-2` plus `share/lunduke-city-2/micropolis-assets` (or set `LUNDUKE_CITY_ASSETS` to that tree). Launch with `SteamDeck=1` for fullscreen. The system file portal is not available in the Deck session, so Load and Save use the in-window city list there.
 
-## Windows cross-compile
+## Windows
 
-`cross/mingw-w64-x86_64.txt` is a Meson cross file for MinGW-w64:
+From Debian or Ubuntu, one script cross-builds the x86_64 exe, runs the test suite under Wine, and writes `build-windows/dist/lunduke-city-2-windows-x86_64.zip`:
 
 ```sh
-sudo apt install mingw-w64
-meson setup build-win --cross-file cross/mingw-w64-x86_64.txt
-meson compile -C build-win
+sudo apt install g++-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix \
+  binutils-mingw-w64-x86-64 meson ninja-build pkg-config python3 \
+  gnupg zstd zip wine wine64 xvfb
+packaging/windows/build-windows.sh
 ```
 
-The new code paths (config, recovery, asset lookup, no POSIX-only calls without a Windows branch) are in place. A finished Windows link also needs Cairo, Pango, and SDL3 built for MinGW. Those are not in the Debian/Ubuntu MinGW packages, so a Windows link was not produced here. Point `x86_64-w64-mingw32-pkg-config` at a sysroot that has them before expecting `meson compile` to finish.
+The script builds a signature-checked MSYS2 sysroot (SDL3, Cairo, Pango, and DejaVu) and configures Meson with `cross/mingw-w64-x86_64.txt`. The zip is self-contained: unzip it and run `bin\lunduke-city-2.exe`. `JOBS` sets the compile parallelism (the default is 4). `LUNDUKE_WIN_TESTS=0` skips the Wine tests.
 
 ## Controls
 

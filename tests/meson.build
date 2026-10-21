@@ -1,3 +1,7 @@
+# A few tests drive POSIX-only behaviour (symlinks, ownership, rlimits,
+# fork/exec and the X window tree). They are not built for Windows.
+posix_host = host_machine.system() != 'windows'
+
 engine_smoke = executable(
   'engine_smoke',
   'engine_smoke.cpp',
@@ -33,43 +37,47 @@ features = executable(
 
 test('features', features)
 
-regressions = executable(
-  'regressions',
-  'regressions.cpp',
-  '../src/assets.cpp',
-  '../src/city_session.cpp',
-  '../src/messages.cpp',
-  '../src/sound_player.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
+if posix_host
+  regressions = executable(
+    'regressions',
+    'regressions.cpp',
+    '../src/assets.cpp',
+    '../src/city_session.cpp',
+    '../src/messages.cpp',
+    '../src/sound_player.cpp',
+    '../src/tools.cpp',
+    include_directories: include_directories('../src'),
+    dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+    cpp_args: [
+      '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+      '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+      '-DLUNDUKE_CITY_TEST_HOOKS',
+    ],
+  )
 
-test('regressions', regressions)
+  test('regressions', regressions)
+endif
 
-round3 = executable(
-  'round3',
-  'round3.cpp',
-  '../src/assets.cpp',
-  '../src/city_session.cpp',
-  '../src/messages.cpp',
-  '../src/sound_player.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
+if posix_host
+  round3 = executable(
+    'round3',
+    'round3.cpp',
+    '../src/assets.cpp',
+    '../src/city_session.cpp',
+    '../src/messages.cpp',
+    '../src/sound_player.cpp',
+    '../src/tools.cpp',
+    include_directories: include_directories('../src'),
+    dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+    cpp_args: [
+      '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+      '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+      '-DLUNDUKE_CITY_TEST_HOOKS',
+    ],
+  )
 
-test('round3', round3, timeout: 120)
+  test('round3', round3, timeout: 120)
+endif
 
 
 
@@ -161,32 +169,34 @@ test(
   depends: lunduke_city_exe,
 )
 
-argv_open = executable(
-  'argv_open',
-  'argv_open.cpp',
-  '../src/assets.cpp',
-  '../src/city_session.cpp',
-  '../src/messages.cpp',
-  '../src/sound_player.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-  ],
-)
+if posix_host
+  argv_open = executable(
+    'argv_open',
+    'argv_open.cpp',
+    '../src/assets.cpp',
+    '../src/city_session.cpp',
+    '../src/messages.cpp',
+    '../src/sound_player.cpp',
+    '../src/tools.cpp',
+    include_directories: include_directories('../src'),
+    dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+    cpp_args: [
+      '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+      '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+    ],
+  )
 
-# This test starts the real binary and reads the window tree. It does not
-# share the display with the other GUI tests.
-test(
-  'argv_open',
-  argv_open,
-  args: [lunduke_city_exe.full_path()],
-  depends: lunduke_city_exe,
-  timeout: 120,
-  is_parallel: false,
-)
+  # This test starts the real binary and reads the window tree. It does not
+  # share the display with the other GUI tests.
+  test(
+    'argv_open',
+    argv_open,
+    args: [lunduke_city_exe.full_path()],
+    depends: lunduke_city_exe,
+    timeout: 120,
+    is_parallel: false,
+  )
+endif
 
 
 
@@ -285,24 +295,26 @@ test('round14', round14)
 
 # Round 15 (C-1..C-3): autosave/recovery helpers, save through a symlink,
 # group kept, stale save temps removed.
-round15 = executable(
-  'round15',
-  'round15.cpp',
-  '../src/assets.cpp',
-  '../src/city_session.cpp',
-  '../src/messages.cpp',
-  '../src/sound_player.cpp',
-  '../src/tools.cpp',
-  include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
-  cpp_args: [
-    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
-    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
-    '-DLUNDUKE_CITY_TEST_HOOKS',
-  ],
-)
+if posix_host
+  round15 = executable(
+    'round15',
+    'round15.cpp',
+    '../src/assets.cpp',
+    '../src/city_session.cpp',
+    '../src/messages.cpp',
+    '../src/sound_player.cpp',
+    '../src/tools.cpp',
+    include_directories: include_directories('../src'),
+    dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+    cpp_args: [
+      '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+      '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+      '-DLUNDUKE_CITY_TEST_HOOKS',
+    ],
+  )
 
-test('round15', round15)
+  test('round15', round15)
+endif
 
 # Round 15 window checks: autosave timer, SIGTERM recovery, the recovery
 # prompt (Not Now / Discard-Cancel / Recover), Open Recent.
