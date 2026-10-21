@@ -1,12 +1,18 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 
 // How the city map sits in the view. Tiles grow to cover a large window and
 // never shrink a closer zoom. A leftover band is centered. The R/C/I meters
 // stay a fixed height instead of stretching with the window.
 
-inline constexpr int kMinMapTile = 6;
+// Atlas tiles are 16px. Drawn sizes are whole multiples of that source, so
+// nearest-neighbour sampling copies each pixel as an N×N block. A 12px tile
+// (and 14, 18, 22, …) drops rows and columns and breaks road dashes and the
+// zone letters.
+inline constexpr int kMapTileSource = 16;
+inline constexpr int kMinMapTile = kMapTileSource;
 inline constexpr int kMaxMapTile = 64;
 // The toolbar is nine rows. A 176px graph crowds it on a 1280x800 window.
 inline constexpr int kMaxDemandPx = 128;
@@ -38,6 +44,45 @@ inline int tile_size_to_cover(int view_w, int view_h, int world_w, int world_h, 
         need = max_tile;
     }
     return need;
+}
+
+// Smallest legal drawn size that is at least `pixels`. Covering a large
+// window rounds up, so the city still fills the view.
+inline int snap_map_tile(int pixels)
+{
+    if (pixels < kMinMapTile) {
+        return kMinMapTile;
+    }
+    if (pixels > kMaxMapTile) {
+        return kMaxMapTile;
+    }
+    const int snapped = ((pixels + kMapTileSource - 1) / kMapTileSource) * kMapTileSource;
+    if (snapped > kMaxMapTile) {
+        return kMaxMapTile;
+    }
+    return snapped;
+}
+
+// One zoom step toward the next or previous whole multiple. The sign of
+// `delta` is the direction; the magnitude is the caller's "one notch".
+inline int step_map_tile(int current, int delta)
+{
+    const int size = snap_map_tile(current);
+    if (delta > 0) {
+        return snap_map_tile(size + 1);
+    }
+    if (delta < 0) {
+        return size <= kMinMapTile ? kMinMapTile : size - kMapTileSource;
+    }
+    return size;
+}
+
+// Device-pixel origin of the scrolled map. Fractional scroll would make a
+// 2× or 3× nearest-neighbour scale paint some source pixels 1px wide and
+// others 3px wide.
+inline double snapped_map_origin(double view, int letterbox, double scroll)
+{
+    return std::floor(view + static_cast<double>(letterbox) - scroll);
 }
 
 inline int map_letterbox(int view, int map_pixels)

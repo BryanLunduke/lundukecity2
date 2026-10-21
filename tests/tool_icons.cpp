@@ -334,5 +334,47 @@ int main()
     if (road_band_bot - road_band_top != rail_band_bot - rail_band_top) {
         return fail("road and rail icons are not the same width");
     }
+    // PD and FD are the only near-white pixels. Each letter pixel keeps a
+    // one-pixel gap inside the gold rim and the dark outline, corners included.
+    auto same = [](const unsigned char *p, int r, int g, int b) {
+        return p[3] == 255 && p[2] == r && p[1] == g && p[0] == b;
+    };
+    auto is_letter = [&](const unsigned char *p) { return same(p, 248, 246, 240); };
+    auto is_rim = [&](const unsigned char *p) {
+        return same(p, 236, 184, 32) || same(p, 255, 226, 120) || same(p, 176, 120, 16) || same(p, 22, 16, 12);
+    };
+    for (const char *name : {"police", "fire"}) {
+        cairo_surface_t *badge = load_png(std::string("tool-icons/") + name + ".png");
+        if (badge == nullptr) {
+            return fail(std::string("missing badge icon ") + name);
+        }
+        cairo_surface_flush(badge);
+        const unsigned char *badge_px = cairo_image_surface_get_data(badge);
+        const int badge_stride = cairo_image_surface_get_stride(badge);
+        int letters = 0;
+        bool touches = false;
+        for (int y = 0; y < 40 && !touches; ++y) {
+            for (int x = 0; x < 40; ++x) {
+                if (!is_letter(at(badge_px, badge_stride, x, y))) {
+                    continue;
+                }
+                ++letters;
+                for (int dy = -1; dy <= 1 && !touches; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int xx = x + dx;
+                        const int yy = y + dy;
+                        if (xx < 0 || yy < 0 || xx >= 40 || yy >= 40 || is_rim(at(badge_px, badge_stride, xx, yy))) {
+                            touches = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        cairo_surface_destroy(badge);
+        if (letters < 20 || touches) {
+            return fail(std::string(name) + " letters touch the badge rim");
+        }
+    }
     return 0;
 }

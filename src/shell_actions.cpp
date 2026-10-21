@@ -359,7 +359,7 @@ void Shell::zoom_by(int delta)
     const double cx = (scroll_x_ + view_w_ * 0.5) / mw;
     const double cy = (scroll_y_ + view_h_ * 0.5) / mh;
     const int before = map_.tile_size();
-    map_.set_tile_size(before + delta);
+    map_.set_tile_size(step_map_tile(before, delta));
     if (map_.tile_size() == before) {
         return;
     }

@@ -315,6 +315,21 @@ int main()
         map_letterbox(1000, 1440) != 0) {
         return fail("large windows do not cover the map");
     }
+    // Drawn tiles stay on the 16px grid. 12px was the old default and is what
+    // broke the road dashes. Zoom notches move one whole multiple at a time.
+    if (kMapTileSource != 16 || kMinMapTile != 16 || snap_map_tile(1) != 16 || snap_map_tile(12) != 16 ||
+        snap_map_tile(16) != 16 || snap_map_tile(17) != 32 || snap_map_tile(48) != 48 || snap_map_tile(64) != 64 ||
+        snap_map_tile(80) != 64) {
+        return fail("map zoom is not a whole multiple of the 16px tile");
+    }
+    if (step_map_tile(16, 2) != 32 || step_map_tile(32, -2) != 16 || step_map_tile(48, 2) != 64 ||
+        step_map_tile(64, 2) != 64 || step_map_tile(16, -2) != 16 || step_map_tile(12, -2) != 16) {
+        return fail("zoom step left the 16px grid");
+    }
+    const double map_origin = snapped_map_origin(118, 0, 10.7);
+    if (map_origin != std::floor(map_origin) || map_origin != 107.0) {
+        return fail("the scrolled map is not aligned to a device pixel");
+    }
     double origin = 0;
     double span = 1.4;
     clamp_viewport_span(origin, span);

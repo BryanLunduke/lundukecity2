@@ -1439,7 +1439,8 @@ void Shell::draw(cairo_t *cr)
         TargetCr live(cr);
         cairo_rectangle(live.cr, view_x_, view_y_, view_w_, view_h_);
         cairo_clip(live.cr);
-        cairo_translate(live.cr, view_x_ + map_ox_ - scroll_x_, view_y_ + map_oy_ - scroll_y_);
+        cairo_translate(live.cr, snapped_map_origin(view_x_, map_ox_, scroll_x_),
+                        snapped_map_origin(view_y_, map_oy_, scroll_y_));
         map_.sync();
         map_.draw(live.cr);
     }

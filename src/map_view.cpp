@@ -86,7 +86,7 @@ void MapView::clear_hover()
 
 void MapView::set_tile_size(int pixels)
 {
-    tile_size_ = std::max(kMinMapTile, std::min(kMaxMapTile, pixels));
+    tile_size_ = snap_map_tile(pixels);
 }
 
 void MapView::set_shake(int dx, int dy)

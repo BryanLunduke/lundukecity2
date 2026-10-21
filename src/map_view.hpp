@@ -75,7 +75,8 @@ private:
 
     CitySession *session_ = nullptr;
     int engine_tool_ = 6;
-    int tile_size_ = 12;
+    // 1:1 with the 16px atlas. Zoom steps are 16, 32, 48, and 64.
+    int tile_size_ = 16;
     int shake_x_ = 0;
     int shake_y_ = 0;
     bool dragging_ = false;
