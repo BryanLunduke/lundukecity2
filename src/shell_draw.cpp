@@ -1177,8 +1177,8 @@ void Shell::draw_dialog(cairo_t *cr)
     }
     if (dialog_ == Dialog::Settings) {
         const double pitch = dp(64);
-        const double height = dp(40) + margin + pitch * 2 + dp(88) + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, dp(560), height, margin);
+        const double height = dp(40) + margin + pitch * 2 + dp(88) + dp(48) + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, win_h_, dp(680), height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -1219,8 +1219,8 @@ void Shell::draw_dialog(cairo_t *cr)
         const char *wheel_label = wheel_zooms_ ? "Mouse wheel: Zoom" : "Mouse wheel: Scroll";
         const bool full = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
         const char *full_label = full ? "Fullscreen: On" : "Fullscreen: Off";
-        buttons_at(x, dw, y + dp(48) + pitch * 2 + dp(4),
-                   {{auto_label, kScaleAuto}, {pause_label, kReset}, {wheel_label, kWheelZoom}, {full_label, kFullscreenBox}});
+        buttons_at(x, dw, y + dp(48) + pitch * 2 + dp(4), {{auto_label, kScaleAuto}, {pause_label, kReset}});
+        buttons_at(x, dw, y + dp(48) + pitch * 2 + dp(48), {{wheel_label, kWheelZoom}, {full_label, kFullscreenBox}});
         buttons_at(x, dw, y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_OK", kOk}});
         return;
     }
@@ -1706,24 +1706,32 @@ void Shell::draw(cairo_t *cr)
     }
     const int status_y = win_h_ - status_h_ - message_h_;
     fill(cr, 0, status_y, win_w_, status_h_, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);
-    std::string status = session_.funds_text() + "    " + session_.city_name() + "    " + speed_word(speed_) + "    " +
-                         session_.date_text();
+    const std::string hint = context_hint();
+    int hint_w = 0;
+    if (!hint.empty()) {
+        hint_w = measure_text(cr, ui_font(), hint, -1).width;
+    }
+    const int status_room = std::max(1, win_w_ - hint_w - 24);
     const std::string clock = session_.scenario_clock_text();
-    if (!clock.empty()) {
+    const std::string meter = session_.scenario_meter();
+    std::string status = session_.funds_text() + "    " + session_.city_name() + "    " + speed_word(speed_);
+    auto fits = [&](const std::string &text) {
+        return measure_text(cr, ui_font(), text, -1).width <= status_room;
+    };
+    const std::string with_date = status + "    " + session_.date_text();
+    if (fits(with_date)) {
+        status = with_date;
+    }
+    if (!clock.empty() && fits(status + "    " + clock)) {
         status += "    " + clock;
     }
-    const std::string meter = session_.scenario_meter();
-    if (!meter.empty()) {
+    if (!meter.empty() && fits(status + "    " + meter)) {
         status += "    " + meter;
     }
-    paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, win_w_ / 2);
-    {
-        const std::string hint = context_hint();
-        if (!hint.empty()) {
-            const TextMetrics metrics = measure_text(cr, ui_font(), hint, -1);
-            paint_text(cr, ui_font(), hint, win_w_ - metrics.width - 8, status_y + 8, theme::kTextR, theme::kTextG,
-                       theme::kTextB, -1);
-        }
+    paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, status_room);
+    if (!hint.empty()) {
+        paint_text(cr, ui_font(), hint, win_w_ - hint_w - 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB,
+                   -1);
     }
     const auto now = std::chrono::steady_clock::now();
     const bool expired = !notice_sticky_ && (hint_until_.time_since_epoch().count() == 0 || now >= hint_until_);

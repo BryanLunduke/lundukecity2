@@ -274,7 +274,9 @@ int Shell::run(int argc, char **argv)
         welcome_gate_ = true;
     }
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
-        demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget") {
+        demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget" &&
+        demo_ != "crime" && demo_ != "zones" && demo_ != "police" && demo_ != "graphs" && demo_ != "terrain" &&
+        demo_ != "controls" && demo_ != "settings") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -624,7 +626,9 @@ bool Shell::init_video()
     normal_w_ = req_w;
     normal_h_ = req_h;
     normal_valid_ = true;
-    if (deck_) {
+    // A requested size (the screenshot and test harness) stays that size.
+    // A Deck session otherwise fills the display.
+    if (deck_ && !size_override_) {
         SDL_SetWindowFullscreen(window_, true);
     } else if (want_maximized_) {
         SDL_MaximizeWindow(window_);
@@ -1134,6 +1138,9 @@ void Shell::loop()
                 open_dialog(Dialog::Budget);
                 gamepad_nav_ = false;
             } else if (demo_ == "graphs") {
+                session_.load_scenario(CitySession::scenario_def(0).id);
+                speed_ = 0;
+                session_.set_speed(0);
                 open_dialog(Dialog::Graphs);
             } else if (demo_ == "evaluation") {
                 session_.update_evaluation();
@@ -1150,10 +1157,12 @@ void Shell::loop()
                 menu_.alt_shown = true;
                 gamepad_nav_ = true;
             } else if (demo_ == "scenario") {
-                scenario_index_ = 0;
-                list_index_ = 0;
+                scenario_index_ = 2;
+                list_index_ = 2;
                 list_scroll_ = 0;
                 open_dialog(Dialog::Scenario);
+                focus_id_ = kListItem + 2;
+                gamepad_nav_ = deck_;
             } else if (demo_ == "welcome") {
                 welcome_gate_ = true;
                 open_dialog(Dialog::Welcome);
@@ -1192,6 +1201,66 @@ void Shell::loop()
                 budget_is_tax_ = false;
                 open_dialog(Dialog::Budget);
                 gamepad_nav_ = true;
+            } else if (demo_ == "crime" || demo_ == "zones" || demo_ == "police") {
+                const int which = demo_ == "crime" ? 5 : 0;
+                session_.load_scenario(CitySession::scenario_def(which).id);
+                speed_ = 0;
+                session_.set_speed(0);
+                close_dialog();
+                overlay_.set_layer(demo_ == "zones" ? CitySession::MapLayer::Zones
+                                   : demo_ == "police" ? CitySession::MapLayer::Police
+                                                       : CitySession::MapLayer::Crime);
+                overlay_on_ = true;
+                goal_dismissed_ = true;
+                center_on_fraction(0.5, 0.5);
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "messages") {
+                session_.set_disasters(true);
+                session_.disaster_earthquake();
+                session_.disaster_flood();
+                open_dialog(Dialog::Messages);
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "terrain") {
+                open_dialog(Dialog::NewCity);
+                new_page_ = 1;
+                focus_id_ = kNewTerrain;
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "files") {
+                const auto dir = std::filesystem::temp_directory_path() / "lunduke-shot-cities";
+                std::error_code ec;
+                std::filesystem::create_directories(dir, ec);
+                session_.save_city_as((dir / "Harbor.cty").string());
+                session_.new_city("Mesa", 4);
+                session_.set_speed(0);
+                speed_ = 0;
+                session_.save_city_as((dir / "Mesa.cty").string());
+                files_dir_ = dir.string();
+                files_save_ = false;
+                list_index_ = 0;
+                list_scroll_ = 0;
+                refresh_files();
+                open_dialog(Dialog::Files);
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "controls") {
+                open_dialog(Dialog::Controls);
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "settings") {
+                open_dialog(Dialog::Settings);
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "querylive") {
+                const int query = tool_by_index(kToolCount - 1)->engine_id;
+                for (int y = 2; y < 30; ++y) {
+                    for (int x = 2; x < 30; ++x) {
+                        session_.use_tool(query, x, y);
+                        if (!session_.message().empty()) {
+                            y = 30;
+                            break;
+                        }
+                    }
+                }
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "city" || demo_ == "paused") {
+                gamepad_nav_ = deck_;
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);
