@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "city_seed.hpp"
+#include "dialog_copy.hpp"
 #include "notice_bar.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
@@ -187,26 +188,6 @@ unsigned gdk_key(SDL_Keycode key)
     }
 }
 
-std::string query_body(const std::string &text)
-{
-    std::string body;
-    for (std::size_t i = 0; i < text.size();) {
-        if (text.compare(i, 3, " — ") == 0) {
-            body.push_back('\n');
-            i += 3;
-            continue;
-        }
-        if (text.compare(i, 2, ", ") == 0) {
-            body.push_back('\n');
-            i += 2;
-            continue;
-        }
-        body.push_back(text[i]);
-        ++i;
-    }
-    return body;
-}
-
 } // namespace
 
 void Shell::on_file_result(const char *const *filelist)
@@ -237,6 +218,9 @@ int Shell::run(int argc, char **argv)
 {
     if (const char *smoke = std::getenv("LUNDUKE_CITY2_SMOKE")) {
         smoke_ = smoke[0] != '\0' && smoke[0] != '0';
+    }
+    if (const char *ui = std::getenv("LUNDUKE_CITY2_UI_TEST")) {
+        ui_test_ = ui[0] != '\0' && ui[0] != '0';
     }
     if (const char *demo = std::getenv("LUNDUKE_CITY2_DEMO")) {
         demo_ = demo;
@@ -280,10 +264,16 @@ int Shell::run(int argc, char **argv)
         pending_opens_.erase(pending_opens_.begin());
         request_with_save(AfterSave::OpenPath);
     }
-    if (smoke_ && pending_opens_.empty() && session_.city_name() == "New City") {
+    if (smoke_ && !ui_test_ && pending_opens_.empty() && session_.city_name() == "New City") {
         session_.load_scenario(CitySession::scenario_def(0).id);
         speed_ = session_.speed();
         center_on_fraction(0.5, 0.5);
+    }
+    if (ui_test_) {
+        welcome_ = false;
+        recovery_checked_ = true;
+        speed_ = 0;
+        session_.set_speed(0);
     }
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu") {
         int ox = 0;
@@ -298,7 +288,7 @@ int Shell::run(int argc, char **argv)
 #endif
     loop();
     shutdown();
-    if (smoke_ && !ran_ok_) {
+    if ((smoke_ || ui_test_) && !ran_ok_) {
         std::cerr << smoke_error_ << "\n";
         return 2;
     }
@@ -308,9 +298,15 @@ int Shell::run(int argc, char **argv)
 bool Shell::init_video()
 {
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS)) {
+    // Audio is optional. SDL_Init fails the whole call when any requested
+    // subsystem fails, and a machine with no playback device (the argv_open
+    // test, and a sniper session without a dummy driver) must still open.
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS)) {
         std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
         return false;
+    }
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+        SDL_ClearError();
     }
     deck_ = steam_deck_environment();
     if (const char *hint = SDL_GetHint("SteamDeck")) {
@@ -439,7 +435,11 @@ void Shell::loop()
         }
         poll_file_dialog();
         if (gamepad_nav_ && dialog_ == Dialog::None && !menu_.open()) {
-            const double step = 700.0 * (elapsed / 1000.0);
+            // The UI test holds the stick for a fixed number of frames. Give
+            // each of those frames a slice of time so the drag does not
+            // depend on how fast the dummy driver spins.
+            const int move_ms = (ui_test_ && elapsed < 16) ? 16 : elapsed;
+            const double step = 700.0 * (move_ms / 1000.0);
             cursor_x_ = static_cast<float>(std::max(0.0, std::min<double>(win_w_ - 1, cursor_x_ + stick_x_ * step)));
             cursor_y_ = static_cast<float>(std::max(0.0, std::min<double>(win_h_ - 1, cursor_y_ + stick_y_ * step)));
             scroll_x_ += pan_x_ * step;
@@ -453,6 +453,39 @@ void Shell::loop()
                 zoom_by(-2);
                 zoom_cool_ = 180;
             }
+        }
+        if (pad_dragging_ && pad_ != nullptr && dialog_ == Dialog::None && !menu_.open()) {
+            int dx = 0;
+            int dy = 0;
+            if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_LEFT)) {
+                dx -= 1;
+            }
+            if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) {
+                dx += 1;
+            }
+            if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_UP)) {
+                dy -= 1;
+            }
+            if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_DOWN)) {
+                dy += 1;
+            }
+            if (dx != 0 || dy != 0) {
+                const int tick = std::max(1, (ui_test_ && elapsed < 16) ? 16 : elapsed);
+                if (pad_repeat_ms_ <= 0) {
+                    const float tile = static_cast<float>(std::max(map_.tile_size(), 8));
+                    cursor_x_ = static_cast<float>(std::max(0.0, std::min<double>(win_w_ - 1, cursor_x_ + dx * tile)));
+                    cursor_y_ = static_cast<float>(std::max(0.0, std::min<double>(win_h_ - 1, cursor_y_ + dy * tile)));
+                    pad_repeat_ms_ = 70;
+                }
+                pad_repeat_ms_ -= tick;
+            } else {
+                pad_repeat_ms_ = 0;
+            }
+        }
+        if (pad_dragging_) {
+            pointer_x_ = cursor_x_;
+            pointer_y_ = cursor_y_;
+            map_.motion(cursor_x_ - view_x_ + scroll_x_, cursor_y_ - view_y_ + scroll_y_, true);
         }
         if (pointer_down_ && pointer_on_map_ && map_.dragging()) {
             double dx = 0;
@@ -591,7 +624,21 @@ void Shell::loop()
                 budget_is_tax_ = false;
                 open_dialog(Dialog::Budget);
                 gamepad_nav_ = false;
+            } else if (demo_ == "graphs") {
+                open_dialog(Dialog::Graphs);
+            } else if (demo_ == "evaluation") {
+                session_.update_evaluation();
+                open_dialog(Dialog::Evaluation);
+            } else if (demo_ == "query") {
+                info_body_ = query_body("Residential zone — population 120, land value 40, powered");
+                open_dialog(Dialog::Query);
+            } else if (demo_ == "osk") {
+                gamepad_nav_ = true;
+                open_dialog(Dialog::NewCity);
             }
+        }
+        if (ui_test_) {
+            drive_ui_test();
         }
         if (!demo_.empty() && frame_ >= 3) {
             quitting_ = true;
@@ -633,11 +680,14 @@ void Shell::handle_event(const SDL_Event &event)
         pointer_x_ = event.motion.x * (pw / static_cast<double>(std::max(ww, 1)));
         pointer_y_ = event.motion.y * (ph / static_cast<double>(std::max(wh, 1)));
         hover_id_ = hit(pointer_x_, pointer_y_);
+        if (menu_.open() && dialog_ == Dialog::None) {
+            break;
+        }
         if (slider_drag_ != 0) {
             on_hotspot(slider_drag_, pointer_x_, pointer_y_);
         } else if (pointer_on_map_ && dialog_ == Dialog::None && !menu_.open()) {
             map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, pointer_down_);
-        } else if (hover_id_ == kPaletteId) {
+        } else if (hover_id_ == kPaletteId && !menu_.open()) {
             palette_.motion(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         }
         break;
@@ -657,6 +707,10 @@ void Shell::handle_event(const SDL_Event &event)
         pointer_down_ = true;
         const int id = hit(pointer_x_, pointer_y_);
         hover_id_ = id;
+        if (menu_.open() && dialog_ == Dialog::None) {
+            on_hotspot(id, pointer_x_, pointer_y_);
+            break;
+        }
         if (id == kMapId && dialog_ == Dialog::None && !menu_.open()) {
             pointer_on_map_ = true;
             SDL_CaptureMouse(true);
@@ -685,7 +739,7 @@ void Shell::handle_event(const SDL_Event &event)
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
         if (ctrl) {
             zoom_by(event.wheel.y > 0 ? 2 : -2);
-        } else if (dialog_ == Dialog::None) {
+        } else if (dialog_ == Dialog::None && !menu_.open()) {
             scroll_x_ -= event.wheel.x * 48.0;
             scroll_y_ -= event.wheel.y * 48.0;
             clamp_scroll();
@@ -727,9 +781,14 @@ void Shell::handle_event(const SDL_Event &event)
                 on_dialog_button(kCancel);
             } else if (accel == AccelKey::Return || accel == AccelKey::Space) {
                 activate_focus();
-            } else if (accel == AccelKey::Up || accel == AccelKey::Left) {
+            } else if (accel == AccelKey::Left || accel == AccelKey::Right) {
+                const int direction = accel == AccelKey::Left ? -1 : 1;
+                if (!adjust_focused_slider(direction)) {
+                    move_focus(direction);
+                }
+            } else if (accel == AccelKey::Up) {
                 move_focus(-1);
-            } else if (accel == AccelKey::Down || accel == AccelKey::Right) {
+            } else if (accel == AccelKey::Down) {
                 move_focus(1);
             } else if (key == SDLK_TAB) {
                 move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
@@ -817,9 +876,8 @@ void Shell::handle_event(const SDL_Event &event)
                 menu_.handle_key(AccelKey::Escape, 0, 0);
             } else if (dialog_ != Dialog::None) {
                 on_dialog_button(kCancel);
-            } else if (pointer_on_map_) {
-                map_.release();
-                pointer_on_map_ = false;
+            } else if (pad_dragging_ || pointer_on_map_) {
+                release_pad_drag();
             }
             break;
         }
@@ -836,10 +894,7 @@ void Shell::handle_event(const SDL_Event &event)
             } else if (dialog_ != Dialog::None) {
                 activate_focus();
             } else {
-                pointer_on_map_ = true;
-                map_.press(cursor_x_ - view_x_ + scroll_x_, cursor_y_ - view_y_ + scroll_y_);
-                map_.release();
-                pointer_on_map_ = false;
+                gamepad_use_cursor(true);
             }
             break;
         }
@@ -851,11 +906,11 @@ void Shell::handle_event(const SDL_Event &event)
             toggle_pause();
             break;
         }
-        if (button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) {
+        if (button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER && !menu_.open()) {
             cycle_tool(-1);
             break;
         }
-        if (button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) {
+        if (button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER && !menu_.open()) {
             cycle_tool(1);
             break;
         }
@@ -872,41 +927,15 @@ void Shell::handle_event(const SDL_Event &event)
         if (dir == AccelKey::None) {
             break;
         }
+        if (pad_dragging_) {
+            break;
+        }
         if (menu_.open()) {
             menu_.handle_key(dir, 0, 0);
         } else if (dialog_ != Dialog::None) {
-            if (dir == AccelKey::Left || dir == AccelKey::Right) {
-                for (const SliderGeom &slider : sliders_) {
-                    if (slider.id == focus_id_) {
-                        const int step = dir == AccelKey::Left ? -1 : 1;
-                        const int value = std::max(slider.min, std::min(slider.max, [&] {
-                            if (slider.id == kSlider + 1) {
-                                return tax_ + step;
-                            }
-                            if (slider.id == kSlider + 2) {
-                                return road_ + step * 5;
-                            }
-                            if (slider.id == kSlider + 3) {
-                                return police_ + step * 5;
-                            }
-                            return fire_ + step * 5;
-                        }()));
-                        if (slider.id == kSlider + 1) {
-                            tax_ = value;
-                            session_.set_tax(tax_);
-                        } else if (slider.id == kSlider + 2) {
-                            road_ = value;
-                            session_.set_road_funding(road_);
-                        } else if (slider.id == kSlider + 3) {
-                            police_ = value;
-                            session_.set_police_funding(police_);
-                        } else if (slider.id == kSlider + 4) {
-                            fire_ = value;
-                            session_.set_fire_funding(fire_);
-                        }
-                        break;
-                    }
-                }
+            if ((dir == AccelKey::Left || dir == AccelKey::Right) &&
+                adjust_focused_slider(dir == AccelKey::Left ? -1 : 1)) {
+                break;
             }
             move_focus(dir == AccelKey::Up || dir == AccelKey::Left ? -1 : 1);
         } else {
@@ -921,6 +950,13 @@ void Shell::handle_event(const SDL_Event &event)
                 scroll_y_ += pan;
             }
             clamp_scroll();
+        }
+        break;
+    }
+    case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+        const auto button = static_cast<SDL_GamepadButton>(event.gbutton.button);
+        if (button == SDL_GAMEPAD_BUTTON_SOUTH) {
+            release_pad_drag();
         }
         break;
     }
@@ -965,6 +1001,14 @@ void Shell::handle_event(const SDL_Event &event)
                 }
             }
         }
+        if (menu_.open() && dialog_ == Dialog::None) {
+            pointer_x_ = x;
+            pointer_y_ = y;
+            if (event.type == SDL_EVENT_FINGER_DOWN) {
+                on_hotspot(hit(pointer_x_, pointer_y_), pointer_x_, pointer_y_);
+            }
+            break;
+        }
         if (fingers_.size() >= 2) {
             if (pointer_on_map_) {
                 map_.release();
@@ -997,7 +1041,9 @@ void Shell::handle_event(const SDL_Event &event)
             if (event.type == SDL_EVENT_FINGER_DOWN) {
                 pointer_down_ = true;
                 const int id = hit(pointer_x_, pointer_y_);
-                if (id == kMapId && dialog_ == Dialog::None && !menu_.open()) {
+                if (menu_.open() && dialog_ == Dialog::None) {
+                    on_hotspot(id, pointer_x_, pointer_y_);
+                } else if (id == kMapId && dialog_ == Dialog::None) {
                     pointer_on_map_ = true;
                     map_.press(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_);
                 } else {

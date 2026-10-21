@@ -4,8 +4,6 @@
 
 #include "map_view.hpp"
 
-#include <cairomm/context.h>
-
 #include "sprite_art.hpp"
 #include "tile_atlas.hpp"
 #include "tools.hpp"
@@ -21,7 +19,13 @@ MapView::MapView()
     set_tile_size(tile_size_);
 }
 
-MapView::~MapView() = default;
+MapView::~MapView()
+{
+    if (map_pixels_ != nullptr) {
+        cairo_surface_destroy(map_pixels_);
+        map_pixels_ = nullptr;
+    }
+}
 
 void MapView::tick(int elapsed_ms)
 {
@@ -103,8 +107,12 @@ void MapView::ensure_surface()
 {
     const int width = CitySession::kWorldW * TileAtlas::kSize;
     const int height = CitySession::kWorldH * TileAtlas::kSize;
-    if (!map_pixels_ || map_pixels_->get_width() != width || map_pixels_->get_height() != height) {
-        map_pixels_ = Cairo::ImageSurface::create(Cairo::FORMAT_ARGB32, width, height);
+    if (map_pixels_ == nullptr || cairo_image_surface_get_width(map_pixels_) != width ||
+        cairo_image_surface_get_height(map_pixels_) != height) {
+        if (map_pixels_ != nullptr) {
+            cairo_surface_destroy(map_pixels_);
+        }
+        map_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
         cached_raw_.clear();
         cached_shown_.clear();
     }
@@ -127,8 +135,8 @@ int MapView::display_tile(int raw, const TileAtlas &atlas) const
 
 void MapView::blit_tile(int x, int y, int shown, const TileAtlas &atlas)
 {
-    unsigned char *data = map_pixels_->get_data();
-    const int stride = map_pixels_->get_stride();
+    unsigned char *data = cairo_image_surface_get_data(map_pixels_);
+    const int stride = cairo_image_surface_get_stride(map_pixels_);
     unsigned char *dest = data + y * TileAtlas::kSize * stride + x * TileAtlas::kSize * 4;
     if (atlas.loaded()) {
         atlas.blit(shown, dest, stride);
@@ -171,7 +179,7 @@ void MapView::sync()
     }
     last_sync_blits_ = dirty;
     if (dirty > 0) {
-        map_pixels_->mark_dirty();
+        cairo_surface_mark_dirty(map_pixels_);
     }
 }
 
@@ -256,7 +264,7 @@ bool MapView::edge_scroll(double view_x, double view_y, int view_w, int view_h, 
     return dx != 0.0 || dy != 0.0;
 }
 
-void MapView::draw_footprint(const Cairo::RefPtr<Cairo::Context> &cr) const
+void MapView::draw_footprint(cairo_t *cr) const
 {
     if (!hover_valid_) {
         return;
@@ -272,53 +280,53 @@ void MapView::draw_footprint(const Cairo::RefPtr<Cairo::Context> &cr) const
     if (w < 2.0 || h < 2.0) {
         return;
     }
-    cr->save();
-    cr->set_antialias(Cairo::ANTIALIAS_NONE);
-    cr->rectangle(x + 1.0, y + 1.0, w - 2.0, h - 2.0);
-    cr->set_source_rgba(0.0, 0.0, 0.0, 0.90);
-    cr->set_line_width(3.0);
-    cr->stroke();
-    cr->rectangle(x + 1.0, y + 1.0, w - 2.0, h - 2.0);
-    cr->set_source_rgba(1.0, 1.0, 1.0, 0.95);
-    cr->set_line_width(1.5);
-    cr->stroke();
-    cr->restore();
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.90);
+    cairo_set_line_width(cr, 3.0);
+    cairo_stroke(cr);
+    cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
+    cairo_set_line_width(cr, 1.5);
+    cairo_stroke(cr);
+    cairo_restore(cr);
 }
 
-void MapView::draw(const Cairo::RefPtr<Cairo::Context> &cr)
+void MapView::draw(cairo_t *cr)
 {
-    cr->set_antialias(Cairo::ANTIALIAS_NONE);
-    if (!map_pixels_) {
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    if (map_pixels_ == nullptr) {
         sync();
     }
-    if (!map_pixels_) {
+    if (map_pixels_ == nullptr) {
         return;
     }
 
-    cr->save();
-    cr->translate(shake_x_, shake_y_);
+    cairo_save(cr);
+    cairo_translate(cr, shake_x_, shake_y_);
     const double scale = static_cast<double>(tile_size_) / static_cast<double>(TileAtlas::kSize);
-    cr->save();
-    cr->scale(scale, scale);
-    cr->set_source(map_pixels_, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr->cobj()), CAIRO_FILTER_NEAREST);
-    cr->paint();
+    cairo_save(cr);
+    cairo_scale(cr, scale, scale);
+    cairo_set_source_surface(cr, map_pixels_, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
 
     if (session_ != nullptr) {
         for (const auto &dot : session_->sprites()) {
-            auto image = sprite_frame(dot.type, dot.frame);
-            if (!image) {
+            cairo_surface_t *image = sprite_frame(dot.type, dot.frame);
+            if (image == nullptr) {
                 continue;
             }
-            cr->save();
-            cr->translate(dot.x + dot.x_offset, dot.y + dot.y_offset);
-            cr->set_source(image, 0, 0);
-            cairo_pattern_set_filter(cairo_get_source(cr->cobj()), CAIRO_FILTER_NEAREST);
-            cr->paint();
-            cr->restore();
+            cairo_save(cr);
+            cairo_translate(cr, dot.x + dot.x_offset, dot.y + dot.y_offset);
+            cairo_set_source_surface(cr, image, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+            cairo_paint(cr);
+            cairo_restore(cr);
         }
     }
-    cr->restore();
+    cairo_restore(cr);
     draw_footprint(cr);
-    cr->restore();
+    cairo_restore(cr);
 }

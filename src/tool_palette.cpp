@@ -10,15 +10,15 @@
 
 namespace {
 
-void box(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double w, double h, double r, double g,
+void box(cairo_t *cr, double x, double y, double w, double h, double r, double g,
          double b)
 {
-    cr->set_source_rgb(r, g, b);
-    cr->rectangle(x, y, w, h);
-    cr->fill();
+    cairo_set_source_rgb(cr, r, g, b);
+    cairo_rectangle(cr, x, y, w, h);
+    cairo_fill(cr);
 }
 
-void icon_bulldozer(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_bulldozer(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.15, y + s * 0.35, s * 0.55, s * 0.28, 0.95, 0.78, 0.15);
     box(cr, x + s * 0.40, y + s * 0.18, s * 0.28, s * 0.22, 0.15, 0.15, 0.15);
@@ -26,7 +26,7 @@ void icon_bulldozer(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y,
     box(cr, x + s * 0.62, y + s * 0.55, s * 0.22, s * 0.28, 0.75, 0.75, 0.78);
 }
 
-void icon_road(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_road(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.28, y + s * 0.12, s * 0.44, s * 0.76, 0.40, 0.40, 0.40);
     box(cr, x + s * 0.46, y + s * 0.18, s * 0.08, s * 0.16, 0.92, 0.92, 0.92);
@@ -34,7 +34,7 @@ void icon_road(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, doub
     box(cr, x + s * 0.46, y + s * 0.66, s * 0.08, s * 0.16, 0.92, 0.92, 0.92);
 }
 
-void icon_rail(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_rail(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.22, y + s * 0.18, s * 0.56, s * 0.10, 0.45, 0.28, 0.12);
     box(cr, x + s * 0.22, y + s * 0.45, s * 0.56, s * 0.10, 0.45, 0.28, 0.12);
@@ -43,7 +43,7 @@ void icon_rail(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, doub
     box(cr, x + s * 0.60, y + s * 0.12, s * 0.08, s * 0.76, 0.25, 0.25, 0.28);
 }
 
-void icon_wire(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_wire(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.46, y + s * 0.18, s * 0.08, s * 0.62, 0.35, 0.22, 0.10);
     box(cr, x + s * 0.18, y + s * 0.28, s * 0.64, s * 0.06, 0.95, 0.82, 0.10);
@@ -51,55 +51,55 @@ void icon_wire(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, doub
     box(cr, x + s * 0.68, y + s * 0.50, s * 0.10, s * 0.16, 0.95, 0.82, 0.10);
 }
 
-void icon_park(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_park(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.44, y + s * 0.55, s * 0.12, s * 0.28, 0.40, 0.24, 0.10);
     box(cr, x + s * 0.22, y + s * 0.28, s * 0.56, s * 0.32, 0.12, 0.55, 0.16);
     box(cr, x + s * 0.32, y + s * 0.14, s * 0.36, s * 0.22, 0.16, 0.62, 0.20);
 }
 
-void icon_house(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_house(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.22, y + s * 0.42, s * 0.56, s * 0.40, 0.93, 0.93, 0.90);
     box(cr, x + s * 0.16, y + s * 0.28, s * 0.68, s * 0.16, 0.75, 0.18, 0.14);
     box(cr, x + s * 0.42, y + s * 0.58, s * 0.16, s * 0.24, 0.35, 0.22, 0.12);
 }
 
-void icon_shop(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_shop(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.16, y + s * 0.30, s * 0.68, s * 0.52, 0.25, 0.38, 0.78);
     box(cr, x + s * 0.28, y + s * 0.48, s * 0.14, s * 0.18, 0.92, 0.92, 0.70);
     box(cr, x + s * 0.52, y + s * 0.48, s * 0.14, s * 0.18, 0.92, 0.92, 0.70);
 }
 
-void icon_factory(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_factory(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.12, y + s * 0.48, s * 0.70, s * 0.34, 0.55, 0.50, 0.22);
     box(cr, x + s * 0.62, y + s * 0.16, s * 0.14, s * 0.36, 0.30, 0.30, 0.32);
     box(cr, x + s * 0.66, y + s * 0.08, s * 0.16, s * 0.10, 0.75, 0.75, 0.78);
 }
 
-void icon_police(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_police(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.28, y + s * 0.18, s * 0.44, s * 0.16, 0.15, 0.25, 0.70);
     box(cr, x + s * 0.22, y + s * 0.34, s * 0.56, s * 0.42, 0.20, 0.36, 0.78);
     box(cr, x + s * 0.44, y + s * 0.42, s * 0.12, s * 0.22, 0.95, 0.85, 0.20);
 }
 
-void icon_fire(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_fire(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.18, y + s * 0.48, s * 0.64, s * 0.34, 0.75, 0.16, 0.12);
     box(cr, x + s * 0.40, y + s * 0.16, s * 0.20, s * 0.34, 0.95, 0.55, 0.10);
     box(cr, x + s * 0.46, y + s * 0.08, s * 0.10, s * 0.16, 0.98, 0.85, 0.25);
 }
 
-void icon_stadium(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_stadium(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.12, y + s * 0.28, s * 0.76, s * 0.44, 0.55, 0.55, 0.52);
     box(cr, x + s * 0.24, y + s * 0.38, s * 0.52, s * 0.24, 0.20, 0.62, 0.24);
 }
 
-void icon_anchor(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_anchor(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.44, y + s * 0.16, s * 0.12, s * 0.58, 0.12, 0.12, 0.16);
     box(cr, x + s * 0.22, y + s * 0.62, s * 0.56, s * 0.10, 0.12, 0.12, 0.16);
@@ -108,28 +108,28 @@ void icon_anchor(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, do
     box(cr, x + s * 0.40, y + s * 0.08, s * 0.20, s * 0.12, 0.12, 0.12, 0.16);
 }
 
-void icon_coal(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_coal(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.14, y + s * 0.46, s * 0.58, s * 0.36, 0.28, 0.28, 0.30);
     box(cr, x + s * 0.62, y + s * 0.18, s * 0.16, s * 0.40, 0.18, 0.18, 0.20);
     box(cr, x + s * 0.66, y + s * 0.10, s * 0.14, s * 0.10, 0.95, 0.80, 0.15);
 }
 
-void icon_nuclear(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_nuclear(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.30, y + s * 0.48, s * 0.40, s * 0.28, 0.35, 0.55, 0.58);
     box(cr, x + s * 0.22, y + s * 0.28, s * 0.56, s * 0.24, 0.55, 0.82, 0.78);
     box(cr, x + s * 0.46, y + s * 0.14, s * 0.08, s * 0.18, 0.20, 0.35, 0.38);
 }
 
-void icon_airport(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_airport(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.10, y + s * 0.46, s * 0.80, s * 0.10, 0.45, 0.45, 0.42);
     box(cr, x + s * 0.38, y + s * 0.22, s * 0.24, s * 0.56, 0.92, 0.92, 0.94);
     box(cr, x + s * 0.22, y + s * 0.40, s * 0.56, s * 0.12, 0.80, 0.82, 0.86);
 }
 
-void icon_query(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, double s)
+void icon_query(cairo_t *cr, double x, double y, double s)
 {
     box(cr, x + s * 0.30, y + s * 0.12, s * 0.36, s * 0.12, 0.10, 0.10, 0.12);
     box(cr, x + s * 0.58, y + s * 0.20, s * 0.12, s * 0.22, 0.10, 0.10, 0.12);
@@ -137,7 +137,7 @@ void icon_query(const Cairo::RefPtr<Cairo::Context> &cr, double x, double y, dou
     box(cr, x + s * 0.44, y + s * 0.66, s * 0.14, s * 0.14, 0.10, 0.10, 0.12);
 }
 
-using IconFn = void (*)(const Cairo::RefPtr<Cairo::Context> &, double, double, double);
+using IconFn = void (*)(cairo_t *, double, double, double);
 
 IconFn icon_for(int engine_id)
 {
@@ -258,9 +258,9 @@ void ToolPalette::leave()
     hover_ = -1;
 }
 
-void ToolPalette::draw(const Cairo::RefPtr<Cairo::Context> &cr) const
+void ToolPalette::draw(cairo_t *cr) const
 {
-    cr->set_antialias(Cairo::ANTIALIAS_NONE);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
     const int rows = (kToolCount + kCols - 1) / kCols;
     box(cr, 0, 0, kPad * 2 + kCols * cell_, kPad * 2 + rows * cell_, 0xED / 255.0, 0xEC / 255.0, 0xEB / 255.0);
 
@@ -284,10 +284,10 @@ void ToolPalette::draw(const Cairo::RefPtr<Cairo::Context> &cr) const
             box(cr, x + 2, y + bs - 2, bs - 2, 2, light, light, light);
             box(cr, x + bs - 2, y + 2, 2, bs - 4, light, light, light);
             box(cr, x + 2, y + 2, bs - 4, bs - 4, face_r, face_g, face_b);
-            cr->set_source_rgb(0.05, 0.05, 0.05);
-            cr->set_line_width(1);
-            cr->rectangle(x + 2.5, y + 2.5, bs - 6, bs - 6);
-            cr->stroke();
+            cairo_set_source_rgb(cr, 0.05, 0.05, 0.05);
+            cairo_set_line_width(cr, 1);
+            cairo_rectangle(cr, x + 2.5, y + 2.5, bs - 6, bs - 6);
+            cairo_stroke(cr);
         } else {
             box(cr, x, y, bs, bs, light, light, light);
             box(cr, x, y + bs - 2, bs, 2, dark, dark, dark);

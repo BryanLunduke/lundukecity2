@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include <cairomm/context.h>
+#include <cairo.h>
+
 #include <string>
 #include <vector>
 
@@ -19,8 +20,7 @@ struct ChartLegend {
     double dash_off = 0;
 };
 
-void draw_history_chart(const Cairo::RefPtr<Cairo::Context> &cr, CitySession *session, bool long_scale, int width,
-                        int height);
+void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int width, int height);
 std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale);
 std::string chart_population_line(CitySession *session);
 std::string chart_funds_line(CitySession *session);

@@ -83,9 +83,10 @@ private:
     void render();
     void layout();
     void draw(cairo_t *cr);
-    void draw_menu(cairo_t *cr);
+    void draw_menubar(cairo_t *cr);
+    void draw_menu_dropdown(cairo_t *cr);
     void draw_dialog(cairo_t *cr);
-    void draw_osk(cairo_t *cr, double x, double y, double w);
+    void draw_osk(cairo_t *cr, double x, double y, double w, double max_h);
 
     void apply_action(Action action);
     void on_hotspot(int id, double x, double y);
@@ -134,6 +135,13 @@ private:
     void label(cairo_t *cr, const char *font, const std::string &text, double x, double y, int wrap);
     void frame_panel(cairo_t *cr, double x, double y, double w, double h, const char *title);
     const char *glyph(SDL_GamepadButton button) const;
+    bool adjust_focused_slider(int direction);
+    bool attach_test_pad();
+    void pump_events();
+    void release_pad_drag();
+    void gamepad_use_cursor(bool press);
+    void drive_ui_test();
+    void note_ui_frame(cairo_surface_t *surface);
 
     CitySession session_;
     MapView map_;
@@ -260,6 +268,15 @@ private:
     float trig_l_ = 0;
     float trig_r_ = 0;
     int zoom_cool_ = 0;
+    bool pad_dragging_ = false;
+    int pad_repeat_ms_ = 0;
+    bool osk_shift_ = false;
+    bool ui_test_ = false;
+    int ui_step_ = 0;
+    int ui_column_ = 0;
+    int ui_drag_frames_ = 0;
+    int ui_tax_before_ = 0;
+    std::vector<int> ui_map_before_;
 
     struct Finger {
         SDL_FingerID id = 0;

@@ -13,7 +13,7 @@
 namespace {
 
 struct Frame {
-    Cairo::RefPtr<Cairo::ImageSurface> surface;
+    cairo_surface_t *surface = nullptr;
 };
 
 constexpr int kTypes = 8;
@@ -28,7 +28,7 @@ Frame &slot(int type, int frame_index)
 bool load_frame(int type, int frame_index)
 {
     Frame &frame = slot(type, frame_index);
-    if (frame.surface) {
+    if (frame.surface != nullptr) {
         return true;
     }
     const std::string relative = "images/micropolisEngine/obj" + std::to_string(type) + "-" +
@@ -37,10 +37,13 @@ bool load_frame(int type, int frame_index)
     if (path.empty()) {
         return false;
     }
-    auto surface = Cairo::ImageSurface::create_from_png(path);
-    if (!surface || surface->get_status() != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
+    if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
         std::cerr << "Lunduke City 2: could not read sprite " << relative << "\n";
-        frame.surface.clear();
+        if (surface != nullptr) {
+            cairo_surface_destroy(surface);
+        }
+        frame.surface = nullptr;
         return false;
     }
     frame.surface = surface;
@@ -49,10 +52,10 @@ bool load_frame(int type, int frame_index)
 
 } // namespace
 
-Cairo::RefPtr<Cairo::ImageSurface> sprite_frame(int type, int frame)
+cairo_surface_t *sprite_frame(int type, int frame)
 {
     if (type < 1 || type > kTypes || frame < 1) {
-        return {};
+        return nullptr;
     }
     int index = frame - 1;
     if (index >= kFrames) {
@@ -60,11 +63,11 @@ Cairo::RefPtr<Cairo::ImageSurface> sprite_frame(int type, int frame)
     }
     if (!load_frame(type, index)) {
         for (int back = index - 1; back >= 0; --back) {
-            if (load_frame(type, back) || slot(type, back).surface) {
+            if (load_frame(type, back) || slot(type, back).surface != nullptr) {
                 return slot(type, back).surface;
             }
         }
-        return {};
+        return nullptr;
     }
     return slot(type, index).surface;
 }

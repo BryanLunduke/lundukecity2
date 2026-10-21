@@ -6,17 +6,22 @@
 
 #include "city_session.hpp"
 
-#include <cairomm/context.h>
-#include <cairomm/surface.h>
+#include <cairo.h>
+
 #include <string>
 #include <vector>
 
 class OverlayMap {
 public:
+    OverlayMap() = default;
+    ~OverlayMap();
+    OverlayMap(const OverlayMap &) = delete;
+    OverlayMap &operator=(const OverlayMap &) = delete;
+
     void set_layer(CitySession::MapLayer layer);
     void set_session(CitySession *session);
     void sync();
-    void draw(const Cairo::RefPtr<Cairo::Context> &cr, int width, int height);
+    void draw(cairo_t *cr, int width, int height);
     bool click(double x, double y, int width, int height, double &fx, double &fy) const;
 
     const char *title() const;
@@ -28,7 +33,7 @@ private:
 
     CitySession::MapLayer layer_ = CitySession::MapLayer::Power;
     CitySession *session_ = nullptr;
-    Cairo::RefPtr<Cairo::ImageSurface> image_;
+    cairo_surface_t *image_ = nullptr;
     std::vector<int> cells_;
     int peak_ = 1;
     unsigned map_serial_ = 0;

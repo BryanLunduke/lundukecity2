@@ -9,6 +9,7 @@ lunduke_city_src = files(
   'shell.cpp',
   'shell_actions.cpp',
   'shell_draw.cpp',
+  'shell_uitest.cpp',
   'side_widgets.cpp',
   'sound_player.cpp',
   'sprite_art.cpp',
@@ -20,7 +21,7 @@ lunduke_city_src = files(
 lunduke_city_exe = executable(
   'lunduke-city-2',
   lunduke_city_src,
-  dependencies: [sdl3_dep, cairomm_dep, pangocairo_dep, micropolis_dep, thread_dep],
+  dependencies: [sdl3_dep, cairo_dep, pangocairo_dep, micropolis_dep, thread_dep],
   cpp_args: [
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
   ],

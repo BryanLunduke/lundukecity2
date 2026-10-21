@@ -126,7 +126,7 @@ void OverlayMap::sync()
         }
     }
     const unsigned serial = session_->map_serial();
-    if (!cells_.empty() && cells_ == next && peak_ == peak && map_serial_ == serial && image_) {
+    if (!cells_.empty() && cells_ == next && peak_ == peak && map_serial_ == serial && image_ != nullptr) {
         return;
     }
     cells_ = std::move(next);
@@ -140,11 +140,15 @@ void OverlayMap::rebuild()
     const bool density = density_layer();
     const int cells_w = density ? CitySession::kWorldW / 2 : CitySession::kWorldW;
     const int cells_h = density ? CitySession::kWorldH / 2 : CitySession::kWorldH;
-    if (!image_ || image_->get_width() != cells_w || image_->get_height() != cells_h) {
-        image_ = Cairo::ImageSurface::create(Cairo::FORMAT_RGB24, cells_w, cells_h);
+    if (image_ == nullptr || cairo_image_surface_get_width(image_) != cells_w ||
+        cairo_image_surface_get_height(image_) != cells_h) {
+        if (image_ != nullptr) {
+            cairo_surface_destroy(image_);
+        }
+        image_ = cairo_image_surface_create(CAIRO_FORMAT_RGB24, cells_w, cells_h);
     }
-    unsigned char *data = image_->get_data();
-    const int stride = image_->get_stride();
+    unsigned char *data = cairo_image_surface_get_data(image_);
+    const int stride = cairo_image_surface_get_stride(image_);
     auto pack = [](const Rgb &color) {
         auto channel = [](double value) {
             const int byte = static_cast<int>(value * 255.0 + 0.5);
@@ -187,23 +191,32 @@ void OverlayMap::rebuild()
             *pixel = pack(color);
         }
     }
-    image_->mark_dirty();
+    cairo_surface_mark_dirty(image_);
 }
 
-void OverlayMap::draw(const Cairo::RefPtr<Cairo::Context> &cr, int width, int height)
+OverlayMap::~OverlayMap()
 {
-    if (!image_) {
+    if (image_ != nullptr) {
+        cairo_surface_destroy(image_);
+        image_ = nullptr;
+    }
+}
+
+void OverlayMap::draw(cairo_t *cr, int width, int height)
+{
+    if (image_ == nullptr) {
         sync();
     }
-    if (!image_ || width < 2 || height < 2) {
+    if (image_ == nullptr || width < 2 || height < 2) {
         return;
     }
-    cr->save();
-    cr->scale(static_cast<double>(width) / image_->get_width(), static_cast<double>(height) / image_->get_height());
-    cr->set_source(image_, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr->cobj()), CAIRO_FILTER_NEAREST);
-    cr->paint();
-    cr->restore();
+    cairo_save(cr);
+    cairo_scale(cr, static_cast<double>(width) / cairo_image_surface_get_width(image_),
+                static_cast<double>(height) / cairo_image_surface_get_height(image_));
+    cairo_set_source_surface(cr, image_, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
 }
 
 bool OverlayMap::click(double x, double y, int width, int height, double &fx, double &fy) const

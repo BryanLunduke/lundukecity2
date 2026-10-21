@@ -101,11 +101,25 @@ int lunduke_city_test_destroy_sprites()
     for (int i = 0; i < 5; ++i) {
         exercise();
     }
-    const long baseline = static_cast<long>(mallinfo2().uordblks);
+    // mallinfo2 needs glibc 2.33. Sniper's runtime is 2.31 and still has mallinfo.
+    long baseline = -1;
+#if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+    baseline = static_cast<long>(mallinfo2().uordblks);
+#elif defined(__GLIBC__) || defined(__linux__)
+    baseline = static_cast<long>(mallinfo().uordblks);
+#endif
+    if (baseline < 0) {
+        return 0;
+    }
     for (int i = 0; i < 40; ++i) {
         exercise();
     }
-    const long grown = static_cast<long>(mallinfo2().uordblks) - baseline;
+    long grown = -1;
+#if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+    grown = static_cast<long>(mallinfo2().uordblks) - baseline;
+#elif defined(__GLIBC__) || defined(__linux__)
+    grown = static_cast<long>(mallinfo().uordblks) - baseline;
+#endif
     if (grown > 2048) {
         std::fprintf(stderr, "sprite heap grew by %ld bytes\n", grown);
         return fail(8, "destroy() leaked sprites");

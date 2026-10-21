@@ -4,15 +4,14 @@
 
 #include "shell_state.hpp"
 
+#include "dialog_copy.hpp"
 #include "graph_legend.hpp"
 #include "notice_bar.hpp"
+#include "osk_layout.hpp"
 #include "text_paint.hpp"
 #include "theme.hpp"
 #include "tools.hpp"
 #include "version.hpp"
-
-#include <cairomm/context.h>
-#include <cairomm/surface.h>
 
 #include <SDL3/SDL.h>
 
@@ -74,11 +73,18 @@ const char *speed_word(int speed)
     }
 }
 
-Cairo::RefPtr<Cairo::Context> same_surface(cairo_t *cr)
-{
-    auto surface = Cairo::RefPtr<Cairo::ImageSurface>(new Cairo::ImageSurface(cairo_get_target(cr), false));
-    return Cairo::Context::create(surface);
-}
+// A second context on the same image surface, with its own transform.
+// cairo_create references the target; destroying the context releases it.
+struct TargetCr {
+    cairo_t *cr;
+    explicit TargetCr(cairo_t *parent)
+        : cr(cairo_create(cairo_get_target(parent)))
+    {
+    }
+    ~TargetCr() { cairo_destroy(cr); }
+    TargetCr(const TargetCr &) = delete;
+    TargetCr &operator=(const TargetCr &) = delete;
+};
 
 void fill(cairo_t *cr, double x, double y, double w, double h, double r, double g, double b)
 {
@@ -179,32 +185,69 @@ void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, con
     cairo_fill(cr);
     push_hot(0, 0, win_w_, win_h_, 0);
     fill(cr, x, y, w, h, theme::kWindowR, theme::kWindowG, theme::kWindowB);
-    fill(cr, x, y, w, 32, theme::kSelectR, theme::kSelectG, theme::kSelectB);
-    paint_text(cr, theme::kTitleFont, title, x + 12, y + 6, 1, 1, 1, static_cast<int>(w - 24));
+    constexpr double kTitleBand = 40;
+    fill(cr, x, y, w, kTitleBand, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+    const TextMetrics title_metrics = measure_text(cr, theme::kTitleFont, title, static_cast<int>(w - 24));
+    const double title_y = y + std::max(2.0, (kTitleBand - title_metrics.height) / 2.0);
+    paint_text(cr, theme::kTitleFont, title, x + 12, title_y, 1, 1, 1, static_cast<int>(w - 24));
     stroke_rect(cr, x, y, w, h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
 }
 
-void Shell::draw_osk(cairo_t *cr, double x, double y, double w)
+void Shell::draw_osk(cairo_t *cr, double x, double y, double w, double max_h)
 {
-    if (!show_osk() || active_field() == nullptr) {
+    if (!show_osk() || active_field() == nullptr || w < 80 || max_h < 40) {
         return;
     }
-    static const char *keys[] = {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h",
-                                 "j", "k", "l", "z", "x", "c", "v", "b", "n", "m", "space", "bksp", "0", "1",
-                                 "2",    "3", "4", "5", "6", "7", "8", "9", "auto"};
-    const int count = static_cast<int>(sizeof(keys) / sizeof(keys[0]));
-    const double key_w = std::max(28.0, std::min(46.0, (w - 8) / 10.0));
-    const double key_h = 32;
-    for (int i = 0; i < count; ++i) {
-        const int col = i % 10;
-        const int row = i / 10;
-        const double kx = x + col * (key_w + 2);
-        const double ky = y + row * (key_h + 2);
-        button(cr, kx, ky, i >= 26 && i <= 27 ? key_w * 1.4 : key_w, key_h, keys[i], kOsk + i, false);
+    int count = 0;
+    const OskKey *keys = osk_keys(count);
+    const double gap = kOskGap;
+    const double unit = std::max(8.0, (w - gap * 9.0) / 10.0);
+    double key_h = 52;
+    if (max_h > 0) {
+        key_h = std::floor((max_h - gap * (kOskRows - 1)) / kOskRows);
+    }
+    // Steam Deck at 1280x800 has room for 48 px targets. Smaller windows
+    // shrink the keys instead of letting them overlap the buttons.
+    if (key_h > 56) {
+        key_h = 56;
+    }
+    if (key_h < 28) {
+        key_h = 28;
+    }
+    const double row_pitch = key_h + gap;
+    const double full_w = 10.0 * unit + 9.0 * gap;
+    for (int row = 0; row < kOskRows; ++row) {
+        double spans = 0;
+        int n = 0;
+        for (int i = 0; i < count; ++i) {
+            if (keys[i].row != row) {
+                continue;
+            }
+            spans += keys[i].span;
+            ++n;
+        }
+        if (n == 0) {
+            continue;
+        }
+        const double row_w = spans * unit + (n - 1) * gap;
+        double kx = x + std::max(0.0, (full_w - row_w) / 2.0);
+        const double ky = y + row * row_pitch;
+        for (int i = 0; i < count; ++i) {
+            if (keys[i].row != row) {
+                continue;
+            }
+            const OskKey &key = keys[i];
+            const double kw = key.span * unit + (key.span - 1.0) * gap;
+            const bool shifted = osk_shift_ && key.kind == OskKind::Text && key.shifted != nullptr;
+            const char *label = shifted ? key.shifted : key.label;
+            const bool primary = (key.kind == OskKind::Shift && osk_shift_) || focus_id_ == kOsk + i;
+            button(cr, kx, ky, kw, key_h, label, kOsk + i, primary);
+            kx += kw + gap;
+        }
     }
 }
 
-void Shell::draw_menu(cairo_t *cr)
+void Shell::draw_menubar(cairo_t *cr)
 {
     cairo_pattern_t *bar = cairo_pattern_create_linear(0, 0, 0, menu_h_);
     cairo_pattern_add_color_stop_rgb(bar, 0, theme::kMenuTopR, theme::kMenuTopG, theme::kMenuTopB);
@@ -231,9 +274,17 @@ void Shell::draw_menu(cairo_t *cr)
                        open || hover_id_ == id ? 1 : theme::kTextB);
         x += w + 2;
     }
+}
+
+void Shell::draw_menu_dropdown(cairo_t *cr)
+{
     if (!menu_.open() || dialog_ != Dialog::None) {
         return;
     }
+    // Everything under an open menu belongs to the menu until it closes.
+    // Rows are pushed after this full-window catcher, so hit() finds them
+    // first. The menu bar itself is above this rect and stays clickable.
+    push_hot(0, menu_h_, win_w_, std::max(0, win_h_ - menu_h_), 0);
     const int column = menu_.open_menu;
     const MenuEntry *items = menu_table::column_items(column);
     const int count = menu_table::column_count(column);
@@ -361,10 +412,13 @@ void Shell::draw_dialog(cairo_t *cr)
     const double dh = std::min(640.0, win_h_ - 48.0);
     const double x = (win_w_ - dw) / 2.0;
     const double y = (win_h_ - dh) / 2.0;
-    auto buttons_at = [&](double by, const std::vector<std::pair<const char *, int>> &buttons) {
+    auto buttons_at = [&](double by, const std::vector<std::pair<const char *, int>> &buttons, double panel_w = -1.0,
+                          double panel_x = -1.0) {
+        const double pw = panel_w < 0 ? dw : panel_w;
+        const double px = panel_x < 0 ? x : panel_x;
         const double gap = 8;
-        const double bw = std::max(120.0, (dw - 24 - gap * (buttons.size() - 1)) / buttons.size());
-        double bx = x + dw - 12 - bw * buttons.size() - gap * (buttons.size() - 1);
+        const double bw = std::max(96.0, (pw - 24 - gap * (buttons.size() - 1)) / buttons.size());
+        double bx = px + pw - 12 - bw * static_cast<double>(buttons.size()) - gap * (buttons.size() - 1);
         for (const auto &button_def : buttons) {
             button(cr, bx, by, bw, 36, button_def.first, button_def.second, button_def.second == focus_id_);
             bx += bw + gap;
@@ -424,7 +478,9 @@ void Shell::draw_dialog(cairo_t *cr)
             if (!dialog_error_.empty()) {
                 paint_text(cr, theme::kUiFont, dialog_error_, x + 16, y + 126, 0.6, 0.1, 0.1, static_cast<int>(dw - 32));
             }
-            draw_osk(cr, x + 16, y + 170, dw - 32);
+            const double osk_top = y + 168;
+            const double osk_limit = y + dh - 60;
+            draw_osk(cr, x + 16, osk_top, dw - 32, osk_limit - osk_top);
             buttons_at(y + dh - 52, {{"_Cancel", kCancel}, {"_Next", kNext}});
         } else if (new_page_ == 1) {
             label(cr, theme::kUiFont, "Difficulty, land, and seed. Default land is the usual generator.", x + 16, y + 42,
@@ -488,7 +544,9 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::Rename) {
-        frame_panel(cr, x, y, dw, 280, "Rename City");
+        const bool osk = show_osk();
+        const double rename_h = osk ? std::min(dh, 560.0) : 280.0;
+        frame_panel(cr, x, y, dw, rename_h, "Rename City");
         label(cr, theme::kBodyFont, "New name for this city:", x + 16, y + 48, static_cast<int>(dw - 32));
         fill(cr, x + 16, y + 84, dw - 32, 36, 1, 1, 1);
         stroke_rect(cr, x + 16, y + 84, dw - 32, 36, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
@@ -499,8 +557,12 @@ void Shell::draw_dialog(cairo_t *cr)
         if (!dialog_error_.empty()) {
             paint_text(cr, theme::kUiFont, dialog_error_, x + 16, y + 128, 0.6, 0.1, 0.1, static_cast<int>(dw - 32));
         }
-        draw_osk(cr, x + 16, y + 156, dw - 32);
-        buttons_at(y + 230, {{"_Cancel", kCancel}, {"_Rename", kRename}});
+        if (osk) {
+            const double osk_top = y + 156;
+            const double osk_limit = y + rename_h - 60;
+            draw_osk(cr, x + 16, osk_top, dw - 32, osk_limit - osk_top);
+        }
+        buttons_at(y + rename_h - 52, {{"_Cancel", kCancel}, {"_Rename", kRename}});
         return;
     }
     if (dialog_ == Dialog::About) {
@@ -541,7 +603,7 @@ void Shell::draw_dialog(cairo_t *cr)
             buttons_at(y + dh - 52, {{"_Cancel", kCancel}, {"Browse in the window", kSystemFiles}});
             return;
         }
-        label(cr, theme::kUiFont, files_dir_, x + 16, y + 40, static_cast<int>(dw - 32));
+        label(cr, theme::kUiFont, files_dir_, x + 16, y + 48, static_cast<int>(dw - 32));
         const double list_top = y + 68;
         const double list_h = dh - 160;
         const int visible = std::max(1, static_cast<int>(list_h / 32));
@@ -591,42 +653,60 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::Budget) {
-        frame_panel(cr, x, y, dw, dh, budget_is_tax_ ? "Taxes collected" : "Budget");
+        frame_panel(cr, x, y, dw, dh, "Budget");
         const auto book = session_.budget();
-        std::string head = std::string(book.estimates ? "Estimates. " : "") + "Funds " + graph_money(book.funds) +
-                           "    Tax " + graph_money(book.taxes) + "    Cash flow " + graph_money(book.cash_flow);
-        label(cr, theme::kBodyFont, head, x + 16, y + 44, static_cast<int>(dw - 32));
-        auto slider = [&](int index, const char *name, int value, int min, int max, const std::string &note, double sy) {
-            paint_text(cr, theme::kBodyFont, std::string(name) + "  " + std::to_string(value) + "%", x + 16, sy,
-                       theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 32));
+        const BudgetCopy copy = budget_copy(book, budget_is_tax_);
+        const double col_w = (dw - 48) / 2.0;
+        paint_text(cr, theme::kUiFont, copy.taxes, x + 16, y + 48, theme::kTextR, theme::kTextG, theme::kTextB,
+                   static_cast<int>(col_w));
+        paint_text(cr, theme::kUiFont, copy.previous_funds, x + 24 + col_w, y + 48, theme::kTextR, theme::kTextG,
+                   theme::kTextB, static_cast<int>(col_w));
+        paint_text(cr, theme::kUiFont, copy.cash_flow, x + 16, y + 70, theme::kTextR, theme::kTextG, theme::kTextB,
+                   static_cast<int>(col_w));
+        paint_text(cr, theme::kUiFont, copy.current_funds, x + 24 + col_w, y + 70, theme::kTextR, theme::kTextG,
+                   theme::kTextB, static_cast<int>(col_w));
+        double note_bottom = y + 96;
+        if (!copy.closing_note.empty()) {
+            paint_text(cr, theme::kUiFont, copy.closing_note, x + 16, note_bottom, theme::kAccelR, theme::kAccelG,
+                       theme::kAccelB, static_cast<int>(dw - 32));
+            note_bottom += 36;
+        }
+        const double sliders_top = note_bottom + 6;
+        const double sliders_bottom = y + dh - 60;
+        const double slot = std::max(48.0, (sliders_bottom - sliders_top) / 4.0);
+        auto slider = [&](int index, const std::string &caption, const std::string &detail, int value, int min,
+                          int max, double sy) {
+            paint_text(cr, "Sans Bold 13", caption, x + 16, sy, theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(dw - 32));
+            const double detail_h = std::max(16.0, slot - 44);
+            cairo_save(cr);
+            cairo_rectangle(cr, x + 16, sy + 16, dw - 32, detail_h);
+            cairo_clip(cr);
+            paint_text(cr, theme::kUiFont, detail, x + 16, sy + 18, theme::kAccelR, theme::kAccelG, theme::kAccelB,
+                       static_cast<int>(dw - 32));
+            cairo_restore(cr);
+            const double bar_y = sy + slot - 24;
             const double sx = x + 16;
             const double sw = dw - 32;
-            fill(cr, sx, sy + 26, sw, 16, 1, 1, 1);
+            fill(cr, sx, bar_y, sw, 16, 1, 1, 1);
             const double t = (value - min) / static_cast<double>(std::max(1, max - min));
-            fill(cr, sx, sy + 26, sw * t, 16, theme::kSelectR, theme::kSelectG, theme::kSelectB);
-            stroke_rect(cr, sx, sy + 26, sw, 16, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+            fill(cr, sx, bar_y, sw * t, 16, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+            stroke_rect(cr, sx, bar_y, sw, 16, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
             const int id = kSlider + index;
-            push_hot(sx, sy + 20, sw, 28, id);
+            push_hot(sx, bar_y - 6, sw, 28, id);
             push_focus(id);
-            next_sliders_.push_back(SliderGeom{id, sx, sy + 20, sw, 28, min, max});
+            next_sliders_.push_back(SliderGeom{id, sx, bar_y - 6, sw, 28, min, max});
             if (focus_id_ == id) {
                 cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
                 cairo_set_line_width(cr, 2);
-                cairo_rectangle(cr, sx + 1, sy + 22, sw - 2, 24);
+                cairo_rectangle(cr, sx + 1, bar_y - 4, sw - 2, 24);
                 cairo_stroke(cr);
             }
-            if (!note.empty()) {
-                paint_text(cr, theme::kUiFont, note, x + 16, sy + 46, theme::kAccelR, theme::kAccelG, theme::kAccelB,
-                           static_cast<int>(dw - 32));
-            }
         };
-        slider(1, "Tax rate", tax_, 0, 20, "", y + 84);
-        slider(2, "Roads", road_, 0, 100, book.road_note, y + 150);
-        slider(3, "Police", police_, 0, 100, book.police_note, y + 230);
-        slider(4, "Fire", fire_, 0, 100, book.fire_note, y + 310);
-        const std::string spent = "Road " + graph_money(book.road_spent) + "   Police " + graph_money(book.police_spent) +
-                                  "   Fire " + graph_money(book.fire_spent);
-        label(cr, theme::kUiFont, spent, x + 16, y + 400, static_cast<int>(dw - 32));
+        slider(1, copy.tax_title + "  " + copy.tax_value, "", tax_, 0, 20, sliders_top);
+        slider(2, "Road fund", copy.road, road_, 0, 100, sliders_top + slot);
+        slider(3, "Police fund", copy.police, police_, 0, 100, sliders_top + slot * 2);
+        slider(4, "Fire fund", copy.fire, fire_, 0, 100, sliders_top + slot * 3);
         if (budget_is_tax_) {
             buttons_at(y + dh - 52, {{"_Reset", kReset}, {"_Collect Taxes", kCollect}});
         } else {
@@ -636,66 +716,121 @@ void Shell::draw_dialog(cairo_t *cr)
     }
     if (dialog_ == Dialog::Graphs) {
         frame_panel(cr, x, y, dw, dh, "Graphs");
-        button(cr, x + 16, y + 42, 140, 32, "10 year", kShortScale, !graphs_long_);
-        button(cr, x + 164, y + 42, 140, 32, "120 year", kLongScale, graphs_long_);
-        auto live = same_surface(cr);
-        live->translate(x + 16, y + 84);
-        draw_history_chart(live, &session_, graphs_long_, static_cast<int>(dw - 32),
-                           static_cast<int>(std::max(80.0, dh - 250)));
-        double ly = y + dh - 130;
-        for (const ChartLegend &entry : chart_legend(&session_, graphs_long_)) {
-            cairo_set_source_rgb(cr, entry.r, entry.g, entry.b);
-            cairo_rectangle(cr, x + 16, ly + 4, 18, 8);
-            cairo_fill(cr);
-            paint_text(cr, theme::kUiFont, entry.caption, x + 40, ly, theme::kTextR, theme::kTextG, theme::kTextB, 360);
-            ly += 18;
+        button(cr, x + 16, y + 46, 140, 32, "10 year", kShortScale, !graphs_long_);
+        button(cr, x + 164, y + 46, 140, 32, "120 year", kLongScale, graphs_long_);
+        const std::vector<ChartLegend> legend = chart_legend(&session_, graphs_long_);
+        const int legend_cols = 2;
+        const int legend_rows = std::max(1, (static_cast<int>(legend.size()) + legend_cols - 1) / legend_cols);
+        const double legend_row_h = 20;
+        const double legend_h = legend_rows * legend_row_h;
+        const double button_top = y + dh - 52;
+        const double legend_top = button_top - 12 - legend_h;
+        const double chart_top = y + 86;
+        const double chart_h = std::max(64.0, legend_top - 8 - chart_top);
+        {
+            TargetCr live(cr);
+            cairo_translate(live.cr, x + 16, chart_top);
+            draw_history_chart(live.cr, &session_, graphs_long_, static_cast<int>(dw - 32), static_cast<int>(chart_h));
         }
-        buttons_at(y + dh - 52, {{"_Close", kClose}});
+        const double col_w = (dw - 32) / legend_cols;
+        for (int i = 0; i < static_cast<int>(legend.size()); ++i) {
+            const ChartLegend &entry = legend[static_cast<std::size_t>(i)];
+            const int col = i % legend_cols;
+            const int row = i / legend_cols;
+            const double lx = x + 16 + col * col_w;
+            const double ly = legend_top + row * legend_row_h;
+            cairo_set_source_rgb(cr, entry.r, entry.g, entry.b);
+            cairo_rectangle(cr, lx, ly + 4, 18, 8);
+            cairo_fill(cr);
+            paint_text(cr, theme::kUiFont, entry.caption, lx + 24, ly, theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(col_w - 28));
+        }
+        buttons_at(button_top, {{"_Close", kClose}});
         return;
     }
     if (dialog_ == Dialog::Evaluation) {
         frame_panel(cr, x, y, dw, dh, "Evaluation");
-        const auto eval = session_.evaluation();
-        std::string body;
-        if (eval.no_residents) {
-            body = "Nobody lives here yet, so there is no poll and no list of problems.";
-        } else {
-            body = "Score " + std::to_string(eval.score) + " (" + std::to_string(eval.score_delta) + ")\n" +
-                   eval.category + "\n" + std::to_string(eval.yes_percent) + "% approve\nPopulation " +
-                   std::to_string(eval.population) + "\n" + eval.difficulty + "\n";
-            for (const auto &problem : eval.problems) {
-                body += problem.name + " (" + std::to_string(problem.votes) + ")\n";
+        const EvaluationCopy copy = evaluation_copy(session_.evaluation(), session_.scenario_progress());
+        const std::string heading = session_.city_name() + " — " + session_.date_text();
+        struct Row {
+            const char *font;
+            std::string text;
+            bool bar = false;
+        };
+        std::vector<Row> rows;
+        rows.push_back({theme::kBodyFont, heading, false});
+        rows.push_back({"Sans Bold 13", copy.score_caption, false});
+        rows.push_back({theme::kBodyFont, copy.score, false});
+        rows.push_back({theme::kBodyFont, copy.score_delta, false});
+        rows.push_back({"Sans Bold 13", copy.opinion_caption, false});
+        rows.push_back({theme::kBodyFont, copy.opinion_question, false});
+        rows.push_back({theme::kBodyFont, copy.yes + "    " + copy.no, false});
+        rows.push_back({theme::kUiFont, copy.opinion_bar, true});
+        rows.push_back({"Sans Bold 13", copy.problems_caption, false});
+        for (const std::string &problem : copy.problems) {
+            rows.push_back({theme::kBodyFont, problem, false});
+        }
+        rows.push_back({"Sans Bold 13", copy.stats_caption, false});
+        rows.push_back({theme::kBodyFont, copy.population, false});
+        rows.push_back({theme::kBodyFont, copy.migration, false});
+        rows.push_back({theme::kBodyFont, copy.assessed, false});
+        rows.push_back({theme::kBodyFont, copy.category, false});
+        rows.push_back({theme::kBodyFont, copy.difficulty, false});
+        if (!copy.scenario.empty()) {
+            rows.push_back({theme::kBodyFont, copy.scenario, false});
+        }
+        const double top = y + 48;
+        const double bottom = y + dh - 60;
+        double line_h = 22;
+        if (!rows.empty() && static_cast<double>(rows.size()) * line_h > (bottom - top)) {
+            line_h = (bottom - top) / static_cast<double>(rows.size());
+        }
+        if (line_h < 15) {
+            line_h = 15;
+        }
+        double ry = top;
+        for (const Row &row : rows) {
+            if (row.bar && copy.yes_percent >= 0) {
+                const double bw = std::min(280.0, dw - 32);
+                fill(cr, x + 16, ry + 4, bw, std::max(8.0, line_h - 8), 0.9, 0.9, 0.9);
+                fill(cr, x + 16, ry + 4, bw * (copy.yes_percent / 100.0), std::max(8.0, line_h - 8), theme::kSelectR,
+                     theme::kSelectG, theme::kSelectB);
+                paint_text(cr, row.font, row.text, x + 24 + bw, ry, theme::kTextR, theme::kTextG, theme::kTextB, 160);
+            } else {
+                paint_text(cr, row.font, row.text, x + 16, ry, theme::kTextR, theme::kTextG, theme::kTextB,
+                           static_cast<int>(dw - 32));
             }
+            ry += line_h;
         }
-        const std::string progress = session_.scenario_progress();
-        if (!progress.empty()) {
-            body += "\n" + progress;
-        }
-        label(cr, theme::kBodyFont, body, x + 16, y + 48, static_cast<int>(dw - 32));
         buttons_at(y + dh - 52, {{"_Close", kClose}});
         return;
     }
     if (dialog_ == Dialog::Overlay) {
         frame_panel(cr, x, y, dw, dh, overlay_.title());
-        label(cr, theme::kUiFont, overlay_.legend(), x + 16, y + 40, static_cast<int>(dw - 32));
+        label(cr, theme::kUiFont, overlay_.legend(), x + 16, y + 48, static_cast<int>(dw - 32));
         const int ow = static_cast<int>(dw - 32);
-        const int oh = static_cast<int>(std::max(80.0, dh - 140));
+        const int oh = static_cast<int>(std::max(80.0, dh - 148));
         overlay_x_ = x + 16;
-        overlay_y_ = y + 64;
+        overlay_y_ = y + 72;
         overlay_w_ = ow;
         overlay_h_ = oh;
-        auto live = same_surface(cr);
-        live->translate(overlay_x_, overlay_y_);
-        overlay_.sync();
-        overlay_.draw(live, ow, oh);
+        {
+            TargetCr live(cr);
+            cairo_translate(live.cr, overlay_x_, overlay_y_);
+            overlay_.sync();
+            overlay_.draw(live.cr, ow, oh);
+        }
         push_hot(overlay_x_, overlay_y_, ow, oh, 90);
         buttons_at(y + dh - 52, {{"_Close", kClose}});
         return;
     }
     if (dialog_ == Dialog::Query) {
-        frame_panel(cr, x, y, std::min(dw, 520.0), 300, "Query");
-        label(cr, theme::kBodyFont, info_body_, x + 16, y + 48, static_cast<int>(std::min(dw, 520.0) - 32));
-        buttons_at(y + 240, {{"_Close", kClose}});
+        const double pw = std::min(520.0, dw);
+        const double px = x + (dw - pw) / 2.0;
+        const double ph = std::min(300.0, dh);
+        frame_panel(cr, px, y, pw, ph, "Query");
+        label(cr, theme::kBodyFont, info_body_, px + 16, y + 48, static_cast<int>(pw - 32));
+        buttons_at(y + ph - 52, {{"_Close", kClose}}, pw, px);
     }
 }
 
@@ -703,7 +838,7 @@ void Shell::draw(cairo_t *cr)
 {
     menu_.recent_count = static_cast<int>(recent_.size());
     fill(cr, 0, 0, win_w_, win_h_, theme::kWindowR, theme::kWindowG, theme::kWindowB);
-    draw_menu(cr);
+    draw_menubar(cr);
     if (welcome_) {
         fill(cr, 0, menu_h_, win_w_, welcome_h_, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
         const std::string line = std::string("Welcome to Lunduke City 2. The clock is ") +
@@ -713,22 +848,22 @@ void Shell::draw(cairo_t *cr)
         button(cr, win_w_ - 120, menu_h_ + 8, 100, 32, "Dismiss", kWelcomeId, false);
     }
     {
-        auto live = same_surface(cr);
-        live->translate(side_x_, pal_y_);
-        palette_.draw(live);
+        TargetCr live(cr);
+        cairo_translate(live.cr, side_x_, pal_y_);
+        palette_.draw(live.cr);
     }
     push_hot(side_x_, pal_y_, side_w_, ToolPalette::height_for(cell_), kPaletteId);
     {
-        auto live = same_surface(cr);
-        live->translate(side_x_, mini_y_);
+        TargetCr live(cr);
+        cairo_translate(live.cr, side_x_, mini_y_);
         minimap_.sync();
-        minimap_.draw(live, side_w_, mini_h_);
+        minimap_.draw(live.cr, side_w_, mini_h_);
     }
     push_hot(side_x_, mini_y_, side_w_, mini_h_, kMinimapId);
     {
-        auto live = same_surface(cr);
-        live->translate(side_x_, demand_y_);
-        demand_.draw(live, side_w_, demand_h_);
+        TargetCr live(cr);
+        cairo_translate(live.cr, side_x_, demand_y_);
+        demand_.draw(live.cr, side_w_, demand_h_);
     }
     stroke_rect(cr, view_x_ - 1, view_y_ - 1, view_w_ + 2, view_h_ + 2, theme::kMenuFrameR, theme::kMenuFrameG,
                 theme::kMenuFrameB);
@@ -736,12 +871,12 @@ void Shell::draw(cairo_t *cr)
     cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
     cairo_clip(cr);
     {
-        auto live = same_surface(cr);
-        live->rectangle(view_x_, view_y_, view_w_, view_h_);
-        live->clip();
-        live->translate(view_x_ - scroll_x_, view_y_ - scroll_y_);
+        TargetCr live(cr);
+        cairo_rectangle(live.cr, view_x_, view_y_, view_w_, view_h_);
+        cairo_clip(live.cr);
+        cairo_translate(live.cr, view_x_ - scroll_x_, view_y_ - scroll_y_);
         map_.sync();
-        map_.draw(live);
+        map_.draw(live.cr);
     }
     cairo_restore(cr);
     push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
@@ -820,18 +955,20 @@ void Shell::draw(cairo_t *cr)
         cairo_arc(cr, cursor_x_, cursor_y_, 9, 0, 6.3);
         cairo_stroke(cr);
     }
+    // Drop-down last, above the map, palette, dialog, and gamepad cursor.
+    draw_menu_dropdown(cr);
 }
 
 void Shell::render()
 {
     layout();
     clamp_scroll();
-    auto surface = Cairo::ImageSurface::create(Cairo::FORMAT_ARGB32, win_w_, win_h_);
-    auto context = Cairo::Context::create(surface);
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, win_w_, win_h_);
+    cairo_t *context = cairo_create(surface);
     next_hot_.clear();
     next_focus_.clear();
     next_sliders_.clear();
-    draw(context->cobj());
+    draw(context);
     hot_.swap(next_hot_);
     focus_order_.swap(next_focus_);
     sliders_.swap(next_sliders_);
@@ -842,9 +979,10 @@ void Shell::render()
         SDL_StopTextInput(window_);
         text_input_on_ = false;
     }
-    surface->flush();
+    cairo_surface_flush(surface);
+    note_ui_frame(surface);
     if (!shot_path_.empty()) {
-        cairo_surface_write_to_png(surface->cobj(), shot_path_.c_str());
+        cairo_surface_write_to_png(surface, shot_path_.c_str());
     }
     if (texture_ == nullptr || tex_w_ != win_w_ || tex_h_ != win_h_) {
         if (texture_ != nullptr) {
@@ -858,9 +996,12 @@ void Shell::render()
         }
     }
     if (texture_ != nullptr) {
-        SDL_UpdateTexture(texture_, nullptr, surface->get_data(), surface->get_stride());
+        SDL_UpdateTexture(texture_, nullptr, cairo_image_surface_get_data(surface),
+                          cairo_image_surface_get_stride(surface));
         SDL_RenderClear(renderer_);
         SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
         SDL_RenderPresent(renderer_);
     }
+    cairo_destroy(context);
+    cairo_surface_destroy(surface);
 }
