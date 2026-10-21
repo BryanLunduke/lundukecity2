@@ -241,6 +241,24 @@ void Shell::run_review_checks()
     }
     SDL_DetachVirtualJoystick(spare_id);
 
+    // M7: a closer zoom is kept, a too-small zoom grows to cover, gauges stay short.
+    map_.set_tile_size(kMaxMapTile);
+    layout();
+    if (map_.tile_size() != kMaxMapTile) {
+        fail("fitting the map shrank a closer zoom");
+        return;
+    }
+    map_.set_tile_size(kMinMapTile);
+    layout();
+    if (map_.pixel_width() < view_w_ && map_.tile_size() < kMaxMapTile) {
+        fail("the map left an empty band beside the city");
+        return;
+    }
+    if (demand_h_ > dp(kMaxDemandPx)) {
+        fail("demand gauges stretched with the window");
+        return;
+    }
+
     const DialogRect eval_deck = place_dialog(1280, 800, 700, 420, 16);
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {

@@ -749,7 +749,7 @@ void Shell::loop()
         if (pad_dragging_) {
             pointer_x_ = cursor_x_;
             pointer_y_ = cursor_y_;
-            map_.motion(cursor_x_ - view_x_ + scroll_x_, cursor_y_ - view_y_ + scroll_y_, true);
+            map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), true);
         }
         if (pointer_down_ && pointer_on_map_ && map_.dragging()) {
             double dx = 0;
@@ -760,7 +760,7 @@ void Shell::loop()
                 scroll_x_ += dx;
                 scroll_y_ += dy;
                 clamp_scroll();
-                map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, true);
+                map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
             }
         }
         if (quake_strength_ > 0) {
@@ -977,7 +977,7 @@ void Shell::handle_event(const SDL_Event &event)
         } else if (list_dragging_ && dialog_ == Dialog::Files) {
             on_hotspot(kListScroll, pointer_x_, pointer_y_);
         } else if (pointer_on_map_ && dialog_ == Dialog::None && !menu_.open()) {
-            map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, pointer_down_);
+            map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), pointer_down_);
         } else if (hover_id_ == kPaletteId && !menu_.open()) {
             palette_.motion(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         }
@@ -1005,7 +1005,7 @@ void Shell::handle_event(const SDL_Event &event)
         if (id == kMapId && dialog_ == Dialog::None && !menu_.open()) {
             pointer_on_map_ = true;
             SDL_CaptureMouse(true);
-            map_.press(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_);
+            map_.press(map_local_x(pointer_x_), map_local_y(pointer_y_));
         } else if (id == kPaletteId && dialog_ == Dialog::None) {
             palette_.press(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         } else if (id == kMinimapId && dialog_ == Dialog::None) {
@@ -1386,7 +1386,7 @@ void Shell::handle_event(const SDL_Event &event)
                     on_hotspot(id, pointer_x_, pointer_y_);
                 } else if (id == kMapId && dialog_ == Dialog::None) {
                     pointer_on_map_ = true;
-                    map_.press(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_);
+                    map_.press(map_local_x(pointer_x_), map_local_y(pointer_y_));
                 } else {
                     on_hotspot(id, pointer_x_, pointer_y_);
                 }
@@ -1401,7 +1401,7 @@ void Shell::handle_event(const SDL_Event &event)
                     list_touch_y_ += static_cast<float>(rows) * 32.0f;
                 }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && pointer_on_map_) {
-                map_.motion(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_, true);
+                map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
             } else if (event.type == SDL_EVENT_FINGER_UP) {
                 list_touch_y_ = -1.0f;
                 pointer_down_ = false;

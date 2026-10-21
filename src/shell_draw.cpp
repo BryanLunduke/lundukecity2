@@ -99,13 +99,15 @@ void Shell::layout()
     mini_y_ = pal_y_ + ToolPalette::height_for(cell_) + dp(8);
     mini_h_ = std::max(dp(64), side_w_ * 5 / 6);
     demand_y_ = mini_y_ + mini_h_ + dp(8);
-    demand_h_ = std::max(dp(72), menu_h_ + welcome_h_ + body - demand_y_ - dp(6));
+    const int demand_room = menu_h_ + welcome_h_ + body - demand_y_ - dp(6);
+    demand_h_ = std::max(dp(72), std::min(dp(kMaxDemandPx), demand_room));
     view_x_ = side_x_ + side_w_ + dp(8);
     view_y_ = menu_h_ + welcome_h_;
     view_w_ = std::max(dp(32), win_w_ - view_x_ - dp(8));
     view_h_ = std::max(dp(32), win_h_ - view_y_ - status_h_ - message_h_);
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
     cursor_y_ = std::max(0.0f, std::min(cursor_y_, static_cast<float>(win_h_ - 1)));
+    fit_map_to_view();
 }
 
 void Shell::button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary)
@@ -1056,7 +1058,7 @@ void Shell::draw(cairo_t *cr)
         TargetCr live(cr);
         cairo_rectangle(live.cr, view_x_, view_y_, view_w_, view_h_);
         cairo_clip(live.cr);
-        cairo_translate(live.cr, view_x_ - scroll_x_, view_y_ - scroll_y_);
+        cairo_translate(live.cr, view_x_ + map_ox_ - scroll_x_, view_y_ + map_oy_ - scroll_y_);
         map_.sync();
         map_.draw(live.cr);
     }

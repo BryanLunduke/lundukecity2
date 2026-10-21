@@ -213,6 +213,34 @@ void Shell::clamp_scroll()
     scroll_y_ = std::max(0.0, std::min(max_y, scroll_y_));
 }
 
+void Shell::fit_map_to_view()
+{
+    const int cover = tile_size_to_cover(view_w_, view_h_, CitySession::kWorldW, CitySession::kWorldH, map_.tile_size(),
+                                         kMinMapTile, kMaxMapTile);
+    if (cover != map_.tile_size()) {
+        const double mw = std::max(1, map_.pixel_width());
+        const double mh = std::max(1, map_.pixel_height());
+        const double cx = (scroll_x_ + view_w_ * 0.5) / mw;
+        const double cy = (scroll_y_ + view_h_ * 0.5) / mh;
+        map_.set_tile_size(cover);
+        scroll_x_ = cx * std::max(1, map_.pixel_width()) - view_w_ / 2.0;
+        scroll_y_ = cy * std::max(1, map_.pixel_height()) - view_h_ / 2.0;
+        clamp_scroll();
+    }
+    map_ox_ = map_letterbox(view_w_, map_.pixel_width());
+    map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+}
+
+double Shell::map_local_x(double x) const
+{
+    return x - view_x_ - map_ox_ + scroll_x_;
+}
+
+double Shell::map_local_y(double y) const
+{
+    return y - view_y_ - map_oy_ + scroll_y_;
+}
+
 void Shell::center_on_fraction(double fx, double fy)
 {
     const double mw = std::max(1, map_.pixel_width());

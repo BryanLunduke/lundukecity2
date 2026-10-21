@@ -4,6 +4,8 @@
 
 #include "map_view.hpp"
 
+#include "map_fit.hpp"
+
 #include "sprite_art.hpp"
 #include "tile_atlas.hpp"
 #include "tools.hpp"
@@ -80,7 +82,7 @@ void MapView::clear_hover()
 
 void MapView::set_tile_size(int pixels)
 {
-    tile_size_ = std::max(6, std::min(16, pixels));
+    tile_size_ = std::max(kMinMapTile, std::min(kMaxMapTile, pixels));
 }
 
 void MapView::set_shake(int dx, int dy)

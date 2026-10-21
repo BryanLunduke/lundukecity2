@@ -5,6 +5,7 @@
 #include "side_widgets.hpp"
 
 #include "city_session.hpp"
+#include "map_fit.hpp"
 #include "tile_atlas.hpp"
 
 #include "micropolis.h"
@@ -172,6 +173,8 @@ void MinimapView::paint_viewport(cairo_t *cr, int width, int height) const
     double vw = 1;
     double vh = 1;
     viewport_(vx, vy, vw, vh);
+    clamp_viewport_span(vx, vw);
+    clamp_viewport_span(vy, vh);
     const AspectBox box = land_box(width, height);
     const double rx = box.x + vx * box.width;
     const double ry = box.y + vy * box.height;

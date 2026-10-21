@@ -8,6 +8,7 @@
 #include "hotspots.hpp"
 #include "city_recovery.hpp"
 #include "city_session.hpp"
+#include "map_fit.hpp"
 #include "map_view.hpp"
 #include "menu_model.hpp"
 #include "overlay_map.hpp"
@@ -117,6 +118,9 @@ private:
     void load_recent();
     void center_on_fraction(double fx, double fy);
     void clamp_scroll();
+    void fit_map_to_view();
+    double map_local_x(double x) const;
+    double map_local_y(double y) const;
     void zoom_by(int delta);
     void set_speed(int speed);
     void toggle_pause();
@@ -211,6 +215,8 @@ private:
     int view_x_ = 0;
     int view_y_ = 0;
     int view_w_ = 1;
+    int map_ox_ = 0;
+    int map_oy_ = 0;
     int view_h_ = 1;
     int side_x_ = 0;
     int side_w_ = 120;

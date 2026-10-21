@@ -7,6 +7,7 @@
 #include "file_list.hpp"
 #include "text_edit.hpp"
 #include "list_scroll.hpp"
+#include "map_fit.hpp"
 #include "redraw.hpp"
 #include "sound_player.hpp"
 #include "ui_scale.hpp"
@@ -170,6 +171,17 @@ int main()
     field_insert(word, caret, anchor, "Z", 64);
     if (word != "Z" || caret != 1) {
         return fail("typing did not replace the selection");
+    }
+    if (tile_size_to_cover(1800, 900, 120, 100, 12, 6, 64) < 15 || tile_size_to_cover(1800, 900, 120, 100, 20, 6, 64) != 20 ||
+        tile_size_to_cover(8000, 4000, 120, 100, 12, 6, 64) != 64 || map_letterbox(1800, 1440) != 180 ||
+        map_letterbox(1000, 1440) != 0) {
+        return fail("large windows do not cover the map");
+    }
+    double origin = 0;
+    double span = 1.4;
+    clamp_viewport_span(origin, span);
+    if (origin != 0 || span != 1) {
+        return fail("minimap viewport was not clamped to the land");
     }
     if (audio_queue_limit_bytes(22050, 1, 2, 50) != 2205 || audio_bytes_to_write(0, 2205, 80000) != 2205 ||
         audio_bytes_to_write(2205, 2205, 800) != 0 || audio_bytes_to_write(2000, 2205, 800) != 205) {

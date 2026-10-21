@@ -177,7 +177,7 @@ void Shell::gamepad_use_cursor(bool press)
         pointer_down_ = true;
         pointer_on_map_ = true;
         pad_repeat_ms_ = 0;
-        pad_dragging_ = map_.press(pointer_x_ - view_x_ + scroll_x_, pointer_y_ - view_y_ + scroll_y_);
+        pad_dragging_ = map_.press(map_local_x(pointer_x_), map_local_y(pointer_y_));
         if (!pad_dragging_) {
             pointer_on_map_ = false;
             pointer_down_ = false;
