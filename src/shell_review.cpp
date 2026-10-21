@@ -11,6 +11,7 @@
 #include "redraw.hpp"
 #include "text_paint.hpp"
 #include "tile_atlas.hpp"
+#include "version.hpp"
 #include "ui_scale.hpp"
 
 #include <string>
@@ -316,6 +317,16 @@ void Shell::run_review_checks()
         return;
     }
     close_dialog();
+
+    dialog_ = Dialog::LoadError;
+    sync_title();
+    const char *title = SDL_GetWindowTitle(window_);
+    if (title == nullptr || std::string(title).find(kProductName) == std::string::npos) {
+        fail("the load error dropped the product name from the title");
+        return;
+    }
+    dialog_ = Dialog::None;
+    sync_title();
 
     gamepad_nav_ = true;
     note_keyboard_input();

@@ -165,7 +165,8 @@ void Shell::sync_title()
         return;
     }
     if (dialog_ == Dialog::LoadError) {
-        SDL_SetWindowTitle(window_, "Could not load city");
+        const std::string failed = std::string(kProductName) + " - Could not load city";
+        SDL_SetWindowTitle(window_, failed.c_str());
         return;
     }
     const std::string title = std::string(kProductName) + " - " + session_.city_name();
