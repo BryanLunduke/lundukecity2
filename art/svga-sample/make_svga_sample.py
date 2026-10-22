@@ -238,16 +238,15 @@ def police_style() -> Style:
 
 
 def airport_style() -> Style:
-    # Deep reddish earth. The first four are the dither; the last two are the shadow.
-    # (170, 85, 0) is the warm fleck and the 1px edge against pavement.
+    # Warm mid-brown, the closest VGA entries to the Warcraft path.
+    # The first three dither; the last two are the shadow. No orange fleck.
     dirt = Material(
         ramp=(
-            (170, 85, 0),
+            (113, 113, 56),
             (113, 97, 56),
             (113, 85, 56),
             (113, 69, 56),
-            (113, 56, 0),
-            (113, 28, 0),
+            (113, 56, 56),
         ),
         role="dirt",
     )
@@ -364,8 +363,8 @@ def assemble(atlas: Image.Image, base: int, width: int, height: int) -> Image.Im
     return image
 
 
-# Dense dither weights, lightest shade first. Dirt keeps the orange-brown rare.
-_DIRT_WEIGHTS = (0, 1, 1, 1, 2, 2, 2, 3, 3)
+# Dirt: index 1 is the base, 0 and 2 are the close neighbours. Grass stays even.
+_DIRT_WEIGHTS = (1, 1, 1, 1, 1, 1, 0, 2)
 _GRASS_WEIGHTS = (0, 1, 1, 1, 2, 2, 2, 3, 3)
 
 # Bevel where the dirt shoulder meets the pavement. Internal black lines stay smooth.
@@ -610,15 +609,18 @@ def _dither_index(x: int, y: int, salt: int, weights: tuple[int, ...]) -> int:
     return weights[h % len(weights)]
 
 
-def _dirt_rim(src, x: int, y: int, w: int, h: int, pavement: dict[tuple[int, int], int]) -> bool:
-    """Dirt that touches a real runway or road, including through one black pixel."""
+def _dirt_rim(src, x: int, y: int, w: int, h: int) -> bool:
+    """Slightly darker dirt where the lot meets soil, including through one black pixel."""
     for dx, dy in _ORTHO:
         nx, ny = x + dx, y + dy
-        if (nx, ny) in pavement:
+        if not _in(nx, ny, w, h):
+            continue
+        neighbour = src[nx, ny]
+        if neighbour == SRC_DTAN:
             return True
-        if _in(nx, ny, w, h) and src[nx, ny] == BLACK:
+        if neighbour == BLACK:
             fx, fy = nx + dx, ny + dy
-            if (fx, fy) in pavement:
+            if _in(fx, fy, w, h) and src[fx, fy] == SRC_DTAN:
                 return True
     return False
 
@@ -666,7 +668,6 @@ def recolour(original: Image.Image, style: Style, cells: set[tuple[int, int]] | 
     surface_colours = {colour for colour, mat in style.materials.items() if mat.role == "surface"}
     boxes = _component_boxes(src, w, h, surface_colours)
     counts = _caster_counts(src, w, h, style.casters)
-    pavement = _caster_counts(src, w, h, frozenset({SRC_DGREY}))
     for y in range(h):
         for x in range(w):
             colour = src[x, y]
@@ -706,8 +707,8 @@ def recolour(original: Image.Image, style: Style, cells: set[tuple[int, int]] | 
                 body = ramp[:-2]
                 weights = _DIRT_WEIGHTS if mat.role == "dirt" else _GRASS_WEIGHTS
                 idx = _dither_index(x, y, 0 if mat.role == "dirt" else 1, weights)
-                if mat.role == "dirt" and _dirt_rim(src, x, y, w, h, pavement):
-                    idx = 0
+                if mat.role == "dirt" and _dirt_rim(src, x, y, w, h):
+                    idx = len(body) - 1
                 if mat.role == "grass" and _grass_rim(src, x, y, w, h, counts):
                     idx = len(body) - 1
                 chosen = body[min(idx, len(body) - 1)]

@@ -56,12 +56,13 @@ same city, not a new scheme.
   A black outline with a building pixel beside it does cast, which lets the
   shadow cross the stroke. Grass is also one step darker where it simply
   touches pavement or a building.
-- Dirt and the police lawn are a dense dither of a few close dark shades,
+- Dirt and the police lawn are a dense dither of a few close shades,
   in 2px clusters with a ragged edge so the pattern is not a 16px grid.
   Sheets paint the lot in scene coordinates, and building tiles are painted
-  as one assembly before slicing. Dirt is a deep reddish brown: EGA brown
-  `(170, 85, 0)` as the warm fleck and as the 1px edge against pavement, then
-  `(113, 97, 56)`, `(113, 85, 56)` and `(113, 69, 56)`. The lawn is deep
+  as one assembly before slicing. Dirt is a warm mid-brown: dominant
+  `(113, 97, 56)`, with close neighbours `(113, 113, 56)` and `(113, 85, 56)`.
+  The darker neighbour is also the rim where the lot meets the soil marks.
+  `(170, 85, 0)` is not used. The lawn is deep
   green: `(0, 170, 0)`, `(56, 113, 0)`, `(28, 113, 0)` and `(0, 113, 0)`,
   with a darker green where it meets pavement or a building. The neon
   `(85, 255, 85)` is not used. The cast shadow is a darker step of that same
@@ -103,7 +104,7 @@ uses the last.
 
 **Airport**
 
-- Infield and clear land `(204, 127, 102)`: EGA brown 6 `(170, 85, 0)`, then 139, 138, 137, and 114, 113 for the shadow. Index 6 is also the 1px edge where the lot meets asphalt, so the grey pavement still reads.
+- Infield and clear land `(204, 127, 102)`: 140 `(113, 113, 56)`, 139 `(113, 97, 56)`, 138 `(113, 85, 56)`, and 137, 136 for the shadow. Index 139 is the base. Index 138 is also the 1px rim against the soil marks. The grey pavement reads against this brown without an orange edge.
 - Darker soil marks `(153, 127, 76)`: 115, flat, so the marks stay a step off the speckled lot.
 - Runways and aprons `(63, 63, 63)`: grey indexes 21, 20, 19. Index 20 is the body. 21 and 19 are only the dirt-side edges.
 - Hangar walls `(127, 127, 127)`: grey indexes 27–24, same shape of ramp as the police concrete.
@@ -153,4 +154,4 @@ colour boundary is still a colour change. The assembled 3×3 and 6×6 are
 checked the same way, so a seam between tiles is included. The last run is
 `verify-report.txt`: 53 tiles, 0 palette violations, 0 ink mismatches,
 0 collapsed boundaries. Strong classic edges (luma delta ≥ 80) still read at
-half that delta on 2064 of 2496 pairs. The lot is darker than the classic tan, so some of those edges are softer; the pass rule is that the two sides stay different colours.
+half that delta on 2092 of 2496 pairs. The lot is darker than the classic tan, so some of those edges are softer; the pass rule is that the two sides stay different colours.

@@ -3,10 +3,10 @@ palette entries in gpl: 256 (246 unique RGB triples)
 
 tiles checked: 53
 assembly police 3x3: palette=0 ink=0 collapsed=0/1520 strong-edge recall=0.895 (675/754) new-strong-inside-flat=35 OK
-assembly airport 6x6: palette=0 ink=0 collapsed=0/3897 strong-edge recall=0.855 (1207/1412) new-strong-inside-flat=3 OK
+assembly airport 6x6: palette=0 ink=0 collapsed=0/3897 strong-edge recall=0.854 (1206/1412) new-strong-inside-flat=3 OK
 
 per-tile totals: pixels=13568 palette_violations=0 ink_mismatches=0 collapsed_boundaries=0/5997
-strong classic edges (luma delta >= 80) still visible at half that delta: 2064/2496 (0.827)
+strong classic edges (luma delta >= 80) still visible at half that delta: 2092/2496 (0.838)
 new strong edges inside a classic flat region (classic delta < 12, svga delta >= 80): 36
 
 RESULT: PASS
