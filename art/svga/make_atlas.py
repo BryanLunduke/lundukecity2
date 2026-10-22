@@ -49,13 +49,20 @@ SRC_TAN = (204, 127, 102)
 SRC_DTAN = (153, 127, 76)
 SRC_ORANGE = (255, 127, 0)
 
-# Approved pass-6 dirt and pass-4 grass. The last two steps are the cast shadow.
+# SNES-style sand. VGA has no desaturated khaki near (195, 170, 135):
+# the nearest entry is roof grey (170, 170, 170), distance 43, which would
+# disappear into buildings. (255, 190, 125) is the nearest warm non-pink,
+# distance 64.0. The dot is one step darker in that same hue so the stipple
+# stays low-contrast. The last two steps are the building shadow.
+DIRT_LIGHT = (255, 223, 125)
+DIRT_BASE = (255, 190, 125)
+DIRT_DOT = (255, 158, 125)
 DIRT_RAMP = (
-    (113, 85, 56),
+    DIRT_LIGHT,
+    DIRT_BASE,
+    DIRT_DOT,
     (113, 69, 56),
-    (113, 56, 56),
     (113, 56, 0),
-    (113, 28, 0),
 )
 GRASS_RAMP = (
     (0, 170, 0),
@@ -112,7 +119,13 @@ WATER_RAMP = (
     (0, 48, 65),
     (0, 32, 65),
 )
-SOIL = (113, 85, 0)
+# Soil is the other classic ground colour. Its open field uses the sand
+# stipple (those RGB values belong to tan; a soil pixel only keeps one where
+# it does not touch tan). The rim and the shadow are soil's own darker steps.
+SOIL_RIM = (113, 85, 56)
+SOIL_SAND = (255, 235, 182)
+SOIL_CONTACT = (113, 85, 0)
+SOIL_RAMP = (SOIL_RIM, SOIL_SAND, SOIL_CONTACT)
 DEEP = (0, 0, 170)
 SPECK = (56, 56, 56)
 STONE = (130, 130, 130)
@@ -121,7 +134,9 @@ LEAF = (162, 162, 162)
 ORANGE = (255, 125, 0)
 
 _DIRT_WEIGHTS = (0, 0, 0, 0, 0, 0, 1, 2)
-_GRASS_WEIGHTS = (0, 1, 1, 1, 2, 2, 2, 3, 3)
+# Same deep-green hues. More of the light step, so lawns are not a dark hole
+# in the new sand. 2/9 (0, 170, 0), 3/9 (56, 113, 0), 3/9 (28, 113, 0), 1/9 (0, 113, 0).
+_GRASS_WEIGHTS = (0, 0, 1, 1, 1, 2, 2, 2, 3)
 _WATER_WEIGHTS = _DIRT_WEIGHTS
 _MIN_CAST = 8
 _ORTHO = ((0, -1), (0, 1), (-1, 0), (1, 0))
@@ -208,20 +223,20 @@ MATS: dict[str, dict[tuple[int, int, int], Material]] = {
         SRC_LBLUE: WATER,
         SRC_BLUE: _flat(DEEP),
         SRC_TAN: DIRT,
-        SRC_DTAN: _flat(SOIL),
+        SRC_DTAN: _mat(SOIL_RAMP, "soil"),
         SRC_GREY: _flat(STONE),
         SRC_DGREY: _flat(ROCK),
     },
     "tree": {
         SRC_TAN: DIRT,
-        SRC_DTAN: _flat(SOIL),
+        SRC_DTAN: _mat(SOIL_RAMP, "soil"),
         SRC_GREEN: GRASS,
         SRC_DGREEN: HEDGE,
         SRC_GREY: _flat(LEAF),
     },
     "building": {
         SRC_TAN: DIRT,
-        SRC_DTAN: _flat(SOIL),
+        SRC_DTAN: _mat(SOIL_RAMP, "soil"),
         SRC_GREEN: GRASS,
         SRC_DGREEN: HEDGE,
         SRC_GREY: CONCRETE,
@@ -291,6 +306,27 @@ def _assert_hash_aperiodic() -> None:
         raise SystemExit(
             f"ground clusters still tile at 16px (match rate {clustered / cluster_total:.3f})"
         )
+    dots = 0
+    repeated = 0
+    for y in range(64):
+        for x in range(64):
+            if _dirt_tone(x, y) != 2:
+                continue
+            dots += 1
+            repeated += _dirt_tone(x + 16, y) == 2
+            repeated += _dirt_tone(x, y + 16) == 2
+    if dots == 0 or repeated / (dots * 2) > 0.2:
+        raise SystemExit(f"sand dots still repeat every 16px ({repeated} of {dots * 2})")
+    touching = 0
+    for y in range(40):
+        for x in range(40):
+            if _dirt_tone(x, y) != 2:
+                continue
+            for dx, dy in _ORTHO:
+                if _dirt_tone(x + dx, y + dy) == 2:
+                    touching += 1
+    if touching:
+        raise SystemExit(f"sand dots touch their neighbours ({touching})")
 
 
 def _in(x: int, y: int, w: int, h: int) -> bool:
@@ -416,19 +452,53 @@ def _grass_rim(src, x: int, y: int, w: int, h: int, counts) -> bool:
     return False
 
 
-def _dirt_rim(src, x: int, y: int, w: int, h: int) -> bool:
+def _touches_water(src, x: int, y: int, w: int, h: int) -> bool:
+    """Ground pixel against open water, including through one black outline."""
     for dx, dy in _ORTHO:
         nx, ny = x + dx, y + dy
         if not _in(nx, ny, w, h):
             continue
         neighbour = src[nx, ny]
-        if neighbour == SRC_DTAN:
+        if neighbour in (SRC_LBLUE, SRC_BLUE):
             return True
         if neighbour == BLACK:
             fx, fy = nx + dx, ny + dy
-            if _in(fx, fy, w, h) and src[fx, fy] == SRC_DTAN:
+            if _in(fx, fy, w, h) and src[fx, fy] in (SRC_LBLUE, SRC_BLUE):
                 return True
     return False
+
+
+def _dirt_tone(x: int, y: int) -> int:
+    """0 rare light, 1 flat base, 2 isolated darker dot.
+
+    The lattices are in world pixels. Their periods (3 and 7) are not 16, so
+    a tile edge does not restart the pattern.
+    """
+    if (x % 3) == 1 and (y % 3) == 1 and (_hash(x // 3, y // 3) % 5) != 0:
+        return 2
+    if (x % 7) == 3 and (y % 7) == 5:
+        return 0
+    return 1
+
+
+def _touches_ground(src, x: int, y: int, w: int, h: int, colours: frozenset) -> bool:
+    for dx, dy in _ORTHO:
+        nx, ny = x + dx, y + dy
+        if not _in(nx, ny, w, h):
+            continue
+        neighbour = src[nx, ny]
+        if neighbour in colours:
+            return True
+        if neighbour == BLACK:
+            fx, fy = nx + dx, ny + dy
+            if _in(fx, fy, w, h) and src[fx, fy] in colours:
+                return True
+    return False
+
+
+def _dirt_rim(src, x: int, y: int, w: int, h: int) -> bool:
+    """1px darker tan where sand meets concrete. Soil carries its own rim."""
+    return _touches_ground(src, x, y, w, h, _PAVEMENT)
 
 
 def _is_land(colour: tuple[int, int, int]) -> bool:
@@ -556,6 +626,21 @@ def paint(original: Image.Image, kinds: list[list[str]]) -> Image.Image:
             if mat.role == "flat":
                 dst[x, y] = ramp[0]
                 continue
+            if mat.role == "soil":
+                # Open soil is the same sand as tan. Only the pixels that touch
+                # tan, concrete, or water change, so a soil fill cannot stay
+                # the old dark brown and cannot share an edge colour with tan.
+                strength = _shadow_strength(src, x, y, w, h, counts)
+                if _touches_water(src, x, y, w, h):
+                    chosen = SOIL_SAND
+                elif strength >= 2:
+                    chosen = SOIL_CONTACT
+                elif strength == 1 or _touches_ground(src, x, y, w, h, frozenset({SRC_TAN}) | _PAVEMENT):
+                    chosen = SOIL_RIM
+                else:
+                    chosen = DIRT_RAMP[_dirt_tone(x, y)]
+                dst[x, y] = chosen
+                continue
             strength = _shadow_strength(src, x, y, w, h, counts)
             shadowed = _apply_shadow(ramp, strength) if mat.role in ("grass", "dirt", "hedge") else None
             if mat.role == "hedge":
@@ -568,14 +653,20 @@ def paint(original: Image.Image, kinds: list[list[str]]) -> Image.Image:
                     chosen = shadowed
                 dst[x, y] = chosen
                 continue
-            if mat.role in ("grass", "dirt"):
+            if mat.role == "dirt":
+                chosen = ramp[_dirt_tone(x, y)]
+                if _touches_water(src, x, y, w, h):
+                    chosen = ramp[0]
+                elif _dirt_rim(src, x, y, w, h):
+                    chosen = ramp[-2]
+                if shadowed is not None:
+                    chosen = shadowed
+                dst[x, y] = chosen
+                continue
+            if mat.role == "grass":
                 body = ramp[:-2]
-                weights = _DIRT_WEIGHTS if mat.role == "dirt" else _GRASS_WEIGHTS
-                salt = 0 if mat.role == "dirt" else 1
-                idx = _dither_index(x, y, salt, weights)
-                if mat.role == "dirt" and _dirt_rim(src, x, y, w, h):
-                    idx = len(body) - 1
-                if mat.role == "grass" and _grass_rim(src, x, y, w, h, counts):
+                idx = _dither_index(x, y, 1, _GRASS_WEIGHTS)
+                if _grass_rim(src, x, y, w, h, counts):
                     idx = len(body) - 1
                 chosen = body[min(idx, len(body) - 1)]
                 if shadowed is not None:
@@ -866,6 +957,15 @@ def main() -> int:
         "held back: tiles 38-39 (unused), rubble, flood, fire, roads, rails, power,",
         "commercial, industrial, hospital, church, civic buildings, animations, the menu toggle",
         f"palette unique RGB triples: {len(palette)}",
+        "sand base (255, 190, 125): distance 64.0 from (195, 170, 135).",
+        "nearest palette colour is roof grey (170, 170, 170) at 43.0, not used.",
+        "nearest warm colour (255, 158, 125) is 62.0 but reads salmon, so it is only the dot.",
+        "dot target (150, 120, 90): nearest is olive (113, 113, 81) at 38.7.",
+        "that olive is far darker than the sand, so the dot is (255, 158, 125), distance 117.0,",
+        "one VGA step below the base. Rare light is (255, 223, 125).",
+        "shadows (113, 69, 56) and (113, 56, 0). Soil rim (113, 85, 56),",
+        "soil shore (255, 235, 182), soil contact (113, 85, 0).",
+        "grass hues unchanged; weights now 2/9 of (0, 170, 0) so lawns sit nearer the light sand.",
         "",
     ]
     failed = False
@@ -919,15 +1019,46 @@ def main() -> int:
 
     dirt = paint(crop_tile(atlas, 0), [["ground"]])
     dirt_counts = _histogram(dirt)
-    tan_pixels = sum(dirt_counts.get(rgb, 0) for rgb in DIRT_RAMP[:3])
-    if tan_pixels == 0 or dirt_counts.get(DIRT_RAMP[0], 0) * 2 < tan_pixels:
-        lines.append(f"FAIL dirt base is not the majority warm brown: {dirt_counts}")
+    base_n = dirt_counts.get(DIRT_BASE, 0)
+    if base_n < 180:
+        lines.append(f"FAIL sand base is not the flat field: {dirt_counts}")
         failed = True
-    forbidden = {(85, 255, 85), (113, 113, 56), (113, 97, 56), (170, 85, 0), (255, 127, 0)}
+    dot_n = dirt_counts.get(DIRT_DOT, 0)
+    if dot_n < 8 or dot_n > 40:
+        lines.append(f"FAIL sand dots are not a sparse stipple ({dot_n})")
+        failed = True
+    forbidden = {
+        (85, 255, 85),
+        (113, 113, 56),
+        (113, 97, 56),
+        (113, 56, 56),
+        (113, 28, 0),
+        (170, 85, 0),
+        (255, 127, 0),
+        SRC_TAN,
+        SRC_DTAN,
+    }
     for image, name in ((svga_scene, "neighbourhood"), (dirt, "dirt")):
         present = forbidden & set(_histogram(image))
         if present:
             lines.append(f"FAIL {name} contains forbidden colours {sorted(present)}")
+            failed = True
+    for base in (261, 279, 315, 351):
+        block = next(image for origin, _classic, image in painted_blocks if origin == base)
+        present = forbidden & set(_histogram(block))
+        if present:
+            lines.append(f"FAIL block {base} still has classic or reddish ground {sorted(present)}")
+            failed = True
+        classic = next(image for origin, image, _svga in painted_blocks if origin == base)
+        cpx = classic.load()
+        spx = block.load()
+        missed = 0
+        for y in range(classic.height):
+            for x in range(classic.width):
+                if cpx[x, y] in (SRC_TAN, SRC_DTAN) and spx[x, y] in (SRC_TAN, SRC_DTAN):
+                    missed += 1
+        if missed:
+            lines.append(f"FAIL block {base} left {missed} classic ground pixels")
             failed = True
 
     # Previews. Each pair is classic on the left and SVGA on the right.
