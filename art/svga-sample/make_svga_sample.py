@@ -148,15 +148,16 @@ def _hash(x: int, y: int) -> int:
 
 
 def police_style() -> Style:
-    # Fresh greens near the classic brightness. Less saturated than pure neon.
-    # The last two are only the darker edge and the cast shadow.
+    # Deep greens, lightest to darkest. The last two are the cast shadow.
+    # (85, 255, 85) is left out; (0, 170, 0) is only the light fleck of the dither.
     grass = Material(
         ramp=(
-            (125, 255, 125),
-            (85, 255, 85),
-            (0, 255, 65),
-            (0, 255, 0),
             (0, 170, 0),
+            (56, 113, 0),
+            (28, 113, 0),
+            (0, 113, 0),
+            (0, 65, 32),
+            (0, 65, 16),
         ),
         role="grass",
     )
@@ -237,15 +238,16 @@ def police_style() -> Style:
 
 
 def airport_style() -> Style:
-    # Classic tan is (204, 127, 102). These three are the close VGA salmons:
-    # same red-over-green-over-blue hue, a little lighter, low contrast.
-    # The last entry is only the cast shadow.
+    # Deep reddish earth. The first four are the dither; the last two are the shadow.
+    # (170, 85, 0) is the warm fleck and the 1px edge against pavement.
     dirt = Material(
         ramp=(
-            (255, 190, 125),
-            (255, 158, 125),
-            (255, 125, 125),
-            (255, 85, 85),
+            (170, 85, 0),
+            (113, 97, 56),
+            (113, 85, 56),
+            (113, 69, 56),
+            (113, 56, 0),
+            (113, 28, 0),
         ),
         role="dirt",
     )
@@ -362,7 +364,9 @@ def assemble(atlas: Image.Image, base: int, width: int, height: int) -> Image.Im
     return image
 
 
-# Ground texture returns 0 or 2 for a sparse cluster, 1 for the calm base.
+# Dense dither weights, lightest shade first. Dirt keeps the orange-brown rare.
+_DIRT_WEIGHTS = (0, 1, 1, 1, 2, 2, 2, 3, 3)
+_GRASS_WEIGHTS = (0, 1, 1, 1, 2, 2, 2, 3, 3)
 
 # Bevel where the dirt shoulder meets the pavement. Internal black lines stay smooth.
 _ASPHALT_EDGE = frozenset({SRC_TAN, SRC_DTAN})
@@ -395,9 +399,9 @@ def _assert_hash_aperiodic() -> None:
     cluster_total = 0
     for y in range(64):
         for x in range(64):
-            here = _ground_index(x, y, 0)
-            clustered += here == _ground_index(x + 16, y, 0)
-            clustered += here == _ground_index(x, y + 16, 0)
+            here = _dither_index(x, y, 0, _DIRT_WEIGHTS)
+            clustered += here == _dither_index(x + 16, y, 0, _DIRT_WEIGHTS)
+            clustered += here == _dither_index(x, y + 16, 0, _DIRT_WEIGHTS)
             cluster_total += 2
     cluster_rate = clustered / cluster_total
     if cluster_rate > 0.95:
@@ -594,29 +598,29 @@ def _component_boxes(src, w: int, h: int, colours: set[tuple[int, int, int]]) ->
     return boxes
 
 
-def _ground_index(x: int, y: int, salt: int) -> int:
-    """Calm base (1), with a few 2–4px clusters of the neighbour shades.
+def _dither_index(x: int, y: int, salt: int, weights: tuple[int, ...]) -> int:
+    """2px clusters of close shades, with a few ragged pixels so it is not a grid.
 
-    The cluster grid is 2px and the choice comes from the full-coordinate
-    hash, so the pattern does not repeat every tile.
+    The cluster coordinate is hashed in full, so a 16px tile does not repeat.
     """
-    cell = _hash((x // 2) + salt * 17, (y // 2) + salt * 29)
-    kind = cell & 15
-    if kind > 2:
-        return 1
-    shade = 0 if (cell & 16) == 0 else 2
-    ox, oy = x & 1, y & 1
-    if kind == 0:
-        return shade
-    if kind == 1:
-        # Three pixels of the 2×2.
-        if ((ox << 1) | oy) == ((cell >> 5) & 3):
-            return 1
-        return shade
-    # A 2px pair, either the top row or the left column.
-    if (cell & 32) == 0:
-        return shade if oy == 0 else 1
-    return shade if ox == 0 else 1
+    if (_hash(x + salt * 3, y + 19) & 7) == 0:
+        h = _hash(x + salt, y + salt * 5)
+    else:
+        h = _hash((x // 2) + salt * 17, (y // 2) + salt * 29)
+    return weights[h % len(weights)]
+
+
+def _dirt_rim(src, x: int, y: int, w: int, h: int, pavement: dict[tuple[int, int], int]) -> bool:
+    """Dirt that touches a real runway or road, including through one black pixel."""
+    for dx, dy in _ORTHO:
+        nx, ny = x + dx, y + dy
+        if (nx, ny) in pavement:
+            return True
+        if _in(nx, ny, w, h) and src[nx, ny] == BLACK:
+            fx, fy = nx + dx, ny + dy
+            if (fx, fy) in pavement:
+                return True
+    return False
 
 
 def _paint_surface(src, x: int, y: int, w: int, h: int, ramp: tuple, box: tuple[int, int, int, int]) -> tuple[int, int, int]:
@@ -662,6 +666,7 @@ def recolour(original: Image.Image, style: Style, cells: set[tuple[int, int]] | 
     surface_colours = {colour for colour, mat in style.materials.items() if mat.role == "surface"}
     boxes = _component_boxes(src, w, h, surface_colours)
     counts = _caster_counts(src, w, h, style.casters)
+    pavement = _caster_counts(src, w, h, frozenset({SRC_DGREY}))
     for y in range(h):
         for x in range(w):
             colour = src[x, y]
@@ -697,10 +702,12 @@ def recolour(original: Image.Image, style: Style, cells: set[tuple[int, int]] | 
                 dst[x, y] = chosen
                 continue
             if mat.role in ("grass", "dirt"):
-                # Grass keeps two shadow steps. Dirt keeps one, so the three
-                # salmons stay in the texture and only the rose is the shadow.
-                body = ramp[:-2] if mat.role == "grass" else ramp[:-1]
-                idx = _ground_index(x, y, 0 if mat.role == "dirt" else 1)
+                # The last two ramp steps are the shadow. The earlier ones dither.
+                body = ramp[:-2]
+                weights = _DIRT_WEIGHTS if mat.role == "dirt" else _GRASS_WEIGHTS
+                idx = _dither_index(x, y, 0 if mat.role == "dirt" else 1, weights)
+                if mat.role == "dirt" and _dirt_rim(src, x, y, w, h, pavement):
+                    idx = 0
                 if mat.role == "grass" and _grass_rim(src, x, y, w, h, counts):
                     idx = len(body) - 1
                 chosen = body[min(idx, len(body) - 1)]

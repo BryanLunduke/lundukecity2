@@ -56,15 +56,16 @@ same city, not a new scheme.
   A black outline with a building pixel beside it does cast, which lets the
   shadow cross the stroke. Grass is also one step darker where it simply
   touches pavement or a building.
-- Dirt and the police lawn are a calm base plus a few 2–4px clusters of a
-  neighbouring shade. The cluster choice uses the full-coordinate hash on a
-  2px grid, so it does not repeat every tile. Sheets paint the lot in scene
-  coordinates, and building tiles are painted as one assembly before slicing,
-  so neighbours share one field. The VGA wheel has no salmon at the classic
-  tan's brightness; the nearest hue is the lighter salmon `(255, 158, 125)`,
-  with a warm tan and a rose as the sparse clusters. The lawn is the fresh
-  green `(85, 255, 85)`, less saturated than the pure classic green, with
-  two close neighbours and a darker green only on the edge and the shadow.
+- Dirt and the police lawn are a dense dither of a few close dark shades,
+  in 2px clusters with a ragged edge so the pattern is not a 16px grid.
+  Sheets paint the lot in scene coordinates, and building tiles are painted
+  as one assembly before slicing. Dirt is a deep reddish brown: EGA brown
+  `(170, 85, 0)` as the warm fleck and as the 1px edge against pavement, then
+  `(113, 97, 56)`, `(113, 85, 56)` and `(113, 69, 56)`. The lawn is deep
+  green: `(0, 170, 0)`, `(56, 113, 0)`, `(28, 113, 0)` and `(0, 113, 0)`,
+  with a darker green where it meets pavement or a building. The neon
+  `(85, 255, 85)` is not used. The cast shadow is a darker step of that same
+  ground.
 - Asphalt has no grain. A pixel whose north or west neighbour is dirt steps
   one grey lighter, and one whose south or east neighbour is dirt steps one
   grey darker. A thin strip with dirt on both sides stays the body colour.
@@ -91,7 +92,7 @@ uses the last.
 
 **Police**
 
-- Lawn `(0, 230, 0)`: 72, EGA light green 10 `(85, 255, 85)`, 49, then 48 and EGA green 2 `(0, 170, 0)` for the edge and shadow. Brighter than the grey-greens, less saturated than pure `(0, 255, 0)`.
+- Lawn `(0, 230, 0)`: EGA green 2 `(0, 170, 0)`, then 118, 119, 120, and 194, 193 for the shadow. Deep greens. The neon `(85, 255, 85)` is not used.
 - Hedge `(0, 127, 0)`: 240, 216, 191, 192. Darker than the lawn, so the shrub row stays a separate band.
 - Roof and trim `(102, 102, 230)`: 56, EGA blue 9 `(85, 85, 255)`, 128. Red stays equal to green.
 - Walls `(0, 0, 230)`: 32 `(0, 0, 255)`, EGA blue 1 `(0, 0, 170)`, 104.
@@ -102,7 +103,7 @@ uses the last.
 
 **Airport**
 
-- Infield and clear land `(204, 127, 102)`: 66, 65 `(255, 158, 125)`, 64, and 12 for the shadow only. Index 65 is the base. 66 and 64 are the sparse clusters.
+- Infield and clear land `(204, 127, 102)`: EGA brown 6 `(170, 85, 0)`, then 139, 138, 137, and 114, 113 for the shadow. Index 6 is also the 1px edge where the lot meets asphalt, so the grey pavement still reads.
 - Darker soil marks `(153, 127, 76)`: 115, flat, so the marks stay a step off the speckled lot.
 - Runways and aprons `(63, 63, 63)`: grey indexes 21, 20, 19. Index 20 is the body. 21 and 19 are only the dirt-side edges.
 - Hangar walls `(127, 127, 127)`: grey indexes 27–24, same shape of ramp as the police concrete.
@@ -152,4 +153,4 @@ colour boundary is still a colour change. The assembled 3×3 and 6×6 are
 checked the same way, so a seam between tiles is included. The last run is
 `verify-report.txt`: 53 tiles, 0 palette violations, 0 ink mismatches,
 0 collapsed boundaries. Strong classic edges (luma delta ≥ 80) still read at
-half that delta on 2477 of 2496 pairs.
+half that delta on 2064 of 2496 pairs. The lot is darker than the classic tan, so some of those edges are softer; the pass rule is that the two sides stay different colours.
