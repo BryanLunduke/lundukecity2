@@ -379,10 +379,16 @@ svga_look = executable(
 test('svga_look', svga_look)
 
 python = find_program('python3', required: true)
+# Previews and the report go to the build tree. The script must not rewrite
+# the committed sheets or leave bytecode beside the source.
 test(
   'svga_atlas',
   python,
-  args: [meson.project_source_root() / 'art' / 'svga' / 'make_atlas.py'],
+  args: [
+    meson.project_source_root() / 'art' / 'svga' / 'make_atlas.py',
+    '--out', meson.project_build_root() / 'svga-atlas',
+  ],
+  env: ['PYTHONDONTWRITEBYTECODE=1'],
   timeout: 180,
 )
 

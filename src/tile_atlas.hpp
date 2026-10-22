@@ -42,7 +42,9 @@ public:
     // Bumps when the active sheet changes, so a cached map can redraw.
     int look_generation() const { return generation_; }
     // Drop the SVGA sheet. The next SVGA request stays on Classic.
+    // The decoded pixels stay loaded; recall_svga() puts the sheet back.
     void forget_svga();
+    bool recall_svga();
 
 private:
     void bind_active();

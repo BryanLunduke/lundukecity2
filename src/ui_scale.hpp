@@ -216,6 +216,17 @@ inline Placement clamp_saved_window(int x, int y, int w, int h, int ax, int ay, 
     return place;
 }
 
+// The choice written to settings.txt. Drawing can still be Classic when
+// the SVGA sheet is missing. That fallback is not a new choice.
+struct LookPreference {
+    bool svga = false;
+
+    int setting() const { return svga ? 1 : 0; }
+
+    // True only when this choice can be drawn from a loaded sheet.
+    bool active(bool sheet_ready) const { return svga && sheet_ready; }
+};
+
 struct StoredSettings {
     bool has_geometry = false;
     int x = 0;

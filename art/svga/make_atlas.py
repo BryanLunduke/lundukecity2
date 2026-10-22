@@ -9,12 +9,21 @@ Classic pixels are not redrawn. Each output pixel keeps the source tile's
 flat-colour region and is painted from a VGA Mode 13h ramp. Black ink stays
 black. Later batches add the other tile groups to this file.
 
-    python3 art/svga/make_atlas.py
+    python3 art/svga/make_atlas.py [--out DIR]
+
+The Warcraft screenshot (svga-refs/warcraft.png) is not part of this tree.
+When it is absent, that side-by-side comparison is skipped. The committed
+tiles-svga.png is checked in place and is not rewritten. --out writes the
+report and previews under DIR (the test passes the build directory).
 """
 
 from __future__ import annotations
 
 import sys
+
+# A test run imports this package. Do not leave bytecode in the source tree.
+sys.dont_write_bytecode = True
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -2340,15 +2349,42 @@ def _histogram(image: Image.Image) -> dict[tuple[int, int, int], int]:
     return counts
 
 
-def _warcraft_compare() -> Image.Image:
+def _output_paths(args: list[str]) -> tuple[Path, Path]:
+    """Preview directory and report path.
+
+    With no arguments the generator still writes next to the source, which
+    is how the committed previews were made. The test passes --out so a run
+    cannot touch those files.
+    """
+    out: Path | None = None
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--out":
+            if index + 1 >= len(args):
+                raise SystemExit("--out needs a directory")
+            out = Path(args[index + 1])
+            index += 2
+            continue
+        raise SystemExit(f"unknown argument: {arg}")
+    if out is None:
+        return PREVIEW_DIR, REPORT_PATH
+    preview = out / "previews"
+    preview.mkdir(parents=True, exist_ok=True)
+    return preview, out / "verify-report.txt"
+
+
+def _warcraft_compare() -> Image.Image | None:
     """The sampled path beside a same-size patch of the new dirt, at 3x.
 
     The patch is painted in world coordinates. A grass margin on each side
-    shows the solid 1px rim; the middle is the calm field.
+    shows the solid 1px rim; the middle is the calm field. The screenshot
+    is a local reference and is not committed, so a missing file skips
+    this sheet instead of failing the check.
     """
     ref = ROOT / "svga-refs" / "warcraft.png"
     if not ref.is_file():
-        raise SystemExit(f"missing Warcraft reference: {ref}")
+        return None
     shot = Image.open(ref).convert("RGB")
     if shot.size != (640, 400):
         raise SystemExit(f"Warcraft shot is {shot.size}, expected 640x400")
@@ -2383,6 +2419,7 @@ def _warcraft_compare() -> Image.Image:
 
 
 def main() -> int:
+    preview_dir, report_path = _output_paths(sys.argv[1:])
     _assert_hash_aperiodic()
     palette = set(vga_palette_8bit())
     _require_palette(palette)
@@ -3402,19 +3439,58 @@ def main() -> int:
     if digest_all.hexdigest() != atlas_sha:
         lines.append(f"FAIL SVGA atlas changed: {digest_all.hexdigest()}")
         failed = True
+    # The committed sheet is locked. Check it in place: same pixels as the
+    # painted atlas (so the hash and the 8px sheet above cover this file),
+    # VGA palette only, and the 960-tile layout. Do not rewrite the PNG.
     svga_path = ATLAS_PATH.with_name("tiles-svga.png")
-    sheet16.save(svga_path)
-    reread = Image.open(svga_path).convert("RGB")
-    src_px = sheet16.load()
-    got_px = reread.load()
-    png_mismatch = reread.size != sheet16.size or any(
-        got_px[x, y] != src_px[x, y]
-        for y in range(sheet16.size[1])
-        for x in range(sheet16.size[0])
-    )
-    if png_mismatch:
-        lines.append("FAIL tiles-svga.png does not match the painted atlas")
+    if not svga_path.is_file():
+        lines.append(f"FAIL committed SVGA sheet missing: {svga_path}")
         failed = True
+    else:
+        with Image.open(svga_path) as opened:
+            committed = opened.convert("RGB")
+            committed.load()
+        tile_columns = committed.size[0] // TILE
+        tile_rows = committed.size[1] // TILE
+        layout_ok = (
+            committed.size == sheet16.size
+            and committed.size[0] == tile_columns * TILE
+            and committed.size[1] == tile_rows * TILE
+            and tile_columns * tile_rows == 960
+        )
+        src_px = sheet16.load()
+        got_px = committed.load()
+        off_file = 0
+        mismatch = False
+        if layout_ok:
+            for y in range(committed.size[1]):
+                for x in range(committed.size[0]):
+                    pixel = got_px[x, y]
+                    if pixel not in palette:
+                        off_file += 1
+                    elif pixel != src_px[x, y]:
+                        mismatch = True
+                        break
+                if mismatch:
+                    break
+        if not layout_ok:
+            lines.append(
+                f"FAIL committed SVGA layout {committed.size[0]}x{committed.size[1]} "
+                f"({tile_columns * tile_rows} tiles), expected {sheet16.size[0]}x{sheet16.size[1]} and 960"
+            )
+            failed = True
+        elif off_file:
+            lines.append(f"FAIL committed SVGA sheet has {off_file} off-palette pixels")
+            failed = True
+        elif mismatch:
+            lines.append("FAIL committed tiles-svga.png does not match the locked atlas")
+            failed = True
+        elif not off8 and digest_all.hexdigest() == atlas_sha:
+            lines.append(
+                "OK committed tiles-svga.png: "
+                f"{committed.size[0]}x{committed.size[1]}, 960 tiles, VGA palette, "
+                f"hash {atlas_sha[:12]}, 8px sheet {sheet8.size[0]}x{sheet8.size[1]}"
+            )
 
     strike = disaster_scene()
     classic_strike, svga_strike = paint_grid(atlas, strike)
@@ -3589,18 +3665,21 @@ def main() -> int:
         12,
     )
 
-    _save(terrain, PREVIEW_DIR / "terrain-water-3x.png")
-    _save(trees, PREVIEW_DIR / "trees-3x.png")
-    _save(residential, PREVIEW_DIR / "residential-3x.png")
-    _save(neighbourhood_sheet, PREVIEW_DIR / "neighbourhood-32.png")
-    _save(compare_sheet, PREVIEW_DIR / "warcraft-dirt-compare.png")
-    _save(ab_neighbourhood, PREVIEW_DIR / "dirt-AB-neighbourhood-32.png")
-    _save(ab_residential, PREVIEW_DIR / "dirt-AB-residential-3x.png")
-    _save(ab_patch, PREVIEW_DIR / "dirt-AB-patch-3x.png")
-    _save(commercial, PREVIEW_DIR / "commercial-3x.png")
-    _save(industrial, PREVIEW_DIR / "industrial-3x.png")
-    _save(downtown_sheet, PREVIEW_DIR / "downtown-32.png")
-    _save(letters, PREVIEW_DIR / "letters-sample.png")
+    _save(terrain, preview_dir / "terrain-water-3x.png")
+    _save(trees, preview_dir / "trees-3x.png")
+    _save(residential, preview_dir / "residential-3x.png")
+    _save(neighbourhood_sheet, preview_dir / "neighbourhood-32.png")
+    if compare_sheet is None:
+        lines.append("SKIP warcraft comparison: svga-refs/warcraft.png is not in the tree")
+    else:
+        _save(compare_sheet, preview_dir / "warcraft-dirt-compare.png")
+    _save(ab_neighbourhood, preview_dir / "dirt-AB-neighbourhood-32.png")
+    _save(ab_residential, preview_dir / "dirt-AB-residential-3x.png")
+    _save(ab_patch, preview_dir / "dirt-AB-patch-3x.png")
+    _save(commercial, preview_dir / "commercial-3x.png")
+    _save(industrial, preview_dir / "industrial-3x.png")
+    _save(downtown_sheet, preview_dir / "downtown-32.png")
+    _save(letters, preview_dir / "letters-sample.png")
 
     def _road_sheet(indexes: list[int], title: str, columns: int) -> Image.Image:
         cells = [_pair(painted_road[index][0], painted_road[index][1], str(index), 3) for index in indexes]
@@ -3639,10 +3718,10 @@ def main() -> int:
         ],
         12,
     )
-    _save(roads, PREVIEW_DIR / "roads-3x.png")
-    _save(rails_power, PREVIEW_DIR / "rails-power-3x.png")
-    _save(bridges, PREVIEW_DIR / "bridges-3x.png")
-    _save(transport_sheet, PREVIEW_DIR / "transport-32.png")
+    _save(roads, preview_dir / "roads-3x.png")
+    _save(rails_power, preview_dir / "rails-power-3x.png")
+    _save(bridges, preview_dir / "bridges-3x.png")
+    _save(transport_sheet, preview_dir / "transport-32.png")
     _, svga_trip_before = paint_grid(atlas, trip, plain_wires=False)
     power_rows = []
     for index in (210, 211, 220, 77, 221, 208):
@@ -3671,7 +3750,7 @@ def main() -> int:
         [_banner("POWER LINES  CLASSIC  BEFORE  AFTER", power_rows[0].width), *power_rows],
         12,
     )
-    _save(power_sample, PREVIEW_DIR / "power-sample.png")
+    _save(power_sample, preview_dir / "power-sample.png")
 
     def _stored(base: int) -> tuple[Image.Image, Image.Image]:
         classic = next(image for origin, image, _svga in painted_civic if origin == base)
@@ -3773,11 +3852,11 @@ def main() -> int:
         ],
         12,
     )
-    _save(civic_sheet, PREVIEW_DIR / "civic-3x.png")
-    _save(grounds_sheet, PREVIEW_DIR / "stadium-port-airport-3x.png")
-    _save(plants_sheet, PREVIEW_DIR / "power-plants-3x.png")
-    _save(special_sheet, PREVIEW_DIR / "special-buildings-3x.png")
-    _save(quarter_sheet, PREVIEW_DIR / "civic-32.png")
+    _save(civic_sheet, preview_dir / "civic-3x.png")
+    _save(grounds_sheet, preview_dir / "stadium-port-airport-3x.png")
+    _save(plants_sheet, preview_dir / "power-plants-3x.png")
+    _save(special_sheet, preview_dir / "special-buildings-3x.png")
+    _save(quarter_sheet, preview_dir / "civic-32.png")
 
     def _fix_row(classic: Image.Image, before: Image.Image, after: Image.Image, caption: str, scale: int) -> Image.Image:
         return _hstack(
@@ -3818,7 +3897,7 @@ def main() -> int:
         [_banner("CIVIC FIXES  CLASSIC  BEFORE  AFTER", fix_w), *fix_rows],
         12,
     )
-    _save(fixes, PREVIEW_DIR / "civic-fixes.png")
+    _save(fixes, preview_dir / "civic-fixes.png")
 
     def _disaster_sheet(indexes: list[int], title: str, columns: int) -> Image.Image:
         cells = [_pair(painted_disaster[index][0], painted_disaster[index][1], str(index), 3) for index in indexes]
@@ -3852,9 +3931,9 @@ def main() -> int:
         ],
         12,
     )
-    _save(disasters, PREVIEW_DIR / "disasters-3x.png")
-    _save(leftovers, PREVIEW_DIR / "leftovers-3x.png")
-    _save(strike_sheet, PREVIEW_DIR / "disaster-32.png")
+    _save(disasters, preview_dir / "disasters-3x.png")
+    _save(leftovers, preview_dir / "leftovers-3x.png")
+    _save(strike_sheet, preview_dir / "disaster-32.png")
 
     lines.append("")
     lines.append(
@@ -3897,7 +3976,7 @@ def main() -> int:
     lines.append("")
     lines.append(f"RESULT: {result}")
     report = "\n".join(lines) + "\n"
-    REPORT_PATH.write_text(report, encoding="utf-8")
+    report_path.write_text(report, encoding="utf-8")
     sys.stdout.write(report)
     return 0 if not failed else 1
 

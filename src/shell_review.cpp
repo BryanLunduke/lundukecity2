@@ -175,6 +175,48 @@ void Shell::run_review_checks()
         map_.sync();
     }
 
+    // A missing SVGA sheet is Classic on screen. Picking SVGA, or quitting,
+    // must not write that fallback over a stored SVGA choice.
+    {
+        if (!tile_atlas().svga_available()) {
+            fail("SVGA sheet was already missing");
+            return;
+        }
+        tile_atlas().forget_svga();
+        const int stored_look = loaded_.look;
+        loaded_.look = 1;
+        set_look_preference(loaded_.look == 1);
+        if (svga_look_ || tile_atlas().use_svga() || look_pref_.setting() != 1) {
+            fail("loading SVGA with no sheet stored Classic");
+            return;
+        }
+        apply_action(Action::SvgaLook);
+        if (svga_look_ || tile_atlas().use_svga() || look_pref_.setting() != 1) {
+            fail("picking SVGA with no sheet stored Classic");
+            return;
+        }
+        apply_action(Action::ClassicLook);
+        if (svga_look_ || tile_atlas().use_svga() || look_pref_.setting() != 0) {
+            fail("picking Classic did not store Classic");
+            return;
+        }
+        set_look_preference(true);
+        if (svga_look_ || look_pref_.setting() != 1) {
+            fail("quitting would replace a stored SVGA choice with Classic");
+            return;
+        }
+        if (!tile_atlas().recall_svga() || !tile_atlas().svga_available()) {
+            fail("SVGA sheet could not be restored");
+            return;
+        }
+        set_look_preference(false);
+        loaded_.look = stored_look;
+        if (svga_look_ || tile_atlas().use_svga()) {
+            fail("Classic did not come back after the missing-sheet check");
+            return;
+        }
+    }
+
     // H5: headless play stays at the classic size and a 1x scale. A saved
     // window must not be written from the test, and a short laptop work area
     // must shrink the default window.

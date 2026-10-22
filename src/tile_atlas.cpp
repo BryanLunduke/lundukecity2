@@ -222,6 +222,15 @@ void TileAtlas::forget_svga()
     ++generation_;
 }
 
+bool TileAtlas::recall_svga()
+{
+    if (count_ <= 0 || sheets().svga.pixels.empty()) {
+        return false;
+    }
+    svga_ready_ = true;
+    return true;
+}
+
 void TileAtlas::average_color(int tile, double &r, double &g, double &b) const
 {
     if (average_ == nullptr || tile < 0 || tile >= count_) {

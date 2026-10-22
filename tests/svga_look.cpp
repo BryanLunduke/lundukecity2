@@ -197,6 +197,24 @@ int main()
     if (std::memcmp(tile0.data(), fell.data(), tile0.size() * sizeof(std::uint32_t)) != 0) {
         return fail("fallback changed Classic pixels");
     }
+    // The stored choice stays SVGA. Only the drawn sheet falls back.
+    ui_scale::LookPreference stored_svga;
+    stored_svga.svga = true;
+    if (stored_svga.active(atlas.svga_available()) || stored_svga.setting() != 1) {
+        return fail("a missing SVGA sheet must not replace the stored choice");
+    }
+    ui_scale::LookPreference picked_svga;
+    picked_svga.svga = true;
+    if (picked_svga.active(false) || picked_svga.setting() != 1) {
+        return fail("picking SVGA with no sheet must not store Classic");
+    }
+    const ui_scale::LookPreference picked_classic;
+    if (picked_classic.setting() != 0 || picked_classic.active(true)) {
+        return fail("picking Classic must store Classic");
+    }
+    if (!stored_svga.active(true)) {
+        return fail("SVGA should be drawn when the sheet is ready");
+    }
     std::cout << "svga look ok\n";
     return 0;
 }

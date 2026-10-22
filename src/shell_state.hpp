@@ -209,6 +209,8 @@ private:
     void save_window_settings();
     void note_window_geometry();
     void apply_loaded_settings();
+    // Remember the player's look. The drawn sheet may stay Classic.
+    void set_look_preference(bool svga);
     // Put the global speed and disasters back after a city file's own options.
     void restore_play_preferences();
     void note_keyboard_input();
@@ -246,6 +248,7 @@ private:
     float ui_scale_ = 1.0f;
     float user_scale_ = 0.0f;
     bool svga_look_ = false;
+    ui_scale::LookPreference look_pref_{};
     float scale_env_ = 0.0f;
     std::string font_ui_ = "Sans 13";
     std::string font_body_ = "Sans 14";

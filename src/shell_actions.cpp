@@ -951,14 +951,14 @@ void Shell::apply_action(Action action)
         zoom_by(-2);
         break;
     case Action::ClassicLook:
-        svga_look_ = false;
-        tile_atlas().set_look(false);
+        set_look_preference(false);
         map_.invalidate_all();
         save_window_settings();
         break;
     case Action::SvgaLook:
-        // A missing sheet stays on Classic. The menu check follows that.
-        svga_look_ = tile_atlas().set_look(true);
+        // A missing sheet stays on Classic for this session, and the menu
+        // check follows the sheet that is drawn. The stored choice stays SVGA.
+        set_look_preference(true);
         map_.invalidate_all();
         save_window_settings();
         break;

@@ -412,7 +412,9 @@ void Shell::save_window_settings()
     stored.auto_goto = session_.auto_goto() ? 1 : 0;
     stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
     stored.wheel_zoom = wheel_zooms_ ? 1 : 0;
-    stored.look = svga_look_ ? 1 : 0;
+    // The drawn sheet may be Classic because the SVGA file is missing.
+    // That is not the player's choice, so it is not what gets stored.
+    stored.look = look_pref_.setting();
     {
         const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
         const bool maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
@@ -465,15 +467,21 @@ void Shell::apply_loaded_settings()
     if (stored.wheel_zoom >= 0) {
         wheel_zooms_ = stored.wheel_zoom != 0;
     }
-    svga_look_ = stored.look == 1 && tile_atlas().set_look(true);
-    if (!svga_look_) {
-        tile_atlas().set_look(false);
-    }
+    set_look_preference(stored.look == 1);
     map_.invalidate_all();
     // These are the global preferences. A city file must not replace them.
     pref_speed_ = speed_;
     pref_disasters_ = session_.disasters() ? 1 : 0;
     session_.accept_preferences();
+}
+
+void Shell::set_look_preference(bool svga)
+{
+    look_pref_.svga = svga;
+    svga_look_ = look_pref_.active(tile_atlas().set_look(svga));
+    if (!svga_look_) {
+        tile_atlas().set_look(false);
+    }
 }
 
 void Shell::restore_play_preferences()
@@ -1293,10 +1301,7 @@ void Shell::loop()
                 }
                 if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
                     const bool svga = look[0] == 's' || look[0] == 'S' || look[0] == '1';
-                    svga_look_ = svga && tile_atlas().set_look(true);
-                    if (!svga_look_) {
-                        tile_atlas().set_look(false);
-                    }
+                    set_look_preference(svga);
                     map_.invalidate_all();
                 }
                 center_on_fraction(0.45, 0.42);
