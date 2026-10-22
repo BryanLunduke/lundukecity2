@@ -49,47 +49,59 @@ SRC_TAN = (204, 127, 102)
 SRC_DTAN = (153, 127, 76)
 SRC_ORANGE = (255, 127, 0)
 
-# Warcraft II path. The screenshot is a doubled 320x200 frame and the path
-# is eight colours. None of them is a mode 13h entry, so each name below is
-# the nearest standard colour. (73, 32, 16) and (65, 28, 16) tie between
-# (65, 32, 0) and (65, 32, 32); the warm entry is the one used.
-# Shares are the upper path (996 px) plus the clean stretch past the
-# catapults (185 px), scaled to 1000.
-DIRT_A = (65, 32, 0)       # 39.4%
-DIRT_B = (65, 40, 32)      # 27.1%
-DIRT_C = (113, 56, 0)      # 16.9%
-DIRT_D = (65, 16, 0)       #  9.9%
-DIRT_E = (113, 56, 56)     #  6.3%
-DIRT_F = (113, 69, 56)     #  0.4%
-# No mode 13h brown is darker than (65, 16, 0). The shadow steps drop green.
-DIRT_SOFT = (65, 0, 16)
-DIRT_CONTACT = (65, 0, 0)
-DIRT_BODY = (
-    (DIRT_A, 394),
-    (DIRT_B, 271),
-    (DIRT_C, 169),
-    (DIRT_D, 99),
-    (DIRT_E, 63),
-    (DIRT_F, 4),
-)
-# Outermost path pixels, where dirt meets grass. Same colours, shifted
-# toward (65, 32, 0). The counts are the 299 edge pixels.
-DIRT_EDGE = (
-    (DIRT_A, 148),
-    (DIRT_B, 85),
-    (DIRT_C, 38),
-    (DIRT_D, 16),
-    (DIRT_E, 12),
-)
+# Warcraft browns, calmed. The path's eight colours are not mode 13h entries.
+# The open field keeps three of the nearest: a dominant base, one close
+# neighbour, and a rare lighter accent. (65, 16, 0) is the darkest of the
+# dropped colours and is reserved for the rim and the soft shadow.
+# (113, 56, 56) and (113, 69, 56) stay out, so the light specks do not return.
+DIRT_BASE = (65, 32, 0)      # 760/961 = 79.1%
+DIRT_NEAR = (65, 40, 32)     # 163/961 = 17.0%
+DIRT_ACCENT = (113, 56, 0)   #  38/961 =  4.0%, isolated
+DIRT_RIM = (65, 16, 0)       # clean 1px edge, and the soft shadow
+DIRT_CONTACT = (65, 0, 16)   # strength-2 shadow, one step darker than the rim
+# The last two entries are the shadow steps: strength 1, then strength 2.
 DIRT_RAMP = (
-    DIRT_A,
-    DIRT_B,
-    DIRT_C,
-    DIRT_D,
-    DIRT_E,
-    DIRT_F,
-    DIRT_SOFT,
+    DIRT_BASE,
+    DIRT_NEAR,
+    DIRT_ACCENT,
+    DIRT_RIM,
     DIRT_CONTACT,
+)
+# 31x31 world-locked mask. 31 does not divide 16, so a tile edge does not
+# restart it. C is the accent (at least two pixels from the next accent).
+# B is the neighbour (no two touch, even on the diagonal). '.' is the base.
+_DIRT_MASK = (
+    "CB.B....BC....B...B..B..B.B.B.B",
+    "......B....B....B..............",
+    ".B.B.....B...CB...B.CB....CB.B.",
+    "....CB.B....B...B......B.B.....",
+    "B.........B...B...B..B.....B.BC",
+    "..B..B.B....B...B......B.B.....",
+    "B........B....BC...C.B.....B.B.",
+    "..B.C.B.C..B.....B.....C...C...",
+    "C............B......B.B..B...B.",
+    "..B.B.B..B.B....B..........B...",
+    "B...........C.....C...B.B....B.",
+    "..B.C...B......B....B.....C....",
+    "B.....B...B..B...B.....B....B..",
+    "..B.....B......B...B.....B.....",
+    "B....B.....B.B........C....B.B.",
+    "...B...C.......C..B.....B......",
+    ".........B..B.......B.....B...C",
+    ".B.B.B.B......B..B....B.B...B..",
+    ".........B.C.......C.....C.....",
+    "B..C...B.......B.B...B.....B...",
+    ".....B......B..........B.....B.",
+    ".......B..B.....B.B.B.....B....",
+    ".B..B.........C.......C.....B.B",
+    ".......C...B....B..B....B.B....",
+    "B.B..B...B...B.......B.......C.",
+    ".......B..........C....B.C.....",
+    "...C.B...B.C...B.....B.....B.B.",
+    "B.B....B.....B...B.B....B......",
+    "....B....B.....B.....B......C..",
+    "..B....B....B....B.B...C..B...B",
+    ".....C..........C..............",
 )
 GRASS_RAMP = (
     (0, 170, 0),
@@ -334,42 +346,43 @@ def _assert_hash_aperiodic() -> None:
         raise SystemExit(
             f"water clusters still tile at 16px (match rate {clustered / cluster_total:.3f})"
         )
-    # The path's own neighbour-match rate is 0.249. An independent mix lands
-    # near sum(p^2) ≈ 0.27, and a 16px tile would land near 1.
-    same = 0
-    total = 0
-    neigh = 0
-    neigh_total = 0
+    # A 16px stamp would repeat every non-base pixel at +16. The mask period
+    # is 31, so those pixels mostly miss.
+    marked = 0
+    repeated = 0
     counts: dict[tuple[int, int, int], int] = {}
-    span = 96
+    span = 93  # three periods of the 31px mask
+    accent_touch = 0
+    near_touch = 0
     for y in range(span):
         for x in range(span):
             here = _dirt_colour(x, y, False)
             counts[here] = counts.get(here, 0) + 1
-            same += here == _dirt_colour(x + 16, y, False)
-            same += here == _dirt_colour(x, y + 16, False)
-            total += 2
-            if x + 1 < span:
-                neigh += here == _dirt_colour(x + 1, y, False)
-                neigh_total += 1
-    if same / total > 0.45:
-        raise SystemExit(f"dirt still tiles at 16px (match rate {same / total:.3f})")
-    rate = neigh / neigh_total
-    if not 0.18 <= rate <= 0.38:
-        raise SystemExit(f"dirt neighbour match {rate:.3f} is outside the path's range")
-    expected = {
-        DIRT_A: 0.394,
-        DIRT_B: 0.271,
-        DIRT_C: 0.169,
-        DIRT_D: 0.099,
-        DIRT_E: 0.063,
-        DIRT_F: 0.004,
-    }
+            if here != DIRT_BASE:
+                marked += 1
+                repeated += here == _dirt_colour(x + 16, y, False)
+            if here == DIRT_ACCENT:
+                for dx, dy in _ORTHO + ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+                    if _dirt_colour(x + dx, y + dy, False) == DIRT_ACCENT:
+                        accent_touch += 1
+            elif here == DIRT_NEAR:
+                for dx, dy in _ORTHO:
+                    if _dirt_colour(x + dx, y + dy, False) == DIRT_NEAR:
+                        near_touch += 1
+    if marked == 0 or repeated / marked > 0.5:
+        raise SystemExit(f"dirt texture still tiles at 16px ({repeated} of {marked})")
+    if accent_touch:
+        raise SystemExit(f"light accents touch ({accent_touch})")
+    if near_touch:
+        raise SystemExit(f"neighbour pixels clump ({near_touch})")
     pixels = span * span
+    expected = {DIRT_BASE: 0.791, DIRT_NEAR: 0.170, DIRT_ACCENT: 0.040}
     for rgb, share in expected.items():
         got = counts.get(rgb, 0) / pixels
-        if abs(got - share) > 0.02:
+        if abs(got - share) > 0.015:
             raise SystemExit(f"dirt share {rgb} is {got:.3f}, wanted {share:.3f}")
+    if counts.get(DIRT_RIM) or counts.get(DIRT_CONTACT):
+        raise SystemExit("rim or shadow colour leaked into the open field")
 
 
 def _in(x: int, y: int, w: int, h: int) -> bool:
@@ -511,26 +524,16 @@ def _touches_water(src, x: int, y: int, w: int, h: int) -> bool:
     return False
 
 
-def _weighted_rgb(
-    x: int, y: int, salt: int, table: tuple[tuple[tuple[int, int, int], int], ...]
-) -> tuple[int, int, int]:
-    total = 0
-    for _rgb, count in table:
-        total += count
-    h = _hash(x + salt * 13, y + salt * 29) % total
-    acc = 0
-    for rgb, count in table:
-        acc += count
-        if h < acc:
-            return rgb
-    return table[-1][0]
-
-
 def _dirt_colour(x: int, y: int, edge: bool) -> tuple[int, int, int]:
-    """Path mix in world pixels. The edge table is the grass-side share."""
+    """Calm field in world pixels. The edge is one solid darker pixel."""
     if edge:
-        return _weighted_rgb(x, y, 4, DIRT_EDGE)
-    return _weighted_rgb(x, y, 0, DIRT_BODY)
+        return DIRT_RIM
+    mark = _DIRT_MASK[y % 31][x % 31]
+    if mark == "C":
+        return DIRT_ACCENT
+    if mark == "B":
+        return DIRT_NEAR
+    return DIRT_BASE
 
 
 def _touches_ground(src, x: int, y: int, w: int, h: int, colours: frozenset) -> bool:
@@ -1001,7 +1004,7 @@ def _warcraft_compare() -> Image.Image:
     """The sampled path beside a same-size patch of the new dirt, at 3x.
 
     The patch is painted in world coordinates. A grass margin on each side
-    shows the darker edge mix; the middle is the field mix.
+    shows the solid 1px rim; the middle is the calm field.
     """
     ref = ROOT / "svga-refs" / "warcraft.png"
     if not ref.is_file():
@@ -1062,11 +1065,11 @@ def main() -> int:
         "  69  (56, 20, 12)    (65, 16, 0)          185   15.52",
         "  48  (48, 16, 12)    (65, 16, 0)          185   20.81",
         "   5  (117, 65, 28)   (113, 69, 56)        137   28.57",
-        "Merged field: (65, 32, 0) 39.4%, (65, 40, 32) 27.1%, (113, 56, 0) 16.9%,",
-        "(65, 16, 0) 9.9%, (113, 56, 56) 6.3%, (113, 69, 56) 0.4%.",
-        "Edge against grass, 299 px, shifts to (65, 32, 0) 49.5%, (65, 40, 32) 28.4%,",
-        "(113, 56, 0) 12.7%, (65, 16, 0) 5.4%, (113, 56, 56) 4.0%.",
-        "No standard brown is darker than (65, 16, 0). Shadows are (65, 0, 16) and (65, 0, 0).",
+        "Calm field: (65, 32, 0) 79.1%, (65, 40, 32) 17.0%, (113, 56, 0) 4.0%.",
+        "Accents are single pixels. Neighbour pixels do not touch.",
+        "(65, 16, 0), (113, 56, 56) and (113, 69, 56) are out of the open field.",
+        "The 1px rim where dirt meets grass, pavement, or water is (65, 16, 0).",
+        "Soft shadow is that same rim. Contact shadow is (65, 0, 16).",
         "Soil rim (65, 0, 48), soil contact (65, 0, 32). Grass and water unchanged.",
         "",
     ]
@@ -1121,14 +1124,18 @@ def main() -> int:
 
     dirt = paint(crop_tile(atlas, 0), [["ground"]])
     dirt_counts = _histogram(dirt)
-    body_n = sum(dirt_counts.get(rgb, 0) for rgb, _count in DIRT_BODY)
-    if body_n < 200 or dirt_counts.get(DIRT_A, 0) < dirt_counts.get(DIRT_B, 0):
-        lines.append(f"FAIL dirt tile is not the path mix: {dirt_counts}")
+    if dirt_counts.get(DIRT_BASE, 0) < dirt_counts.get(DIRT_NEAR, 0):
+        lines.append(f"FAIL dirt tile is not the calm base: {dirt_counts}")
+        failed = True
+    if dirt_counts.get(DIRT_RIM, 0) or dirt_counts.get((113, 56, 56), 0) or dirt_counts.get((113, 69, 56), 0):
+        lines.append(f"FAIL open dirt tile picked up an edge or dropped colour: {dirt_counts}")
         failed = True
     forbidden = {
         (85, 255, 85),
         (113, 113, 56),
         (113, 97, 56),
+        (113, 56, 56),
+        (113, 69, 56),
         (113, 28, 0),
         (170, 85, 0),
         (255, 127, 0),
