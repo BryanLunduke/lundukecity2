@@ -49,24 +49,9 @@ SRC_TAN = (204, 127, 102)
 SRC_DTAN = (153, 127, 76)
 SRC_ORANGE = (255, 127, 0)
 
-# Warcraft browns, calmed. The path's eight colours are not mode 13h entries.
-# The open field keeps three of the nearest: a dominant base, one close
-# neighbour, and a rare lighter accent. (65, 16, 0) is the darkest of the
-# dropped colours and is reserved for the rim and the soft shadow.
-# (113, 56, 56) and (113, 69, 56) stay out, so the light specks do not return.
-DIRT_BASE = (65, 32, 0)      # 760/961 = 79.1%
-DIRT_NEAR = (65, 40, 32)     # 163/961 = 17.0%
-DIRT_ACCENT = (113, 56, 0)   #  38/961 =  4.0%, isolated
-DIRT_RIM = (65, 16, 0)       # clean 1px edge, and the soft shadow
-DIRT_CONTACT = (65, 0, 16)   # strength-2 shadow, one step darker than the rim
-# The last two entries are the shadow steps: strength 1, then strength 2.
-DIRT_RAMP = (
-    DIRT_BASE,
-    DIRT_NEAR,
-    DIRT_ACCENT,
-    DIRT_RIM,
-    DIRT_CONTACT,
-)
+# Two dirt schemes share one mask. A is the calm field already reviewed.
+# B is the same texture one value step lighter in the warm brown family.
+# Ramp order: base, neighbour, accent, rim (also the soft shadow), contact.
 # 31x31 world-locked mask. 31 does not divide 16, so a tile edge does not
 # restart it. C is the accent (at least two pixels from the next accent).
 # B is the neighbour (no two touch, even on the diagonal). '.' is the base.
@@ -103,6 +88,68 @@ _DIRT_MASK = (
     "..B....B....B....B.B...C..B...B",
     ".....C..........C..............",
 )
+
+
+@dataclass(frozen=True)
+class DirtScheme:
+    """One dirt palette. The 31x31 mask decides which role a pixel uses."""
+
+    name: str
+    base: tuple[int, int, int]
+    near: tuple[int, int, int]
+    accent: tuple[int, int, int]
+    rim: tuple[int, int, int]
+    contact: tuple[int, int, int]
+    soil_rim: tuple[int, int, int]
+    soil_contact: tuple[int, int, int]
+
+    @property
+    def ramp(self) -> tuple[tuple[int, int, int], ...]:
+        return (self.base, self.near, self.accent, self.rim, self.contact)
+
+    @property
+    def soil_ramp(self) -> tuple[tuple[int, int, int], ...]:
+        return (self.soil_rim, self.soil_contact)
+
+
+# A: the reviewed calm field. B: the same roles, one value step lighter.
+# Neighbour B is (113, 69, 56), the value step above (65, 40, 32).
+# (113, 56, 56) is closer in luma but pink, so the warm step is the one used.
+# The accent's true next value step is orange paint (255, 125, 0), so B uses
+# the EGA brown (170, 85, 0) and keeps it rare.
+SCHEME_A = DirtScheme(
+    "A",
+    (65, 32, 0),
+    (65, 40, 32),
+    (113, 56, 0),
+    (65, 16, 0),
+    (65, 0, 16),
+    (65, 0, 48),
+    (65, 0, 32),
+)
+SCHEME_B = DirtScheme(
+    "B",
+    (113, 56, 0),
+    (113, 69, 56),
+    (170, 85, 0),
+    (113, 28, 0),
+    (113, 0, 28),
+    (65, 48, 0),
+    (65, 16, 0),
+)
+SCHEMES = (SCHEME_A, SCHEME_B)
+# Names the rest of the file uses for the reviewed field.
+DIRT_BASE = SCHEME_A.base
+DIRT_NEAR = SCHEME_A.near
+DIRT_ACCENT = SCHEME_A.accent
+DIRT_RIM = SCHEME_A.rim
+DIRT_CONTACT = SCHEME_A.contact
+DIRT_RAMP = SCHEME_A.ramp
+SOIL_RAMP = SCHEME_A.soil_ramp
+BUILDING_RED = (170, 0, 0)
+GRASS_LINE = (0, 170, 0)
+HEDGE_LINE = (32, 65, 32)
+
 GRASS_RAMP = (
     (0, 170, 0),
     (56, 113, 0),
@@ -129,15 +176,18 @@ ROOF_RAMP = (
     (182, 182, 182),
     (170, 170, 170),
 )
+# One step calmer than the periwinkle glass. Less red in the light step,
+# so the windows read blue rather than purple.
 GLASS_RAMP = (
-    (125, 125, 255),
-    (85, 85, 255),
+    (125, 158, 255),
+    (56, 85, 113),
     (56, 56, 113),
 )
+# One step down from the electric (0, 0, 255) wall.
 WALL_RAMP = (
-    (0, 0, 255),
     (0, 0, 170),
     (0, 0, 113),
+    (0, 0, 65),
 )
 SLATE_RAMP = (
     (81, 81, 81),
@@ -158,13 +208,8 @@ WATER_RAMP = (
     (0, 48, 65),
     (0, 32, 65),
 )
-# Soil is the other classic ground colour. Its open field uses the path
-# stipple (those RGB values belong to tan; a soil pixel only keeps one where
-# it does not touch tan). The rim and the contact shadow are darker steps
-# that tan does not use, so the shared stipple cannot collapse a boundary.
-SOIL_RIM = (65, 0, 48)
-SOIL_CONTACT = (65, 0, 32)
-SOIL_RAMP = (SOIL_RIM, SOIL_CONTACT)
+# Soil's open field uses the tan stipple. Its rim and contact stay off that
+# stipple so a soil pixel can touch tan. Each dirt scheme has its own pair.
 DEEP = (0, 0, 170)
 SPECK = (56, 56, 56)
 STONE = (130, 130, 130)
@@ -286,24 +331,42 @@ MATS: dict[str, dict[tuple[int, int, int], Material]] = {
         SRC_BLUE: WALL,
         SRC_YELLOW: SIGN,
         WHITE: _flat(WHITE),
-        SRC_RED: _flat((255, 0, 0)),
+        SRC_RED: _flat(BUILDING_RED),
         SRC_ORANGE: _flat(ORANGE),
     },
 }
 
 
+def _claim(
+    owner: dict[tuple[int, int, int], tuple[int, int, int]],
+    rgb: tuple[int, int, int],
+    src: tuple[int, int, int],
+    palette: set[tuple[int, int, int]],
+    label: str,
+) -> None:
+    if rgb == BLACK:
+        raise SystemExit(f"{label} uses black; black is reserved for ink")
+    if rgb not in palette:
+        raise SystemExit(f"{rgb} is not in the VGA palette ({label})")
+    if rgb in owner and owner[rgb] != src:
+        raise SystemExit(f"{rgb} is used by both source {owner[rgb]} and {src} ({label})")
+    owner[rgb] = src
+
+
 def _require_palette(palette: set[tuple[int, int, int]]) -> None:
-    owner: dict[tuple[int, int, int], tuple[int, int, int]] = {}
+    shared: dict[tuple[int, int, int], tuple[int, int, int]] = {}
     for kind, mats in MATS.items():
         for src, mat in mats.items():
+            if src in (SRC_TAN, SRC_DTAN):
+                continue
             for rgb in mat.ramp:
-                if rgb == BLACK:
-                    raise SystemExit(f"{kind} {src} uses black; black is reserved for ink")
-                if rgb not in palette:
-                    raise SystemExit(f"{rgb} is not in the VGA palette ({kind} {src})")
-                if rgb in owner and owner[rgb] != src:
-                    raise SystemExit(f"{rgb} is used by both source {owner[rgb]} and {src}")
-                owner[rgb] = src
+                _claim(shared, rgb, src, palette, f"{kind} {src}")
+    for scheme in SCHEMES:
+        owner = dict(shared)
+        for rgb in scheme.ramp:
+            _claim(owner, rgb, SRC_TAN, palette, f"dirt {scheme.name}")
+        for rgb in scheme.soil_ramp:
+            _claim(owner, rgb, SRC_DTAN, palette, f"soil {scheme.name}")
 
 
 def _hash(x: int, y: int) -> int:
@@ -524,16 +587,16 @@ def _touches_water(src, x: int, y: int, w: int, h: int) -> bool:
     return False
 
 
-def _dirt_colour(x: int, y: int, edge: bool) -> tuple[int, int, int]:
+def _dirt_colour(x: int, y: int, edge: bool, scheme: DirtScheme = SCHEME_A) -> tuple[int, int, int]:
     """Calm field in world pixels. The edge is one solid darker pixel."""
     if edge:
-        return DIRT_RIM
+        return scheme.rim
     mark = _DIRT_MASK[y % 31][x % 31]
     if mark == "C":
-        return DIRT_ACCENT
+        return scheme.accent
     if mark == "B":
-        return DIRT_NEAR
-    return DIRT_BASE
+        return scheme.near
+    return scheme.base
 
 
 def _touches_ground(src, x: int, y: int, w: int, h: int, colours: frozenset) -> bool:
@@ -653,7 +716,58 @@ def _paint_surface(src, x: int, y: int, w: int, h: int, ramp: tuple, box: tuple[
     return ramp[max(0, min(n - 1, idx))]
 
 
-def paint(original: Image.Image, kinds: list[list[str]]) -> Image.Image:
+def _components(src, w: int, h: int, colour: tuple[int, int, int]) -> list[list[tuple[int, int]]]:
+    seen = [[False] * w for _ in range(h)]
+    found: list[list[tuple[int, int]]] = []
+    for y in range(h):
+        for x in range(w):
+            if seen[y][x] or src[x, y] != colour:
+                continue
+            stack = [(x, y)]
+            seen[y][x] = True
+            cells: list[tuple[int, int]] = []
+            while stack:
+                cx, cy = stack.pop()
+                cells.append((cx, cy))
+                for dx, dy in _ORTHO:
+                    nx, ny = cx + dx, cy + dy
+                    if _in(nx, ny, w, h) and not seen[ny][nx] and src[nx, ny] == colour:
+                        seen[ny][nx] = True
+                        stack.append((nx, ny))
+            found.append(cells)
+    return found
+
+
+def _solid_marks(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int, int], tuple[int, int, int]]:
+    """Lot borders and zone letters are one flat colour. Lawns stay dithered.
+
+    A border is a stroke: almost every pixel has at most two orthogonal
+    neighbours. A zone letter is a compact mark that sits on a building tile.
+    Tree canopies fail both tests.
+    """
+    marks: dict[tuple[int, int], tuple[int, int, int]] = {}
+    for colour, solid in ((SRC_GREEN, GRASS_LINE), (SRC_DGREEN, HEDGE_LINE)):
+        for cells in _components(src, w, h, colour):
+            if len(cells) < 12:
+                continue
+            group = set(cells)
+            thin = 0
+            for x, y in cells:
+                neighbours = sum((x + dx, y + dy) in group for dx, dy in _ORTHO)
+                if neighbours <= 2:
+                    thin += 1
+            stroke = thin / len(cells) >= 0.9
+            xs = [cell[0] for cell in cells]
+            ys = [cell[1] for cell in cells]
+            on_building = all(kinds[y // TILE][x // TILE] == "building" for x, y in cells)
+            glyph = on_building and len(cells) <= 80 and max(xs) - min(xs) <= 13 and max(ys) - min(ys) <= 13
+            if stroke or glyph:
+                for cell in cells:
+                    marks[cell] = solid
+    return marks
+
+
+def paint(original: Image.Image, kinds: list[list[str]], scheme: DirtScheme = SCHEME_A) -> Image.Image:
     """Recolour `original`. `kinds` is one label per 16px cell, row-major."""
     w, h = original.size
     if w % TILE or h % TILE:
@@ -665,6 +779,7 @@ def paint(original: Image.Image, kinds: list[list[str]]) -> Image.Image:
     boxes = _component_boxes(src, w, h, surface_colours)
     mask = _caster_mask(kinds, src, w, h)
     counts = _caster_counts(src, w, h, mask)
+    solid = _solid_marks(src, w, h, kinds)
     for y in range(h):
         kind_row = kinds[y // TILE]
         for x in range(w):
@@ -682,24 +797,27 @@ def paint(original: Image.Image, kinds: list[list[str]]) -> Image.Image:
                 dst[x, y] = ramp[0]
                 continue
             if mat.role == "soil":
-                # Open soil is the same path mix as tan. Only the pixels that
+                # Open soil is the same stipple as tan. Only the pixels that
                 # touch tan, concrete, or water change, so a soil fill cannot
                 # share an edge colour with tan.
                 strength = _shadow_strength(src, x, y, w, h, counts)
                 if _touches_water(src, x, y, w, h):
-                    chosen = SOIL_RIM
+                    chosen = scheme.soil_rim
                 elif strength >= 2:
-                    chosen = SOIL_CONTACT
+                    chosen = scheme.soil_contact
                 elif strength == 1 or _touches_ground(src, x, y, w, h, frozenset({SRC_TAN}) | _PAVEMENT):
-                    chosen = SOIL_RIM
+                    chosen = scheme.soil_rim
                 elif _touches_ground(src, x, y, w, h, frozenset({SRC_GREEN, SRC_DGREEN})):
-                    chosen = _dirt_colour(x, y, True)
+                    chosen = _dirt_colour(x, y, True, scheme)
                 else:
-                    chosen = _dirt_colour(x, y, False)
+                    chosen = _dirt_colour(x, y, False, scheme)
                 dst[x, y] = chosen
                 continue
             strength = _shadow_strength(src, x, y, w, h, counts)
-            shadowed = _apply_shadow(ramp, strength) if mat.role in ("grass", "dirt", "hedge") else None
+            if (x, y) in solid and mat.role in ("grass", "hedge"):
+                dst[x, y] = solid[(x, y)]
+                continue
+            shadowed = _apply_shadow(scheme.ramp if mat.role == "dirt" else ramp, strength) if mat.role in ("grass", "dirt", "hedge") else None
             if mat.role == "hedge":
                 body = ramp[:-2]
                 idx = 0 if (_hash(x, y) & 7) < 2 else min(1, len(body) - 1)
@@ -712,7 +830,7 @@ def paint(original: Image.Image, kinds: list[list[str]]) -> Image.Image:
                 continue
             if mat.role == "dirt":
                 edge = _touches_water(src, x, y, w, h) or _dirt_edge(src, x, y, w, h)
-                chosen = _dirt_colour(x, y, edge)
+                chosen = _dirt_colour(x, y, edge, scheme)
                 if shadowed is not None:
                     chosen = shadowed
                 dst[x, y] = chosen
@@ -773,14 +891,16 @@ def kinds_for(indexes: list[list[int]]) -> list[list[str]]:
     return [[tile_kind(index) for index in row] for row in indexes]
 
 
-def paint_grid(atlas: Image.Image, grid: list[list[int]]) -> tuple[Image.Image, Image.Image]:
+def paint_grid(
+    atlas: Image.Image, grid: list[list[int]], scheme: DirtScheme = SCHEME_A
+) -> tuple[Image.Image, Image.Image]:
     height = len(grid)
     width = len(grid[0])
     classic = Image.new("RGB", (width * TILE, height * TILE))
     for y, row in enumerate(grid):
         for x, index in enumerate(row):
             classic.paste(crop_tile(atlas, index), (x * TILE, y * TILE))
-    return classic, paint(classic, kinds_for(grid))
+    return classic, paint(classic, kinds_for(grid), scheme)
 
 
 def luma(rgb: tuple[int, int, int]) -> float:
@@ -1065,12 +1185,14 @@ def main() -> int:
         "  69  (56, 20, 12)    (65, 16, 0)          185   15.52",
         "  48  (48, 16, 12)    (65, 16, 0)          185   20.81",
         "   5  (117, 65, 28)   (113, 69, 56)        137   28.57",
-        "Calm field: (65, 32, 0) 79.1%, (65, 40, 32) 17.0%, (113, 56, 0) 4.0%.",
-        "Accents are single pixels. Neighbour pixels do not touch.",
-        "(65, 16, 0), (113, 56, 56) and (113, 69, 56) are out of the open field.",
-        "The 1px rim where dirt meets grass, pavement, or water is (65, 16, 0).",
-        "Soft shadow is that same rim. Contact shadow is (65, 0, 16).",
-        "Soil rim (65, 0, 48), soil contact (65, 0, 32). Grass and water unchanged.",
+        "Variant A field: (65, 32, 0) 79.1%, (65, 40, 32) 17.0%, (113, 56, 0) 4.0%.",
+        "Rim and soft shadow (65, 16, 0). Contact (65, 0, 16).",
+        "Variant B is the same mask one value step lighter:",
+        "base (113, 56, 0), neighbour (113, 69, 56), accent (170, 85, 0).",
+        "B rim (113, 28, 0), B contact (113, 0, 28).",
+        "(113, 56, 56) was the closer luma neighbour but reads pink, so B uses the warm step.",
+        "Building red is (170, 0, 0). Glass light step is (125, 158, 255).",
+        "Wall light step is (0, 0, 170). Lot borders and zone letters are solid.",
         "",
     ]
     failed = False
@@ -1135,10 +1257,11 @@ def main() -> int:
         (113, 113, 56),
         (113, 97, 56),
         (113, 56, 56),
-        (113, 69, 56),
-        (113, 28, 0),
-        (170, 85, 0),
         (255, 127, 0),
+        (255, 0, 0),
+        (0, 0, 255),
+        (125, 125, 255),
+        (85, 85, 255),
         (255, 190, 125),
         (255, 223, 125),
         (255, 158, 125),
@@ -1146,14 +1269,16 @@ def main() -> int:
         SRC_TAN,
         SRC_DTAN,
     }
+    forbidden_a = forbidden | {(170, 85, 0), (113, 28, 0), (113, 69, 56), (113, 0, 28)}
+    forbidden_b = forbidden | {(65, 32, 0), (65, 40, 32), (65, 0, 16), (65, 0, 32), (65, 0, 48)}
     for image, name in ((svga_scene, "neighbourhood"), (dirt, "dirt")):
-        present = forbidden & set(_histogram(image))
+        present = forbidden_a & set(_histogram(image))
         if present:
             lines.append(f"FAIL {name} contains forbidden colours {sorted(present)}")
             failed = True
     for base in (261, 279, 315, 351):
         block = next(image for origin, _classic, image in painted_blocks if origin == base)
-        present = forbidden & set(_histogram(block))
+        present = forbidden_a & set(_histogram(block))
         if present:
             lines.append(f"FAIL block {base} still has classic or reddish ground {sorted(present)}")
             failed = True
@@ -1169,7 +1294,41 @@ def main() -> int:
             lines.append(f"FAIL block {base} left {missed} classic ground pixels")
             failed = True
 
-    # Previews. Each pair is classic on the left and SVGA on the right.
+    lot_classic = next(image for origin, image, _svga in painted_blocks if origin == 240)
+    lot_svga = next(image for origin, _classic, image in painted_blocks if origin == 240)
+    border_bad = 0
+    lcx, lsx = lot_classic.load(), lot_svga.load()
+    for x in range(lot_classic.width):
+        if lcx[x, 0] == SRC_GREEN and lsx[x, 0] != GRASS_LINE:
+            border_bad += 1
+    if border_bad:
+        lines.append(f"FAIL lot 240 border is not a solid green line ({border_bad})")
+        failed = True
+
+    painted_b: list[tuple[int, Image.Image, Image.Image]] = []
+    for index in singles:
+        classic = crop_tile(atlas, index)
+        svga = paint(classic, [[tile_kind(index)]], SCHEME_B)
+        check(f"B tile {index}", classic, svga)
+    for base, width, height in blocks:
+        classic = assemble(atlas, base, width, height)
+        kinds = [[tile_kind(base)] * width for _ in range(height)]
+        svga = paint(classic, kinds, SCHEME_B)
+        painted_b.append((base, classic, svga))
+        check(f"B block {base} {width}x{height}", classic, svga)
+    _classic_b, svga_b_scene = paint_grid(atlas, scene, SCHEME_B)
+    check("B neighbourhood", classic_scene, svga_b_scene)
+    dirt_b = paint(crop_tile(atlas, 0), [["ground"]], SCHEME_B)
+    for image, name in ((svga_b_scene, "B neighbourhood"), (dirt_b, "B dirt")):
+        present = forbidden_b & set(_histogram(image))
+        if present:
+            lines.append(f"FAIL {name} contains forbidden colours {sorted(present)}")
+            failed = True
+    if _histogram(dirt_b).get(SCHEME_B.base, 0) < _histogram(dirt_b).get(SCHEME_B.near, 0):
+        lines.append(f"FAIL variant B dirt is not the lighter base: {_histogram(dirt_b)}")
+        failed = True
+
+    # Previews. Each pair is classic on the left and SVGA variant A on the right.
     water_cells = []
     for index in [0, 1, *range(2, 21)]:
         classic = crop_tile(atlas, index)
@@ -1234,11 +1393,59 @@ def main() -> int:
     )
 
     compare_sheet = _warcraft_compare()
+
+    def _scheme_panel(image: Image.Image, label: str, scale: int) -> Image.Image:
+        return _vstack([_text(label, 2), _scaled(image, scale)], 8)
+
+    ab_blocks = []
+    for base in (240, 261, 297, 315, 342):
+        left = next(image for origin, _classic, image in painted_blocks if origin == base)
+        right = next(image for origin, _classic, image in painted_b if origin == base)
+        ab_blocks.append(_pair(left, right, str(base), 3))
+    ab_res_grid = _grid(ab_blocks, 3)
+    ab_residential = _vstack(
+        [
+            _banner("DIRT A LEFT  DIRT B RIGHT  3X", ab_res_grid.width),
+            _banner("LOTS 240 261 297 315 342", ab_res_grid.width),
+            ab_res_grid,
+        ],
+        14,
+    )
+    ab_left = _scheme_panel(svga_scene, "DIRT A", 2)
+    ab_right = _scheme_panel(svga_b_scene, "DIRT B", 2)
+    ab_panels = _hstack([ab_left, ab_right], 24)
+    ab_neighbourhood = _vstack(
+        [
+            _banner("NEIGHBOURHOOD  32PX  DIRT A LEFT  DIRT B RIGHT", ab_panels.width),
+            ab_panels,
+        ],
+        12,
+    )
+    patch_w, patch_h = 62, 48
+    patches = []
+    for scheme in SCHEMES:
+        patch = Image.new("RGB", (patch_w, patch_h))
+        px = patch.load()
+        for y in range(patch_h):
+            for x in range(patch_w):
+                px[x, y] = _dirt_colour(x + 128, y + 64, False, scheme)
+        patches.append(_scheme_panel(patch, f"DIRT {scheme.name}", 3))
+    ab_patch = _vstack(
+        [
+            _banner("DIRT PATCH  3X  A LEFT  B RIGHT", _hstack(patches, 16).width),
+            _hstack(patches, 16),
+        ],
+        12,
+    )
+
     _save(terrain, PREVIEW_DIR / "terrain-water-3x.png")
     _save(trees, PREVIEW_DIR / "trees-3x.png")
     _save(residential, PREVIEW_DIR / "residential-3x.png")
     _save(neighbourhood_sheet, PREVIEW_DIR / "neighbourhood-32.png")
     _save(compare_sheet, PREVIEW_DIR / "warcraft-dirt-compare.png")
+    _save(ab_neighbourhood, PREVIEW_DIR / "dirt-AB-neighbourhood-32.png")
+    _save(ab_residential, PREVIEW_DIR / "dirt-AB-residential-3x.png")
+    _save(ab_patch, PREVIEW_DIR / "dirt-AB-patch-3x.png")
 
     lines.append("")
     lines.append(
@@ -1253,6 +1460,9 @@ def main() -> int:
         "residential-3x.png",
         "neighbourhood-32.png",
         "warcraft-dirt-compare.png",
+        "dirt-AB-neighbourhood-32.png",
+        "dirt-AB-residential-3x.png",
+        "dirt-AB-patch-3x.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"
