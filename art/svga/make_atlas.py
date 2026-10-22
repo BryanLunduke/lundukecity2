@@ -183,10 +183,17 @@ AMBER_RAMP = (
 )
 GRASS_LINE = (0, 170, 0)
 HEDGE_LINE = (32, 65, 32)
-# Commercial lots are light blue, industrial lots are yellow. One solid step
-# of each, not a dither.
-COM_LINE = (56, 85, 113)
-IND_LINE = (113, 113, 0)
+# Zone letters and lot borders have to read at a glance. The C keeps the
+# classic light-blue hue (equal red and green, high blue) at the lighter
+# standard step, (125, 125, 255). (85, 85, 255) is the same hue but darker,
+# and it sinks into a slate roof. The I is bright yellow one notch off neon
+# (255, 255, 0): (255, 255, 85). A letter on a light roof gets a 1px dark edge.
+COM_LINE = (125, 125, 255)
+IND_LINE = (255, 255, 85)
+LETTER_SHADE = (32, 32, 32)
+# Previous pass, kept so the letter sample can show the darker marks.
+_COM_LINE_BEFORE = (56, 85, 113)
+_IND_LINE_BEFORE = (113, 113, 0)
 
 GRASS_RAMP = (
     (0, 170, 0),
@@ -265,6 +272,40 @@ _ORTHO = ((0, -1), (0, 1), (-1, 0), (1, 0))
 _NW = ((0, -1), (-1, 0))
 _SE = ((0, 1), (1, 0))
 _PAVEMENT = frozenset({SRC_GREY})
+# The building C, the empty-lot C, and the empty-lot I. Every batch-2 letter matches one of these.
+_C_MARK = frozenset(
+    (x, y)
+    for y, row in enumerate((".####.", "##..##", "##....", "##....", "##....", "##..##", ".####."))
+    for x, ch in enumerate(row)
+    if ch == "#"
+)
+_C_LOT = frozenset(
+    (x, y)
+    for y, row in enumerate(
+        (
+            "..#####..",
+            ".##...##.",
+            "##.....##",
+            "##.......",
+            "##.......",
+            "##.......",
+            "##.......",
+            "##.......",
+            "##.....##",
+            ".##...##.",
+            "..#####..",
+        )
+    )
+    for x, ch in enumerate(row)
+    if ch == "#"
+)
+_I_MARK = frozenset(
+    (x, y)
+    for y, row in enumerate(("####", ".##.", ".##.", ".##.", ".##.", ".##.", ".##.", ".##.", ".##.", ".##.", "####"))
+    for x, ch in enumerate(row)
+    if ch == "#"
+)
+_LIGHT_BEHIND = frozenset({SRC_GREY, SRC_LGREY, WHITE})
 RECEIVERS = frozenset({SRC_TAN, SRC_DTAN, SRC_GREEN, SRC_DGREEN})
 TREE_CAST = frozenset({SRC_GREEN, SRC_DGREEN})
 BUILD_CAST = frozenset({SRC_GREY, SRC_LGREY, SRC_LBLUE, SRC_BLUE, SRC_DGREY, SRC_DGREEN, SRC_YELLOW})
@@ -788,12 +829,78 @@ def _components(src, w: int, h: int, colour: tuple[int, int, int]) -> list[list[
     return found
 
 
-def _solid_marks(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int, int], tuple[int, int, int]]:
+def _rel_mask(cells: list[tuple[int, int]]) -> frozenset[tuple[int, int]]:
+    xs = [cell[0] for cell in cells]
+    ys = [cell[1] for cell in cells]
+    x0, y0 = min(xs), min(ys)
+    return frozenset((x - x0, y - y0) for x, y in cells)
+
+
+def _on_commerce(kinds: list[list[str]], cells: list[tuple[int, int]]) -> bool:
+    return all(kinds[y // TILE][x // TILE] == "commerce" for x, y in cells)
+
+
+def _zone_letters(src, w: int, h: int, kinds: list[list[str]], colour: tuple[int, int, int], masks: tuple) -> list[list[tuple[int, int]]]:
+    found = []
+    for cells in _components(src, w, h, colour):
+        if not _on_commerce(kinds, cells):
+            continue
+        if _rel_mask(cells) in masks:
+            found.append(cells)
+    return found
+
+
+def _zone_border(src, w: int, h: int, kinds: list[list[str]], colour: tuple[int, int, int]) -> list[tuple[int, int]]:
+    """The lot frame of each 3x3 commerce block, even when it touches the windows."""
+    span = TILE * 3
+    pixels: list[tuple[int, int]] = []
+    tiles_y, tiles_x = h // TILE, w // TILE
+    for by in range(tiles_y - 2):
+        for bx in range(tiles_x - 2):
+            if any(kinds[by + dy][bx + dx] != "commerce" for dy in range(3) for dx in range(3)):
+                continue
+            ox, oy = bx * TILE, by * TILE
+            for y in range(oy, oy + span):
+                for x in range(ox, ox + span):
+                    if src[x, y] != colour:
+                        continue
+                    lx, ly = x - ox, y - oy
+                    if 1 < lx < span - 2 and 1 < ly < span - 2:
+                        continue
+                    neighbours = 0
+                    for dx, dy in _ORTHO:
+                        nx, ny = x + dx, y + dy
+                        if _in(nx, ny, w, h) and src[nx, ny] == colour:
+                            neighbours += 1
+                    if neighbours <= 2:
+                        pixels.append((x, y))
+    return pixels
+
+
+def _letter_shade(src, w: int, h: int, cells: list[tuple[int, int]], taken: set[tuple[int, int]]) -> dict[tuple[int, int], tuple[int, int, int]]:
+    """A 1px dark edge where a letter sits on a light grey face."""
+    shade: dict[tuple[int, int], tuple[int, int, int]] = {}
+    group = set(cells)
+    for x, y in cells:
+        for dx, dy in _ORTHO:
+            nx, ny = x + dx, y + dy
+            if not _in(nx, ny, w, h) or (nx, ny) in group or (nx, ny) in taken:
+                continue
+            if src[nx, ny] not in _LIGHT_BEHIND:
+                continue
+            shade[(nx, ny)] = LETTER_SHADE
+    return shade
+
+
+def _solid_marks(
+    src, w: int, h: int, kinds: list[list[str]], bright_zones: bool = True
+) -> dict[tuple[int, int], tuple[int, int, int]]:
     """Lot borders and zone letters are one flat colour. Lawns stay dithered.
 
-    A border is a stroke: almost every pixel has at most two orthogonal
-    neighbours. A zone letter is a compact mark that sits on a building tile.
-    Tree canopies fail both tests.
+    A residential border is a stroke: almost every pixel has at most two
+    orthogonal neighbours. A zone letter is a compact mark on a building tile.
+    Tree canopies fail both tests. Commercial and industrial letters are the
+    C and I shapes, and their lot borders are the frame of each 3x3.
     """
     marks: dict[tuple[int, int], tuple[int, int, int]] = {}
     for colour, solid in ((SRC_GREEN, GRASS_LINE), (SRC_DGREEN, HEDGE_LINE)):
@@ -814,25 +921,32 @@ def _solid_marks(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int,
             if stroke or glyph:
                 for cell in cells:
                     marks[cell] = solid
-    # Commercial and industrial zone colours. Residential light-blue mullions
-    # are not commerce tiles, so this loop does not repaint them.
-    for colour, solid in ((SRC_LBLUE, COM_LINE), (SRC_YELLOW, IND_LINE)):
+    if bright_zones:
+        pairs = ((SRC_LBLUE, COM_LINE, (_C_MARK, _C_LOT)), (SRC_YELLOW, IND_LINE, (_I_MARK,)))
+    else:
+        pairs = ((SRC_LBLUE, _COM_LINE_BEFORE, ()), (SRC_YELLOW, _IND_LINE_BEFORE, ()))
+    for colour, solid, masks in pairs:
+        if masks:
+            letters = _zone_letters(src, w, h, kinds, colour, masks)
+            taken: set[tuple[int, int]] = {cell for group in letters for cell in group}
+            for cells in letters:
+                for cell in cells:
+                    marks[cell] = solid
+                for cell, shade in _letter_shade(src, w, h, cells, taken).items():
+                    marks[cell] = shade
+            for cell in _zone_border(src, w, h, kinds, colour):
+                if cell not in taken:
+                    marks[cell] = solid
+            continue
         for cells in _components(src, w, h, colour):
-            if len(cells) < 12:
-                continue
-            if not all(kinds[y // TILE][x // TILE] == "commerce" for x, y in cells):
+            if len(cells) < 12 or not _on_commerce(kinds, cells):
                 continue
             group = set(cells)
-            thin = 0
-            for x, y in cells:
-                neighbours = sum((x + dx, y + dy) in group for dx, dy in _ORTHO)
-                if neighbours <= 2:
-                    thin += 1
-            stroke = thin / len(cells) >= 0.9
+            thin = sum(sum((x + dx, y + dy) in group for dx, dy in _ORTHO) <= 2 for x, y in cells) / len(cells)
             xs = [cell[0] for cell in cells]
             ys = [cell[1] for cell in cells]
             glyph = len(cells) <= 80 and max(xs) - min(xs) <= 13 and max(ys) - min(ys) <= 13
-            if stroke or glyph:
+            if thin >= 0.9 or glyph:
                 for cell in cells:
                     marks[cell] = solid
     return marks
@@ -920,7 +1034,12 @@ def _dither_recolour(src, w: int, h: int) -> dict[tuple[int, int], tuple[int, in
     return out
 
 
-def paint(original: Image.Image, kinds: list[list[str]], scheme: DirtScheme = SCHEME_B) -> Image.Image:
+def paint(
+    original: Image.Image,
+    kinds: list[list[str]],
+    scheme: DirtScheme = SCHEME_B,
+    bright_zones: bool = True,
+) -> Image.Image:
     """Recolour `original`. `kinds` is one label per 16px cell, row-major."""
     w, h = original.size
     if w % TILE or h % TILE:
@@ -932,7 +1051,7 @@ def paint(original: Image.Image, kinds: list[list[str]], scheme: DirtScheme = SC
     boxes = _component_boxes(src, w, h, surface_colours)
     mask = _caster_mask(kinds, src, w, h)
     counts = _caster_counts(src, w, h, mask)
-    solid = _solid_marks(src, w, h, kinds)
+    solid = _solid_marks(src, w, h, kinds, bright_zones)
     dither = _dither_recolour(src, w, h)
     for y in range(h):
         kind_row = kinds[y // TILE]
@@ -1436,7 +1555,6 @@ def main() -> int:
 
     hot = {
         (255, 255, 0),
-        (255, 255, 85),
         (255, 255, 125),
         (255, 127, 0),
         (255, 125, 0),
@@ -1445,7 +1563,6 @@ def main() -> int:
         (255, 0, 0),
         (170, 0, 0),
         (0, 0, 255),
-        (125, 125, 255),
         (85, 85, 255),
         (85, 255, 85),
     }
@@ -1477,6 +1594,50 @@ def main() -> int:
 
     _border_solid(423, SRC_LBLUE, COM_LINE, painted_com)
     _border_solid(612, SRC_YELLOW, IND_LINE, painted_ind)
+
+    def _letter_pixels(base: int, colour: tuple[int, int, int], mask: frozenset[tuple[int, int]]) -> list[tuple[int, int]]:
+        nonlocal failed
+        classic = assemble(atlas, base, 3, 3)
+        src = classic.load()
+        found = [cells for cells in _components(src, 48, 48, colour) if _rel_mask(cells) == mask]
+        if len(found) != 1:
+            lines.append(f"FAIL block {base} has {len(found)} copies of the zone letter")
+            failed = True
+            return []
+        return found[0]
+
+    for base in com_bases:
+        mask = _C_LOT if base == 423 else _C_MARK
+        svga = next(image for origin, _classic, image in painted_com if origin == base)
+        pixels = _letter_pixels(base, SRC_LBLUE, mask)
+        spx = svga.load()
+        wrong = sum(spx[x, y] != COM_LINE for x, y in pixels)
+        if wrong:
+            lines.append(f"FAIL the C on {base} is not the light blue ({wrong})")
+            failed = True
+    i_pixels = _letter_pixels(612, SRC_YELLOW, _I_MARK)
+    i_px = next(image for origin, _classic, image in painted_ind if origin == 612).load()
+    i_wrong = sum(i_px[x, y] != IND_LINE for x, y in i_pixels)
+    if i_wrong:
+        lines.append(f"FAIL the I on 612 is not the bright yellow ({i_wrong})")
+        failed = True
+    for base in ind_bases:
+        if base == 612:
+            continue
+        classic = next(image for origin, image, _svga in painted_ind if origin == base)
+        src = classic.load()
+        extra = [cells for cells in _components(src, 48, 48, SRC_YELLOW) if _rel_mask(cells) == _I_MARK]
+        if extra:
+            lines.append(f"FAIL block {base} has an I the empty-lot check did not expect")
+            failed = True
+    roof = next(image for origin, _classic, image in painted_com if origin == 558)
+    slate = next(image for origin, _classic, image in painted_com if origin == 504)
+    if LETTER_SHADE not in set(_histogram(roof)):
+        lines.append("FAIL the C on light roof 558 has no dark edge")
+        failed = True
+    if LETTER_SHADE in set(_histogram(slate)):
+        lines.append("FAIL the C on dark roof 504 grew a shadow it does not need")
+        failed = True
 
     open_water = paint(crop_tile(atlas, 2), [["water"]])
     shore = paint(crop_tile(atlas, 13), [["water"]])
@@ -1732,6 +1893,36 @@ def main() -> int:
         grid = _grid(cells, 4)
         return _vstack([_banner(title, grid.width), grid], 14)
 
+    def _captioned(image: Image.Image, caption: str, scale: int) -> Image.Image:
+        scaled = _scaled(image, scale)
+        label = _text(caption, 2)
+        width = max(scaled.width, label.width)
+        cell = _blank(width, label.height + 4 + scaled.height)
+        cell.paste(label, ((width - label.width) // 2, 0))
+        cell.paste(scaled, ((width - scaled.width) // 2, label.height + 4))
+        return cell
+
+    letter_rows = []
+    for base in (423, 612, 504, 603, 621):
+        classic = assemble(atlas, base, 3, 3)
+        kinds = [["commerce"] * 3 for _ in range(3)]
+        before = paint(classic, kinds, bright_zones=False)
+        after = paint(classic, kinds, bright_zones=True)
+        letter_rows.append(
+            _hstack(
+                [
+                    _captioned(classic, f"{base} CLASSIC", 3),
+                    _captioned(before, "BEFORE", 3),
+                    _captioned(after, "AFTER", 3),
+                ],
+                18,
+            )
+        )
+    letters = _vstack(
+        [_banner("ZONE LETTERS  CLASSIC  BEFORE  AFTER", letter_rows[0].width), *letter_rows],
+        12,
+    )
+
     commercial = _zone_sheet(painted_com, "COMMERCIAL  3X  CLASSIC LEFT  SVGA RIGHT")
     smoke_cells = [_pair(classic, svga, str(index), 3) for index, classic, svga in painted_smoke]
     smoke_grid = _grid(smoke_cells, 8)
@@ -1767,6 +1958,7 @@ def main() -> int:
     _save(commercial, PREVIEW_DIR / "commercial-3x.png")
     _save(industrial, PREVIEW_DIR / "industrial-3x.png")
     _save(downtown_sheet, PREVIEW_DIR / "downtown-32.png")
+    _save(letters, PREVIEW_DIR / "letters-sample.png")
 
     lines.append("")
     lines.append(
@@ -1788,6 +1980,7 @@ def main() -> int:
         "commercial-3x.png",
         "industrial-3x.png",
         "downtown-32.png",
+        "letters-sample.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"
