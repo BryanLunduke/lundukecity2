@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Lunduke City authors
 # See COPYING and NOTICE.
 
-"""SVGA look, batches 1 to 4: terrain, zones, roads, and civic buildings.
+"""SVGA look, batches 1 to 5: terrain, zones, roads, civic, and disasters.
 
 Classic pixels are not redrawn. Each output pixel keeps the source tile's
 flat-colour region and is painted from a VGA Mode 13h ramp. Black ink stays
@@ -306,6 +306,11 @@ SHIELD = (0, 0, 170)
 # Signs and symbols stay readable. Dusty rose is for walls and roofs.
 # (170, 0, 0) is the clear red the hospital cross and the reactor core use.
 SYMBOL_RED = (170, 0, 0)
+# Fire and blasts keep three warm steps, one notch off the neon primaries.
+# The body is (255, 65, 0), the middle is (255, 125, 0), the tip is (255, 255, 85).
+FLAME_RED = (255, 65, 0)
+FLAME_ORANGE = ORANGE
+FLAME_YELLOW = RAIL_MARK
 # The football field is one flat green. The end zone is one step duller,
 # still bright enough that a red or yellow player reads on it.
 FIELD = GRASS_LINE
@@ -378,8 +383,20 @@ _MARK_KINDS = frozenset(
         "stadium",
     }
 )
-# Batch 4 masses. A thin pavement stroke on these kinds is not a dirt edge.
-# Roads, houses, and commerce keep the locked rim.
+# Disasters and the leftover tiles. A thin stroke here is not a dirt edge.
+_DISASTER_KINDS = frozenset(
+    {
+        "rubble",
+        "blaze",
+        "flood",
+        "rad",
+        "bolt",
+        "teleport",
+        "mark",
+    }
+)
+# Batch 4 masses, plus the disaster tiles. A thin pavement stroke on these
+# kinds is not a dirt edge. Roads, houses, and commerce keep the locked rim.
 _RIM_KINDS = frozenset(
     {
         "airport",
@@ -393,7 +410,7 @@ _RIM_KINDS = frozenset(
         "fountain",
         "steam",
     }
-)
+) | _DISASTER_KINDS
 # A small red mark on a light panel is a sign. The fire station's red is the
 # building, so it stays dusty rose.
 _SYMBOL_KINDS = frozenset(
@@ -603,6 +620,54 @@ MATS["stadium"][SRC_RED] = _flat(SYMBOL_RED)
 MATS["stadium"][SRC_YELLOW] = _flat(RAIL_MARK)
 MATS["stadium"][SRC_BLUE] = _flat(SHIELD)
 MATS["stadium"][SRC_ORANGE] = _flat(ORANGE)
+# Rubble, ruins, and the stray dirt tiles. Black ink stays black.
+MATS["rubble"] = {
+    SRC_TAN: DIRT,
+    SRC_DTAN: _mat(SOIL_RAMP, "soil"),
+    SRC_GREY: _flat(STONE),
+    SRC_DGREY: _flat(SLATE_RAMP[0]),
+    WHITE: _flat(WHITE),
+}
+# Flames share one flat colour per classic hue, so a frame cannot flicker.
+MATS["blaze"] = dict(MATS["rubble"])
+MATS["blaze"][SRC_RED] = _flat(FLAME_RED)
+MATS["blaze"][SRC_ORANGE] = _flat(FLAME_ORANGE)
+MATS["blaze"][SRC_YELLOW] = _flat(FLAME_YELLOW)
+# Flood water is the deep water. White specks are the foam.
+MATS["flood"] = dict(MATS["water"])
+MATS["flood"][WHITE] = _flat(WHITE)
+# The radiation marks are a symbol. Rose would disappear into dirt B.
+MATS["rad"] = dict(MATS["rubble"])
+MATS["rad"][SRC_RED] = _flat(SYMBOL_RED)
+MATS["rad"][SRC_YELLOW] = _flat(FLAME_YELLOW)
+# The lightning tile does not animate. Flat colours keep the bolt crisp.
+MATS["bolt"] = {
+    SRC_GREY: _flat(REACTOR),
+    SRC_DGREY: _flat(ORBIT),
+    SRC_RED: _flat(SYMBOL_RED),
+    SRC_YELLOW: _flat(FLAME_YELLOW),
+}
+# The pad and the moving spark are flat, so the eight frames stay one colour.
+MATS["teleport"] = {
+    SRC_TAN: DIRT,
+    SRC_DTAN: _mat(SOIL_RAMP, "soil"),
+    SRC_DGREY: _flat(SLATE_RAMP[0]),
+    SRC_LGREY: _flat(ROOF_RAMP[0]),
+    SRC_LBLUE: _flat(GLASS_RAMP[0]),
+}
+# Black line art on white. A few grey or green pixels stay in that hue.
+MATS["mark"] = {
+    WHITE: _flat(WHITE),
+    SRC_LGREY: _flat(ROOF_RAMP[0]),
+    SRC_TAN: DIRT,
+    SRC_DGREEN: _flat(HEDGE_RAMP[3]),
+    SRC_DTAN: _mat(SOIL_RAMP, "soil"),
+    SRC_DGREY: _flat(SLATE_RAMP[0]),
+}
+# Tiles 956-959 are empty white. They stay empty.
+MATS["blank"] = {
+    WHITE: _flat(WHITE),
+}
 # The pale-blue reactor, kept for the before half of the fix preview.
 _STEAM_BEFORE = {
     SRC_GREY: _flat(STEAM_BODY),
@@ -772,6 +837,27 @@ def tile_kind(index: int) -> str:
         return "nuclear"
     if 840 <= index <= 843:
         return "fountain"
+    # Leftover woods-edge and ruin tiles, then the disaster strip 44-63.
+    if index == 39:
+        return "mark"
+    if index in (38, 53, 54, 55, 223):
+        return "rubble"
+    if 44 <= index <= 47:
+        return "rubble"
+    if 48 <= index <= 51:
+        return "flood"
+    if index == 52:
+        return "rad"
+    if 56 <= index <= 63 or 860 <= index <= 867:
+        return "blaze"
+    if index == 827:
+        return "bolt"
+    if 844 <= index <= 851:
+        return "teleport"
+    if 868 <= index <= 883:
+        return "mark"
+    if 956 <= index <= 959:
+        return "blank"
     raise SystemExit(f"tile {index} is outside the painted batches")
 
 
@@ -1348,10 +1434,14 @@ def _cables(src, w: int, h: int) -> set[tuple[int, int]]:
     return wires
 
 
-def _stroke_thin(cells: list[tuple[int, int]]) -> bool:
-    """A pavement stroke: a 1px line, or a bar only a few pixels thick."""
+def _stroke_thin(cells: list[tuple[int, int]], specks: bool = False) -> bool:
+    """A pavement stroke: a 1px line, or a bar only a few pixels thick.
+
+    Disaster specks of one to three pixels count too. A locked tile does not
+    pass specks, so its rim stays where batch 4 left it.
+    """
     if len(cells) < 4:
-        return False
+        return specks
     group = set(cells)
     ends = sum(sum((x + dx, y + dy) in group for dx, dy in _ORTHO) <= 2 for x, y in cells)
     xs = [cell[0] for cell in cells]
@@ -1371,9 +1461,10 @@ def _thin_pavement(src, w: int, h: int, kinds: list[list[str]]) -> set[tuple[int
     # it must not cast a second reddish line beside the taxiway.
     for colour in (SRC_GREY, SRC_DGREY, SRC_YELLOW):
         for cells in _components(src, w, h, colour):
-            if not _stroke_thin(cells):
+            here = {kinds[y // TILE][x // TILE] for x, y in cells}
+            if not here <= _RIM_KINDS:
                 continue
-            if any(kinds[y // TILE][x // TILE] not in _RIM_KINDS for x, y in cells):
+            if not _stroke_thin(cells, specks=here <= _DISASTER_KINDS):
                 continue
             quiet.update(cells)
     return quiet
@@ -1585,16 +1676,17 @@ def paint(
                 dst[x, y] = chosen
                 continue
             if mat.role == "dirt":
-                edge = _touches_water(src, x, y, w, h) or _dirt_edge(src, x, y, w, h)
+                # The teleport's two blue lamps are lights on the pad, not a
+                # shore. Treating them as water drew a reddish rim around each.
+                shore = _touches_water(src, x, y, w, h) and kind != "teleport"
+                edge = shore or _dirt_edge(src, x, y, w, h)
                 if kind == "road":
                     if plain_wires:
                         edge = edge or _road_shoulder(src, x, y, w, h, cables)
                     elif _touches_ground(src, x, y, w, h, frozenset({SRC_DGREY, SRC_GREY})):
                         edge = True
                 elif civic_fixes and kind in _RIM_KINDS:
-                    edge = _touches_water(src, x, y, w, h) or _civic_dirt_edge(
-                        src, x, y, w, h, quiet, kind
-                    )
+                    edge = shore or _civic_dirt_edge(src, x, y, w, h, quiet, kind)
                 chosen = _dirt_colour(x, y, edge, scheme)
                 if shadowed is not None:
                     chosen = shadowed
@@ -1701,7 +1793,12 @@ def luma(rgb: tuple[int, int, int]) -> float:
     return 0.299 * red + 0.587 * green + 0.114 * blue
 
 
-def compare(classic: Image.Image, svga: Image.Image, palette: set[tuple[int, int, int]]) -> dict:
+def compare(
+    classic: Image.Image,
+    svga: Image.Image,
+    palette: set[tuple[int, int, int]],
+    cell: int = 0,
+) -> dict:
     cw, ch = classic.size
     if svga.size != classic.size:
         raise RuntimeError(f"size {svga.size} != classic {classic.size}")
@@ -1715,9 +1812,11 @@ def compare(classic: Image.Image, svga: Image.Image, palette: set[tuple[int, int
         "strong": 0,
         "strong_kept": 0,
         "new_strong": 0,
+        "seams": 0,
         "pixels": cw * ch,
     }
     samples: list[str] = []
+    seam_samples: list[str] = []
     for y in range(ch):
         for x in range(cw):
             src = cpx[x, y]
@@ -1735,6 +1834,17 @@ def compare(classic: Image.Image, svga: Image.Image, palette: set[tuple[int, int
                     continue
                 src2 = cpx[nx, ny]
                 dst2 = spx[nx, ny]
+                # The atlas packs unrelated sprites edge to edge. A collapse
+                # on that cut is not a map boundary, so it is counted apart
+                # from the tiles themselves.
+                if cell and (x // cell != nx // cell or y // cell != ny // cell):
+                    if src != src2 and dst == dst2:
+                        stats["seams"] += 1
+                        if len(seam_samples) < 4:
+                            seam_samples.append(
+                                f"sheet seam {src}/{src2} -> {dst} at {(x, y)}-{(nx, ny)}"
+                            )
+                    continue
                 if src != src2:
                     stats["boundaries"] += 1
                     if dst == dst2:
@@ -1752,6 +1862,7 @@ def compare(classic: Image.Image, svga: Image.Image, palette: set[tuple[int, int
                 elif classic_delta < 12 and svga_delta >= STRONG_LUMA:
                     stats["new_strong"] += 1
     stats["samples"] = samples
+    stats["seam_samples"] = seam_samples
     return stats
 
 
@@ -1893,6 +2004,39 @@ def civic_quarter() -> list[list[int]]:
     _stamp(grid, 709, 16, 9, 6, 6)
     grid[12][22] = 255
     grid[12][23] = 258
+    return grid
+
+
+def disaster_scene() -> list[list[int]]:
+    """Fire, rubble, flood, and an explosion beside zones, a road, and water."""
+    width, height = 18, 12
+    grid = [[0 for _ in range(width)] for _ in range(height)]
+    for x in range(width):
+        grid[1][x] = 66
+        grid[6][x] = 66
+    grid[1][6] = 76
+    grid[6][6] = 76
+    for y in range(2, 6):
+        grid[y][6] = 67
+    _stamp(grid, 240, 0, 2, 3, 3)
+    _stamp(grid, 423, 9, 2, 3, 3)
+    for dx, index in enumerate((56, 58, 61, 63)):
+        grid[3][13 + dx] = index
+    for dx, index in enumerate(range(44, 48)):
+        grid[4][13 + dx] = index
+    grid[8][0] = 2
+    grid[8][1] = 2
+    for dx, index in enumerate(range(48, 52)):
+        grid[8][2 + dx] = index
+    grid[8][6] = 52
+    grid[8][8] = 827
+    for dx, index in enumerate((860, 862, 864, 866)):
+        grid[8][10 + dx] = index
+    grid[9][10] = 44
+    grid[9][12] = 249
+    grid[9][14] = 255
+    grid[10][0] = 13
+    grid[10][1] = 14
     return grid
 
 
@@ -2118,7 +2262,7 @@ def main() -> int:
     _require_palette(palette)
     atlas = load_atlas()
     lines = [
-        "SVGA batches 1 to 4 verification",
+        "SVGA batches 1 to 5 verification",
         "groups: terrain, residential 240-404, commercial 423-611, industrial 612-692,",
         "chimney frames 852-859 and 884-915, roads 64-207, power 208-222,",
         "rails 224-239, drawbridge frames 828-831 and 948-951,",
@@ -2129,9 +2273,12 @@ def main() -> int:
         "The reactor is a grey panel with dark orbits and a clear red core.",
         "The pitch is flat (0, 170, 0). Signs and players use (170, 0, 0).",
         "Dirt rim stays off thin taxiways. It remains on solid walls and the runway.",
-        "held back: tiles 38-39 (unused), 956-959 (blank), rubble, flood,",
-        "disaster fire 56-63, trash, lightning, explosions, teleport 844-851,",
-        "the menu toggle",
+        "Disasters: rubble 44-47, flood 48-51, radiation 52, fire 56-63,",
+        "lightning 827, explosions 860-867. Teleport 844-851. Leftovers 38-39,",
+        "53-55, 223, and the line art 868-883. Tiles 956-959 stay blank white.",
+        "Monster and tornado are sprites, not atlas tiles.",
+        "Fire is three warm steps: (255, 65, 0), (255, 125, 0), (255, 255, 85).",
+        "held back: the 8px atlas and the Classic Look / SVGA Look toggle",
         "There is no school tile in this atlas.",
         f"palette unique RGB triples: {len(palette)}",
         "Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.",
@@ -2896,6 +3043,188 @@ def main() -> int:
             lines.append(f"FAIL special {name} still has an intense colour {sorted(present)}")
             failed = True
 
+    digest4 = hashlib.sha256()
+    for index in (
+        *range(405, 423),
+        *range(693, 827),
+        *range(832, 844),
+        *range(916, 948),
+        *range(952, 956),
+    ):
+        digest4.update(paint(crop_tile(atlas, index), [[tile_kind(index)]]).tobytes())
+    for base, width, height in civic_spans:
+        digest4.update(paint_span(atlas, base, width, height)[1].tobytes())
+    for frame in range(832, 840):
+        digest4.update(paint_grid(atlas, radar_grid(frame))[1].tobytes())
+    digest4.update(svga_quarter.tobytes())
+    for _name, _classic_s, svga_s in painted_special:
+        digest4.update(svga_s.tobytes())
+    batch4_sha = "bc3893633dd4edb79f0b9224bcfc4a96a40eba24e8723990e69ee0e94b610b9f"
+    if digest4.hexdigest() != batch4_sha:
+        lines.append(f"FAIL batch 4 tiles changed: {digest4.hexdigest()}")
+        failed = True
+
+    disaster_ids = [
+        *range(38, 40),
+        *range(44, 64),
+        223,
+        827,
+        *range(844, 852),
+        *range(860, 884),
+        *range(956, 960),
+    ]
+    painted_disaster: dict[int, tuple[Image.Image, Image.Image]] = {}
+    for index in disaster_ids:
+        classic = crop_tile(atlas, index)
+        svga = paint(classic, [[tile_kind(index)]])
+        painted_disaster[index] = (classic, svga)
+        check(f"tile {index}", classic, svga)
+    neon_flame = {(255, 0, 0), (255, 255, 0), (255, 127, 0), (0, 0, 255), (85, 255, 85)}
+    for index in (*range(56, 64), *range(860, 868)):
+        classic, svga = painted_disaster[index]
+        src, dst = classic.load(), svga.load()
+        bad = False
+        for y in range(16):
+            for x in range(16):
+                colour, out = src[x, y], dst[x, y]
+                if colour == SRC_RED and out != FLAME_RED:
+                    bad = True
+                elif colour == SRC_ORANGE and out != FLAME_ORANGE:
+                    bad = True
+                elif colour == SRC_YELLOW and out != FLAME_YELLOW:
+                    bad = True
+                elif colour == SRC_TAN and out not in DIRT_RAMP:
+                    bad = True
+        if bad or neon_flame & set(_histogram(svga)):
+            lines.append(f"FAIL blaze {index} is not the three warm steps")
+            failed = True
+    for index in range(48, 52):
+        classic, svga = painted_disaster[index]
+        src, dst = classic.load(), svga.load()
+        bad = sum(
+            dst[x, y] not in WATER_RAMP
+            for y in range(16)
+            for x in range(16)
+            if src[x, y] == SRC_LBLUE
+        )
+        foam = sum(dst[x, y] != WHITE for y in range(16) for x in range(16) if src[x, y] == WHITE)
+        if bad or foam:
+            lines.append(f"FAIL flood {index} water={bad} foam={foam}")
+            failed = True
+    rad_c, rad_s = painted_disaster[52]
+    rad_src, rad_px = rad_c.load(), rad_s.load()
+    if any(rad_px[x, y] != SYMBOL_RED for y in range(16) for x in range(16) if rad_src[x, y] == SRC_RED):
+        lines.append("FAIL the radiation marks are not clear red")
+        failed = True
+    if any(rad_px[x, y] != FLAME_YELLOW for y in range(16) for x in range(16) if rad_src[x, y] == SRC_YELLOW):
+        lines.append("FAIL the radiation marks lost their yellow")
+        failed = True
+    bolt_c, bolt_s = painted_disaster[827]
+    bolt_src, bolt_px = bolt_c.load(), bolt_s.load()
+    bolt_bad = sum(
+        (bolt_src[x, y] == SRC_YELLOW and bolt_px[x, y] != FLAME_YELLOW)
+        or (bolt_src[x, y] == SRC_RED and bolt_px[x, y] != SYMBOL_RED)
+        for y in range(16)
+        for x in range(16)
+    )
+    if bolt_bad:
+        lines.append(f"FAIL the lightning bolt is not readable ({bolt_bad})")
+        failed = True
+    for index in range(844, 852):
+        classic, svga = painted_disaster[index]
+        src, dst = classic.load(), svga.load()
+        if any(dst[x, y] != SLATE_RAMP[0] for y in range(16) for x in range(16) if src[x, y] == SRC_DGREY):
+            lines.append(f"FAIL teleport {index} pad is not one flat grey")
+            failed = True
+        if any(dst[x, y] != ROOF_RAMP[0] for y in range(16) for x in range(16) if src[x, y] == SRC_LGREY):
+            lines.append(f"FAIL teleport {index} spark is not one flat light")
+            failed = True
+    for index in range(956, 960):
+        if set(_histogram(painted_disaster[index][0])) != {WHITE} or set(_histogram(painted_disaster[index][1])) != {WHITE}:
+            lines.append(f"FAIL tile {index} is not blank white")
+            failed = True
+
+    def _flame_rim(index: int) -> int:
+        classic, svga = painted_disaster[index]
+        src, dst = classic.load(), svga.load()
+        quiet = _thin_pavement(src, 16, 16, [[tile_kind(index)]])
+        traced = 0
+        hot = {SRC_RED, SRC_ORANGE, SRC_YELLOW}
+        for y in range(16):
+            for x in range(16):
+                if src[x, y] != SRC_TAN or dst[x, y] not in (DIRT_RIM, DIRT_CONTACT):
+                    continue
+                for dx, dy in _ORTHO:
+                    nx, ny = x + dx, y + dy
+                    if not _in(nx, ny, 16, 16):
+                        continue
+                    if (nx, ny) in quiet or src[nx, ny] in hot:
+                        traced += 1
+        return traced
+
+    rim_bad = sum(_flame_rim(index) for index in (*range(44, 48), *range(56, 64), *range(860, 868), *range(844, 852)))
+    if rim_bad:
+        lines.append(f"FAIL dirt beside a flame or a thin ruin is still a rim ({rim_bad})")
+        failed = True
+
+    columns = atlas.size[0] // TILE
+    rows = atlas.size[1] // TILE
+    if columns * rows != 960:
+        lines.append(f"FAIL atlas has {columns * rows} tiles, expected 960")
+        failed = True
+    atlas_kinds = [[tile_kind(y * columns + x) for x in range(columns)] for y in range(rows)]
+    svga_atlas = paint(atlas, atlas_kinds)
+    sheet = compare(atlas, svga_atlas, palette, cell=TILE)
+    if not _ok(sheet):
+        failed = True
+        recall = (sheet["strong_kept"] / sheet["strong"]) if sheet["strong"] else 1.0
+        lines.append(
+            f"FAIL full atlas: palette={sheet['palette_bad']} ink={sheet['ink_bad']} "
+            f"collapsed={sheet['collapsed']}/{sheet['boundaries']} "
+            f"strong={sheet['strong_kept']}/{sheet['strong']} ({recall:.3f})"
+        )
+        for sample in sheet["samples"]:
+            lines.append(f"    {sample}")
+    else:
+        lines.append(
+            f"OK full atlas: palette=0 ink=0 collapsed=0/{sheet['boundaries']} inside every tile"
+        )
+    if sheet["seams"]:
+        lines.append(
+            f"    sprite-sheet seams, not map edges: {sheet['seams']}. "
+            "Rail 235's cable grey meets house 251's concrete where the sheet packs them together."
+        )
+        for sample in sheet["seam_samples"]:
+            lines.append(f"    {sample}")
+    uncovered = [index for index in range(960) if tile_kind(index) == ""]
+    if uncovered:
+        lines.append(f"FAIL unpainted tiles {uncovered}")
+        failed = True
+    tile_bad = 0
+    for index in range(960):
+        classic = crop_tile(atlas, index)
+        single = paint(classic, [[tile_kind(index)]])
+        stats = compare(classic, single, palette)
+        if _ok(stats):
+            continue
+        tile_bad += 1
+        failed = True
+        if tile_bad <= 6:
+            lines.append(
+                f"FAIL tile {index}: palette={stats['palette_bad']} ink={stats['ink_bad']} "
+                f"collapsed={stats['collapsed']}/{stats['boundaries']}"
+            )
+            for sample in stats["samples"][:4]:
+                lines.append(f"    {sample}")
+    if tile_bad:
+        lines.append(f"FAIL {tile_bad} of 960 tiles failed compare()")
+    else:
+        lines.append("OK every tile 0-959 passes compare(); 956-959 stay blank white")
+
+    strike = disaster_scene()
+    classic_strike, svga_strike = paint_grid(atlas, strike)
+    check(f"disaster scene {len(strike[0])}x{len(strike)}", classic_strike, svga_strike)
+
     # Previews. Each pair is classic on the left and the SVGA look on the right.
     water_cells = []
     for index in [0, 1, *range(2, 21)]:
@@ -3296,6 +3625,42 @@ def main() -> int:
     )
     _save(fixes, PREVIEW_DIR / "civic-fixes.png")
 
+    def _disaster_sheet(indexes: list[int], title: str, columns: int) -> Image.Image:
+        cells = [_pair(painted_disaster[index][0], painted_disaster[index][1], str(index), 3) for index in indexes]
+        grid = _grid(cells, columns)
+        return _vstack([_banner(title, grid.width), grid], 14)
+
+    disasters = _vstack(
+        [
+            _disaster_sheet([*range(44, 48), 52, 827], "RUBBLE  RADIATION  LIGHTNING", 6),
+            _disaster_sheet([*range(48, 52)], "FLOOD", 4),
+            _disaster_sheet([*range(56, 64)], "FIRE  56-63", 8),
+            _disaster_sheet([*range(860, 868)], "EXPLOSION  860-867", 8),
+        ],
+        16,
+    )
+    leftovers = _vstack(
+        [
+            _disaster_sheet([38, 39, 53, 54, 55, 223], "LEFTOVER TILES", 6),
+            _disaster_sheet([*range(844, 852)], "TELEPORT  844-851", 8),
+            _disaster_sheet([*range(868, 884)], "LINE ART  868-883", 8),
+        ],
+        16,
+    )
+    strike_classic = _vstack([_text("CLASSIC", 2), _scaled(classic_strike, 2)], 8)
+    strike_svga = _vstack([_text("SVGA", 2), _scaled(svga_strike, 2)], 8)
+    strike_panels = _hstack([strike_classic, strike_svga], 24)
+    strike_sheet = _vstack(
+        [
+            _banner("DISASTER  32PX  FIRE  RUBBLE  FLOOD  EXPLOSION", strike_panels.width),
+            strike_panels,
+        ],
+        12,
+    )
+    _save(disasters, PREVIEW_DIR / "disasters-3x.png")
+    _save(leftovers, PREVIEW_DIR / "leftovers-3x.png")
+    _save(strike_sheet, PREVIEW_DIR / "disaster-32.png")
+
     lines.append("")
     lines.append(
         f"dirt tile 0: { {str(k): v for k, v in sorted(dirt_counts.items(), key=lambda kv: -kv[1])} }"
@@ -3328,6 +3693,9 @@ def main() -> int:
         "special-buildings-3x.png",
         "civic-32.png",
         "civic-fixes.png",
+        "disasters-3x.png",
+        "leftovers-3x.png",
+        "disaster-32.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"

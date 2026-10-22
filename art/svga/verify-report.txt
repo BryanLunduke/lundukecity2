@@ -1,4 +1,4 @@
-SVGA batches 1 to 4 verification
+SVGA batches 1 to 5 verification
 groups: terrain, residential 240-404, commercial 423-611, industrial 612-692,
 chimney frames 852-859 and 884-915, roads 64-207, power 208-222,
 rails 224-239, drawbridge frames 828-831 and 948-951,
@@ -9,9 +9,12 @@ reactor panel 820 and 952-955, fountain 840-843, special sprites zoo/park/librar
 The reactor is a grey panel with dark orbits and a clear red core.
 The pitch is flat (0, 170, 0). Signs and players use (170, 0, 0).
 Dirt rim stays off thin taxiways. It remains on solid walls and the runway.
-held back: tiles 38-39 (unused), 956-959 (blank), rubble, flood,
-disaster fire 56-63, trash, lightning, explosions, teleport 844-851,
-the menu toggle
+Disasters: rubble 44-47, flood 48-51, radiation 52, fire 56-63,
+lightning 827, explosions 860-867. Teleport 844-851. Leftovers 38-39,
+53-55, 223, and the line art 868-883. Tiles 956-959 stay blank white.
+Monster and tornado are sprites, not atlas tiles.
+Fire is three warm steps: (255, 65, 0), (255, 125, 0), (255, 255, 85).
+held back: the 8px atlas and the Classic Look / SVGA Look toggle
 There is no school tile in this atlas.
 palette unique RGB triples: 246
 Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.
@@ -654,6 +657,71 @@ OK radar 837 on the airport: palette=0 ink=0 collapsed=0/3905 strong=1030/1403 (
 OK radar 838 on the airport: palette=0 ink=0 collapsed=0/3909 strong=1019/1406 (0.725)
 OK radar 839 on the airport: palette=0 ink=0 collapsed=0/3915 strong=1019/1407 (0.724)
 OK civic quarter 24x16: palette=0 ink=0 collapsed=0/28660 strong=7002/12947 (0.541)
+OK tile 38: palette=0 ink=0 collapsed=0/180 strong=180/180 (1.000)
+OK tile 39: palette=0 ink=0 collapsed=0/339 strong=336/336 (1.000)
+OK tile 44: palette=0 ink=0 collapsed=0/243 strong=226/226 (1.000)
+OK tile 45: palette=0 ink=0 collapsed=0/259 strong=217/217 (1.000)
+OK tile 46: palette=0 ink=0 collapsed=0/250 strong=223/223 (1.000)
+OK tile 47: palette=0 ink=0 collapsed=0/277 strong=256/256 (1.000)
+OK tile 48: palette=0 ink=0 collapsed=0/173 strong=138/138 (1.000)
+OK tile 49: palette=0 ink=0 collapsed=0/150 strong=138/138 (1.000)
+OK tile 50: palette=0 ink=0 collapsed=0/139 strong=123/123 (1.000)
+OK tile 51: palette=0 ink=0 collapsed=0/132 strong=109/109 (1.000)
+OK tile 52: palette=0 ink=0 collapsed=0/172 strong=14/14 (1.000)
+OK tile 53: palette=0 ink=0 collapsed=0/231 strong=231/231 (1.000)
+OK tile 54: palette=0 ink=0 collapsed=0/228 strong=228/228 (1.000)
+OK tile 55: palette=0 ink=0 collapsed=0/268 strong=268/268 (1.000)
+OK tile 56: palette=0 ink=0 collapsed=0/241 strong=16/16 (1.000)
+OK tile 57: palette=0 ink=0 collapsed=0/234 strong=3/3 (1.000)
+OK tile 58: palette=0 ink=0 collapsed=0/252 strong=8/8 (1.000)
+OK tile 59: palette=0 ink=0 collapsed=0/244 strong=18/18 (1.000)
+OK tile 60: palette=0 ink=0 collapsed=0/239 strong=8/8 (1.000)
+OK tile 61: palette=0 ink=0 collapsed=0/242 strong=7/7 (1.000)
+OK tile 62: palette=0 ink=0 collapsed=0/263 strong=19/19 (1.000)
+OK tile 63: palette=0 ink=0 collapsed=0/246 strong=25/25 (1.000)
+OK tile 223: palette=0 ink=0 collapsed=0/62 strong=58/62 (0.935)
+OK tile 827: palette=0 ink=0 collapsed=0/192 strong=54/54 (1.000)
+OK tile 844: palette=0 ink=0 collapsed=0/87 strong=25/57 (0.439)
+OK tile 845: palette=0 ink=0 collapsed=0/75 strong=19/37 (0.514)
+OK tile 846: palette=0 ink=0 collapsed=0/81 strong=18/47 (0.383)
+OK tile 847: palette=0 ink=0 collapsed=0/78 strong=17/41 (0.415)
+OK tile 848: palette=0 ink=0 collapsed=0/95 strong=26/58 (0.448)
+OK tile 849: palette=0 ink=0 collapsed=0/81 strong=28/49 (0.571)
+OK tile 850: palette=0 ink=0 collapsed=0/87 strong=16/52 (0.308)
+OK tile 851: palette=0 ink=0 collapsed=0/92 strong=17/53 (0.321)
+OK tile 860: palette=0 ink=0 collapsed=0/24 strong=0/4 (0.000)
+OK tile 861: palette=0 ink=0 collapsed=0/45 strong=4/17 (0.235)
+OK tile 862: palette=0 ink=0 collapsed=0/101 strong=10/28 (0.357)
+OK tile 863: palette=0 ink=0 collapsed=0/187 strong=26/48 (0.542)
+OK tile 864: palette=0 ink=0 collapsed=0/257 strong=19/37 (0.514)
+OK tile 865: palette=0 ink=0 collapsed=0/282 strong=52/67 (0.776)
+OK tile 866: palette=0 ink=0 collapsed=0/311 strong=105/148 (0.709)
+OK tile 867: palette=0 ink=0 collapsed=0/259 strong=217/217 (1.000)
+OK tile 868: palette=0 ink=0 collapsed=0/176 strong=165/165 (1.000)
+OK tile 869: palette=0 ink=0 collapsed=0/168 strong=168/168 (1.000)
+OK tile 870: palette=0 ink=0 collapsed=0/168 strong=168/168 (1.000)
+OK tile 871: palette=0 ink=0 collapsed=0/168 strong=168/168 (1.000)
+OK tile 872: palette=0 ink=0 collapsed=0/209 strong=209/209 (1.000)
+OK tile 873: palette=0 ink=0 collapsed=0/209 strong=209/209 (1.000)
+OK tile 874: palette=0 ink=0 collapsed=0/201 strong=201/201 (1.000)
+OK tile 875: palette=0 ink=0 collapsed=0/205 strong=205/205 (1.000)
+OK tile 876: palette=0 ink=0 collapsed=0/182 strong=182/182 (1.000)
+OK tile 877: palette=0 ink=0 collapsed=0/194 strong=194/194 (1.000)
+OK tile 878: palette=0 ink=0 collapsed=0/201 strong=201/201 (1.000)
+OK tile 879: palette=0 ink=0 collapsed=0/199 strong=199/199 (1.000)
+OK tile 880: palette=0 ink=0 collapsed=0/201 strong=201/201 (1.000)
+OK tile 881: palette=0 ink=0 collapsed=0/209 strong=209/209 (1.000)
+OK tile 882: palette=0 ink=0 collapsed=0/209 strong=209/209 (1.000)
+OK tile 883: palette=0 ink=0 collapsed=0/217 strong=217/217 (1.000)
+OK tile 956: palette=0 ink=0 collapsed=0/0 strong=0/0 (1.000)
+OK tile 957: palette=0 ink=0 collapsed=0/0 strong=0/0 (1.000)
+OK tile 958: palette=0 ink=0 collapsed=0/0 strong=0/0 (1.000)
+OK tile 959: palette=0 ink=0 collapsed=0/0 strong=0/0 (1.000)
+OK full atlas: palette=0 ink=0 collapsed=0/136673 inside every tile
+    sprite-sheet seams, not map edges: 1. Rail 235's cable grey meets house 251's concrete where the sheet packs them together.
+    sheet seam (63, 63, 63)/(127, 127, 127) -> (146, 146, 146) at (187, 239)-(187, 240)
+OK every tile 0-959 passes compare(); 956-959 stay blank white
+OK disaster scene 18x12: palette=0 ink=0 collapsed=0/11899 strong=4569/8097 (0.564)
 
 dirt tile 0: {'(113, 56, 0)': 193, '(113, 69, 56)': 46, '(170, 85, 0)': 12, '(56, 56, 56)': 5}
 south shore tile 13: {'(0, 56, 113)': 121, '(0, 32, 65)': 29, '(65, 48, 0)': 19, '(0, 48, 65)': 18, '(113, 56, 0)': 17, '(0, 85, 113)': 16, '(0, 28, 113)': 13, '(113, 28, 0)': 11, '(0, 0, 170)': 5, '(113, 69, 56)': 3, '(130, 130, 130)': 2, '(170, 85, 0)': 2}
@@ -683,5 +751,8 @@ previews:
   previews/special-buildings-3x.png
   previews/civic-32.png
   previews/civic-fixes.png
+  previews/disasters-3x.png
+  previews/leftovers-3x.png
+  previews/disaster-32.png
 
 RESULT: PASS
