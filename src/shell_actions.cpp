@@ -13,6 +13,7 @@
 #include "platform.hpp"
 #include "save_path.hpp"
 #include "special_buildings.hpp"
+#include "tile_atlas.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 
@@ -948,6 +949,18 @@ void Shell::apply_action(Action action)
         break;
     case Action::ZoomOut:
         zoom_by(-2);
+        break;
+    case Action::ClassicLook:
+        set_look_preference(false);
+        map_.invalidate_all();
+        save_window_settings();
+        break;
+    case Action::SvgaLook:
+        // A missing sheet stays on Classic for this session, and the menu
+        // check follows the sheet that is drawn. The stored choice stays SVGA.
+        set_look_preference(true);
+        map_.invalidate_all();
+        save_window_settings();
         break;
     case Action::Fire:
     case Action::Flood:

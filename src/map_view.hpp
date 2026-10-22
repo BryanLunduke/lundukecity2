@@ -92,6 +92,7 @@ private:
     bool blink_on_ = false;
     int blink_ms_ = 0;
     bool atlas_was_loaded_ = false;
+    int look_generation_ = -1;
     int last_sync_blits_ = 0;
     bool active_ = true;
     std::vector<int> cached_raw_;

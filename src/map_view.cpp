@@ -321,8 +321,9 @@ void MapView::sync()
 {
     ensure_surface();
     TileAtlas &atlas = tile_atlas();
-    if (atlas.loaded() != atlas_was_loaded_) {
+    if (atlas.loaded() != atlas_was_loaded_ || atlas.look_generation() != look_generation_) {
         atlas_was_loaded_ = atlas.loaded();
+        look_generation_ = atlas.look_generation();
         std::fill(cached_raw_.begin(), cached_raw_.end(), -1);
         std::fill(cached_shown_.begin(), cached_shown_.end(), -1);
     }

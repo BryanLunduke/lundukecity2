@@ -34,11 +34,28 @@ public:
     // How many times the file was actually opened. A failure is not retried.
     int load_attempts() const { return attempts_; }
 
+    // Classic is the default. SVGA is used only when its sheet loaded.
+    // Switching does not reload the files. A missing sheet stays on Classic.
+    bool use_svga() const { return use_svga_; }
+    bool svga_available() const { return svga_ready_; }
+    bool set_look(bool svga);
+    // Bumps when the active sheet changes, so a cached map can redraw.
+    int look_generation() const { return generation_; }
+    // Drop the SVGA sheet. The next SVGA request stays on Classic.
+    // The decoded pixels stay loaded; recall_svga() puts the sheet back.
+    void forget_svga();
+    bool recall_svga();
+
 private:
+    void bind_active();
+
     int count_ = 0;
     int columns_ = 16;
     int attempts_ = 0;
+    int generation_ = 0;
     bool tried_ = false;
+    bool svga_ready_ = false;
+    bool use_svga_ = false;
     std::string error_;
     // Tightly packed opaque pixels, 16*16 per tile, native ARGB32.
     // Held as bytes so the header stays free of containers' noise in TUs.
