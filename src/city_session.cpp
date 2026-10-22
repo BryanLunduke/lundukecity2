@@ -2135,8 +2135,8 @@ void CitySession::recount_population_from_map()
                         if (nx < 0 || ny < 0 || nx >= kWorldW || ny >= kWorldH) {
                             continue;
                         }
-                        const int near = sim.map[nx][ny] & LOMASK;
-                        if (near >= LHTHR && near <= HHTHR) {
+                        const int house = sim.map[nx][ny] & LOMASK;
+                        if (house >= LHTHR && house <= HHTHR) {
                             ++homes;
                         }
                     }

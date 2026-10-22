@@ -77,7 +77,7 @@ int main()
     if (!history_point_skipped(hole, 4, 1) || history_point_skipped(hole, 4, 0) ||
         !history_point_skipped(tail, 4, 3) || history_point_skipped(tail, 4, 0) ||
         !history_point_skipped(holes, 5, 1) || !history_point_skipped(holes, 5, 3) ||
-        history_point_skipped(run, 4, 1) || history_point_skipped(run, 4, 2)) {
+        !history_point_skipped(run, 4, 1) || !history_point_skipped(run, 4, 2)) {
         return fail(8, "a history hole was drawn as a drop to zero");
     }
 

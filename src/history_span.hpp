@@ -5,10 +5,9 @@
 #pragma once
 
 // History index 0 is the newest sample. A fresh city stores zeros for
-// every month that has not happened yet. Skip that unfilled tail. An
-// isolated zero between two real samples is a missing month, not a drop
-// to the axis, even when several months are missing. A run of zeros, and
-// a zero at the newest sample, are real readings and stay on the line.
+// every month that has not happened yet. Skip that unfilled tail. Any
+// other zero is a missing month: drawing it pulls the line down to the
+// axis. The newest sample stays, including a real zero.
 
 inline bool history_point_skipped(const double *values, int count, int index)
 {
@@ -22,8 +21,5 @@ inline bool history_point_skipped(const double *values, int count, int index)
     if (index > oldest) {
         return true;
     }
-    if (values[index] != 0.0 || index == 0 || index + 1 > oldest) {
-        return false;
-    }
-    return values[index - 1] != 0.0 && values[index + 1] != 0.0;
+    return values[index] == 0.0 && index != 0;
 }

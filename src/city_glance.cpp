@@ -130,8 +130,8 @@ std::int64_t population_on_map(const unsigned char *map)
                         if (nx < 0 || ny < 0 || nx >= kW || ny >= kH) {
                             continue;
                         }
-                        const int near = tile_of(map, nx, ny) & LOMASK;
-                        if (near >= LHTHR && near <= HHTHR) {
+                        const int house = tile_of(map, nx, ny) & LOMASK;
+                        if (house >= LHTHR && house <= HHTHR) {
                             ++homes;
                         }
                     }
