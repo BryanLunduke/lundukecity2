@@ -1281,6 +1281,17 @@ void Shell::draw_dialog(cairo_t *cr)
             label(cr, body_font(), col_b, panel.x + margin + col_w + dp(16), cols_y, static_cast<int>(col_w));
         }
         cairo_restore(cr);
+        if (controls_scroll_max_ > 0) {
+            const double track_w = std::max(4.0, static_cast<double>(dp(6)));
+            const double track_x = panel.x + panel.w - margin + (margin - track_w) * 0.5;
+            fill(cr, track_x, body_top, track_w, view_h, 0.82, 0.82, 0.82);
+            const double thumb_h = std::max(static_cast<double>(dp(18)),
+                                            view_h * view_h / (view_h + static_cast<double>(controls_scroll_max_)));
+            const double travel = std::max(0.0, view_h - thumb_h);
+            const double thumb_y =
+                body_top + travel * (static_cast<double>(controls_scroll_) / static_cast<double>(controls_scroll_max_));
+            fill(cr, track_x, thumb_y, track_w, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        }
         const double footer_y = body_top + view_h + dp(4);
         paint_text(cr, ui_font(), "Left and right change page.", panel.x + margin, footer_y, theme::kTextR,
                    theme::kTextG, theme::kTextB, static_cast<int>(panel.w - 2 * margin));
@@ -1925,6 +1936,12 @@ std::string Shell::dialog_title_hint() const
     const bool osk_key = focus_id_ >= kOsk && focus_id_ < kOsk + 64;
     const bool field = focus_id_ == kFieldName || focus_id_ == kFieldSeed;
     if (osk_key) {
+        int key_count = 0;
+        const OskKey *keys = osk_keys(key_count);
+        const int index = focus_id_ - kOsk;
+        if (index >= 0 && index < key_count && keys[index].kind == OskKind::Auto) {
+            return pad ? a + " picks a name    " + b + " closes    Start confirms" : "Enter picks a name    Esc closes";
+        }
         return pad ? a + " types    " + b + " closes    Start confirms" : "Enter types    Esc closes";
     }
     if (field) {

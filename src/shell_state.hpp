@@ -151,6 +151,9 @@ private:
     void reroll_terrain();
     void jump_notice(int index);
     void arm_touch_tool();
+    // Drop a pending tap, end a drag, and forget every finger. A drag that
+    // already placed tiles keeps them. Nothing here restores the map.
+    void reset_touch_state();
     std::string context_hint() const;
     std::string dialog_title_hint() const;
     void set_speed(int speed);
@@ -368,7 +371,6 @@ private:
     bool touch_minimap_ = false;
     float touch_down_x_ = 0;
     float touch_down_y_ = 0;
-    Uint64 touch_down_ms_ = 0;
     bool pan_pointer_ = false;
     bool pan_moved_ = false;
     int pan_button_ = 0;

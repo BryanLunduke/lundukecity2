@@ -364,13 +364,6 @@ public:
 
     const std::string &save_path() const { return save_path_; }
 
-    // A one-finger drag can spend money before a second finger lands.
-    // The snapshot puts the tiles and the treasury back, so a pan or a
-    // pinch does not keep the charge.
-    void begin_provisional_stroke();
-    void refund_provisional_stroke();
-    void commit_provisional_stroke();
-
 private:
     struct Engine;
 
@@ -425,13 +418,6 @@ private:
     void recount_population_from_map();
     void refresh_loaded_meters();
     void clear_scenario_clock();
-    bool stroke_active_ = false;
-    std::int64_t stroke_funds_ = 0;
-    std::string stroke_message_;
-    int stroke_message_serial_ = 0;
-    std::size_t stroke_notices_ = 0;
-    bool stroke_dirty_ = false;
-    std::vector<unsigned short> stroke_tiles_;
     void remember_notice(std::string text, int tile_x, int tile_y, bool has_place);
     bool write_scenario_sidecar(const std::string &path) const;
     void read_scenario_sidecar(const std::string &path);

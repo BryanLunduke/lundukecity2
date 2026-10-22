@@ -485,6 +485,7 @@ void Shell::restore_play_preferences()
 void Shell::note_keyboard_input()
 {
     gamepad_nav_ = false;
+    touch_used_ = false;
 }
 
 void Shell::note_background_write_failed(const char *text)
@@ -825,7 +826,8 @@ std::string Shell::visual_stamp() const
         << ' ' << dialog_error_ << ' '
         << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
         << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
-        << static_cast<int>(files_.size());
+        << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
+        << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_;
     return out.str();
 }
 
@@ -937,9 +939,9 @@ void Shell::loop()
         if (!pause_noted_ && !skip_pause_note && dialog_ == Dialog::None && !welcome_gate_ && speed_ == 0 && frame_ > 1) {
             pause_noted_ = true;
             if (deck_ || gamepad_nav_) {
-                shown_message_ = "Game paused. Press Start, then Speed, to run the city.";
+                shown_message_ = "Game paused. Press Start, then Options, to run the city.";
             } else {
-                shown_message_ = "Game paused. Press Space, or Start then Speed, to run the city.";
+                shown_message_ = "Game paused. Press Space, or Start then Options, to run the city.";
             }
             hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(8);
         }
@@ -1332,6 +1334,7 @@ void Shell::handle_event(const SDL_Event &event)
         window_exposed_ = true;
         break;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
+        reset_touch_state();
         if (pause_unfocused_ && speed_ > 0) {
             unfocus_speed_ = speed_;
             paused_for_unfocus_ = true;
@@ -1345,6 +1348,7 @@ void Shell::handle_event(const SDL_Event &event)
         }
         break;
     case SDL_EVENT_MOUSE_MOTION: {
+        touch_used_ = false;
         int ww = 1;
         int wh = 1;
         int pw = 1;
@@ -1897,9 +1901,11 @@ void Shell::handle_event(const SDL_Event &event)
         touch_used_ = true;
         const float x = event.tfinger.x * static_cast<float>(win_w_);
         const float y = event.tfinger.y * static_cast<float>(win_h_);
-        if (event.type == SDL_EVENT_FINGER_DOWN) {
+        const bool down = event.type == SDL_EVENT_FINGER_DOWN;
+        const bool up = event.type == SDL_EVENT_FINGER_UP;
+        if (down) {
             fingers_.push_back(Finger{event.tfinger.fingerID, x, y});
-        } else if (event.type == SDL_EVENT_FINGER_UP) {
+        } else if (up) {
             fingers_.erase(std::remove_if(fingers_.begin(), fingers_.end(),
                                           [&](const Finger &finger) { return finger.id == event.tfinger.fingerID; }),
                            fingers_.end());
@@ -1914,23 +1920,25 @@ void Shell::handle_event(const SDL_Event &event)
         if (menu_.open() && dialog_ == Dialog::None) {
             pointer_x_ = x;
             pointer_y_ = y;
-            if (event.type == SDL_EVENT_FINGER_DOWN) {
+            if (down) {
                 on_hotspot(hit(pointer_x_, pointer_y_), pointer_x_, pointer_y_);
+            }
+            if (up && fingers_.empty()) {
+                reset_touch_state();
             }
             break;
         }
+        // 8px. A shorter move is still a tap. Past that, the drag builds.
+        constexpr float kTouchArm2 = 8.0f * 8.0f;
         if (fingers_.size() >= 2) {
+            // Pending: nothing was built, so cancel. Armed: end the stroke
+            // and keep the tiles. Never restore a map or the treasury.
             if (touch_armed_) {
-                session_.refund_provisional_stroke();
-                shown_message_.clear();
-                hint_until_ = std::chrono::steady_clock::now();
-                query_pinned_ = false;
-            }
-            touch_pending_ = false;
-            if (pointer_on_map_) {
                 map_.release();
                 pointer_on_map_ = false;
+                pointer_down_ = false;
             }
+            touch_pending_ = false;
             touch_armed_ = false;
             touch_minimap_ = false;
             const float dx = fingers_[0].x - fingers_[1].x;
@@ -1940,7 +1948,7 @@ void Shell::handle_event(const SDL_Event &event)
             const float cy = (fingers_[0].y + fingers_[1].y) * 0.5f;
             if (!(pinch_dist_ > 1.0f)) {
                 pinch_dist_ = dist;
-            } else if (event.type == SDL_EVENT_FINGER_MOTION) {
+            } else if (event.type == SDL_EVENT_FINGER_MOTION && dialog_ == Dialog::None) {
                 scroll_x_ -= (cx - pointer_x_);
                 scroll_y_ -= (cy - pointer_y_);
                 clamp_scroll();
@@ -1953,39 +1961,66 @@ void Shell::handle_event(const SDL_Event &event)
             }
             pointer_x_ = cx;
             pointer_y_ = cy;
+        } else if (up && fingers_.empty()) {
+            // The finger is already gone, so this must not look at fingers_.
+            pointer_x_ = x;
+            pointer_y_ = y;
+            if (touch_pending_ && !touch_armed_) {
+                const float dx = x - touch_down_x_;
+                const float dy = y - touch_down_y_;
+                if (dx * dx + dy * dy <= kTouchArm2 && dialog_ == Dialog::None && !menu_.open()) {
+                    map_.press(map_local_x(touch_down_x_), map_local_y(touch_down_y_));
+                    map_.release();
+                }
+            } else if (touch_armed_) {
+                map_.release();
+                pointer_on_map_ = false;
+                pointer_down_ = false;
+            }
+            reset_touch_state();
+        } else if (up) {
+            // One finger of a pinch lifted. The one still down is not a tap.
+            pinch_dist_ = 0;
+            touch_pending_ = false;
+            touch_armed_ = false;
+            touch_minimap_ = false;
+            pointer_down_ = false;
+            if (pointer_on_map_) {
+                map_.release();
+                pointer_on_map_ = false;
+            }
         } else if (fingers_.size() == 1) {
             pinch_dist_ = 0;
             pointer_x_ = fingers_[0].x;
             pointer_y_ = fingers_[0].y;
-            if (event.type == SDL_EVENT_FINGER_DOWN) {
+            if (down) {
                 pointer_down_ = true;
                 const int id = hit(pointer_x_, pointer_y_);
-                if (menu_.open() && dialog_ == Dialog::None) {
-                    on_hotspot(id, pointer_x_, pointer_y_);
-                } else if (id == kPaletteId && dialog_ == Dialog::None) {
+                if (id == kPaletteId && dialog_ == Dialog::None) {
                     press_palette(pointer_x_ - side_x_, pointer_y_ - pal_y_);
                 } else if (id == kMinimapId && dialog_ == Dialog::None) {
+                    touch_pending_ = false;
+                    touch_armed_ = false;
                     touch_minimap_ = true;
                     minimap_.press(pointer_x_ - side_x_, pointer_y_ - mini_y_, side_w_, mini_h_);
                 } else if (id == kMapId && dialog_ == Dialog::None) {
+                    touch_minimap_ = false;
                     touch_pending_ = true;
                     touch_armed_ = false;
                     touch_down_x_ = pointer_x_;
                     touch_down_y_ = pointer_y_;
-                    touch_down_ms_ = SDL_GetTicks();
                 } else {
                     on_hotspot(id, pointer_x_, pointer_y_);
                 }
                 if (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages) {
-                    list_touch_y_ = event.tfinger.y * static_cast<float>(win_h_);
+                    list_touch_y_ = y;
                 }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_minimap_) {
                 minimap_.press(pointer_x_ - side_x_, pointer_y_ - mini_y_, side_w_, mini_h_);
             } else if (event.type == SDL_EVENT_FINGER_MOTION &&
                        (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages) &&
                        list_touch_y_ >= 0.0f) {
-                const float ny = event.tfinger.y * static_cast<float>(win_h_);
-                const int rows = static_cast<int>((ny - list_touch_y_) / 32.0f);
+                const int rows = static_cast<int>((y - list_touch_y_) / 32.0f);
                 if (rows != 0) {
                     nudge_file_list(-rows, false, true);
                     list_touch_y_ += static_cast<float>(rows) * 32.0f;
@@ -1993,33 +2028,11 @@ void Shell::handle_event(const SDL_Event &event)
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_pending_ && !touch_armed_) {
                 const float dx = pointer_x_ - touch_down_x_;
                 const float dy = pointer_y_ - touch_down_y_;
-                if (dx * dx + dy * dy > 64.0f) {
+                if (dx * dx + dy * dy > kTouchArm2) {
                     arm_touch_tool();
                 }
-            } else if (event.type == SDL_EVENT_FINGER_MOTION && pointer_on_map_) {
+            } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_armed_) {
                 map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
-            } else if (event.type == SDL_EVENT_FINGER_UP) {
-                list_touch_y_ = -1.0f;
-                pointer_down_ = false;
-                touch_minimap_ = false;
-                if (touch_pending_ && !touch_armed_) {
-                    map_.press(map_local_x(touch_down_x_), map_local_y(touch_down_y_));
-                    map_.release();
-                    touch_pending_ = false;
-                } else if (pointer_on_map_) {
-                    map_.release();
-                    pointer_on_map_ = false;
-                }
-                session_.commit_provisional_stroke();
-                touch_pending_ = false;
-                touch_armed_ = false;
-            }
-        } else {
-            pinch_dist_ = 0;
-            pointer_down_ = false;
-            if (pointer_on_map_) {
-                map_.release();
-                pointer_on_map_ = false;
             }
         }
         break;

@@ -93,8 +93,8 @@ inline std::string controls_page_body(int page, bool deck)
                "B closes a map overlay.";
     case 2:
         return "Tap a tool, a menu, or a button to use it.\n"
-               "A tap on the map builds when the finger lifts. Moving past a short distance starts a drag.\n"
-               "A second finger never spends money. It cancels that stroke and pans, or pinches to zoom.\n"
+               "A tap on the map builds when the finger lifts. Moving past a short distance starts a drag, and the drag builds as it moves.\n"
+               "A second finger before that drag starts cancels it, and nothing is built. A second finger during a drag ends the stroke and keeps the tiles already placed, then pans or pinches to zoom.\n"
                "Drag the minimap to jump across the city.\n"
                "Drag a list to scroll it.\n"
                "The on-screen keyboard types into the name and seed fields.\n"

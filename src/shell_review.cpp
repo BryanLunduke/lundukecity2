@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "city_tail.hpp"
+#include "osk_layout.hpp"
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
 #include "text_edit.hpp"
@@ -646,6 +647,280 @@ void Shell::run_review_checks()
     const DialogRect budget_short = place_dialog(1024, 640, 640, 470, 16);
     if (eval_deck.y + eval_deck.h > 800 || budget_short.y + budget_short.h > 640 || budget_short.w > 1024 - 32) {
         fail("a content-sized dialog does not fit the small window");
+        return;
+    }
+
+    // Touch builds like the mouse, and a second finger never restores a map.
+    close_dialog();
+    session_.set_speed(0);
+    speed_ = 0;
+    select_tool(1);
+    map_.set_tile_size(16);
+    center_on_fraction(0.5, 0.5);
+    render();
+    auto stamp = [&]() {
+        unsigned long long hash = 1469598103934665603ull;
+        for (int ty = 0; ty < CitySession::kWorldH; ++ty) {
+            for (int tx = 0; tx < CitySession::kWorldW; ++tx) {
+                hash ^= static_cast<unsigned long long>(static_cast<unsigned>(session_.map_value(tx, ty)));
+                hash *= 1099511628211ull;
+            }
+        }
+        return hash;
+    };
+    auto place = [&](int tx, int ty, float &wx, float &wy) {
+        const double ox = snapped_map_origin(view_x_, map_ox_, scroll_x_);
+        const double oy = snapped_map_origin(view_y_, map_oy_, scroll_y_);
+        wx = static_cast<float>(ox + (tx + 0.5) * map_.tile_size());
+        wy = static_cast<float>(oy + (ty + 0.5) * map_.tile_size());
+        return wx >= view_x_ + 2 && wx < view_x_ + view_w_ - 2 && wy >= view_y_ + 2 && wy < view_y_ + view_h_ - 2;
+    };
+    auto finger = [&](Uint32 type, SDL_FingerID id, float wx, float wy) {
+        SDL_Event event{};
+        event.type = type;
+        event.tfinger.type = static_cast<SDL_EventType>(type);
+        event.tfinger.fingerID = id;
+        event.tfinger.x = wx / static_cast<float>(std::max(1, win_w_));
+        event.tfinger.y = wy / static_cast<float>(std::max(1, win_h_));
+        event.tfinger.pressure = 1.0f;
+        handle_event(event);
+    };
+    // A rest does not arm. The second finger lands before any 8px move, which
+    // is the 0.2s, 0.5s, and 1s cases: time is not part of the decision.
+    int rested = 0;
+    for (int ty = 8; ty < 70 && rested < 3; ty += 2) {
+        for (int tx = 8; tx < 90 && rested < 3; tx += 2) {
+            float wx = 0;
+            float wy = 0;
+            if (!place(tx, ty, wx, wy)) {
+                continue;
+            }
+            const auto funds_before = session_.funds();
+            const auto map_before = stamp();
+            finger(SDL_EVENT_FINGER_DOWN, 1, wx, wy);
+            finger(SDL_EVENT_FINGER_MOTION, 1, wx + 3.0f, wy + 1.0f);
+            finger(SDL_EVENT_FINGER_DOWN, 2, wx + 36.0f, wy + 8.0f);
+            finger(SDL_EVENT_FINGER_MOTION, 1, wx + 7.0f, wy + 4.0f);
+            finger(SDL_EVENT_FINGER_MOTION, 2, wx + 40.0f, wy + 11.0f);
+            finger(SDL_EVENT_FINGER_UP, 2, wx + 40.0f, wy + 11.0f);
+            finger(SDL_EVENT_FINGER_UP, 1, wx + 7.0f, wy + 4.0f);
+            if (session_.funds() != funds_before || stamp() != map_before) {
+                fail("a two-finger pan built or changed funds");
+                return;
+            }
+            finger(SDL_EVENT_FINGER_DOWN, 1, wx, wy);
+            if (session_.funds() != funds_before) {
+                fail("a tap built before the finger lifted");
+                return;
+            }
+            finger(SDL_EVENT_FINGER_UP, 1, wx, wy);
+            if (session_.funds() < funds_before) {
+                ++rested;
+            }
+        }
+    }
+    if (rested < 3) {
+        fail("a tap did not build, or a rested second finger could not be checked on real land");
+        return;
+    }
+
+    int prior_x = -1;
+    int prior_y = -1;
+    int prior_tile = 0;
+    std::int64_t after_prior = 0;
+    for (int ty = 8; ty < 70 && prior_x < 0; ty += 3) {
+        for (int tx = 8; tx < 90 && prior_x < 0; tx += 3) {
+            float wx = 0;
+            float wy = 0;
+            if (!place(tx, ty, wx, wy)) {
+                continue;
+            }
+            const auto funds_before = session_.funds();
+            map_.press(map_local_x(wx), map_local_y(wy));
+            map_.release();
+            if (session_.funds() < funds_before) {
+                prior_x = tx;
+                prior_y = ty;
+                prior_tile = session_.map_value(tx, ty);
+                after_prior = session_.funds();
+            }
+        }
+    }
+    if (prior_x < 0) {
+        fail("a mouse click did not build a prior stroke");
+        return;
+    }
+    bool kept = false;
+    for (int ty = 12; ty < 70 && !kept; ty += 4) {
+        for (int tx = 12; tx < 80 && !kept; tx += 4) {
+            if (tx == prior_x && ty == prior_y) {
+                continue;
+            }
+            float wx = 0;
+            float wy = 0;
+            if (!place(tx, ty, wx, wy)) {
+                continue;
+            }
+            const float far_x = wx + static_cast<float>(map_.tile_size() * 2);
+            const float far_y = wy;
+            if (far_x >= view_x_ + view_w_ - 2) {
+                continue;
+            }
+            finger(SDL_EVENT_FINGER_DOWN, 1, wx, wy);
+            finger(SDL_EVENT_FINGER_MOTION, 1, far_x, far_y);
+            if (session_.funds() >= after_prior) {
+                finger(SDL_EVENT_FINGER_UP, 1, far_x, far_y);
+                continue;
+            }
+            const auto after_drag = session_.funds();
+            const auto after_map = stamp();
+            finger(SDL_EVENT_FINGER_DOWN, 2, far_x - 30.0f, far_y + 24.0f);
+            if (session_.funds() != after_drag || stamp() != after_map || session_.map_value(prior_x, prior_y) != prior_tile) {
+                fail("a second finger refunded an earlier stroke");
+                return;
+            }
+            finger(SDL_EVENT_FINGER_UP, 1, far_x, far_y);
+            finger(SDL_EVENT_FINGER_UP, 2, far_x - 30.0f, far_y + 24.0f);
+            if (session_.funds() != after_drag || session_.map_value(prior_x, prior_y) != prior_tile) {
+                fail("lifting the fingers changed a finished stroke");
+                return;
+            }
+            kept = true;
+        }
+    }
+    if (!kept) {
+        fail("a touch drag did not build before the second finger");
+        return;
+    }
+
+    const Hotspot *mini = nullptr;
+    for (const Hotspot &spot : hot_) {
+        if (spot.id == kMinimapId) {
+            mini = &spot;
+        }
+    }
+    if (mini == nullptr) {
+        fail("the minimap has no hotspot");
+        return;
+    }
+    const float mini_x = static_cast<float>(mini->x + mini->w * 0.5);
+    const float mini_y = static_cast<float>(mini->y + mini->h * 0.5);
+    finger(SDL_EVENT_FINGER_DOWN, 1, mini_x, mini_y);
+    finger(SDL_EVENT_FINGER_UP, 1, mini_x, mini_y);
+    const double scroll_after_mini = scroll_x_;
+    const float map_x = static_cast<float>(view_x_ + view_w_ * 0.45);
+    const float map_y = static_cast<float>(view_y_ + view_h_ * 0.45);
+    finger(SDL_EVENT_FINGER_DOWN, 1, map_x, map_y);
+    finger(SDL_EVENT_FINGER_MOTION, 1, map_x + 24.0f, map_y);
+    const double scroll_jump = scroll_x_ - scroll_after_mini;
+    finger(SDL_EVENT_FINGER_UP, 1, map_x + 24.0f, map_y);
+    if (scroll_jump > 80.0 || scroll_jump < -80.0) {
+        fail("a minimap tap left the next map drag panning the view");
+        return;
+    }
+
+    const auto previous_map = stamp();
+    const auto previous_funds = session_.funds();
+    reset_touch_state();
+    if (!session_.load_scenario(CitySession::scenario_def(0).id)) {
+        fail("could not load a city after the touch session");
+        return;
+    }
+    render();
+    const auto loaded_funds = session_.funds();
+    const auto loaded_map = stamp();
+    if (loaded_map == previous_map && loaded_funds == previous_funds) {
+        fail("the loaded city matches the touch session");
+        return;
+    }
+    const float pinch_x = static_cast<float>(view_x_ + view_w_ * 0.5);
+    const float pinch_y = static_cast<float>(view_y_ + view_h_ * 0.5);
+    finger(SDL_EVENT_FINGER_DOWN, 1, pinch_x, pinch_y);
+    finger(SDL_EVENT_FINGER_DOWN, 2, pinch_x + 48.0f, pinch_y + 12.0f);
+    finger(SDL_EVENT_FINGER_MOTION, 1, pinch_x - 10.0f, pinch_y + 6.0f);
+    finger(SDL_EVENT_FINGER_MOTION, 2, pinch_x + 70.0f, pinch_y - 16.0f);
+    finger(SDL_EVENT_FINGER_UP, 2, pinch_x + 70.0f, pinch_y - 16.0f);
+    finger(SDL_EVENT_FINGER_UP, 1, pinch_x - 10.0f, pinch_y + 6.0f);
+    if (session_.funds() != loaded_funds || stamp() != loaded_map) {
+        fail("a pinch after load changed the loaded city");
+        return;
+    }
+    const std::string meter = session_.scenario_meter();
+    const auto pop_at = meter.find("Population ");
+    if (pop_at == std::string::npos) {
+        fail("the scenario meter has no population");
+        return;
+    }
+    const auto arrow = meter.find(" →", pop_at);
+    const std::string number = meter.substr(pop_at + 11, arrow == std::string::npos ? std::string::npos : arrow - (pop_at + 11));
+    int digits = 0;
+    for (char letter : number) {
+        if (letter >= '0' && letter <= '9') {
+            ++digits;
+        }
+    }
+    if (digits >= 4 && number.find(',') == std::string::npos) {
+        fail("population " + number + " has no thousands separator");
+        return;
+    }
+
+    map_.set_tile_size(kMapTileOverview);
+    layout();
+    gamepad_nav_ = true;
+    cursor_x_ = static_cast<float>(win_w_ - 1);
+    cursor_y_ = static_cast<float>(view_y_ + view_h_ * 0.5);
+    clamp_gamepad_cursor(1.0f, 0.0f);
+    const double map_right = snapped_map_origin(view_x_, map_ox_, scroll_x_) + map_.pixel_width();
+    if (cursor_y_ >= view_y_ && cursor_y_ < view_y_ + view_h_ && cursor_x_ >= map_right - 0.5) {
+        fail("the gamepad cursor rests in the right grey band");
+        return;
+    }
+    gamepad_nav_ = false;
+
+    touch_used_ = true;
+    deck_ = false;
+    if (context_hint().find("Click builds") != std::string::npos) {
+        fail("touch kept the keyboard hint");
+        return;
+    }
+    note_keyboard_input();
+    if (context_hint().find("Click builds") == std::string::npos) {
+        fail("a key did not restore the keyboard hint");
+        return;
+    }
+    int key_count = 0;
+    const OskKey *keys = osk_keys(key_count);
+    int random_key = -1;
+    for (int i = 0; i < key_count; ++i) {
+        if (keys[i].kind == OskKind::Auto) {
+            random_key = i;
+        }
+    }
+    dialog_ = Dialog::NewCity;
+    gamepad_nav_ = true;
+    focus_id_ = kOsk + random_key;
+    if (random_key < 0 || dialog_title_hint().find("types") != std::string::npos) {
+        fail("the Random key says it types");
+        return;
+    }
+    dialog_ = Dialog::None;
+    gamepad_nav_ = false;
+
+    const std::string stamped = visual_stamp();
+    overlay_on_ = !overlay_on_;
+    const bool overlay_redraws = visual_stamp() != stamped;
+    overlay_on_ = !overlay_on_;
+    controls_page_ = 1;
+    controls_scroll_ = 40;
+    const bool controls_redraw = visual_stamp() != stamped;
+    controls_page_ = 0;
+    controls_scroll_ = 0;
+    const int island_was = new_island_;
+    new_island_ = CitySession::kIslandAlways;
+    const bool land_redraws = visual_stamp() != stamped;
+    new_island_ = island_was;
+    if (!overlay_redraws || !controls_redraw || !land_redraws) {
+        fail("a paused window change did not ask for a redraw");
         return;
     }
 }

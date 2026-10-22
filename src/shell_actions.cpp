@@ -121,6 +121,7 @@ void Shell::dismiss_dialog()
 
 void Shell::open_dialog(Dialog dialog)
 {
+    reset_touch_state();
     menu_.close();
     special_open_ = false;
     dialog_ = dialog;
@@ -406,19 +407,27 @@ void Shell::clamp_gamepad_cursor(float push_x, float push_y)
     }
     const double view_r = static_cast<double>(view_x_) + view_w_;
     const double view_b = static_cast<double>(view_y_) + view_h_;
-    const double x = cursor_x_;
-    const double y = cursor_y_;
-    if (x < view_x_ || x >= view_r || y < view_y_ || y >= view_b) {
-        return;
-    }
+    double x = cursor_x_;
+    double y = cursor_y_;
     const double map_left = snapped_map_origin(view_x_, map_ox_, scroll_x_);
     const double map_top = snapped_map_origin(view_y_, map_oy_, scroll_y_);
     const double vis_left = std::max(static_cast<double>(view_x_), map_left);
     const double vis_top = std::max(static_cast<double>(view_y_), map_top);
     const double vis_right = std::min(view_r, map_left + map_.pixel_width());
     const double vis_bottom = std::min(view_b, map_top + map_.pixel_height());
-    cursor_x_ = static_cast<float>(clamp_cursor_off_letterbox(x, push_x, view_x_, view_r, vis_left, vis_right));
-    cursor_y_ = static_cast<float>(clamp_cursor_off_letterbox(y, push_y, view_y_, view_b, vis_top, vis_bottom));
+    const bool in_port = x >= view_x_ && x < view_r && y >= view_y_ && y < view_b;
+    if (in_port) {
+        x = clamp_cursor_off_letterbox(x, push_x, view_x_, view_r, vis_left, vis_right);
+        y = clamp_cursor_off_letterbox(y, push_y, view_y_, view_b, vis_top, vis_bottom);
+    }
+    // A right push used to step onto the port edge and stay there: the next
+    // frame treats that edge as outside the port. At 8px the edge is the
+    // grey band. The toolbar is on the left, so the right side is not a control.
+    if (y >= view_y_ && y < view_b && x >= vis_right && x >= view_x_) {
+        x = vis_right - 1.0;
+    }
+    cursor_x_ = static_cast<float>(x);
+    cursor_y_ = static_cast<float>(y);
 }
 
 void Shell::toggle_fullscreen()
@@ -473,9 +482,24 @@ void Shell::arm_touch_tool()
     touch_armed_ = true;
     touch_pending_ = false;
     pointer_on_map_ = true;
-    session_.begin_provisional_stroke();
+    pointer_down_ = true;
     map_.press(map_local_x(touch_down_x_), map_local_y(touch_down_y_));
     map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
+}
+
+void Shell::reset_touch_state()
+{
+    if (touch_armed_) {
+        map_.release();
+        pointer_on_map_ = false;
+        pointer_down_ = false;
+    }
+    touch_pending_ = false;
+    touch_armed_ = false;
+    touch_minimap_ = false;
+    pinch_dist_ = 0;
+    list_touch_y_ = -1.0f;
+    fingers_.clear();
 }
 
 void Shell::load_recent()
@@ -593,6 +617,7 @@ void Shell::finish_save(const std::string &path)
 
 void Shell::finish_open(const std::string &path)
 {
+    reset_touch_state();
     if (path.empty() || !session_.load_city(path)) {
         std::string reason = session_.last_load_error();
         if (reason.empty()) {
@@ -1205,6 +1230,7 @@ void Shell::on_dialog_button(int id)
             close_dialog();
             const int serial = session_.message_serial();
             ++city_generation_;
+            reset_touch_state();
             session_.new_city(spec);
             if (session_.message_serial() == serial) {
                 restore_play_preferences();
@@ -1221,6 +1247,7 @@ void Shell::on_dialog_button(int id)
             if (index >= 0 && index < CitySession::kScenarioCount) {
                 const int id_num = CitySession::scenario_def(index).id;
                 ++city_generation_;
+                reset_touch_state();
                 if (!session_.load_scenario(id_num)) {
                     info_title_ = "Play Scenario";
                     info_body_ = "Could not start that scenario.";

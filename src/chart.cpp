@@ -231,6 +231,12 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
             cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
             cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
             cairo_set_font_size(cr, 10);
+            int enabled = 0;
+            for (int mask_i = 0; mask_i < kGraphSeriesCount; ++mask_i) {
+                if ((enabled_mask & (1 << mask_i)) != 0) {
+                    ++enabled;
+                }
+            }
             auto axis_text = [&](double value) {
                 const auto n = static_cast<long long>(std::llround(value));
                 if (item.population) {
@@ -248,8 +254,15 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
                 cairo_move_to(cr, 2, y);
                 cairo_show_text(cr, text.c_str());
             };
-            stamp(axis_text(max_v), top + 10);
-            stamp(axis_text(min_v), plot_bottom);
+            // Each line is scaled to itself. A population range on that axis
+            // would describe only the first series.
+            if (enabled == 1) {
+                stamp(axis_text(max_v), top + 10);
+                stamp(axis_text(min_v), plot_bottom);
+            } else {
+                stamp("high", top + 10);
+                stamp("low", plot_bottom);
+            }
         }
         cairo_set_source_rgb(cr, item.r, item.g, item.b);
         cairo_set_line_width(cr, item.population ? 2.6 : 2.0);
@@ -276,24 +289,31 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
         cairo_stroke(cr);
         if (hover_index >= 0 && !history_point_skipped(samples, n, hover_index)) {
             if (!hover.empty()) {
-                hover += "   ";
+                hover += "  ";
             }
-            const auto n = static_cast<long long>(std::llround(samples[hover_index]));
-            hover += item.name;
+            const auto sample = static_cast<long long>(std::llround(samples[hover_index]));
+            const char *brief = item.name;
+            if (item.population) {
+                brief = "Pop";
+            } else if (item.name == kGraphSeries[1].name) {
+                brief = "Res";
+            } else if (item.name == kGraphSeries[2].name) {
+                brief = "Com";
+            } else if (item.name == kGraphSeries[3].name) {
+                brief = "Ind";
+            } else if (item.name == kGraphSeries[4].name) {
+                brief = "Cash";
+            }
+            hover += brief;
             hover += " ";
             if (item.population) {
-                hover += grouped_number(n);
-                hover += " people";
+                hover += grouped_number(sample);
             } else if (item.cash) {
-                hover += graph_money(n);
+                hover += graph_money(sample);
             } else if (item.legend == GraphLegendKind::People) {
-                hover += grouped_number(static_cast<std::int64_t>(n) * kHistoryPeoplePerSample);
-                hover += " people";
-            } else if (item.legend == GraphLegendKind::Level) {
-                hover += grouped_number(n);
-                hover += " level";
+                hover += grouped_number(static_cast<std::int64_t>(sample) * kHistoryPeoplePerSample);
             } else {
-                hover += grouped_number(n);
+                hover += grouped_number(sample);
             }
         }
     }
@@ -306,13 +326,31 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
     }
     if (!hover.empty()) {
         cairo_save(cr);
-        cairo_rectangle(cr, static_cast<double>(left), 1, plot_w, static_cast<double>(top - 2));
+        const double band = static_cast<double>(top - 1);
+        cairo_rectangle(cr, 0, 0, width, band);
         cairo_clip(cr);
         cairo_set_source_rgb(cr, 0.15, 0.15, 0.15);
         cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
         cairo_set_font_size(cr, 11);
-        cairo_move_to(cr, left + 4, 14);
-        cairo_show_text(cr, hover.c_str());
+        std::string shown = hover;
+        const double limit = static_cast<double>(width) - 8.0;
+        auto fits = [&](const std::string &text) {
+            cairo_text_extents_t ext;
+            cairo_text_extents(cr, text.c_str(), &ext);
+            return ext.x_advance <= limit;
+        };
+        if (!fits(shown)) {
+            cairo_set_font_size(cr, 9);
+        }
+        if (!fits(shown)) {
+            const std::string dots = "...";
+            while (shown.size() > 1 && !fits(shown + dots)) {
+                shown.pop_back();
+            }
+            shown += dots;
+        }
+        cairo_move_to(cr, 4, 14);
+        cairo_show_text(cr, shown.c_str());
         cairo_restore(cr);
     }
     if (readout != nullptr) {

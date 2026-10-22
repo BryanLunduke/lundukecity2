@@ -1814,7 +1814,7 @@ std::string CitySession::scenario_meter() const
     if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
         return "Score " + std::to_string(static_cast<int>(sim.cityScore)) + " → goal > 500";
     }
-    return "Population " + std::to_string(people > 0 ? people : 0) + " → 100,000";
+    return "Population " + with_commas(people > 0 ? people : 0) + " → 100,000";
 }
 
 std::string CitySession::scenario_outcome_text(bool won) const
@@ -1834,7 +1834,7 @@ std::string CitySession::scenario_outcome_text(bool won) const
         text += ".";
     } else {
         const Evaluation report = evaluation();
-        text += " Population " + std::to_string(report.population) + ", score " + std::to_string(report.score) + ".";
+        text += " Population " + with_commas(report.population) + ", score " + with_commas(report.score) + ".";
     }
     return text;
 }
@@ -2190,56 +2190,6 @@ void CitySession::refresh_loaded_meters()
     // score and the traffic average the scenario meter reads, which otherwise
     // stay on the file until the next evaluation.
     sim.cityEvaluation();
-}
-
-void CitySession::begin_provisional_stroke()
-{
-    if (engine_ == nullptr || stroke_active_) {
-        return;
-    }
-    Micropolis &sim = engine_->sim;
-    stroke_funds_ = static_cast<std::int64_t>(sim.totalFunds);
-    stroke_message_ = message_;
-    stroke_message_serial_ = message_serial_;
-    stroke_notices_ = notices_.size();
-    stroke_dirty_ = dirty_;
-    stroke_tiles_.resize(static_cast<std::size_t>(kWorldW * kWorldH));
-    for (int x = 0; x < kWorldW; ++x) {
-        for (int y = 0; y < kWorldH; ++y) {
-            stroke_tiles_[static_cast<std::size_t>(y * kWorldW + x)] = sim.map[x][y];
-        }
-    }
-    stroke_active_ = true;
-}
-
-void CitySession::refund_provisional_stroke()
-{
-    if (!stroke_active_ || engine_ == nullptr) {
-        return;
-    }
-    Micropolis &sim = engine_->sim;
-    for (int x = 0; x < kWorldW; ++x) {
-        for (int y = 0; y < kWorldH; ++y) {
-            sim.map[x][y] = stroke_tiles_[static_cast<std::size_t>(y * kWorldW + x)];
-        }
-    }
-    sim.setFunds(static_cast<Quad>(stroke_funds_));
-    message_ = stroke_message_;
-    message_serial_ = stroke_message_serial_;
-    if (notices_.size() > stroke_notices_) {
-        const std::size_t extra = notices_.size() - stroke_notices_;
-        notices_.erase(notices_.begin(), notices_.begin() + extra);
-    }
-    dirty_ = stroke_dirty_;
-    stroke_active_ = false;
-    stroke_tiles_.clear();
-    ++sim.mapSerial;
-}
-
-void CitySession::commit_provisional_stroke()
-{
-    stroke_active_ = false;
-    stroke_tiles_.clear();
 }
 
 void CitySession::arm_eval_baseline()
