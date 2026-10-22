@@ -267,9 +267,11 @@ ASPHALT_EDGE = (44, 44, 44)
 # Ties, wires, and car bodies. Flat, so a traffic frame cannot flicker.
 TIE = (130, 130, 130)
 WIRE = (203, 203, 203)
-# A power line is a thin dark-grey stroke. The asphalt fill uses the same
-# classic grey, so the stroke is lifted to (81, 81, 81) to read on dirt B.
-CABLE = (81, 81, 81)
+# A power line is a thin dark-grey stroke, the same classic grey as asphalt.
+# (146, 146, 146) is light enough to read on dirt B and is not the tie grey,
+# so a wire can cross a rail without the two colours collapsing.
+CABLE = (146, 146, 146)
+_CABLE_BEFORE = (81, 81, 81)
 DASH = (255, 255, 255)
 RAIL_MARK = (255, 255, 85)
 LEAF = (162, 162, 162)
@@ -1067,6 +1069,23 @@ def _dither_recolour(src, w: int, h: int) -> dict[tuple[int, int], tuple[int, in
     return out
 
 
+def _road_shoulder(src, x: int, y: int, w: int, h: int, cables: set[tuple[int, int]]) -> bool:
+    """Dirt rim against asphalt and ties. A wire or its pole does not count."""
+    for dx, dy in _ORTHO:
+        nx, ny = x + dx, y + dy
+        if not _in(nx, ny, w, h) or (nx, ny) in cables:
+            continue
+        neighbour = src[nx, ny]
+        if neighbour in (SRC_DGREY, SRC_GREY):
+            return True
+        if neighbour != BLACK:
+            continue
+        fx, fy = nx + dx, ny + dy
+        if _in(fx, fy, w, h) and (fx, fy) not in cables and src[fx, fy] in (SRC_DGREY, SRC_GREY):
+            return True
+    return False
+
+
 def _cables(src, w: int, h: int) -> set[tuple[int, int]]:
     """Thin dark-grey strokes are wires. A road fill is not."""
     wires: set[tuple[int, int]] = set()
@@ -1085,6 +1104,7 @@ def paint(
     kinds: list[list[str]],
     scheme: DirtScheme = SCHEME_B,
     bright_zones: bool = True,
+    plain_wires: bool = True,
 ) -> Image.Image:
     """Recolour `original`. `kinds` is one label per 16px cell, row-major."""
     w, h = original.size
@@ -1153,10 +1173,11 @@ def paint(
                 continue
             if mat.role == "dirt":
                 edge = _touches_water(src, x, y, w, h) or _dirt_edge(src, x, y, w, h)
-                if kind_row[x // TILE] == "road" and _touches_ground(
-                    src, x, y, w, h, frozenset({SRC_DGREY, SRC_GREY})
-                ):
-                    edge = True
+                if kind_row[x // TILE] == "road":
+                    if plain_wires:
+                        edge = edge or _road_shoulder(src, x, y, w, h, cables)
+                    elif _touches_ground(src, x, y, w, h, frozenset({SRC_DGREY, SRC_GREY})):
+                        edge = True
                 chosen = _dirt_colour(x, y, edge, scheme)
                 if shadowed is not None:
                     chosen = shadowed
@@ -1174,7 +1195,7 @@ def paint(
                 continue
             if mat.role == "asphalt":
                 if (x, y) in cables:
-                    dst[x, y] = CABLE
+                    dst[x, y] = CABLE if plain_wires else _CABLE_BEFORE
                     continue
                 # The curb is the outer edge only. A dash or a car is inside
                 # the roadway, so it does not pull the centre line off centre.
@@ -1235,7 +1256,10 @@ def kinds_for(indexes: list[list[int]]) -> list[list[str]]:
 
 
 def paint_grid(
-    atlas: Image.Image, grid: list[list[int]], scheme: DirtScheme = SCHEME_B
+    atlas: Image.Image,
+    grid: list[list[int]],
+    scheme: DirtScheme = SCHEME_B,
+    plain_wires: bool = True,
 ) -> tuple[Image.Image, Image.Image]:
     height = len(grid)
     width = len(grid[0])
@@ -1243,7 +1267,7 @@ def paint_grid(
     for y, row in enumerate(grid):
         for x, index in enumerate(row):
             classic.paste(crop_tile(atlas, index), (x * TILE, y * TILE))
-    return classic, paint(classic, kinds_for(grid), scheme)
+    return classic, paint(classic, kinds_for(grid), scheme, plain_wires=plain_wires)
 
 
 def luma(rgb: tuple[int, int, int]) -> float:
@@ -1699,6 +1723,24 @@ def main() -> int:
     road_src = painted_road[66][0].load()
     if any(cable.getpixel((x, y)) != CABLE for y in range(16) for x in range(16) if cable_src[x, y] == SRC_DGREY):
         lines.append("FAIL power wires on 210 are not the lighter cable grey")
+        failed = True
+    wire_rim = 0
+    for y in range(16):
+        for x in range(16):
+            if cable_src[x, y] != SRC_TAN:
+                continue
+            if not any(
+                _in(x + dx, y + dy, 16, 16) and (x + dx, y + dy) in _cables(cable_src, 16, 16)
+                for dx, dy in _ORTHO
+            ):
+                continue
+            if cable.getpixel((x, y)) in (DIRT_RIM, DIRT_CONTACT):
+                wire_rim += 1
+    if wire_rim:
+        lines.append(f"FAIL dirt beside the wires on 210 is still a rim ({wire_rim})")
+        failed = True
+    if DIRT_RIM not in set(_histogram(road)):
+        lines.append("FAIL the road shoulder on 66 lost its dirt rim")
         failed = True
     if any(road.getpixel((x, y)) == CABLE for y in range(16) for x in range(16) if road_src[x, y] == SRC_DGREY):
         lines.append("FAIL the roadway on 66 was painted as a cable")
@@ -2182,6 +2224,35 @@ def main() -> int:
     _save(rails_power, PREVIEW_DIR / "rails-power-3x.png")
     _save(bridges, PREVIEW_DIR / "bridges-3x.png")
     _save(transport_sheet, PREVIEW_DIR / "transport-32.png")
+    _, svga_trip_before = paint_grid(atlas, trip, plain_wires=False)
+    power_rows = []
+    for index in (210, 211, 220, 77, 221, 208):
+        classic, after = painted_road[index]
+        before = paint(classic, [["road"]], plain_wires=False)
+        power_rows.append(
+            _hstack(
+                [
+                    _captioned(classic, f"{index} CLASSIC", 4),
+                    _captioned(before, "BEFORE", 4),
+                    _captioned(after, "AFTER", 4),
+                ],
+                16,
+            )
+        )
+    power_rows.append(
+        _hstack(
+            [
+                _captioned(svga_trip_before, "SCENE BEFORE", 2),
+                _captioned(svga_trip, "SCENE AFTER", 2),
+            ],
+            18,
+        )
+    )
+    power_sample = _vstack(
+        [_banner("POWER LINES  CLASSIC  BEFORE  AFTER", power_rows[0].width), *power_rows],
+        12,
+    )
+    _save(power_sample, PREVIEW_DIR / "power-sample.png")
 
     lines.append("")
     lines.append(
@@ -2208,6 +2279,7 @@ def main() -> int:
         "rails-power-3x.png",
         "bridges-3x.png",
         "transport-32.png",
+        "power-sample.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"
