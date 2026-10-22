@@ -10,3 +10,6 @@
 // (1 train .. 8 bus). frame is 1-based, matching SimSprite::frame.
 // The returned surface is owned by the sprite cache. Do not destroy it.
 cairo_surface_t *sprite_frame(int type, int frame);
+
+// Drops every cached explosion and vehicle frame. Safe to call twice.
+void sprite_art_shutdown();

@@ -53,7 +53,9 @@ inline EvaluationCopy evaluation_copy(const CitySession::Evaluation &report, con
         copy.migration = "Net migration (last year): 0";
     } else {
         copy.score = "Score: " + std::to_string(report.score);
-        if (report.score_delta > 0) {
+        if (!report.deltas_known) {
+            copy.score_delta = "Change since the last evaluation: —";
+        } else if (report.score_delta > 0) {
             copy.score_delta = "Change since the last evaluation: +" + std::to_string(report.score_delta);
         } else if (report.score_delta < 0) {
             copy.score_delta = "Change since the last evaluation: " + std::to_string(report.score_delta);
@@ -77,7 +79,8 @@ inline EvaluationCopy evaluation_copy(const CitySession::Evaluation &report, con
             }
         }
         copy.population = "Population: " + grouped_number(report.population);
-        copy.migration = "Net migration (last year): " + grouped_number(report.migration);
+        copy.migration = report.deltas_known ? "Net migration (last year): " + grouped_number(report.migration)
+                                             : "Net migration (last year): —";
     }
     copy.assessed = "Assessed value: " + graph_money(report.assessed_value);
     copy.category = "Category: " + report.category;

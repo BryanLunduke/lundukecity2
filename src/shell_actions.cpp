@@ -81,6 +81,7 @@ bool Shell::dialog_pauses() const
     case Dialog::Evaluation:
     case Dialog::Overlay:
     case Dialog::Query:
+    case Dialog::Messages:
         return false;
     case Dialog::Budget:
         return budget_is_tax_;
@@ -120,6 +121,7 @@ void Shell::dismiss_dialog()
 
 void Shell::open_dialog(Dialog dialog)
 {
+    reset_touch_state();
     menu_.close();
     special_open_ = false;
     dialog_ = dialog;
@@ -153,7 +155,10 @@ void Shell::open_dialog(Dialog dialog)
     } else if (dialog == Dialog::Recovery) {
         focus_id_ = kRecover;
     } else if (dialog == Dialog::Scenario) {
-        focus_id_ = kPlay;
+        focus_id_ = kListItem;
+        list_index_ = scenario_index_;
+    } else if (dialog == Dialog::Files && !files_save_) {
+        focus_id_ = files_.empty() ? kUp : kListItem;
     } else if (dialog == Dialog::Welcome) {
         focus_id_ = kWelcomeNew;
     } else if (dialog == Dialog::QuitConfirm) {
@@ -163,8 +168,17 @@ void Shell::open_dialog(Dialog dialog)
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {
         focus_id_ = kSlider + 1;
+    } else if (dialog == Dialog::Messages) {
+        focus_id_ = session_.notices().empty() ? kClose : kListItem;
+        list_index_ = 0;
+        list_scroll_ = 0;
+    } else if (dialog == Dialog::Controls) {
+        controls_page_ = 0;
+        focus_id_ = kCancel;
     } else if (dialog == Dialog::Settings) {
         open_volume_ = volume_;
+        open_wheel_zooms_ = wheel_zooms_;
+        open_fullscreen_ = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
         open_scale_percent_ = user_scale_ <= 0.05f ? 0 : static_cast<int>(std::lround(user_scale_ * 100.0f));
         if (open_scale_percent_ < 0) {
             open_scale_percent_ = 0;
@@ -393,19 +407,109 @@ void Shell::clamp_gamepad_cursor(float push_x, float push_y)
     }
     const double view_r = static_cast<double>(view_x_) + view_w_;
     const double view_b = static_cast<double>(view_y_) + view_h_;
-    const double x = cursor_x_;
-    const double y = cursor_y_;
-    if (x < view_x_ || x >= view_r || y < view_y_ || y >= view_b) {
-        return;
-    }
+    double x = cursor_x_;
+    double y = cursor_y_;
     const double map_left = snapped_map_origin(view_x_, map_ox_, scroll_x_);
     const double map_top = snapped_map_origin(view_y_, map_oy_, scroll_y_);
     const double vis_left = std::max(static_cast<double>(view_x_), map_left);
     const double vis_top = std::max(static_cast<double>(view_y_), map_top);
     const double vis_right = std::min(view_r, map_left + map_.pixel_width());
     const double vis_bottom = std::min(view_b, map_top + map_.pixel_height());
-    cursor_x_ = static_cast<float>(clamp_cursor_off_letterbox(x, push_x, view_x_, view_r, vis_left, vis_right));
-    cursor_y_ = static_cast<float>(clamp_cursor_off_letterbox(y, push_y, view_y_, view_b, vis_top, vis_bottom));
+    const bool in_port = x >= view_x_ && x < view_r && y >= view_y_ && y < view_b;
+    if (in_port) {
+        x = clamp_cursor_off_letterbox(x, push_x, view_x_, view_r, vis_left, vis_right);
+        y = clamp_cursor_off_letterbox(y, push_y, view_y_, view_b, vis_top, vis_bottom);
+    }
+    // A right push used to step onto the port edge and stay there: the next
+    // frame treats that edge as outside the port. At 8px the edge is the
+    // grey band. The toolbar is on the left, so the right side is not a control.
+    if (y >= view_y_ && x >= vis_right && x >= view_x_) {
+        x = vis_right - 1.0;
+    }
+    // Holding the stick down used to step past the map into the hint bar.
+    // The next frame treats that as outside the port, and the D-pad pans
+    // instead of moving the cursor, so only the stick could come back.
+    // The visible map is the limit at every zoom, including the 8px overview.
+    if (x >= static_cast<double>(view_x_) && y >= vis_bottom && vis_bottom > vis_top) {
+        y = vis_bottom - 1.0;
+    }
+    cursor_x_ = static_cast<float>(x);
+    cursor_y_ = static_cast<float>(y);
+}
+
+void Shell::toggle_fullscreen()
+{
+    if (window_ == nullptr) {
+        return;
+    }
+    const bool full = (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
+    SDL_SetWindowFullscreen(window_, !full);
+}
+
+void Shell::toggle_overlay(CitySession::MapLayer layer)
+{
+    if (overlay_on_ && overlay_.layer() == layer) {
+        overlay_on_ = false;
+        return;
+    }
+    overlay_.set_layer(layer);
+    overlay_on_ = true;
+    overlay_.sync();
+}
+
+void Shell::reroll_terrain()
+{
+    const unsigned salt = static_cast<unsigned>(SDL_GetTicks()) * 1103515245u + 12345u;
+    const int seed = 1000 + static_cast<int>(salt % 900000);
+    field_b_ = std::to_string(seed);
+    terrain_key_ = 0;
+}
+
+void Shell::jump_notice(int index)
+{
+    const auto &notes = session_.notices();
+    if (index < 0 || index >= static_cast<int>(notes.size())) {
+        return;
+    }
+    const CitySession::CityNotice &note = notes[static_cast<std::size_t>(index)];
+    if (!note.has_place) {
+        return;
+    }
+    center_on_fraction((note.tile_x + 0.5) / CitySession::kWorldW, (note.tile_y + 0.5) / CitySession::kWorldH);
+    if (dialog_ == Dialog::Messages) {
+        close_dialog();
+    }
+}
+
+void Shell::arm_touch_tool()
+{
+    if (!touch_pending_ || touch_armed_) {
+        return;
+    }
+    touch_armed_ = true;
+    touch_pending_ = false;
+    pointer_on_map_ = true;
+    pointer_down_ = true;
+    map_.press(map_local_x(touch_down_x_), map_local_y(touch_down_y_));
+    map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
+}
+
+void Shell::reset_touch_state()
+{
+    if (touch_armed_) {
+        map_.release();
+        pointer_on_map_ = false;
+        pointer_down_ = false;
+    }
+    touch_pending_ = false;
+    touch_armed_ = false;
+    touch_minimap_ = false;
+    pinch_dist_ = 0;
+    list_touch_y_ = -1.0f;
+    list_touch_row_ = false;
+    list_touch_dragged_ = false;
+    list_dragging_ = false;
+    fingers_.clear();
 }
 
 void Shell::load_recent()
@@ -523,6 +627,7 @@ void Shell::finish_save(const std::string &path)
 
 void Shell::finish_open(const std::string &path)
 {
+    reset_touch_state();
     if (path.empty() || !session_.load_city(path)) {
         std::string reason = session_.last_load_error();
         if (reason.empty()) {
@@ -565,7 +670,6 @@ void Shell::refresh_files()
         !review_) {
         std::filesystem::create_directories(files_dir_, ec);
     }
-    files_.push_back("..");
     if (std::filesystem::is_directory(files_dir_, ec)) {
         for (const auto &entry : std::filesystem::directory_iterator(files_dir_, ec)) {
             if (ec) {
@@ -877,28 +981,45 @@ void Shell::apply_action(Action action)
         open_dialog(Dialog::Evaluation);
         break;
     case Action::Power:
-        overlay_.set_layer(CitySession::MapLayer::Power);
-        open_dialog(Dialog::Overlay);
+        toggle_overlay(CitySession::MapLayer::Power);
         break;
     case Action::Water:
-        overlay_.set_layer(CitySession::MapLayer::Water);
-        open_dialog(Dialog::Overlay);
+        toggle_overlay(CitySession::MapLayer::Zones);
+        break;
+    case Action::Zones:
+        toggle_overlay(CitySession::MapLayer::Zones);
         break;
     case Action::Pollution:
-        overlay_.set_layer(CitySession::MapLayer::Pollution);
-        open_dialog(Dialog::Overlay);
+        toggle_overlay(CitySession::MapLayer::Pollution);
         break;
     case Action::Crime:
-        overlay_.set_layer(CitySession::MapLayer::Crime);
-        open_dialog(Dialog::Overlay);
+        toggle_overlay(CitySession::MapLayer::Crime);
         break;
     case Action::LandValue:
-        overlay_.set_layer(CitySession::MapLayer::LandValue);
-        open_dialog(Dialog::Overlay);
+        toggle_overlay(CitySession::MapLayer::LandValue);
         break;
     case Action::Traffic:
-        overlay_.set_layer(CitySession::MapLayer::Traffic);
-        open_dialog(Dialog::Overlay);
+        toggle_overlay(CitySession::MapLayer::Traffic);
+        break;
+    case Action::PoliceMap:
+        toggle_overlay(CitySession::MapLayer::Police);
+        break;
+    case Action::FireMap:
+        toggle_overlay(CitySession::MapLayer::Fire);
+        break;
+    case Action::Population:
+        toggle_overlay(CitySession::MapLayer::Population);
+        break;
+    case Action::Growth:
+        toggle_overlay(CitySession::MapLayer::Growth);
+        break;
+    case Action::Messages:
+        list_index_ = 0;
+        list_scroll_ = 0;
+        open_dialog(Dialog::Messages);
+        break;
+    case Action::Fullscreen:
+        toggle_fullscreen();
         break;
     case Action::About:
         open_dialog(Dialog::About);
@@ -922,12 +1043,31 @@ void Shell::on_dialog_button(int id)
             pause_unfocused_ = !pause_unfocused_;
             return;
         }
+        if (id == kScaleAuto) {
+            scale_percent_ = scale_percent_ <= 0 ? 100 : 0;
+            return;
+        }
+        if (id == kWheelZoom) {
+            wheel_zooms_ = !wheel_zooms_;
+            return;
+        }
+        if (id == kFullscreenBox) {
+            toggle_fullscreen();
+            return;
+        }
         if (id == kCancel) {
             volume_ = open_volume_;
             scale_percent_ = open_scale_percent_;
             pause_unfocused_ = open_pause_unfocused_;
+            wheel_zooms_ = open_wheel_zooms_;
             user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
             sound_.set_volume(static_cast<float>(volume_) / 100.0f);
+            if (window_ != nullptr) {
+                const bool full = (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
+                if (full != open_fullscreen_) {
+                    toggle_fullscreen();
+                }
+            }
             refresh_ui_scale();
             close_dialog();
             return;
@@ -1100,6 +1240,7 @@ void Shell::on_dialog_button(int id)
             close_dialog();
             const int serial = session_.message_serial();
             ++city_generation_;
+            reset_touch_state();
             session_.new_city(spec);
             if (session_.message_serial() == serial) {
                 restore_play_preferences();
@@ -1116,6 +1257,7 @@ void Shell::on_dialog_button(int id)
             if (index >= 0 && index < CitySession::kScenarioCount) {
                 const int id_num = CitySession::scenario_def(index).id;
                 ++city_generation_;
+                reset_touch_state();
                 if (!session_.load_scenario(id_num)) {
                     info_title_ = "Play Scenario";
                     info_body_ = "Could not start that scenario.";
@@ -1310,15 +1452,6 @@ void Shell::on_hotspot(int id, double x, double y)
             return;
         }
     }
-    if (id == kOverlayMap && dialog_ == Dialog::Overlay) {
-        double fx = 0;
-        double fy = 0;
-        if (overlay_.click(x - overlay_x_, y - overlay_y_, static_cast<int>(overlay_w_), static_cast<int>(overlay_h_), fx,
-                           fy)) {
-            center_on_fraction(fx, fy);
-        }
-        return;
-    }
     if (id >= kMenuTitle && id < kMenuTitle + 5 && dialog_ == Dialog::None) {
         special_open_ = false;
         const int column = id - kMenuTitle;
@@ -1358,7 +1491,13 @@ void Shell::on_hotspot(int id, double x, double y)
     if (id >= kListItem && id < kListItem + 64) {
         const int row = id - kListItem;
         if (dialog_ == Dialog::Files) {
-            list_index_ = list_scroll_ + row;
+            const int picked = list_scroll_ + row;
+            if (picked == list_index_ && picked >= 0 && picked < static_cast<int>(files_.size())) {
+                focus_id_ = id;
+                activate_file_row();
+                return;
+            }
+            list_index_ = picked;
             if (list_index_ >= static_cast<int>(files_.size())) {
                 list_index_ = static_cast<int>(files_.size()) - 1;
             }
@@ -1367,7 +1506,13 @@ void Shell::on_hotspot(int id, double x, double y)
             }
             reveal_file_list();
         } else if (dialog_ == Dialog::Scenario) {
-            scenario_index_ = list_scroll_ + row;
+            const int picked = list_scroll_ + row;
+            if (picked == scenario_index_) {
+                focus_id_ = id;
+                on_dialog_button(kPlay);
+                return;
+            }
+            scenario_index_ = picked;
             if (scenario_index_ >= CitySession::kScenarioCount) {
                 scenario_index_ = CitySession::kScenarioCount - 1;
             }
@@ -1376,6 +1521,17 @@ void Shell::on_hotspot(int id, double x, double y)
             }
             list_index_ = scenario_index_;
             reveal_file_list();
+        } else if (dialog_ == Dialog::Messages) {
+            const int picked = list_scroll_ + row;
+            list_index_ = picked;
+            if (list_index_ >= static_cast<int>(session_.notices().size())) {
+                list_index_ = static_cast<int>(session_.notices().size()) - 1;
+            }
+            if (list_index_ < 0) {
+                list_index_ = 0;
+            }
+            reveal_file_list();
+            jump_notice(list_index_);
         } else {
             list_index_ = row;
         }
@@ -1417,7 +1573,19 @@ void Shell::on_hotspot(int id, double x, double y)
             type_text(" ");
         } else if (key.kind == OskKind::Auto) {
             if (active_field() != nullptr) {
-                *active_field() = "auto";
+                static const char *names[] = {
+                    "Pine Harbor", "Red Mesa", "Oak Crossing", "Cedar Bluff", "Silver Ford",
+                    "Little Falls", "West Ridge", "Copper Bend", "Green Hollow", "Stone Ferry",
+                };
+                const unsigned salt = static_cast<unsigned>(SDL_GetTicks());
+                int pick = static_cast<int>(salt % 10);
+                if (pick == osk_last_name_) {
+                    pick = (pick + 1) % 10;
+                }
+                osk_last_name_ = pick;
+                *active_field() = names[pick];
+                field_caret_ = static_cast<int>(active_field()->size());
+                field_anchor_ = field_caret_;
             }
         } else if (key.kind == OskKind::Shift) {
             osk_shift_ = !osk_shift_;
@@ -1425,6 +1593,16 @@ void Shell::on_hotspot(int id, double x, double y)
             const char *insert = (osk_shift_ && key.text_shift != nullptr) ? key.text_shift : key.text;
             type_text(insert);
         }
+        return;
+    }
+    if (id >= kGraphSeries && id < kGraphSeries + 16 && dialog_ == Dialog::Graphs) {
+        graph_mask_ ^= 1 << (id - kGraphSeries);
+        focus_id_ = id;
+        return;
+    }
+    if (id == kNewTerrain && dialog_ == Dialog::NewCity) {
+        reroll_terrain();
+        focus_id_ = id;
         return;
     }
     if (id >= kSlider && id < kSlider + 8) {
@@ -1439,8 +1617,15 @@ void Shell::on_hotspot(int id, double x, double y)
                 if (id == kSlider + 1) {
                     volume_ = value;
                     sound_.set_volume(static_cast<float>(volume_) / 100.0f);
-                } else if (id == kSlider + 2) {
-                    scale_percent_ = value;
+                } else if (id == kSlider + 2 && scale_percent_ > 0) {
+                    int snapped = 50 + static_cast<int>(std::lround((value - 50) / 25.0) * 25);
+                    if (snapped < 50) {
+                        snapped = 50;
+                    }
+                    if (snapped > 200) {
+                        snapped = 200;
+                    }
+                    scale_percent_ = snapped;
                 }
             } else if (id == kSlider + 1) {
                 tax_ = value;
@@ -1665,14 +1850,20 @@ void Shell::move_focus(int delta)
     }
     index = (index + delta + static_cast<int>(focus_order_.size())) % static_cast<int>(focus_order_.size());
     focus_id_ = focus_order_[static_cast<std::size_t>(index)];
-    if (focus_id_ == kFieldName || focus_id_ == kFieldSeed) {
-        select_field();
-    }
     if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
         if (dialog_ == Dialog::Files) {
             list_index_ = list_scroll_ + (focus_id_ - kListItem);
             if (list_index_ >= static_cast<int>(files_.size())) {
                 list_index_ = static_cast<int>(files_.size()) - 1;
+            }
+            if (list_index_ < 0) {
+                list_index_ = 0;
+            }
+            reveal_file_list();
+        } else if (dialog_ == Dialog::Messages) {
+            list_index_ = list_scroll_ + (focus_id_ - kListItem);
+            if (list_index_ >= static_cast<int>(session_.notices().size())) {
+                list_index_ = static_cast<int>(session_.notices().size()) - 1;
             }
             if (list_index_ < 0) {
                 list_index_ = 0;
@@ -1696,8 +1887,12 @@ void Shell::move_focus(int delta)
 
 void Shell::reveal_file_list()
 {
+    list_scroll_free_ = false;
     const bool scenarios = dialog_ == Dialog::Scenario;
-    const int count = scenarios ? CitySession::kScenarioCount : static_cast<int>(files_.size());
+    const bool messages = dialog_ == Dialog::Messages;
+    const int count = scenarios ? CitySession::kScenarioCount
+                                : messages ? static_cast<int>(session_.notices().size())
+                                           : static_cast<int>(files_.size());
     const int index = scenarios ? scenario_index_ : list_index_;
     list_reveal(list_scroll_, index, std::max(1, files_visible_), count);
     if (scenarios) {
@@ -1705,18 +1900,77 @@ void Shell::reveal_file_list()
     }
 }
 
+void Shell::scroll_open_list(int delta)
+{
+    if (delta == 0) {
+        return;
+    }
+    const bool scenarios = dialog_ == Dialog::Scenario;
+    const bool messages = dialog_ == Dialog::Messages;
+    const bool files = dialog_ == Dialog::Files;
+    if (!scenarios && !messages && !files) {
+        return;
+    }
+    const int count = scenarios ? CitySession::kScenarioCount
+                                : messages ? static_cast<int>(session_.notices().size())
+                                           : static_cast<int>(files_.size());
+    const int visible = std::max(1, files_visible_);
+    int next = list_scroll_ + delta;
+    const int max_scroll = list_max_scroll(count, visible);
+    if (next < 0) {
+        next = 0;
+    }
+    if (next > max_scroll) {
+        next = max_scroll;
+    }
+    if (next == list_scroll_) {
+        return;
+    }
+    list_scroll_ = next;
+    list_scroll_free_ = true;
+    const int selected = scenarios ? scenario_index_ : list_index_;
+    if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
+        const int row = selected - list_scroll_;
+        if (row >= 0 && row < visible && row < 64) {
+            focus_id_ = kListItem + row;
+        } else {
+            // Keep D-pad on the list without ringing a different row.
+            focus_id_ = kListItem + 63;
+        }
+    }
+}
+
+void Shell::place_list_window(int index, int count)
+{
+    const int visible = std::max(1, files_visible_);
+    if (list_scroll_free_) {
+        const int max_scroll = list_max_scroll(count, visible);
+        if (list_scroll_ < 0) {
+            list_scroll_ = 0;
+        }
+        if (list_scroll_ > max_scroll) {
+            list_scroll_ = max_scroll;
+        }
+        return;
+    }
+    list_reveal(list_scroll_, index, visible, count);
+}
+
 bool Shell::nudge_file_list(int delta, bool page, bool force)
 {
     const bool files = dialog_ == Dialog::Files && !files_.empty();
     const bool scenarios = dialog_ == Dialog::Scenario;
-    if ((!files && !scenarios) || delta == 0) {
+    const bool messages = dialog_ == Dialog::Messages && !session_.notices().empty();
+    if ((!files && !scenarios && !messages) || delta == 0) {
         return false;
     }
     const bool on_list = focus_id_ >= kListItem && focus_id_ < kListItem + 64;
     if (!on_list && !force && !page) {
         return false;
     }
-    const int count = scenarios ? CitySession::kScenarioCount : static_cast<int>(files_.size());
+    const int count = scenarios ? CitySession::kScenarioCount
+                               : messages ? static_cast<int>(session_.notices().size())
+                                          : static_cast<int>(files_.size());
     int index = scenarios ? scenario_index_ : list_index_;
     const int step = page ? std::max(1, files_visible_ - 1) : std::max(1, std::abs(delta));
     const int sign = delta < 0 ? -1 : 1;
@@ -1768,12 +2022,19 @@ void Shell::activate_file_row()
 
 void Shell::activate_focus()
 {
-    if (focus_id_ >= kOsk) {
+    if (focus_id_ >= kOsk && focus_id_ < kOsk + 64) {
         on_hotspot(focus_id_, 0, 0);
         return;
     }
-    if (focus_id_ >= kChoice) {
+    if (focus_id_ >= kGraphSeries && focus_id_ < kGraphSeries + 16) {
         on_hotspot(focus_id_, 0, 0);
+        return;
+    }
+    if (focus_id_ >= kChoice && focus_id_ < kChoice + 50) {
+        on_hotspot(focus_id_, 0, 0);
+        return;
+    }
+    if (focus_id_ >= kSlider && focus_id_ < kSlider + 8) {
         return;
     }
     if (dialog_ != Dialog::None && is_dialog_button(focus_id_)) {
@@ -1782,6 +2043,10 @@ void Shell::activate_focus()
     }
     if (dialog_ == Dialog::Scenario) {
         on_dialog_button(kPlay);
+        return;
+    }
+    if (dialog_ == Dialog::Messages) {
+        jump_notice(list_index_);
         return;
     }
     if (dialog_ == Dialog::Files) {
@@ -1814,6 +2079,9 @@ bool Shell::adjust_focused_slider(int direction)
                 current = volume_;
                 step = direction * 5;
             } else if (slider.id == kSlider + 2) {
+                if (scale_percent_ <= 0) {
+                    return false;
+                }
                 current = scale_percent_;
                 step = direction * 25;
             }

@@ -52,7 +52,8 @@ enum class Dialog : int {
     Settings,
     Controls,
     Welcome,
-    QuitConfirm
+    QuitConfirm,
+    Messages
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
@@ -144,7 +145,18 @@ private:
     void zoom_by(int delta, double anchor_x, double anchor_y);
     // Pull a resting gamepad cursor off the grey band beside the map.
     // push_* is the stick; a push outward steps off the port onto the UI.
+    // Down is clamped onto the map so the cursor cannot fall into the hint bar.
     void clamp_gamepad_cursor(float push_x, float push_y);
+    void toggle_fullscreen();
+    void toggle_overlay(CitySession::MapLayer layer);
+    void reroll_terrain();
+    void jump_notice(int index);
+    void arm_touch_tool();
+    // Drop a pending tap, end a drag, and forget every finger. A drag that
+    // already placed tiles keeps them. Nothing here restores the map.
+    void reset_touch_state();
+    std::string context_hint() const;
+    std::string dialog_title_hint() const;
     void set_speed(int speed);
     void toggle_pause();
     void cycle_tool(int delta);
@@ -180,6 +192,10 @@ private:
     bool adjust_focused_slider(int direction);
     bool nudge_file_list(int delta, bool page, bool force);
     void reveal_file_list();
+    // Touch drag. Moves the window and leaves the selection where it is.
+    void scroll_open_list(int delta);
+    // Keep a touch-scrolled window put. A selection change reveals that row.
+    void place_list_window(int index, int count);
     void run_review_checks();
     int dp(int px) const;
     const char *ui_font() const;
@@ -285,7 +301,7 @@ private:
     bool open_pause_unfocused_ = false;
     ui_scale::StoredSettings loaded_{};
     int paused_from_ = 2;
-    int tool_index_ = 3;
+    int tool_index_ = 16;
     bool special_open_ = false;
     int special_cursor_ = 0;
     int special_choice_ = -1;
@@ -317,8 +333,18 @@ private:
     int files_visible_ = 1;
     double list_track_y_ = 0;
     double list_track_h_ = 1;
+    // File and scenario scrollbar. Messages has no track, so it never sets this.
+    // A touch does not synthesize a mouse-up, so this also clears on finger
+    // up or cancel, in reset_touch_state(), and on buttonless mouse motion.
     bool list_dragging_ = false;
+    // Set while a touch drag has moved the window away from the selection.
+    // Paint must not snap the scroll back until the selection itself moves.
+    bool list_scroll_free_ = false;
     float list_touch_y_ = -1.0f;
+    float list_touch_origin_x_ = 0;
+    float list_touch_origin_y_ = 0;
+    bool list_touch_row_ = false;
+    bool list_touch_dragged_ = false;
     int scenario_index_ = 0;
     bool files_save_ = false;
     std::string files_dir_;
@@ -336,6 +362,39 @@ private:
     int police_ = 100;
     int fire_ = 100;
     bool graphs_long_ = false;
+    int graph_mask_ = 0x7f;
+    int graph_pointer_x_ = -1;
+    double graph_chart_x_ = 0;
+    double graph_chart_y_ = 0;
+    double graph_chart_w_ = 0;
+    double graph_chart_h_ = 0;
+    std::string graph_readout_;
+    bool overlay_on_ = false;
+    bool wheel_zooms_ = false;
+    bool open_wheel_zooms_ = false;
+    bool open_fullscreen_ = false;
+    int controls_page_ = 0;
+    int controls_scroll_ = 0;
+    int controls_scroll_max_ = 0;
+    int osk_last_name_ = -1;
+    bool goal_dismissed_ = false;
+    int goal_scenario_ = -1;
+    std::chrono::steady_clock::time_point goal_until_{};
+    bool pause_noted_ = false;
+    bool touch_pending_ = false;
+    bool touch_armed_ = false;
+    bool touch_minimap_ = false;
+    float touch_down_x_ = 0;
+    float touch_down_y_ = 0;
+    bool pan_pointer_ = false;
+    bool pan_moved_ = false;
+    int pan_button_ = 0;
+    double pan_start_x_ = 0;
+    double pan_start_y_ = 0;
+    double pan_scroll_x_ = 0;
+    double pan_scroll_y_ = 0;
+    int terrain_key_ = 0;
+    cairo_surface_t *terrain_preview_ = nullptr;
     double overlay_x_ = 0;
     double overlay_y_ = 0;
     double overlay_w_ = 0;

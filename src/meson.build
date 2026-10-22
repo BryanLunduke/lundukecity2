@@ -2,6 +2,7 @@ lunduke_city_src = files(
   'main.cpp',
   'assets.cpp',
   'chart.cpp',
+  'city_glance.cpp',
   'city_session.cpp',
   'map_view.cpp',
   'messages.cpp',

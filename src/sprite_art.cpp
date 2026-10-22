@@ -19,10 +19,15 @@ struct Frame {
 constexpr int kTypes = 8;
 constexpr int kFrames = 16;
 
+std::vector<Frame> &frames()
+{
+    static std::vector<Frame> stored(static_cast<std::size_t>(kTypes * kFrames));
+    return stored;
+}
+
 Frame &slot(int type, int frame_index)
 {
-    static std::vector<Frame> frames(static_cast<std::size_t>(kTypes * kFrames));
-    return frames[static_cast<std::size_t>((type - 1) * kFrames + frame_index)];
+    return frames()[static_cast<std::size_t>((type - 1) * kFrames + frame_index)];
 }
 
 bool load_frame(int type, int frame_index)
@@ -51,6 +56,16 @@ bool load_frame(int type, int frame_index)
 }
 
 } // namespace
+
+void sprite_art_shutdown()
+{
+    for (Frame &frame : frames()) {
+        if (frame.surface != nullptr) {
+            cairo_surface_destroy(frame.surface);
+            frame.surface = nullptr;
+        }
+    }
+}
 
 cairo_surface_t *sprite_frame(int type, int frame)
 {

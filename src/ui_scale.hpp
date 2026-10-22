@@ -75,10 +75,19 @@ inline bool chrome_fits(float scale, int win_w, int win_h)
     }
     const int pal_y = menu + px(6);
     const int mini_y = pal_y + palette_h(cell) + px(8);
-    const int mini_h = std::max(px(64), side * 5 / 6);
-    const int demand_y = mini_y + mini_h + px(8);
     const int status_y = win_h - status - message;
-    return demand_y + px(72) <= status_y;
+    const int gap = px(8);
+    int mini_h = std::max(px(64), side * 5 / 6);
+    const int demand_floor = px(72);
+    int demand_y = mini_y + mini_h + gap;
+    // A short window shrinks the minimap (down to 36 scaled pixels) before
+    // the demand gauges are allowed to cover the status bar.
+    if (demand_y + demand_floor > status_y) {
+        const int overflow = demand_y + demand_floor - status_y;
+        mini_h = std::max(px(36), mini_h - overflow);
+        demand_y = mini_y + mini_h + gap;
+    }
+    return mini_h >= px(36) && demand_y + demand_floor <= status_y;
 }
 
 // Shrink a requested scale until the chrome fits. The result stays at least 0.5.
@@ -224,6 +233,8 @@ struct StoredSettings {
     int disasters = -1;
     int auto_goto = -1;
     int pause_unfocused = -1;
+    // -1 absent, 0 scroll, 1 zoom.
+    int wheel_zoom = -1;
 };
 
 inline std::string settings_text(const StoredSettings &settings)
@@ -250,6 +261,7 @@ inline std::string settings_text(const StoredSettings &settings)
     put("disasters", settings.disasters);
     put("auto_goto", settings.auto_goto);
     put("pause_unfocused", settings.pause_unfocused);
+    put("wheel_zoom", settings.wheel_zoom);
     return out.str();
 }
 
@@ -351,6 +363,9 @@ inline StoredSettings settings_parse(const std::string &text)
         } else if (key == "pause_unfocused") {
             bool saw = false;
             as_int(settings.pause_unfocused, saw);
+        } else if (key == "wheel_zoom") {
+            bool saw = false;
+            as_int(settings.wheel_zoom, saw);
         }
     }
     if (saw_w && saw_h && settings.w >= 320 && settings.h >= 240) {

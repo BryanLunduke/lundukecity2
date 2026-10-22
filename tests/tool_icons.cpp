@@ -108,8 +108,8 @@ int main()
     if (std::abs(deck - 1.0) > 0.01) {
         return fail("a 40px sprite does not fill a 40px button");
     }
-    if (!(half < 1.0) || std::abs(half * 40.0 - 16.0) > 0.01) {
-        return fail("a sprite larger than the button is clipped instead of shrunk");
+    if (std::abs(half - 0.5) > 0.01) {
+        return fail("a slot smaller than the sprite must use a crisp half scale");
     }
     // 64px is not a whole multiple of 40. Stretching would look lumpy, and
     // shrinking below the 1x sprite is worse than leaving a margin.

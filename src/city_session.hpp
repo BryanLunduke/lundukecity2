@@ -68,6 +68,11 @@ public:
         Crime,
         LandValue,
         Traffic,
+        Police,
+        Fire,
+        Population,
+        Growth,
+        Zones,
     };
 
     using Listener = std::function<void()>;
@@ -270,6 +275,9 @@ public:
     int history_value(HistorySeries series, HistoryScale scale, int index) const;
     // Dollars for one cash-flow sample. Index 0 is the newest.
     std::int64_t cash_flow_history(HistoryScale scale, int index) const;
+    // The sample the graphs plot. A fresh short-scale point of zero uses
+    // the budget's current cash-flow figure instead of the empty history.
+    std::int64_t plot_cash_flow(HistoryScale scale, int index) const;
     // False when the sample was reconstructed from the capped history byte.
     bool cash_flow_history_exact(HistoryScale scale, int index) const;
     // 1 when the scenario was just won, -1 when it was just lost, then 0.
@@ -289,11 +297,16 @@ public:
     std::string scenario_outcome_text(bool won) const;
     // 0 when this city is not one of the eight scenarios.
     int scenario_id() const;
-    // Years until the scenario is scored. -1 when no scenario is running.
-    // 0 when the deadline has already passed.
+    // Whole years until the scenario is scored, rounded down. -1 when no
+    // scenario is running. 0 when the deadline has already passed.
     int scenario_years_left() const;
+    // "30 years left", "9 years, 2 months left", or "Time is up".
+    // Empty when no scenario is running.
+    std::string scenario_clock_text() const;
     // Goal plus the time still left. Empty when no scenario is running.
     std::string scenario_progress() const;
+    // The number the scenario is chasing, with the live reading.
+    std::string scenario_meter() const;
 
     // Public-opinion and score data from the last cityEvaluation().
     // update_evaluation() runs that pass; evaluation() only reads it.
@@ -316,6 +329,10 @@ public:
         // poll and no complaints; the window says so instead of showing
         // the engine's start-up defaults.
         bool no_residents = false;
+        // False until a full game year has passed since the city was
+        // started or loaded. The window shows a dash instead of a stale
+        // migration or score change from the scenario file.
+        bool deltas_known = true;
     };
     void update_evaluation();
     Evaluation evaluation() const;
@@ -329,6 +346,20 @@ public:
     int map_value(int x, int y) const;
     int layer_value(MapLayer layer, int x, int y) const;
     unsigned map_serial() const;
+    // Filled by the last query. False until the player queries a tile.
+    bool query_tile(int &x, int &y) const;
+    struct CityNotice {
+        std::string text;
+        int tile_x = 0;
+        int tile_y = 0;
+        int month = 0;
+        int year = 1900;
+        bool has_place = false;
+    };
+    const std::vector<CityNotice> &notices() const { return notices_; }
+    void clear_notices();
+    // Terrain only, on a throwaway simulator. Does not touch this city.
+    bool preview_terrain(int seed, int island, int rivers, int lakes, int trees, std::vector<unsigned short> &tiles) const;
     std::vector<SpriteDot> sprites() const;
 
     const std::string &save_path() const { return save_path_; }
@@ -376,6 +407,20 @@ private:
     int eval_month_ = -1;
     int speed_before_outcome_ = 2;
     bool outcome_paused_ = false;
+    bool eval_deltas_ready_ = false;
+    long long eval_anchor_time_ = 0;
+    int scenario_result_ = 0;
+    bool query_has_tile_ = false;
+    int query_x_ = 0;
+    int query_y_ = 0;
+    std::vector<CityNotice> notices_;
+    void arm_eval_baseline();
+    void recount_population_from_map();
+    void refresh_loaded_meters();
+    void clear_scenario_clock();
+    void remember_notice(std::string text, int tile_x, int tile_y, bool has_place);
+    bool write_scenario_sidecar(const std::string &path) const;
+    void read_scenario_sidecar(const std::string &path);
 
 #ifdef LUNDUKE_CITY_TEST_HOOKS
     friend int hostile_review_session_probe(CitySession &session, int op);

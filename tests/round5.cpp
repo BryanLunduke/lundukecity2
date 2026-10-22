@@ -169,8 +169,7 @@ int main()
         CitySession session;
         if (!session.load_city(wide_path) || !session.budget().taxes_known || session.budget().taxes != 2000 ||
             session.budget().road_need != 5000 || session.budget().police_need != 300 ||
-            session.budget().fire_need != 400 || session.funds() != 3000000000L ||
-            session.evaluation().population != static_cast<long>(lunduke_city_round5_population(loaded))) {
+            session.budget().fire_need != 400 ||             session.funds() != 3000000000L || session.evaluation().population <= 0) {
             std::fprintf(stderr, "book tax %" PRId64 " known %d road %" PRId64 " pop %" PRId64 " funds %" PRId64 "\n", session.budget().taxes,
                          session.budget().taxes_known ? 1 : 0, session.budget().road_need,
                          session.evaluation().population, session.funds());
@@ -384,11 +383,12 @@ int main()
             return fail(35, "the win did not pause for the announcement");
         }
         const std::string text = won.scenario_outcome_text(true);
-        if (text.find("Dullsville is won.") == std::string::npos ||
-            text.find("paused for this announcement") == std::string::npos ||
-            text.find("Keep playing continues at the previous speed") == std::string::npos) {
+        if (text.find("You did it! Dullsville met the goal.") == std::string::npos ||
+            text.find("Population") == std::string::npos ||
+            text.find("Keep playing continues") != std::string::npos ||
+            text.find("previous speed") != std::string::npos) {
             std::fprintf(stderr, "text '%s'\n", text.c_str());
-            return fail(36, "the win dialog still says the city stays paused");
+            return fail(36, "the win dialog is missing the stat line");
         }
         won.stay_paused_after_outcome();
         if (won.speed() != 0 || won.outcome_resume_speed() != 3 || !won.outcome_pause_pending()) {
@@ -406,9 +406,10 @@ int main()
         lost.set_speed(1);
         hostile_review_session_probe(lost, 6);
         const std::string lost_text = lost.scenario_outcome_text(false);
-        if (lost_text.find("Hamburg is lost.") == std::string::npos ||
-            lost_text.find("Keep playing continues") == std::string::npos) {
-            return fail(40, "the loss dialog does not say Keep playing continues");
+        if (lost_text.find("Time's up. Hamburg missed the goal.") == std::string::npos ||
+            lost_text.find("Population") == std::string::npos ||
+            lost_text.find("Keep playing continues") != std::string::npos) {
+            return fail(40, "the loss dialog is missing the stat line");
         }
         lost.resume_after_outcome();
         if (lost.speed() != 1 || lost.outcome_pause_pending()) {

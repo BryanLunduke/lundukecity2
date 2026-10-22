@@ -4,12 +4,10 @@
 
 #pragma once
 
-// Menu model for the SDL shell. The 0.9.5-2 gtkmm bar had 35 actionable
-// rows. Settings and Controls bring that to 37 (8 System, 12 Options,
-// 6 Disasters, 9 Windows, 2 Help), 4 separators
-// and 5 titles. Hidden zoom accelerators (Ctrl+plus, Ctrl+keypad plus,
-// Ctrl+keypad minus) are extra bindings, not extra rows. Together with the
-// two hidden zoom-in bindings that is the "37" figure in the migration note.
+// Menu model for the SDL shell. 43 actionable rows: 8 System, 13 Options,
+// 6 Disasters, 14 Windows, 2 Help. Fullscreen, the zone and coverage
+// maps, and Messages are the rows past the original 37. Hidden zoom
+// accelerators are extra bindings, not extra rows.
 
 #include <cctype>
 #include <string>
@@ -46,6 +44,8 @@ enum class Action {
     Budget, Graphs, Evaluation,
     Power, Water, Pollution, Crime, LandValue, Traffic,
     About, Settings, Controls,
+    Fullscreen,
+    Zones, PoliceMap, FireMap, Population, Growth, Messages,
     RecentIndex
 };
 
@@ -99,10 +99,10 @@ namespace menu_table {
 
 inline constexpr MenuEntry kSystem[] = {
     {"_New City", "Ctrl+N", ItemKind::Normal, Action::NewCity, AccelKey::N, static_cast<int>(AccelMod::Ctrl), 0},
-    {"_Load City...", "Ctrl+O", ItemKind::Normal, Action::Load, AccelKey::O, static_cast<int>(AccelMod::Ctrl), 0},
+    {"_Load City…", "Ctrl+O", ItemKind::Normal, Action::Load, AccelKey::O, static_cast<int>(AccelMod::Ctrl), 0},
     {"Open _Recent", nullptr, ItemKind::Submenu, Action::Recent, AccelKey::None, 0, 0},
     {"Save _City", "Ctrl+S", ItemKind::Normal, Action::Save, AccelKey::S, static_cast<int>(AccelMod::Ctrl), 0},
-    {"Save City _As...", "Ctrl+Shift+S", ItemKind::Normal, Action::SaveAs, AccelKey::S,
+    {"Save City _As…", "Ctrl+Shift+S", ItemKind::Normal, Action::SaveAs, AccelKey::S,
      static_cast<int>(AccelMod::Ctrl) | static_cast<int>(AccelMod::Shift), 0},
     {"Play _Scenario…", nullptr, ItemKind::Normal, Action::Scenario, AccelKey::None, 0, 0},
     {"Rename Cit_y…", nullptr, ItemKind::Normal, Action::Rename, AccelKey::None, 0, 0},
@@ -116,6 +116,7 @@ inline constexpr MenuEntry kOptions[] = {
     {"Enable _disasters", nullptr, ItemKind::Check, Action::DisastersEnabled, AccelKey::None, 0, 0},
     {"Auto-_goto", nullptr, ItemKind::Check, Action::AutoGoto, AccelKey::None, 0, 0},
     {"_Mute sound", nullptr, ItemKind::Check, Action::Mute, AccelKey::None, 0, 0},
+    {"Fu_llscreen", nullptr, ItemKind::Check, Action::Fullscreen, AccelKey::None, 0, 0},
     {"_Settings…", nullptr, ItemKind::Normal, Action::Settings, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Pause", "Ctrl+P", ItemKind::Radio, Action::SetPause, AccelKey::None, 0, 1},
@@ -141,12 +142,17 @@ inline constexpr MenuEntry kWindows[] = {
     {"_Graphs", nullptr, ItemKind::Normal, Action::Graphs, AccelKey::None, 0, 0},
     {"_Evaluation", nullptr, ItemKind::Normal, Action::Evaluation, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
-    {"_Power", nullptr, ItemKind::Normal, Action::Power, AccelKey::None, 0, 0},
-    {"_Water", nullptr, ItemKind::Normal, Action::Water, AccelKey::None, 0, 0},
-    {"P_ollution", nullptr, ItemKind::Normal, Action::Pollution, AccelKey::None, 0, 0},
-    {"_Crime", nullptr, ItemKind::Normal, Action::Crime, AccelKey::None, 0, 0},
-    {"_Land value", nullptr, ItemKind::Normal, Action::LandValue, AccelKey::None, 0, 0},
-    {"_Traffic", nullptr, ItemKind::Normal, Action::Traffic, AccelKey::None, 0, 0},
+    {"_Power", nullptr, ItemKind::Check, Action::Power, AccelKey::None, 0, 0},
+    {"All _zones", nullptr, ItemKind::Check, Action::Zones, AccelKey::None, 0, 0},
+    {"P_ollution", nullptr, ItemKind::Check, Action::Pollution, AccelKey::None, 0, 0},
+    {"_Crime", nullptr, ItemKind::Check, Action::Crime, AccelKey::None, 0, 0},
+    {"_Land value", nullptr, ItemKind::Check, Action::LandValue, AccelKey::None, 0, 0},
+    {"_Traffic", nullptr, ItemKind::Check, Action::Traffic, AccelKey::None, 0, 0},
+    {"Police co_verage", nullptr, ItemKind::Check, Action::PoliceMap, AccelKey::None, 0, 0},
+    {"_Fire coverage", nullptr, ItemKind::Check, Action::FireMap, AccelKey::None, 0, 0},
+    {"Pop_ulation", nullptr, ItemKind::Check, Action::Population, AccelKey::None, 0, 0},
+    {"G_rowth rate", nullptr, ItemKind::Check, Action::Growth, AccelKey::None, 0, 0},
+    {"_Messages", nullptr, ItemKind::Normal, Action::Messages, AccelKey::None, 0, 0},
 };
 
 inline constexpr MenuEntry kHelp[] = {

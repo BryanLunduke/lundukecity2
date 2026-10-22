@@ -55,15 +55,15 @@ static int test_query_words()
 {
     const std::string low = zone_status_text(29, 1, 5, 9, 13, 17);
     const std::string high = zone_status_text(11, 4, 8, 12, 16, 20);
-    if (low.find("sparse") == std::string::npos || low.find("low") == std::string::npos ||
-        low.find("safe") == std::string::npos || low.find("clean") == std::string::npos ||
-        low.find("declining") == std::string::npos || low.find("booming") != std::string::npos) {
+    if (low.find("Sparse") == std::string::npos || low.find("Low") == std::string::npos ||
+        low.find("Safe") == std::string::npos || low.find("Clean") == std::string::npos ||
+        low.find("Declining") == std::string::npos || low.find("Booming") != std::string::npos) {
         std::fprintf(stderr, "low query: %s\n", low.c_str());
         return fail(1, "low query bands did not follow the engine categories");
     }
-    if (high.find("packed") == std::string::npos || high.find("prime") == std::string::npos ||
-        high.find("dangerous") == std::string::npos || high.find("heavy") == std::string::npos ||
-        high.find("booming") == std::string::npos || high.find("sparse") != std::string::npos) {
+    if (high.find("Packed") == std::string::npos || high.find("Prime") == std::string::npos ||
+        high.find("Dangerous") == std::string::npos || high.find("Heavy") == std::string::npos ||
+        high.find("Booming") == std::string::npos || high.find("Sparse") != std::string::npos) {
         std::fprintf(stderr, "high query: %s\n", high.c_str());
         return fail(2, "high query bands did not follow the engine categories");
     }
@@ -85,7 +85,7 @@ static int test_query_words()
         return fail(3, "generated city had no clear tile to query");
     }
     const std::string live = session.message();
-    if (live.find("growth stable") == std::string::npos || live.find("booming") != std::string::npos) {
+    if (live.find("Growth: Stable") == std::string::npos || live.find("Booming") != std::string::npos) {
         std::fprintf(stderr, "live query: %s\n", live.c_str());
         return fail(4, "clear land was not reported as stable growth");
     }

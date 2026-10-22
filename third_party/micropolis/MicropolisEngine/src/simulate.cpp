@@ -303,9 +303,11 @@ void Micropolis::doSimInit()
     captureCensusSnapshot();
     doPowerScan();
     newPower = true;         /* post rel */
+    // Crime reads the density map. Scanning crime first left the scenario
+    // meter on the empty map until the next crime pass.
     pollutionTerrainLandValueScan();
-    crimeScan();
     populationDensityScan();
+    crimeScan();
     fireAnalysis();
     newMap = 1;
     censusChanged = true;

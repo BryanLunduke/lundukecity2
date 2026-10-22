@@ -8,6 +8,7 @@
 #include "assets.hpp"
 #include "city_tail.hpp"
 #include "messages.hpp"
+#include "scenario_sidecar.hpp"
 #include "special_buildings.hpp"
 
 #include "micropolis.h"
@@ -25,7 +26,9 @@
 
 namespace {
 
-std::string with_commas(std::int64_t value)
+// Thousands separators for a count such as population or score. No currency
+// symbol: a city of 17,940 people is not $17,940.
+std::string grouped_count(std::int64_t value)
 {
     const bool neg = value < 0;
     std::uint64_t mag = static_cast<std::uint64_t>(neg ? -value : value);
@@ -40,7 +43,17 @@ std::string with_commas(std::int64_t value)
         ++count;
     }
     std::reverse(grouped.begin(), grouped.end());
-    return (neg ? "-$" : "$") + grouped;
+    if (neg) {
+        grouped.insert(grouped.begin(), '-');
+    }
+    return grouped;
+}
+
+// Funds, taxes, and department costs. The sign sits in front of the dollar.
+std::string with_commas(std::int64_t value)
+{
+    const bool neg = value < 0;
+    return (neg ? "-$" : "$") + grouped_count(neg ? -value : value);
 }
 
 const char *kMonths[] = {
@@ -468,11 +481,33 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
         const std::string kind = take_string();
         if (kind == "message") {
             int number = 0;
+            int mx = 0;
+            int my = 0;
+            bool has_place = false;
             const char *p = params + 1;
             if (*p == 'd') {
                 number = take_int();
+                ++p;
             }
-            post_message(message_for_number(number));
+            if (*p == 'd') {
+                mx = take_int();
+                ++p;
+                has_place = true;
+            }
+            if (*p == 'd') {
+                my = take_int();
+                ++p;
+            }
+            if (*p == 'd') {
+                (void)take_int();
+                ++p;
+            }
+            if (*p == 'b') {
+                (void)take_int();
+            }
+            const std::string text = message_for_number(number);
+            post_message(text);
+            remember_notice(text, mx, my, has_place);
         }
         return;
     }
@@ -516,6 +551,17 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
         }
         const std::string special = special_query_at(&engine_->sim, qx, qy);
         message_ = special.empty() ? zone_status_text(category, s0, s1, s2, s3, s4) : special;
+        query_x_ = qx;
+        query_y_ = qy;
+        query_has_tile_ = Micropolis::testBounds(qx, qy);
+        if (query_has_tile_) {
+            const int raw = engine_->sim.map[qx][qy];
+            const bool powered = (raw & PWRBIT) != 0;
+            message_ += ", Power: ";
+            message_ += powered ? "on" : "off";
+            message_ += ", Pollution level: " + std::to_string(layer_value(MapLayer::Pollution, qx, qy));
+            message_ += ", Crime level: " + std::to_string(layer_value(MapLayer::Crime, qx, qy));
+        }
         ++query_serial_;
         notify();
         return;
@@ -575,6 +621,7 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
         }
         outcome_paused_ = true;
         scenario_outcome_ = which == "winGame" ? 1 : -1;
+        scenario_result_ = scenario_outcome_;
         speed_ = 0;
         engine_->sim.setSpeed(0);
         mark_dirty();
@@ -677,6 +724,9 @@ void CitySession::new_city(const NewCitySpec &spec)
     }
     eval_month_ = -1;
     eval_month_pending_ = false;
+    clear_notices();
+    clear_scenario_clock();
+    arm_eval_baseline();
     ready_ = true;
     notify();
 }
@@ -815,6 +865,12 @@ bool CitySession::load_city(const std::string &path)
     mark_clean_time();
     eval_month_ = -1;
     eval_month_pending_ = false;
+    clear_notices();
+    clear_scenario_clock();
+    read_scenario_sidecar(path);
+    recount_population_from_map();
+    refresh_loaded_meters();
+    arm_eval_baseline();
     if (classify_city_path(path) == CityFileKind::Incomplete) {
         post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
     } else {
@@ -885,6 +941,11 @@ bool CitySession::load_scenario(int id)
     mark_clean_time();
     eval_month_ = -1;
     eval_month_pending_ = false;
+    clear_notices();
+    clear_scenario_clock();
+    recount_population_from_map();
+    refresh_loaded_meters();
+    arm_eval_baseline();
     post_message(std::string("Playing ") + entry->def.name + ".");
     return true;
 }
@@ -908,6 +969,10 @@ bool CitySession::save_city_as(const std::string &path)
     dirty_ = false;
     fresh_generated_ = false;
     mark_clean_time();
+    if (!write_scenario_sidecar(path) && engine_->sim.scoreType != SC_NONE) {
+        post_message("The city was saved, but the scenario timer could not be stored. Loading this file ends the scenario.");
+        return true;
+    }
     post_message("City saved.");
     return true;
 }
@@ -919,7 +984,11 @@ bool CitySession::write_recovery(const std::string &path)
     }
     // saveFile, not saveCityAs: no "saved" callback, no engine file name
     // change, and a waiting tax year stays waiting (commitPending false).
-    return engine_->sim.saveFile(path.c_str(), false);
+    if (!engine_->sim.saveFile(path.c_str(), false)) {
+        return false;
+    }
+    write_scenario_sidecar(path);
+    return true;
 }
 
 bool CitySession::load_recovery(const std::string &recovery_path, const std::string &origin_path)
@@ -1695,46 +1764,90 @@ int CitySession::scenario_years_left() const
     if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
         return -1;
     }
-    // scoreWait counts simulation cycles. A year is 48 cycles, and the
-    // counter is checked once per cycle. Round up so the first year on
-    // the clock still reads as a full year.
+    // scoreWait counts simulation cycles. A year is 48 cycles. Whole years
+    // are rounded down so a partial year still shows in scenario_clock_text.
     if (sim.scoreWait <= 0) {
         return 0;
     }
-    return (static_cast<int>(sim.scoreWait) + 47) / 48;
+    return static_cast<int>(sim.scoreWait) / 48;
+}
+
+std::string CitySession::scenario_clock_text() const
+{
+    const Micropolis &sim = engine_->sim;
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+        return {};
+    }
+    if (sim.scoreWait <= 0) {
+        return "Time is up";
+    }
+    const int cycles = static_cast<int>(sim.scoreWait);
+    const int years = cycles / 48;
+    const int months = (cycles % 48) / 4;
+    if (months <= 0) {
+        if (years == 1) {
+            return "1 year left";
+        }
+        return std::to_string(years) + " years left";
+    }
+    std::string text = std::to_string(years) + (years == 1 ? " year, " : " years, ");
+    text += std::to_string(months) + (months == 1 ? " month left" : " months left");
+    return text;
 }
 
 std::string CitySession::scenario_progress() const
 {
     const int id = scenario_id();
-    if (id == 0) {
+    if (id == 0 || scenario_years_left() < 0) {
         return {};
     }
     const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
-    const int left = scenario_years_left();
-    std::string time = "Time is up";
-    if (left == 1) {
-        time = "1 year left";
-    } else if (left > 1) {
-        time = std::to_string(left) + " years left";
-    } else if (left < 0) {
-        time = std::to_string(def.years) + " years";
+    const std::string time = scenario_clock_text();
+    if (time.empty()) {
+        return def.goal;
     }
     return time + ". " + def.goal;
 }
 
+std::string CitySession::scenario_meter() const
+{
+    const int id = scenario_id();
+    if (id == 0 || scenario_years_left() < 0) {
+        return {};
+    }
+    const Micropolis &sim = engine_->sim;
+    const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
+    if (id == SC_DETROIT) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < 60";
+    }
+    if (id == SC_BERN) {
+        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < 80";
+    }
+    if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
+        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + " → goal > 500";
+    }
+    return "Population " + grouped_count(people > 0 ? people : 0) + " → 100,000";
+}
+
 std::string CitySession::scenario_outcome_text(bool won) const
 {
-    std::string text = city_name() + (won ? " is won." : " is lost.");
+    const std::string name = city_name();
+    std::string text = won ? "You did it! " + name + " met the goal." : "Time's up. " + name + " missed the goal.";
     const int id = scenario_id();
     if (id != 0) {
         const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
-        text += won ? " The goal was met: " : " The goal was missed: ";
+        text += " ";
         text += def.goal;
-        text += ".";
     }
-    text += " The city is paused for this announcement. Keep playing continues at the previous speed.";
-    text += " Closing this window, or cancelling the scenario list, leaves the city paused.";
+    const std::string meter = scenario_meter();
+    if (!meter.empty()) {
+        text += " ";
+        text += meter;
+        text += ".";
+    } else {
+        const Evaluation report = evaluation();
+        text += " Population " + grouped_count(report.population) + ", score " + grouped_count(report.score) + ".";
+    }
     return text;
 }
 
@@ -1781,6 +1894,8 @@ CitySession::Evaluation CitySession::evaluation() const
     Evaluation report;
     report.score = sim.cityScore;
     report.score_delta = sim.cityScoreDelta;
+    const bool year_passed = ready_ && sim.cityTime >= eval_anchor_time_ + 48;
+    report.deltas_known = eval_deltas_ready_ || year_passed;
     report.yes_percent = sim.evalPreviewValid ? sim.evalPreviewYes : sim.cityYes;
     if (report.yes_percent < 0) {
         report.yes_percent = 0;
@@ -1792,6 +1907,10 @@ CitySession::Evaluation CitySession::evaluation() const
     report.population = live_population < 0 ? 0 : static_cast<std::int64_t>(live_population);
     // cityPopDelta is the last tax year. A mid-year preview does not replace it.
     report.migration = static_cast<std::int64_t>(sim.cityPopDelta);
+    if (!report.deltas_known) {
+        report.score_delta = 0;
+        report.migration = 0;
+    }
     report.assessed_value = static_cast<std::int64_t>(sim.evalPreviewValid ? sim.evalPreviewAssessed : sim.cityAssessedValue);
     report.category = city_class_name(live_city_class(live_population < 0 ? 0 : live_population));
     report.year = static_cast<int>(sim.cityYear > 0 ? sim.cityYear : sim.startingYear);
@@ -1925,8 +2044,259 @@ int CitySession::layer_value(MapLayer layer, int x, int y) const
         return sim.getLandValue(x / 2, y / 2);
     case MapLayer::Traffic:
         return sim.getTrafficDensity(x / 2, y / 2);
+    case MapLayer::Police:
+        return sim.policeStationEffectMap.worldGet(x, y);
+    case MapLayer::Fire:
+        return sim.fireStationEffectMap.worldGet(x, y);
+    case MapLayer::Population:
+        return sim.populationDensityMap.worldGet(x, y);
+    case MapLayer::Growth:
+        return sim.rateOfGrowthMap.worldGet(x, y);
+    case MapLayer::Zones: {
+        if (water) {
+            return 8;
+        }
+        if (tile >= RESBASE && tile < COMBASE) {
+            return 1;
+        }
+        if (tile >= COMBASE && tile < INDBASE) {
+            return 2;
+        }
+        if (tile >= INDBASE && tile < PORTBASE) {
+            return 3;
+        }
+        if ((tile >= ROADBASE && tile <= BRWXXX7) || tile == ROADVPOWERH) {
+            return 4;
+        }
+        if (tile >= RAILBASE && tile <= LASTRAIL) {
+            return 5;
+        }
+        return 0;
+    }
     }
     return 0;
+}
+
+bool CitySession::query_tile(int &x, int &y) const
+{
+    if (!query_has_tile_) {
+        return false;
+    }
+    x = query_x_;
+    y = query_y_;
+    return true;
+}
+
+void CitySession::clear_notices()
+{
+    notices_.clear();
+}
+
+void CitySession::remember_notice(std::string text, int tile_x, int tile_y, bool has_place)
+{
+    if (text.empty()) {
+        return;
+    }
+    // Dragging a blocked tile used to append the same line on every sample.
+    if (text == "Cannot build here." && !notices_.empty() && notices_.front().text == text) {
+        notices_.front().tile_x = tile_x;
+        notices_.front().tile_y = tile_y;
+        notices_.front().has_place = has_place && Micropolis::testBounds(tile_x, tile_y);
+        return;
+    }
+    CityNotice notice;
+    notice.text = std::move(text);
+    notice.tile_x = tile_x;
+    notice.tile_y = tile_y;
+    notice.has_place = has_place && Micropolis::testBounds(tile_x, tile_y);
+    notice.month = static_cast<int>(engine_->sim.cityMonth);
+    if (notice.month < 0 || notice.month > 11) {
+        notice.month = 0;
+    }
+    const long year = static_cast<long>(engine_->sim.cityYear);
+    notice.year = static_cast<int>(year > 0 ? year : engine_->sim.startingYear);
+    notices_.insert(notices_.begin(), std::move(notice));
+    if (notices_.size() > 50) {
+        notices_.resize(50);
+    }
+}
+
+void CitySession::recount_population_from_map()
+{
+    if (engine_ == nullptr || !ready_) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    Quad res = 0;
+    Quad com = 0;
+    Quad ind = 0;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            const unsigned short raw = sim.map[x][y];
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int tile = raw & LOMASK;
+            // Same splits as doZone: houses below the hospital, then
+            // commercial, then industry through the last industrial tile.
+            // Hospitals and churches are zone centres and are not people.
+            if (tile == FREEZ) {
+                int homes = 0;
+                for (int nx = x - 1; nx <= x + 1; ++nx) {
+                    for (int ny = y - 1; ny <= y + 1; ++ny) {
+                        if (nx < 0 || ny < 0 || nx >= kWorldW || ny >= kWorldH) {
+                            continue;
+                        }
+                        const int house = sim.map[nx][ny] & LOMASK;
+                        if (house >= LHTHR && house <= HHTHR) {
+                            ++homes;
+                        }
+                    }
+                }
+                res += homes;
+            } else if (tile < HOSPITAL) {
+                res += ((tile - RZB) / 9) % 4 * 8 + 16;
+            } else if (tile >= COMBASE && tile < INDBASE) {
+                if (tile != COMCLR) {
+                    com += ((tile - CZB) / 9) % 5 + 1;
+                }
+            } else if (tile >= INDBASE && tile <= PORTBASE) {
+                if (tile != INDCLR) {
+                    ind += ((tile - IZB) / 9) % 4 + 1;
+                }
+            }
+        }
+    }
+    const Quad people = (res + (com + ind) * 8) * 20;
+    const Quad saved = (sim.resPop + (sim.comPop + sim.indPop) * 8) * 20;
+    // An empty generated map can still carry a wide census that is not on
+    // the tiles. A city with zones always shows the tiles, so a stale
+    // stored "Town" does not sit on screen until the next census.
+    if (people <= 0 && saved > 0) {
+        sim.cityPop = saved;
+        sim.cityClass = live_city_class(saved);
+        return;
+    }
+    sim.resPop = res;
+    sim.comPop = com;
+    sim.indPop = ind;
+    sim.snapResPop = res;
+    sim.snapComPop = com;
+    sim.snapIndPop = ind;
+    sim.censusSnapshotValid = true;
+    sim.liveCensusComplete = true;
+    sim.cityPop = people < 0 ? 0 : people;
+    sim.cityClass = live_city_class(people < 0 ? 0 : people);
+}
+
+void CitySession::refresh_loaded_meters()
+{
+    if (engine_ == nullptr || !ready_) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    if (live_population_count(sim) <= 0) {
+        return;
+    }
+    // doSimInit now scans density before crime. This pass refreshes the
+    // score and the traffic average the scenario meter reads, which otherwise
+    // stay on the file until the next evaluation.
+    sim.cityEvaluation();
+}
+
+void CitySession::arm_eval_baseline()
+{
+    Micropolis &sim = engine_->sim;
+    eval_deltas_ready_ = false;
+    const Quad time = sim.cityTime < 0 ? static_cast<Quad>(0) : sim.cityTime;
+    eval_anchor_time_ = static_cast<long long>(time);
+    const Quad people = live_population_count(sim);
+    sim.cityPop = people < 0 ? 0 : people;
+    sim.cityPopDelta = 0;
+    sim.cityScoreDelta = 0;
+}
+
+void CitySession::clear_scenario_clock()
+{
+    scenario_result_ = 0;
+}
+
+bool CitySession::write_scenario_sidecar(const std::string &path) const
+{
+    if (path.empty()) {
+        return false;
+    }
+    const Micropolis &sim = engine_->sim;
+    ScenarioClock clock;
+    clock.scenario = static_cast<int>(sim.scenario);
+    clock.score_wait = static_cast<int>(sim.scoreWait);
+    clock.score_type = static_cast<int>(sim.scoreType);
+    clock.outcome = scenario_result_;
+    clock.month = static_cast<int>(sim.cityMonth);
+    const long year = static_cast<long>(sim.cityYear);
+    clock.year = static_cast<int>(year > 0 ? year : sim.startingYear);
+    std::ofstream out(scenario_sidecar_path(path), std::ios::trunc);
+    if (!out) {
+        return false;
+    }
+    out << scenario_sidecar_text(clock);
+    return static_cast<bool>(out);
+}
+
+void CitySession::read_scenario_sidecar(const std::string &path)
+{
+    std::ifstream in(scenario_sidecar_path(path));
+    if (!in) {
+        return;
+    }
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    ScenarioClock clock;
+    if (!scenario_sidecar_parse(buffer.str(), clock)) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    if (clock.scenario >= SC_DULLSVILLE && clock.scenario <= SC_RIO) {
+        sim.scenario = static_cast<Scenario>(clock.scenario);
+    }
+    scenario_result_ = clock.outcome;
+    if (clock.outcome != 0) {
+        sim.scoreType = SC_NONE;
+        sim.scoreWait = 0;
+        return;
+    }
+    if (clock.scenario != 0) {
+        const int type = clock.score_type != 0 ? clock.score_type : clock.scenario;
+        sim.scoreType = static_cast<Scenario>(type);
+        sim.scoreWait = static_cast<short>(std::max(0, clock.score_wait));
+    }
+}
+
+bool CitySession::preview_terrain(int seed, int island, int rivers, int lakes, int trees,
+                                 std::vector<unsigned short> &tiles) const
+{
+    Micropolis sim;
+    sim.terrainCreateIsland = island;
+    sim.terrainCurveLevel = rivers;
+    sim.terrainLakeLevel = lakes;
+    sim.terrainTreeLevel = trees;
+    sim.generateSomeCity(seed);
+    tiles.resize(static_cast<std::size_t>(kWorldW * kWorldH));
+    for (int y = 0; y < kWorldH; ++y) {
+        for (int x = 0; x < kWorldW; ++x) {
+            tiles[static_cast<std::size_t>(y * kWorldW + x)] = sim.map[x][y];
+        }
+    }
+    return true;
+}
+
+std::int64_t CitySession::plot_cash_flow(HistoryScale scale, int index) const
+{
+    const std::int64_t stored = cash_flow_history(scale, index);
+    if (scale == HistoryScale::Short && index == 0 && stored == 0) {
+        return budget().cash_flow;
+    }
+    return stored;
 }
 
 unsigned CitySession::map_serial() const

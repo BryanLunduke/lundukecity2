@@ -56,6 +56,10 @@ enum HotspotId : int {
     kWelcomeLoad = 123,
     kWelcomeScenario = 124,
     kWelcomeQuit = 125,
+    kNewTerrain = 126,
+    kScaleAuto = 127,
+    kWheelZoom = 128,
+    kFullscreenBox = 129,
 
     kMenuItem = 1000,
     kRecentItem = 2000,
@@ -65,6 +69,7 @@ enum HotspotId : int {
     kListItem = 7000,
     kSlider = 8000,
     kChoice = 8300,
+    kGraphSeries = 8500,
 
     // Special-building rows are kSpecialItem + table index.
     kSpecialItem = 9000,
@@ -72,7 +77,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kWelcomeQuit;
+    return id >= kCancel && id <= kFullscreenBox;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the
@@ -95,6 +100,9 @@ inline bool is_modal_control(int id)
         return true;
     }
     if (id >= kChoice && id < kChoice + 50) {
+        return true;
+    }
+    if (id >= kGraphSeries && id < kGraphSeries + 16) {
         return true;
     }
     return false;
