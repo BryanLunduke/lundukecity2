@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Lunduke City authors
 # See COPYING and NOTICE.
 
-"""SVGA look, batches 1 and 2: terrain, residential, commercial, and industrial.
+"""SVGA look, batches 1 to 3: terrain, zones, roads, rails, power, and bridges.
 
 Classic pixels are not redrawn. Each output pixel keeps the source tile's
 flat-colour region and is painted from a VGA Mode 13h ramp. Black ink stays
@@ -259,6 +259,19 @@ DEEP = (0, 0, 170)
 SPECK = (56, 56, 56)
 STONE = (130, 130, 130)
 ROCK = (44, 44, 44)
+# Asphalt is smooth: one body grey, one darker pixel where the road meets
+# dirt, water, or the black curb. Dashes and cars are not an edge, so the
+# centre line stays a hard white band on an even field.
+ASPHALT_BODY = (56, 56, 56)
+ASPHALT_EDGE = (44, 44, 44)
+# Ties, wires, and car bodies. Flat, so a traffic frame cannot flicker.
+TIE = (130, 130, 130)
+WIRE = (203, 203, 203)
+# A power line is a thin dark-grey stroke. The asphalt fill uses the same
+# classic grey, so the stroke is lifted to (81, 81, 81) to read on dirt B.
+CABLE = (81, 81, 81)
+DASH = (255, 255, 255)
+RAIL_MARK = (255, 255, 85)
 LEAF = (162, 162, 162)
 ORANGE = (255, 125, 0)
 
@@ -419,6 +432,21 @@ MATS: dict[str, dict[tuple[int, int, int], Material]] = {
 MATS["commerce"] = dict(MATS["building"])
 MATS["commerce"][SRC_YELLOW] = _mat(GOLD_RAMP, "surface")
 MATS["commerce"][SRC_ORANGE] = _mat(AMBER_RAMP, "surface")
+# Roads, rails, power, and bridges. White dashes stay white. Grey ties and
+# the lighter wire stay flat so they read on dirt B and do not shimmer.
+MATS["road"] = {
+    SRC_TAN: DIRT,
+    SRC_DTAN: _mat(SOIL_RAMP, "soil"),
+    SRC_DGREY: _mat((ASPHALT_BODY, ASPHALT_EDGE), "asphalt"),
+    SRC_GREY: _flat(TIE),
+    SRC_LGREY: _flat(WIRE),
+    SRC_LBLUE: WATER,
+    SRC_BLUE: _flat(DEEP),
+    SRC_YELLOW: _flat(RAIL_MARK),
+    SRC_RED: _flat(ROSE_RAMP[1]),
+    SRC_GREEN: _flat(GRASS_RAMP[3]),
+    WHITE: _flat(DASH),
+}
 
 
 def _claim(
@@ -552,6 +580,11 @@ def tile_kind(index: int) -> str:
     # 852-859 and 884-915 are the industrial chimney frames. Coal smoke is later.
     if 423 <= index <= 692 or 852 <= index <= 859 or 884 <= index <= 915:
         return "commerce"
+    # Roads 64-207 (16 shapes, four light frames, four heavy frames).
+    # Power 208-222, rails 224-238, the road/power tile 239.
+    # Open drawbridge frames 828-831 and 948-951.
+    if 64 <= index <= 222 or 224 <= index <= 239 or 828 <= index <= 831 or 948 <= index <= 951:
+        return "road"
     raise SystemExit(f"tile {index} is outside the painted batches")
 
 
@@ -1034,6 +1067,19 @@ def _dither_recolour(src, w: int, h: int) -> dict[tuple[int, int], tuple[int, in
     return out
 
 
+def _cables(src, w: int, h: int) -> set[tuple[int, int]]:
+    """Thin dark-grey strokes are wires. A road fill is not."""
+    wires: set[tuple[int, int]] = set()
+    for cells in _components(src, w, h, SRC_DGREY):
+        if len(cells) < 4:
+            continue
+        group = set(cells)
+        thin = sum(sum((x + dx, y + dy) in group for dx, dy in _ORTHO) <= 2 for x, y in cells) / len(cells)
+        if thin >= 0.85:
+            wires.update(cells)
+    return wires
+
+
 def paint(
     original: Image.Image,
     kinds: list[list[str]],
@@ -1053,6 +1099,7 @@ def paint(
     counts = _caster_counts(src, w, h, mask)
     solid = _solid_marks(src, w, h, kinds, bright_zones)
     dither = _dither_recolour(src, w, h)
+    cables = _cables(src, w, h)
     for y in range(h):
         kind_row = kinds[y // TILE]
         for x in range(w):
@@ -1106,6 +1153,10 @@ def paint(
                 continue
             if mat.role == "dirt":
                 edge = _touches_water(src, x, y, w, h) or _dirt_edge(src, x, y, w, h)
+                if kind_row[x // TILE] == "road" and _touches_ground(
+                    src, x, y, w, h, frozenset({SRC_DGREY, SRC_GREY})
+                ):
+                    edge = True
                 chosen = _dirt_colour(x, y, edge, scheme)
                 if shadowed is not None:
                     chosen = shadowed
@@ -1120,6 +1171,22 @@ def paint(
                 if shadowed is not None:
                     chosen = shadowed
                 dst[x, y] = chosen
+                continue
+            if mat.role == "asphalt":
+                if (x, y) in cables:
+                    dst[x, y] = CABLE
+                    continue
+                # The curb is the outer edge only. A dash or a car is inside
+                # the roadway, so it does not pull the centre line off centre.
+                curb = _touches_ground(
+                    src,
+                    x,
+                    y,
+                    w,
+                    h,
+                    frozenset({SRC_TAN, SRC_DTAN, SRC_LBLUE, SRC_BLUE, BLACK, SRC_GREEN, SRC_DGREEN}),
+                )
+                dst[x, y] = ramp[1] if curb else ramp[0]
                 continue
             if mat.role == "water":
                 body = ramp[:3]
@@ -1311,6 +1378,46 @@ def downtown() -> list[list[int]]:
     return grid
 
 
+def transport() -> list[list[int]]:
+    """A road, a road/rail crossing, power lines, and a bridge over water."""
+    width, height = 18, 12
+    grid = [[0 for _ in range(width)] for _ in range(height)]
+    for x in range(width):
+        grid[2][x] = 66
+    grid[2][4] = 76
+    grid[2][11] = 238
+    grid[2][14] = 77
+    for y in (3, 4, 5):
+        grid[y][4] = 67
+    grid[6][4] = 237
+    for x in range(width):
+        if x != 4:
+            grid[6][x] = 226
+    for y in (0, 1, 3, 4, 5):
+        grid[y][11] = 227
+    for y in (7, 8):
+        grid[y][4] = 67
+    for y in (3, 4, 5, 7, 8):
+        grid[y][14] = 211
+    grid[6][14] = 221
+    for x in range(width):
+        grid[9][x] = 210
+    grid[9][4] = 78
+    grid[9][14] = 220
+    for x in range(width):
+        grid[10][x] = 2
+        grid[11][x] = 2
+    for x in range(6, 10):
+        grid[10][x] = 64
+    grid[10][4] = 65
+    grid[11][4] = 65
+    _stamp(grid, 450, 6, 3, 3, 3)
+    grid[4][0] = 249
+    grid[4][1] = 252
+    grid[4][16] = 255
+    return grid
+
+
 def _blank(width: int, height: int, colour: tuple[int, int, int] = BG) -> Image.Image:
     return Image.new("RGB", (width, height), colour)
 
@@ -1463,11 +1570,12 @@ def main() -> int:
     _require_palette(palette)
     atlas = load_atlas()
     lines = [
-        "SVGA batches 1 and 2 verification",
+        "SVGA batches 1 to 3 verification",
         "groups: terrain, residential 240-404, commercial 423-611, industrial 612-692,",
-        "industrial chimney frames 852-859 and 884-915",
-        "held back: tiles 38-39 (unused), rubble, flood, fire, roads, rails, power,",
-        "hospital, church, port, airport, civic buildings, coal smoke, the menu toggle",
+        "chimney frames 852-859 and 884-915, roads 64-207, power 208-222,",
+        "rails 224-239, drawbridge frames 828-831 and 948-951",
+        "held back: tiles 38-39 (unused), rubble, flood, fire, hospital, church,",
+        "port, airport, civic buildings, coal smoke, the menu toggle",
         f"palette unique RGB triples: {len(palette)}",
         "Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.",
         "Upper path 996 px (bbox x 186-229, y 12-105) plus the clean stretch",
@@ -1552,6 +1660,68 @@ def main() -> int:
     down = downtown()
     classic_down, svga_down = paint_grid(atlas, down)
     check(f"downtown {len(down[0])}x{len(down)}", classic_down, svga_down)
+
+    road_ids = [*range(64, 223), *range(224, 240), *range(828, 832), *range(948, 952)]
+    painted_road: dict[int, tuple[Image.Image, Image.Image]] = {}
+    for index in road_ids:
+        classic = crop_tile(atlas, index)
+        svga = paint(classic, [["road"]])
+        painted_road[index] = (classic, svga)
+        check(f"tile {index}", classic, svga)
+
+    trip = transport()
+    classic_trip, svga_trip = paint_grid(atlas, trip)
+    check(f"transport {len(trip[0])}x{len(trip)}", classic_trip, svga_trip)
+
+    def _centre_line(index: int, axis: int) -> None:
+        nonlocal failed
+        classic, svga = painted_road[index]
+        src, dst = classic.load(), svga.load()
+        asphalt = [(x, y) for y in range(16) for x in range(16) if src[x, y] == SRC_DGREY]
+        dashes = [(x, y) for y in range(16) for x in range(16) if src[x, y] == WHITE]
+        if not asphalt or not dashes:
+            lines.append(f"FAIL tile {index} has no asphalt centre line")
+            failed = True
+            return
+        lo = min(point[axis] for point in asphalt)
+        hi = max(point[axis] for point in asphalt)
+        mid = (lo + hi) / 2
+        off = [point for point in dashes if abs(point[axis] - mid) > 0.5 or dst[point] != DASH]
+        if off:
+            lines.append(f"FAIL tile {index} centre line is off the roadway middle ({len(off)})")
+            failed = True
+
+    _centre_line(66, 1)
+    _centre_line(67, 0)
+    cable = painted_road[210][1]
+    road = painted_road[66][1]
+    cable_src = painted_road[210][0].load()
+    road_src = painted_road[66][0].load()
+    if any(cable.getpixel((x, y)) != CABLE for y in range(16) for x in range(16) if cable_src[x, y] == SRC_DGREY):
+        lines.append("FAIL power wires on 210 are not the lighter cable grey")
+        failed = True
+    if any(road.getpixel((x, y)) == CABLE for y in range(16) for x in range(16) if road_src[x, y] == SRC_DGREY):
+        lines.append("FAIL the roadway on 66 was painted as a cable")
+        failed = True
+    for index, (classic, svga) in painted_road.items():
+        src, dst = classic.load(), svga.load()
+        bad_dash = bad_tie = bad_asphalt = 0
+        for y in range(16):
+            for x in range(16):
+                colour, out = src[x, y], dst[x, y]
+                if colour == WHITE and out != DASH:
+                    bad_dash += 1
+                elif colour == SRC_GREY and out != TIE:
+                    bad_tie += 1
+                elif colour == SRC_YELLOW and out != RAIL_MARK:
+                    bad_dash += 1
+                elif colour == SRC_DGREY and out not in (ASPHALT_BODY, ASPHALT_EDGE, CABLE):
+                    bad_asphalt += 1
+        if bad_dash or bad_tie or bad_asphalt:
+            lines.append(
+                f"FAIL tile {index} transport colours dash={bad_dash} tie={bad_tie} asphalt={bad_asphalt}"
+            )
+            failed = True
 
     hot = {
         (255, 255, 0),
@@ -1777,6 +1947,17 @@ def main() -> int:
     if digest.hexdigest() != batch1_sha:
         lines.append(f"FAIL batch 1 tiles changed: {digest.hexdigest()}")
         failed = True
+    digest2 = hashlib.sha256()
+    for base in com_bases + ind_bases:
+        image = next(svga for origin, _classic, svga in painted_com + painted_ind if origin == base)
+        digest2.update(image.tobytes())
+    for index, _classic, svga in painted_smoke:
+        digest2.update(svga.tobytes())
+    digest2.update(svga_down.tobytes())
+    batch2_sha = "19916eac7e959f386f092441d5f1ac41bda8dfc7f46c91757171709ddb9a7923"
+    if digest2.hexdigest() != batch2_sha:
+        lines.append(f"FAIL batch 2 tiles changed: {digest2.hexdigest()}")
+        failed = True
 
     # Previews. Each pair is classic on the left and the SVGA look on the right.
     water_cells = []
@@ -1960,6 +2141,48 @@ def main() -> int:
     _save(downtown_sheet, PREVIEW_DIR / "downtown-32.png")
     _save(letters, PREVIEW_DIR / "letters-sample.png")
 
+    def _road_sheet(indexes: list[int], title: str, columns: int) -> Image.Image:
+        cells = [_pair(painted_road[index][0], painted_road[index][1], str(index), 3) for index in indexes]
+        grid = _grid(cells, columns)
+        return _vstack([_banner(title, grid.width), grid], 14)
+
+    def _traffic(shape: int) -> list[int]:
+        return [80 + shape, 128 + shape, 112 + shape, 96 + shape, 144 + shape, 192 + shape, 176 + shape, 160 + shape]
+
+    roads = _vstack(
+        [
+            _road_sheet([*range(64, 80)], "ROADS  NO TRAFFIC  3X  CLASSIC LEFT  SVGA RIGHT", 8),
+            _road_sheet(_traffic(2) + _traffic(3) + _traffic(12), "LIGHT THEN HEAVY  STRAIGHT ROADS AND THE CROSSING", 8),
+        ],
+        16,
+    )
+    rails_power = _vstack(
+        [
+            _road_sheet([*range(224, 240)], "RAILS  3X  CLASSIC LEFT  SVGA RIGHT", 8),
+            _road_sheet([*range(208, 223)], "POWER LINES", 8),
+        ],
+        16,
+    )
+    bridges = _road_sheet(
+        [64, 65, 79, 95, *range(828, 832), *range(948, 952), *_traffic(0), *_traffic(1), *_traffic(15)],
+        "BRIDGES  3X  CLASSIC LEFT  SVGA RIGHT",
+        8,
+    )
+    trip_classic = _vstack([_text("CLASSIC", 2), _scaled(classic_trip, 2)], 8)
+    trip_svga = _vstack([_text("SVGA", 2), _scaled(svga_trip, 2)], 8)
+    trip_panels = _hstack([trip_classic, trip_svga], 24)
+    transport_sheet = _vstack(
+        [
+            _banner("TRANSPORT  32PX  ROADS  RAIL  POWER  BRIDGE", trip_panels.width),
+            trip_panels,
+        ],
+        12,
+    )
+    _save(roads, PREVIEW_DIR / "roads-3x.png")
+    _save(rails_power, PREVIEW_DIR / "rails-power-3x.png")
+    _save(bridges, PREVIEW_DIR / "bridges-3x.png")
+    _save(transport_sheet, PREVIEW_DIR / "transport-32.png")
+
     lines.append("")
     lines.append(
         f"dirt tile 0: { {str(k): v for k, v in sorted(dirt_counts.items(), key=lambda kv: -kv[1])} }"
@@ -1981,6 +2204,10 @@ def main() -> int:
         "industrial-3x.png",
         "downtown-32.png",
         "letters-sample.png",
+        "roads-3x.png",
+        "rails-power-3x.png",
+        "bridges-3x.png",
+        "transport-32.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"
