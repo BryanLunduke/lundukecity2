@@ -984,8 +984,150 @@ void Shell::run_review_checks()
         fail("a tap did not select the load row under the finger");
         return;
     }
+
+    // A touch on the scrollbar used to leave the drag flag set. Later drags
+    // then moved the highlight, and a mouse move with no button dragged too.
+    // The thumb itself follows the finger the same way a mouse drag does.
+    files_.clear();
+    for (int i = 0; i < 40; ++i) {
+        files_.push_back("City" + std::to_string(i) + ".cty");
+    }
+    files_save_ = false;
+    dialog_ = Dialog::Files;
+    list_index_ = 4;
+    list_scroll_ = 0;
+    list_scroll_free_ = false;
+    list_dragging_ = false;
+    focus_id_ = kListItem;
+    render();
+    if (list_max_scroll(static_cast<int>(files_.size()), std::max(1, files_visible_)) < 1) {
+        fail("the load list does not scroll");
+        return;
+    }
+    const Hotspot *bar = find_row(kListScroll);
+    if (bar == nullptr || bar->h < 40.0) {
+        fail("the load list has no scrollbar");
+        return;
+    }
+    const float bar_x = static_cast<float>(bar->x + bar->w * 0.5);
+    const float bar_top = static_cast<float>(bar->y + 4.0);
+    finger(SDL_EVENT_FINGER_DOWN, 1, bar_x, bar_top);
+    finger(SDL_EVENT_FINGER_UP, 1, bar_x, bar_top);
+    if (list_dragging_) {
+        fail("lifting off the scrollbar left the drag flag set");
+        return;
+    }
+    const int held_index = list_index_;
+    render();
+    const Hotspot *body = find_row(kListItem);
+    if (body == nullptr) {
+        fail("the load list has no row after a scrollbar touch");
+        return;
+    }
+    const float body_x = static_cast<float>(body->x + body->w * 0.5);
+    const float body_y = static_cast<float>(body->y + body->h * 0.5);
+    finger(SDL_EVENT_FINGER_DOWN, 1, body_x, body_y);
+    finger(SDL_EVENT_FINGER_MOTION, 1, body_x, body_y - 96.0f);
+    finger(SDL_EVENT_FINGER_UP, 1, body_x, body_y - 96.0f);
+    if (list_index_ != held_index) {
+        fail("a touch drag after the scrollbar moved the highlight");
+        return;
+    }
+
+    // The finger is still down, so only buttonless mouse motion can clear it.
+    render();
+    const Hotspot *bar_held = find_row(kListScroll);
+    if (bar_held == nullptr) {
+        fail("the load list scrollbar disappeared");
+        return;
+    }
+    const float held_x = static_cast<float>(bar_held->x + bar_held->w * 0.5);
+    const float held_top = static_cast<float>(bar_held->y + 4.0);
+    const float held_bottom = static_cast<float>(bar_held->y + bar_held->h - 4.0);
+    finger(SDL_EVENT_FINGER_DOWN, 1, held_x, held_top);
+    if (!list_dragging_) {
+        fail("touching the scrollbar did not start a drag");
+        return;
+    }
+    const int mouse_index = list_index_;
+    const int mouse_scroll = list_scroll_;
+    int ww = 1;
+    int wh = 1;
+    int pw = 1;
+    int ph = 1;
+    SDL_GetWindowSize(window_, &ww, &wh);
+    SDL_GetWindowSizeInPixels(window_, &pw, &ph);
+    SDL_Event motion{};
+    motion.type = SDL_EVENT_MOUSE_MOTION;
+    motion.motion.state = 0;
+    motion.motion.x = held_x * static_cast<float>(ww) / static_cast<float>(std::max(pw, 1));
+    motion.motion.y = held_bottom * static_cast<float>(wh) / static_cast<float>(std::max(ph, 1));
+    handle_event(motion);
+    if (list_index_ != mouse_index || list_scroll_ != mouse_scroll) {
+        fail("mouse motion with no button dragged the list");
+        return;
+    }
+    if (list_dragging_) {
+        fail("mouse motion with no button left the scrollbar drag set");
+        return;
+    }
+    finger(SDL_EVENT_FINGER_UP, 1, held_x, held_top);
+
+    // A canceled touch is not a mouse-up either.
+    finger(SDL_EVENT_FINGER_DOWN, 1, held_x, held_top);
+    finger(SDL_EVENT_FINGER_CANCELED, 1, held_x, held_top);
+    if (list_dragging_) {
+        fail("a canceled scrollbar touch left the drag flag set");
+        return;
+    }
+    const int cancel_index = list_index_;
+    render();
+    const Hotspot *after_cancel = find_row(kListItem);
+    if (after_cancel == nullptr) {
+        fail("the load list has no row after a canceled scrollbar touch");
+        return;
+    }
+    const float cancel_x = static_cast<float>(after_cancel->x + after_cancel->w * 0.5);
+    const float cancel_y = static_cast<float>(after_cancel->y + after_cancel->h * 0.5);
+    finger(SDL_EVENT_FINGER_DOWN, 1, cancel_x, cancel_y);
+    finger(SDL_EVENT_FINGER_MOTION, 1, cancel_x, cancel_y - 96.0f);
+    finger(SDL_EVENT_FINGER_UP, 1, cancel_x, cancel_y - 96.0f);
+    if (list_index_ != cancel_index) {
+        fail("a touch drag after a canceled scrollbar touch moved the highlight");
+        return;
+    }
+
+    list_index_ = 0;
+    list_scroll_ = 0;
+    list_scroll_free_ = false;
+    list_dragging_ = false;
+    focus_id_ = kListItem;
+    render();
+    const Hotspot *thumb = find_row(kListScroll);
+    if (thumb == nullptr || thumb->h < 40.0) {
+        fail("the load list scrollbar is missing for the thumb drag");
+        return;
+    }
+    const float thumb_x = static_cast<float>(thumb->x + thumb->w * 0.5);
+    const float thumb_top = static_cast<float>(thumb->y + 4.0);
+    const float thumb_bottom = static_cast<float>(thumb->y + thumb->h - 4.0);
+    finger(SDL_EVENT_FINGER_DOWN, 1, thumb_x, thumb_top);
+    const int scroll_at_top = list_scroll_;
+    const int index_at_top = list_index_;
+    finger(SDL_EVENT_FINGER_MOTION, 1, thumb_x, thumb_bottom);
+    finger(SDL_EVENT_FINGER_UP, 1, thumb_x, thumb_bottom);
+    if (list_scroll_ <= scroll_at_top || list_index_ <= index_at_top) {
+        fail("dragging the scrollbar thumb down did not scroll the list down");
+        return;
+    }
+    if (list_dragging_) {
+        fail("lifting after a thumb drag left the drag flag set");
+        return;
+    }
+
     dialog_ = Dialog::None;
     list_scroll_free_ = false;
+    list_dragging_ = false;
 
     map_.set_tile_size(kMapTileOverview);
     layout();

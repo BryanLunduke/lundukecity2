@@ -508,6 +508,7 @@ void Shell::reset_touch_state()
     list_touch_y_ = -1.0f;
     list_touch_row_ = false;
     list_touch_dragged_ = false;
+    list_dragging_ = false;
     fingers_.clear();
 }
 

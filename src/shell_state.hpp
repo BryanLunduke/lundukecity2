@@ -333,6 +333,9 @@ private:
     int files_visible_ = 1;
     double list_track_y_ = 0;
     double list_track_h_ = 1;
+    // File and scenario scrollbar. Messages has no track, so it never sets this.
+    // A touch does not synthesize a mouse-up, so this also clears on finger
+    // up or cancel, in reset_touch_state(), and on buttonless mouse motion.
     bool list_dragging_ = false;
     // Set while a touch drag has moved the window away from the selection.
     // Paint must not snap the scroll back until the selection itself moves.

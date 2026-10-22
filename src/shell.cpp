@@ -1358,6 +1358,11 @@ void Shell::handle_event(const SDL_Event &event)
         pointer_x_ = event.motion.x * (pw / static_cast<double>(std::max(ww, 1)));
         pointer_y_ = event.motion.y * (ph / static_cast<double>(std::max(wh, 1)));
         hover_id_ = hit(pointer_x_, pointer_y_);
+        // Nothing is held. A scrollbar drag left over from a touch must not
+        // follow the pointer.
+        if (event.motion.state == 0) {
+            list_dragging_ = false;
+        }
         if (menu_.open() && dialog_ == Dialog::None) {
             break;
         }
@@ -1897,18 +1902,22 @@ void Shell::handle_event(const SDL_Event &event)
     }
     case SDL_EVENT_FINGER_DOWN:
     case SDL_EVENT_FINGER_MOTION:
-    case SDL_EVENT_FINGER_UP: {
+    case SDL_EVENT_FINGER_UP:
+    case SDL_EVENT_FINGER_CANCELED: {
         touch_used_ = true;
         const float x = event.tfinger.x * static_cast<float>(win_w_);
         const float y = event.tfinger.y * static_cast<float>(win_h_);
         const bool down = event.type == SDL_EVENT_FINGER_DOWN;
-        const bool up = event.type == SDL_EVENT_FINGER_UP;
+        const bool cancel = event.type == SDL_EVENT_FINGER_CANCELED;
+        const bool up = event.type == SDL_EVENT_FINGER_UP || cancel;
         if (down) {
             fingers_.push_back(Finger{event.tfinger.fingerID, x, y});
         } else if (up) {
             fingers_.erase(std::remove_if(fingers_.begin(), fingers_.end(),
                                           [&](const Finger &finger) { return finger.id == event.tfinger.fingerID; }),
                            fingers_.end());
+            // Touch does not send a mouse-up. Drop the scrollbar drag here.
+            list_dragging_ = false;
         } else {
             for (Finger &finger : fingers_) {
                 if (finger.id == event.tfinger.fingerID) {
@@ -1970,7 +1979,7 @@ void Shell::handle_event(const SDL_Event &event)
             pointer_x_ = x;
             pointer_y_ = y;
             // A list row selects on lift. Crossing 8px is a drag: it only scrolled.
-            if (list_touch_row_ && !list_touch_dragged_) {
+            if (!cancel && list_touch_row_ && !list_touch_dragged_) {
                 const float dx = x - list_touch_origin_x_;
                 const float dy = y - list_touch_origin_y_;
                 if (dx * dx + dy * dy <= kTouchArm2 &&
@@ -1981,7 +1990,7 @@ void Shell::handle_event(const SDL_Event &event)
                     }
                 }
             }
-            if (touch_pending_ && !touch_armed_) {
+            if (!cancel && touch_pending_ && !touch_armed_) {
                 const float dx = x - touch_down_x_;
                 const float dy = y - touch_down_y_;
                 if (dx * dx + dy * dy <= kTouchArm2 && dialog_ == Dialog::None && !menu_.open()) {
@@ -2048,11 +2057,9 @@ void Shell::handle_event(const SDL_Event &event)
                        list_touch_y_ >= 0.0f) {
                 const int rows = static_cast<int>((y - list_touch_y_) / 32.0f);
                 if (list_dragging_) {
-                    // The scrollbar still tracks the finger by moving the selection.
-                    if (rows != 0) {
-                        nudge_file_list(-rows, false, true);
-                        list_touch_y_ += static_cast<float>(rows) * 32.0f;
-                    }
+                    // The thumb follows the finger, the same as a mouse drag
+                    // on the track. Finger down moves the list down.
+                    on_hotspot(kListScroll, pointer_x_, pointer_y_);
                 } else {
                     if (list_touch_row_) {
                         const float dx = x - list_touch_origin_x_;
