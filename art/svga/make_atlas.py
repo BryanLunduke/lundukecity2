@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Lunduke City authors
 # See COPYING and NOTICE.
 
-"""SVGA look, batch 1: dirt, water, coast, trees, and residential zones.
+"""SVGA look, batches 1 and 2: terrain, residential, commercial, and industrial.
 
 Classic pixels are not redrawn. Each output pixel keeps the source tile's
 flat-colour region and is painted from a VGA Mode 13h ramp. Black ink stays
@@ -164,8 +164,29 @@ ROSE_MATE = (113, 56, 69)
 # Red pixels inside a red/blue dither that is meant to read blue. One step
 # off the wall's darkest blue, so the stitches stay blue and the seam holds.
 BLUE_MATE = (16, 0, 65)
+# Commerce yellow is one value step down from neon (255, 255, 0): the face
+# stays pure yellow. The highlight is the paler gold in that value band.
+# The next step up is the neon yellow itself, so it is not used.
+GOLD_RAMP = (
+    (113, 113, 56),
+    (113, 113, 0),
+    (65, 65, 0),
+    (65, 65, 0),
+)
+# Hot orange's darker pure steps are dirt colours, so the amber face is the
+# dusty orange (113, 85, 56), with a gold highlight and a darker shade.
+AMBER_RAMP = (
+    (113, 85, 0),
+    (113, 85, 56),
+    (65, 48, 32),
+    (65, 48, 32),
+)
 GRASS_LINE = (0, 170, 0)
 HEDGE_LINE = (32, 65, 32)
+# Commercial lots are light blue, industrial lots are yellow. One solid step
+# of each, not a dither.
+COM_LINE = (56, 85, 113)
+IND_LINE = (113, 113, 0)
 
 GRASS_RAMP = (
     (0, 170, 0),
@@ -352,6 +373,11 @@ MATS: dict[str, dict[tuple[int, int, int], Material]] = {
         SRC_ORANGE: _flat(ORANGE),
     },
 }
+# Commercial and industrial share the residential recipe. Yellow and orange
+# are stepped down here only, so the approved residential signs stay put.
+MATS["commerce"] = dict(MATS["building"])
+MATS["commerce"][SRC_YELLOW] = _mat(GOLD_RAMP, "surface")
+MATS["commerce"][SRC_ORANGE] = _mat(AMBER_RAMP, "surface")
 
 
 def _claim(
@@ -481,7 +507,11 @@ def tile_kind(index: int) -> str:
         return "tree"
     if 240 <= index <= 404:
         return "building"
-    raise SystemExit(f"tile {index} is outside batch 1")
+    # Commercial 423-611 (empty lot, then 20 densities). Industrial 612-692.
+    # 852-859 and 884-915 are the industrial chimney frames. Coal smoke is later.
+    if 423 <= index <= 692 or 852 <= index <= 859 or 884 <= index <= 915:
+        return "commerce"
+    raise SystemExit(f"tile {index} is outside the painted batches")
 
 
 def batch1_indices() -> list[int]:
@@ -502,7 +532,7 @@ def _caster_mask(kinds: list[list[str]], src, w: int, h: int) -> list[list[bool]
             colour = src[x, y]
             if kind == "tree" and colour in TREE_CAST:
                 mask[y][x] = True
-            elif kind == "building" and colour in BUILD_CAST:
+            elif kind in ("building", "commerce") and colour in BUILD_CAST:
                 mask[y][x] = True
     return mask
 
@@ -779,8 +809,29 @@ def _solid_marks(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int,
             stroke = thin / len(cells) >= 0.9
             xs = [cell[0] for cell in cells]
             ys = [cell[1] for cell in cells]
-            on_building = all(kinds[y // TILE][x // TILE] == "building" for x, y in cells)
+            on_building = all(kinds[y // TILE][x // TILE] in ("building", "commerce") for x, y in cells)
             glyph = on_building and len(cells) <= 80 and max(xs) - min(xs) <= 13 and max(ys) - min(ys) <= 13
+            if stroke or glyph:
+                for cell in cells:
+                    marks[cell] = solid
+    # Commercial and industrial zone colours. Residential light-blue mullions
+    # are not commerce tiles, so this loop does not repaint them.
+    for colour, solid in ((SRC_LBLUE, COM_LINE), (SRC_YELLOW, IND_LINE)):
+        for cells in _components(src, w, h, colour):
+            if len(cells) < 12:
+                continue
+            if not all(kinds[y // TILE][x // TILE] == "commerce" for x, y in cells):
+                continue
+            group = set(cells)
+            thin = 0
+            for x, y in cells:
+                neighbours = sum((x + dx, y + dy) in group for dx, dy in _ORTHO)
+                if neighbours <= 2:
+                    thin += 1
+            stroke = thin / len(cells) >= 0.9
+            xs = [cell[0] for cell in cells]
+            ys = [cell[1] for cell in cells]
+            glyph = len(cells) <= 80 and max(xs) - min(xs) <= 13 and max(ys) - min(ys) <= 13
             if stroke or glyph:
                 for cell in cells:
                     marks[cell] = solid
@@ -877,7 +928,7 @@ def paint(original: Image.Image, kinds: list[list[str]], scheme: DirtScheme = SC
     src = original.load()
     out = Image.new("RGB", (w, h))
     dst = out.load()
-    surface_colours = {SRC_GREY, SRC_DGREY, SRC_LGREY, SRC_LBLUE, SRC_BLUE, SRC_YELLOW}
+    surface_colours = {SRC_GREY, SRC_DGREY, SRC_LGREY, SRC_LBLUE, SRC_BLUE, SRC_YELLOW, SRC_ORANGE}
     boxes = _component_boxes(src, w, h, surface_colours)
     mask = _caster_mask(kinds, src, w, h)
     counts = _caster_counts(src, w, h, mask)
@@ -920,7 +971,7 @@ def paint(original: Image.Image, kinds: list[list[str]], scheme: DirtScheme = SC
                 dst[x, y] = chosen
                 continue
             strength = _shadow_strength(src, x, y, w, h, counts)
-            if (x, y) in solid and mat.role in ("grass", "hedge"):
+            if (x, y) in solid and mat.role in ("grass", "hedge", "surface"):
                 dst[x, y] = solid[(x, y)]
                 continue
             shadowed = _apply_shadow(scheme.ramp if mat.role == "dirt" else ramp, strength) if mat.role in ("grass", "dirt", "hedge") else None
@@ -1122,6 +1173,25 @@ def neighbourhood() -> list[list[int]]:
     return grid
 
 
+def downtown() -> list[list[int]]:
+    """Commercial, industrial, and a residential row, on open dirt."""
+    width, height = 22, 14
+    grid = [[0 for _ in range(width)] for _ in range(height)]
+    for x, base in ((1, 423), (5, 450), (9, 468), (13, 531), (17, 603)):
+        _stamp(grid, base, x, 1, 3, 3)
+    for x, base in ((1, 612), (5, 621), (9, 648), (13, 675), (17, 684)):
+        _stamp(grid, base, x, 5, 3, 3)
+    # Tile 621 is the chimney cell. Powered, it plays the smoke frames at 852.
+    grid[5][5] = 852
+    _stamp(grid, 240, 1, 10, 3, 3)
+    _stamp(grid, 261, 5, 10, 3, 3)
+    _stamp(grid, 297, 9, 10, 3, 3)
+    _stamp(grid, 315, 13, 10, 3, 3)
+    for x, index in ((17, 249), (18, 252), (19, 255), (20, 258)):
+        _stamp(grid, index, x, 11)
+    return grid
+
+
 def _blank(width: int, height: int, colour: tuple[int, int, int] = BG) -> Image.Image:
     return Image.new("RGB", (width, height), colour)
 
@@ -1274,10 +1344,11 @@ def main() -> int:
     _require_palette(palette)
     atlas = load_atlas()
     lines = [
-        "SVGA batch 1 verification",
-        "groups: dirt, marked dirt, water and coast, trees and woods, residential 240-404",
+        "SVGA batches 1 and 2 verification",
+        "groups: terrain, residential 240-404, commercial 423-611, industrial 612-692,",
+        "industrial chimney frames 852-859 and 884-915",
         "held back: tiles 38-39 (unused), rubble, flood, fire, roads, rails, power,",
-        "commercial, industrial, hospital, church, civic buildings, animations, the menu toggle",
+        "hospital, church, port, airport, civic buildings, coal smoke, the menu toggle",
         f"palette unique RGB triples: {len(palette)}",
         "Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.",
         "Upper path 996 px (bbox x 186-229, y 12-105) plus the clean stretch",
@@ -1340,6 +1411,72 @@ def main() -> int:
     shore_rows = [row[:] for row in scene[:4]]
     classic_shore, svga_shore = paint_grid(atlas, shore_rows)
     check("shore strip", classic_shore, svga_shore)
+
+    com_bases = [423] + [432 + i * 9 for i in range(20)]
+    ind_bases = [612] + [621 + i * 9 for i in range(8)]
+    smoke_ids = [*range(852, 860), *range(884, 916)]
+    painted_com: list[tuple[int, Image.Image, Image.Image]] = []
+    painted_ind: list[tuple[int, Image.Image, Image.Image]] = []
+    for base in com_bases + ind_bases:
+        classic = assemble(atlas, base, 3, 3)
+        kinds = [["commerce"] * 3 for _ in range(3)]
+        svga = paint(classic, kinds)
+        (painted_com if base in com_bases else painted_ind).append((base, classic, svga))
+        check(f"block {base} 3x3", classic, svga)
+    painted_smoke: list[tuple[int, Image.Image, Image.Image]] = []
+    for index in smoke_ids:
+        classic = crop_tile(atlas, index)
+        svga = paint(classic, [["commerce"]])
+        painted_smoke.append((index, classic, svga))
+        check(f"smoke {index}", classic, svga)
+
+    down = downtown()
+    classic_down, svga_down = paint_grid(atlas, down)
+    check(f"downtown {len(down[0])}x{len(down)}", classic_down, svga_down)
+
+    hot = {
+        (255, 255, 0),
+        (255, 255, 85),
+        (255, 255, 125),
+        (255, 127, 0),
+        (255, 125, 0),
+        (255, 65, 0),
+        (255, 190, 0),
+        (255, 0, 0),
+        (170, 0, 0),
+        (0, 0, 255),
+        (125, 125, 255),
+        (85, 85, 255),
+        (85, 255, 85),
+    }
+    for image, name in (
+        (next(image for origin, _c, image in painted_com if origin == 423), "lot 423"),
+        (next(image for origin, _c, image in painted_com if origin == 468), "block 468"),
+        (next(image for origin, _c, image in painted_com if origin == 531), "block 531"),
+        (next(image for origin, _c, image in painted_ind if origin == 612), "lot 612"),
+        (next(image for origin, _c, image in painted_ind if origin == 621), "block 621"),
+        (next(image for origin, _c, image in painted_smoke if origin == 888), "smoke 888"),
+    ):
+        present = hot & set(_histogram(image))
+        if present:
+            lines.append(f"FAIL {name} still has an intense colour {sorted(present)}")
+            failed = True
+
+    def _border_solid(base: int, source: tuple[int, int, int], solid_colour: tuple[int, int, int], group) -> None:
+        nonlocal failed
+        classic = next(image for origin, image, _svga in group if origin == base)
+        svga = next(image for origin, _classic, image in group if origin == base)
+        cpx, spx = classic.load(), svga.load()
+        bad = 0
+        for x in range(classic.width):
+            if cpx[x, 0] == source and spx[x, 0] != solid_colour:
+                bad += 1
+        if bad:
+            lines.append(f"FAIL lot {base} border is not a solid line ({bad})")
+            failed = True
+
+    _border_solid(423, SRC_LBLUE, COM_LINE, painted_com)
+    _border_solid(612, SRC_YELLOW, IND_LINE, painted_ind)
 
     open_water = paint(crop_tile(atlas, 2), [["water"]])
     shore = paint(crop_tile(atlas, 13), [["water"]])
@@ -1466,6 +1603,20 @@ def main() -> int:
     _classic_a, svga_a_scene = paint_grid(atlas, scene, SCHEME_A)
     check("A neighbourhood", classic_scene, svga_a_scene)
 
+    import hashlib
+
+    digest = hashlib.sha256()
+    for index in [0, 1, *range(2, 21), *range(21, 38), *range(40, 44), *range(249, 261)]:
+        digest.update(paint(crop_tile(atlas, index), [[tile_kind(index)]]).tobytes())
+    for base, width, height in blocks:
+        classic = assemble(atlas, base, width, height)
+        digest.update(paint(classic, [[tile_kind(base)] * width for _ in range(height)]).tobytes())
+    digest.update(svga_scene.tobytes())
+    batch1_sha = "f8e48f4044b59fa7292010837f008b0e912a26fec26aeb5cee5b22b90971842d"
+    if digest.hexdigest() != batch1_sha:
+        lines.append(f"FAIL batch 1 tiles changed: {digest.hexdigest()}")
+        failed = True
+
     # Previews. Each pair is classic on the left and the SVGA look on the right.
     water_cells = []
     for index in [0, 1, *range(2, 21)]:
@@ -1576,6 +1727,35 @@ def main() -> int:
         12,
     )
 
+    def _zone_sheet(painted: list[tuple[int, Image.Image, Image.Image]], title: str) -> Image.Image:
+        cells = [_pair(classic, svga, str(base), 3) for base, classic, svga in painted]
+        grid = _grid(cells, 4)
+        return _vstack([_banner(title, grid.width), grid], 14)
+
+    commercial = _zone_sheet(painted_com, "COMMERCIAL  3X  CLASSIC LEFT  SVGA RIGHT")
+    smoke_cells = [_pair(classic, svga, str(index), 3) for index, classic, svga in painted_smoke]
+    smoke_grid = _grid(smoke_cells, 8)
+    industrial_blocks = _zone_sheet(painted_ind, "INDUSTRIAL  3X  CLASSIC LEFT  SVGA RIGHT")
+    ind_w = max(industrial_blocks.width, smoke_grid.width)
+    industrial = _vstack(
+        [
+            _fit_width(industrial_blocks, ind_w),
+            _banner("CHIMNEY FRAMES  852-859 AND 884-915", ind_w),
+            _fit_width(smoke_grid, ind_w),
+        ],
+        14,
+    )
+    down_classic = _vstack([_text("CLASSIC", 2), _scaled(classic_down, 2)], 8)
+    down_svga = _vstack([_text("SVGA", 2), _scaled(svga_down, 2)], 8)
+    down_panels = _hstack([down_classic, down_svga], 24)
+    downtown_sheet = _vstack(
+        [
+            _banner("DOWNTOWN  32PX  COMMERCIAL  INDUSTRIAL  RESIDENTIAL", down_panels.width),
+            down_panels,
+        ],
+        12,
+    )
+
     _save(terrain, PREVIEW_DIR / "terrain-water-3x.png")
     _save(trees, PREVIEW_DIR / "trees-3x.png")
     _save(residential, PREVIEW_DIR / "residential-3x.png")
@@ -1584,6 +1764,9 @@ def main() -> int:
     _save(ab_neighbourhood, PREVIEW_DIR / "dirt-AB-neighbourhood-32.png")
     _save(ab_residential, PREVIEW_DIR / "dirt-AB-residential-3x.png")
     _save(ab_patch, PREVIEW_DIR / "dirt-AB-patch-3x.png")
+    _save(commercial, PREVIEW_DIR / "commercial-3x.png")
+    _save(industrial, PREVIEW_DIR / "industrial-3x.png")
+    _save(downtown_sheet, PREVIEW_DIR / "downtown-32.png")
 
     lines.append("")
     lines.append(
@@ -1602,6 +1785,9 @@ def main() -> int:
         "dirt-AB-residential-3x.png",
         "dirt-AB-patch-3x.png",
         "blocks-297-342-before-after.png",
+        "commercial-3x.png",
+        "industrial-3x.png",
+        "downtown-32.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"

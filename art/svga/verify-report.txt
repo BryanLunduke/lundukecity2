@@ -1,7 +1,8 @@
-SVGA batch 1 verification
-groups: dirt, marked dirt, water and coast, trees and woods, residential 240-404
+SVGA batches 1 and 2 verification
+groups: terrain, residential 240-404, commercial 423-611, industrial 612-692,
+industrial chimney frames 852-859 and 884-915
 held back: tiles 38-39 (unused), rubble, flood, fire, roads, rails, power,
-commercial, industrial, hospital, church, civic buildings, animations, the menu toggle
+hospital, church, port, airport, civic buildings, coal smoke, the menu toggle
 palette unique RGB triples: 246
 Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.
 Upper path 996 px (bbox x 186-229, y 12-105) plus the clean stretch
@@ -97,6 +98,77 @@ OK block 387 3x3: palette=0 ink=0 collapsed=0/1367 strong=174/174 (1.000)
 OK block 396 3x3: palette=0 ink=0 collapsed=0/1329 strong=482/494 (0.976)
 OK neighbourhood 22x15: palette=0 ink=0 collapsed=0/19436 strong=1661/7484 (0.222)
 OK shore strip: palette=0 ink=0 collapsed=0/4663 strong=247/2531 (0.098)
+OK block 423 3x3: palette=0 ink=0 collapsed=0/463 strong=282/348 (0.810)
+OK block 432 3x3: palette=0 ink=0 collapsed=0/1164 strong=286/286 (1.000)
+OK block 441 3x3: palette=0 ink=0 collapsed=0/1327 strong=313/632 (0.495)
+OK block 450 3x3: palette=0 ink=0 collapsed=0/1075 strong=107/214 (0.500)
+OK block 459 3x3: palette=0 ink=0 collapsed=0/1168 strong=385/391 (0.985)
+OK block 468 3x3: palette=0 ink=0 collapsed=0/1664 strong=173/278 (0.622)
+OK block 477 3x3: palette=0 ink=0 collapsed=0/1101 strong=77/91 (0.846)
+OK block 486 3x3: palette=0 ink=0 collapsed=0/1088 strong=304/360 (0.844)
+OK block 495 3x3: palette=0 ink=0 collapsed=0/1039 strong=34/78 (0.436)
+OK block 504 3x3: palette=0 ink=0 collapsed=0/1241 strong=344/348 (0.989)
+OK block 513 3x3: palette=0 ink=0 collapsed=0/739 strong=278/281 (0.989)
+OK block 522 3x3: palette=0 ink=0 collapsed=0/1265 strong=163/342 (0.477)
+OK block 531 3x3: palette=0 ink=0 collapsed=0/1178 strong=194/219 (0.886)
+OK block 540 3x3: palette=0 ink=0 collapsed=0/1612 strong=659/660 (0.998)
+OK block 549 3x3: palette=0 ink=0 collapsed=0/1636 strong=243/243 (1.000)
+OK block 558 3x3: palette=0 ink=0 collapsed=0/1542 strong=186/197 (0.944)
+OK block 567 3x3: palette=0 ink=0 collapsed=0/812 strong=78/190 (0.411)
+OK block 576 3x3: palette=0 ink=0 collapsed=0/1121 strong=272/285 (0.954)
+OK block 585 3x3: palette=0 ink=0 collapsed=0/1534 strong=546/546 (1.000)
+OK block 594 3x3: palette=0 ink=0 collapsed=0/1657 strong=261/307 (0.850)
+OK block 603 3x3: palette=0 ink=0 collapsed=0/1545 strong=327/327 (1.000)
+OK block 612 3x3: palette=0 ink=0 collapsed=0/419 strong=264/316 (0.835)
+OK block 621 3x3: palette=0 ink=0 collapsed=0/1299 strong=233/266 (0.876)
+OK block 630 3x3: palette=0 ink=0 collapsed=0/961 strong=210/277 (0.758)
+OK block 639 3x3: palette=0 ink=0 collapsed=0/1089 strong=240/332 (0.723)
+OK block 648 3x3: palette=0 ink=0 collapsed=0/1224 strong=149/218 (0.683)
+OK block 657 3x3: palette=0 ink=0 collapsed=0/968 strong=113/143 (0.790)
+OK block 666 3x3: palette=0 ink=0 collapsed=0/1626 strong=145/170 (0.853)
+OK block 675 3x3: palette=0 ink=0 collapsed=0/1210 strong=113/146 (0.774)
+OK block 684 3x3: palette=0 ink=0 collapsed=0/1217 strong=184/221 (0.833)
+OK smoke 852: palette=0 ink=0 collapsed=0/274 strong=47/53 (0.887)
+OK smoke 853: palette=0 ink=0 collapsed=0/264 strong=46/48 (0.958)
+OK smoke 854: palette=0 ink=0 collapsed=0/263 strong=46/47 (0.979)
+OK smoke 855: palette=0 ink=0 collapsed=0/266 strong=45/49 (0.918)
+OK smoke 856: palette=0 ink=0 collapsed=0/273 strong=48/54 (0.889)
+OK smoke 857: palette=0 ink=0 collapsed=0/278 strong=51/57 (0.895)
+OK smoke 858: palette=0 ink=0 collapsed=0/275 strong=50/53 (0.943)
+OK smoke 859: palette=0 ink=0 collapsed=0/279 strong=49/55 (0.891)
+OK smoke 884: palette=0 ink=0 collapsed=0/148 strong=8/22 (0.364)
+OK smoke 885: palette=0 ink=0 collapsed=0/154 strong=6/19 (0.316)
+OK smoke 886: palette=0 ink=0 collapsed=0/149 strong=7/18 (0.389)
+OK smoke 887: palette=0 ink=0 collapsed=0/147 strong=5/17 (0.294)
+OK smoke 888: palette=0 ink=0 collapsed=0/153 strong=35/42 (0.833)
+OK smoke 889: palette=0 ink=0 collapsed=0/156 strong=39/43 (0.907)
+OK smoke 890: palette=0 ink=0 collapsed=0/162 strong=36/42 (0.857)
+OK smoke 891: palette=0 ink=0 collapsed=0/165 strong=36/41 (0.878)
+OK smoke 892: palette=0 ink=0 collapsed=0/175 strong=14/14 (1.000)
+OK smoke 893: palette=0 ink=0 collapsed=0/184 strong=14/14 (1.000)
+OK smoke 894: palette=0 ink=0 collapsed=0/188 strong=14/14 (1.000)
+OK smoke 895: palette=0 ink=0 collapsed=0/188 strong=15/15 (1.000)
+OK smoke 896: palette=0 ink=0 collapsed=0/238 strong=9/25 (0.360)
+OK smoke 897: palette=0 ink=0 collapsed=0/258 strong=8/27 (0.296)
+OK smoke 898: palette=0 ink=0 collapsed=0/265 strong=8/28 (0.286)
+OK smoke 899: palette=0 ink=0 collapsed=0/246 strong=10/32 (0.312)
+OK smoke 900: palette=0 ink=0 collapsed=0/194 strong=11/13 (0.846)
+OK smoke 901: palette=0 ink=0 collapsed=0/203 strong=12/14 (0.857)
+OK smoke 902: palette=0 ink=0 collapsed=0/205 strong=12/13 (0.923)
+OK smoke 903: palette=0 ink=0 collapsed=0/210 strong=13/14 (0.929)
+OK smoke 904: palette=0 ink=0 collapsed=0/128 strong=0/0 (1.000)
+OK smoke 905: palette=0 ink=0 collapsed=0/136 strong=0/0 (1.000)
+OK smoke 906: palette=0 ink=0 collapsed=0/136 strong=0/0 (1.000)
+OK smoke 907: palette=0 ink=0 collapsed=0/157 strong=2/2 (1.000)
+OK smoke 908: palette=0 ink=0 collapsed=0/207 strong=16/57 (0.281)
+OK smoke 909: palette=0 ink=0 collapsed=0/208 strong=17/47 (0.362)
+OK smoke 910: palette=0 ink=0 collapsed=0/216 strong=12/49 (0.245)
+OK smoke 911: palette=0 ink=0 collapsed=0/223 strong=10/51 (0.196)
+OK smoke 912: palette=0 ink=0 collapsed=0/110 strong=5/11 (0.455)
+OK smoke 913: palette=0 ink=0 collapsed=0/110 strong=4/8 (0.500)
+OK smoke 914: palette=0 ink=0 collapsed=0/111 strong=4/6 (0.667)
+OK smoke 915: palette=0 ink=0 collapsed=0/117 strong=4/9 (0.444)
+OK downtown 22x14: palette=0 ink=0 collapsed=0/22158 strong=3133/7481 (0.419)
 OK A tile 0: palette=0 ink=0 collapsed=0/20 strong=0/20 (0.000)
 OK A tile 1: palette=0 ink=0 collapsed=0/10 strong=3/10 (0.300)
 OK A tile 2: palette=0 ink=0 collapsed=0/58 strong=8/58 (0.138)
@@ -183,5 +255,8 @@ previews:
   previews/dirt-AB-residential-3x.png
   previews/dirt-AB-patch-3x.png
   previews/blocks-297-342-before-after.png
+  previews/commercial-3x.png
+  previews/industrial-3x.png
+  previews/downtown-32.png
 
 RESULT: PASS
