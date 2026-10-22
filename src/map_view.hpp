@@ -38,6 +38,8 @@ public:
     void set_tile_size(int pixels);
     void set_shake(int dx, int dy);
     int tile_size() const { return tile_size_; }
+    int shake_x() const { return shake_x_; }
+    int shake_y() const { return shake_y_; }
     int pixel_width() const;
     int pixel_height() const;
 

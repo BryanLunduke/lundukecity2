@@ -370,6 +370,36 @@ int main()
         std::abs(fy - 458.0 / 1600.0) > 0.0001 || std::abs(fh - 684.0 / 1600.0) > 0.0001) {
         return fail("the minimap rectangle is wrong at 16px");
     }
+    // A centred 8px map has a grey band on each side. The view centre is the
+    // middle of the city. Forgetting the band reports ~0.60 and the zoom to
+    // 16px lands about 13 tiles to the right. A tall window does the same
+    // vertically. A cursor or pinch point that is not the centre stays on
+    // the same tile.
+    const int port_w = 1154;
+    const int box8 = map_letterbox(port_w, 120 * 8);
+    const double centre = port_w / 2.0;
+    const double fx8 = map_point_fraction(centre, 0.0, box8, 0.0, 120 * 8);
+    const double scroll16 = scroll_for_map_fraction(fx8, centre, 0.0, map_letterbox(port_w, 120 * 16), 120 * 16);
+    const double tile16 = (scroll16 + centre) / 16.0;
+    const int tall = 900;
+    const int box_tall = map_letterbox(tall, 100 * 8);
+    const double mid_y = tall / 2.0;
+    const double fy_tall = map_point_fraction(mid_y, 0.0, box_tall, 0.0, 100 * 8);
+    const double cursor_at = 200.0;
+    const double anchored = map_point_fraction(cursor_at, 0.0, box8, 0.0, 120 * 8);
+    const double scroll_anchor = scroll_for_map_fraction(anchored, cursor_at, 0.0, 0, 120 * 16);
+    const double tile_before = (cursor_at - box8) / 8.0;
+    const double tile_after = (scroll_anchor + cursor_at) / 16.0;
+    if (box8 != 97 || std::abs(fx8 - 0.5) > 0.001 || std::abs(tile16 - 60.0) > 0.01 || std::abs(fy_tall - 0.5) > 0.001 ||
+        std::abs(tile_before - tile_after) > 0.01) {
+        return fail("zooming dropped the tile under the view centre");
+    }
+    if (std::abs(clamp_cursor_off_letterbox(150.0, 0.0, 118.0, 1272.0, 215.0, 1175.0) - 215.0) > 0.01 ||
+        std::abs(clamp_cursor_off_letterbox(150.0, -1.0, 118.0, 1272.0, 215.0, 1175.0) - 117.0) > 0.01 ||
+        std::abs(clamp_cursor_off_letterbox(400.0, -1.0, 118.0, 1272.0, 215.0, 1175.0) - 400.0) > 0.01 ||
+        std::abs(clamp_cursor_off_letterbox(40.0, 0.0, 118.0, 1272.0, 215.0, 1175.0) - 40.0) > 0.01) {
+        return fail("the gamepad cursor rests on the grey band");
+    }
     double origin = 0;
     double span = 1.4;
     clamp_viewport_span(origin, span);

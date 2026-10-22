@@ -159,6 +159,46 @@ inline int map_letterbox(int view, int map_pixels)
     return (view - map_pixels) / 2;
 }
 
+// Fraction of the map under a window point. `point` and `view_origin` are
+// window pixels. `letterbox` is the grey band on that side, and `scroll` is
+// in map pixels. Leaving the band in the sum treats the margin as city, so a
+// centred 8px map reports about 0.6 instead of 0.5.
+inline double map_point_fraction(double point, double view_origin, int letterbox, double scroll, int map_pixels)
+{
+    const double span = std::max(1, map_pixels);
+    return (scroll + (point - view_origin) - static_cast<double>(letterbox)) / span;
+}
+
+// Scroll that keeps `fraction` under the same window point. `letterbox` is
+// the band at the size being scrolled.
+inline double scroll_for_map_fraction(double fraction, double point, double view_origin, int letterbox, int map_pixels)
+{
+    return static_cast<double>(letterbox) + fraction * std::max(1, map_pixels) - (point - view_origin);
+}
+
+// A gamepad cursor inside the map port but on the grey band. `push` is the
+// stick on this axis: a push toward the outside steps off the port, and a
+// resting stick sits on the map instead of the band.
+inline double clamp_cursor_off_letterbox(double coord, double push, double view0, double view1, double map0, double map1)
+{
+    if (coord < view0 || coord >= view1 || !(map1 > map0)) {
+        return coord;
+    }
+    if (coord >= map0 && coord < map1) {
+        return coord;
+    }
+    if (coord < map0) {
+        if (push < -0.15) {
+            return view0 - 1.0;
+        }
+        return map0;
+    }
+    if (push > 0.15) {
+        return view1;
+    }
+    return map1 - 1.0;
+}
+
 inline void clamp_viewport_span(double &origin, double &span)
 {
     if (origin < 0) {

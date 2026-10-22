@@ -448,7 +448,16 @@ void MapView::draw_footprint(cairo_t *cr) const
     if (!hover_valid_) {
         return;
     }
-    const ToolFootprint foot = tool_footprint(engine_tool_);
+    ToolFootprint foot = tool_footprint(engine_tool_);
+    // Query has no building footprint. At the overview zoom the crosshair is
+    // a whole tile, so the cell under it still needs an outline before A.
+    if (tile_size_ <= kMapTileOverview && !foot.placeable) {
+        foot.placeable = true;
+        foot.width = 1;
+        foot.height = 1;
+        foot.cursor_to_left = 0;
+        foot.cursor_to_top = 0;
+    }
     if (!foot.placeable || foot.width < 1 || foot.height < 1) {
         return;
     }
@@ -461,14 +470,25 @@ void MapView::draw_footprint(cairo_t *cr) const
     }
     cairo_save(cr);
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
-    cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.90);
-    cairo_set_line_width(cr, 3.0);
-    cairo_stroke(cr);
-    cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
-    cairo_set_line_width(cr, 1.5);
-    cairo_stroke(cr);
+    if (tile_size_ <= kMapTileOverview) {
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.90);
+        cairo_set_line_width(cr, 1.0);
+        cairo_stroke(cr);
+        cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
+        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
+        cairo_set_line_width(cr, 1.0);
+        cairo_stroke(cr);
+    } else {
+        cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.90);
+        cairo_set_line_width(cr, 3.0);
+        cairo_stroke(cr);
+        cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
+        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
+        cairo_set_line_width(cr, 1.5);
+        cairo_stroke(cr);
+    }
     cairo_restore(cr);
 }
 

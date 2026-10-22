@@ -922,6 +922,7 @@ void Shell::loop()
             scroll_x_ += pan_x_ * step;
             scroll_y_ += pan_y_ * step;
             clamp_scroll();
+            clamp_gamepad_cursor(stick_x_, stick_y_);
             if (trigger_zoom_edge(trig_r_, zoom_r_latched_)) {
                 zoom_by(2);
             }
@@ -950,6 +951,7 @@ void Shell::loop()
                     const float tile = static_cast<float>(std::max(map_.tile_size(), 8));
                     cursor_x_ = static_cast<float>(std::max(0.0, std::min<double>(win_w_ - 1, cursor_x_ + dx * tile)));
                     cursor_y_ = static_cast<float>(std::max(0.0, std::min<double>(win_h_ - 1, cursor_y_ + dy * tile)));
+                    clamp_gamepad_cursor(static_cast<float>(dx), static_cast<float>(dy));
                     pad_repeat_ms_ = 70;
                 }
                 pad_repeat_ms_ -= tick;
@@ -1322,7 +1324,9 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (ctrl) {
-            zoom_by(event.wheel.y > 0 ? 2 : -2);
+            pointer_x_ = event.wheel.mouse_x;
+            pointer_y_ = event.wheel.mouse_y;
+            zoom_by(event.wheel.y > 0 ? 2 : -2, pointer_x_, pointer_y_);
         } else if (dialog_ == Dialog::None && !menu_.open()) {
             scroll_x_ -= event.wheel.x * 48.0;
             scroll_y_ -= event.wheel.y * 48.0;
@@ -1692,9 +1696,9 @@ void Shell::handle_event(const SDL_Event &event)
                 clamp_scroll();
                 const int pinch = pinch_zoom_step(dist, pinch_dist_);
                 if (pinch > 0) {
-                    zoom_by(2);
+                    zoom_by(2, cx, cy);
                 } else if (pinch < 0) {
-                    zoom_by(-2);
+                    zoom_by(-2, cx, cy);
                 }
             }
             pointer_x_ = cx;
