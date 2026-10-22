@@ -1,0 +1,286 @@
+{
+  "note": "Sample SVGA recolour. Not wired into the game.",
+  "atlas": "third_party/micropolis-assets/images/micropolisEngine/tiles.png",
+  "palette": "palette/vga-mode13h.gpl",
+  "assemblies": {
+    "police": {
+      "base": 770,
+      "width": 3,
+      "height": 3,
+      "group": "police"
+    },
+    "airport": {
+      "base": 709,
+      "width": 6,
+      "height": 6,
+      "group": "airport"
+    }
+  },
+  "tiles": [
+    {
+      "id": 770,
+      "file": "tiles/police/tile-0770.png",
+      "group": "police"
+    },
+    {
+      "id": 771,
+      "file": "tiles/police/tile-0771.png",
+      "group": "police"
+    },
+    {
+      "id": 772,
+      "file": "tiles/police/tile-0772.png",
+      "group": "police"
+    },
+    {
+      "id": 773,
+      "file": "tiles/police/tile-0773.png",
+      "group": "police"
+    },
+    {
+      "id": 774,
+      "file": "tiles/police/tile-0774.png",
+      "group": "police"
+    },
+    {
+      "id": 775,
+      "file": "tiles/police/tile-0775.png",
+      "group": "police"
+    },
+    {
+      "id": 776,
+      "file": "tiles/police/tile-0776.png",
+      "group": "police"
+    },
+    {
+      "id": 777,
+      "file": "tiles/police/tile-0777.png",
+      "group": "police"
+    },
+    {
+      "id": 778,
+      "file": "tiles/police/tile-0778.png",
+      "group": "police"
+    },
+    {
+      "id": 709,
+      "file": "tiles/airport/tile-0709.png",
+      "group": "airport"
+    },
+    {
+      "id": 710,
+      "file": "tiles/airport/tile-0710.png",
+      "group": "airport"
+    },
+    {
+      "id": 711,
+      "file": "tiles/airport/tile-0711.png",
+      "group": "airport"
+    },
+    {
+      "id": 712,
+      "file": "tiles/airport/tile-0712.png",
+      "group": "airport"
+    },
+    {
+      "id": 713,
+      "file": "tiles/airport/tile-0713.png",
+      "group": "airport"
+    },
+    {
+      "id": 714,
+      "file": "tiles/airport/tile-0714.png",
+      "group": "airport"
+    },
+    {
+      "id": 715,
+      "file": "tiles/airport/tile-0715.png",
+      "group": "airport"
+    },
+    {
+      "id": 716,
+      "file": "tiles/airport/tile-0716.png",
+      "group": "airport"
+    },
+    {
+      "id": 717,
+      "file": "tiles/airport/tile-0717.png",
+      "group": "airport"
+    },
+    {
+      "id": 718,
+      "file": "tiles/airport/tile-0718.png",
+      "group": "airport"
+    },
+    {
+      "id": 719,
+      "file": "tiles/airport/tile-0719.png",
+      "group": "airport"
+    },
+    {
+      "id": 720,
+      "file": "tiles/airport/tile-0720.png",
+      "group": "airport"
+    },
+    {
+      "id": 721,
+      "file": "tiles/airport/tile-0721.png",
+      "group": "airport"
+    },
+    {
+      "id": 722,
+      "file": "tiles/airport/tile-0722.png",
+      "group": "airport"
+    },
+    {
+      "id": 723,
+      "file": "tiles/airport/tile-0723.png",
+      "group": "airport"
+    },
+    {
+      "id": 724,
+      "file": "tiles/airport/tile-0724.png",
+      "group": "airport"
+    },
+    {
+      "id": 725,
+      "file": "tiles/airport/tile-0725.png",
+      "group": "airport"
+    },
+    {
+      "id": 726,
+      "file": "tiles/airport/tile-0726.png",
+      "group": "airport"
+    },
+    {
+      "id": 727,
+      "file": "tiles/airport/tile-0727.png",
+      "group": "airport"
+    },
+    {
+      "id": 728,
+      "file": "tiles/airport/tile-0728.png",
+      "group": "airport"
+    },
+    {
+      "id": 729,
+      "file": "tiles/airport/tile-0729.png",
+      "group": "airport"
+    },
+    {
+      "id": 730,
+      "file": "tiles/airport/tile-0730.png",
+      "group": "airport"
+    },
+    {
+      "id": 731,
+      "file": "tiles/airport/tile-0731.png",
+      "group": "airport"
+    },
+    {
+      "id": 732,
+      "file": "tiles/airport/tile-0732.png",
+      "group": "airport"
+    },
+    {
+      "id": 733,
+      "file": "tiles/airport/tile-0733.png",
+      "group": "airport"
+    },
+    {
+      "id": 734,
+      "file": "tiles/airport/tile-0734.png",
+      "group": "airport"
+    },
+    {
+      "id": 735,
+      "file": "tiles/airport/tile-0735.png",
+      "group": "airport"
+    },
+    {
+      "id": 736,
+      "file": "tiles/airport/tile-0736.png",
+      "group": "airport"
+    },
+    {
+      "id": 737,
+      "file": "tiles/airport/tile-0737.png",
+      "group": "airport"
+    },
+    {
+      "id": 738,
+      "file": "tiles/airport/tile-0738.png",
+      "group": "airport"
+    },
+    {
+      "id": 739,
+      "file": "tiles/airport/tile-0739.png",
+      "group": "airport"
+    },
+    {
+      "id": 740,
+      "file": "tiles/airport/tile-0740.png",
+      "group": "airport"
+    },
+    {
+      "id": 741,
+      "file": "tiles/airport/tile-0741.png",
+      "group": "airport"
+    },
+    {
+      "id": 742,
+      "file": "tiles/airport/tile-0742.png",
+      "group": "airport"
+    },
+    {
+      "id": 743,
+      "file": "tiles/airport/tile-0743.png",
+      "group": "airport"
+    },
+    {
+      "id": 744,
+      "file": "tiles/airport/tile-0744.png",
+      "group": "airport"
+    },
+    {
+      "id": 832,
+      "file": "tiles/radar/tile-0832.png",
+      "group": "radar"
+    },
+    {
+      "id": 833,
+      "file": "tiles/radar/tile-0833.png",
+      "group": "radar"
+    },
+    {
+      "id": 834,
+      "file": "tiles/radar/tile-0834.png",
+      "group": "radar"
+    },
+    {
+      "id": 835,
+      "file": "tiles/radar/tile-0835.png",
+      "group": "radar"
+    },
+    {
+      "id": 836,
+      "file": "tiles/radar/tile-0836.png",
+      "group": "radar"
+    },
+    {
+      "id": 837,
+      "file": "tiles/radar/tile-0837.png",
+      "group": "radar"
+    },
+    {
+      "id": 838,
+      "file": "tiles/radar/tile-0838.png",
+      "group": "radar"
+    },
+    {
+      "id": 839,
+      "file": "tiles/radar/tile-0839.png",
+      "group": "radar"
+    }
+  ]
+}
