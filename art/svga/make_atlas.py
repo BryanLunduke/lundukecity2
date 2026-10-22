@@ -295,13 +295,25 @@ POLICE_ROOF = (
     (81, 81, 113),
     (56, 56, 113),
 )
-# Nuclear vapour. Lighter and bluer than coal smoke, and flat so the swirl
-# frames cannot flicker. The arm is the darker of the two.
+# The previous nuclear pass filled the reactor panel with these two blues.
+# They stay available so the fix preview can show that pass. They are not
+# on a ramp, and the painted sheet does not use them.
 STEAM_BODY = (182, 219, 255)
 STEAM_ARM = (125, 190, 255)
 # The lawn badges are a few blue pixels. Flat, so the shield does not shade
 # down into the wall's darkest step.
 SHIELD = (0, 0, 170)
+# Signs and symbols stay readable. Dusty rose is for walls and roofs.
+# (170, 0, 0) is the clear red the hospital cross and the reactor core use.
+SYMBOL_RED = (170, 0, 0)
+# The football field is one flat green. The end zone is one step duller,
+# still bright enough that a red or yellow player reads on it.
+FIELD = GRASS_LINE
+FIELD_STRIPE = (56, 113, 56)
+# The reactor panel is a flat grey, close to the classic 127 field. The
+# orbits are the dark grey, so the atom stays a drawing instead of a blue square.
+REACTOR = (130, 130, 130)
+ORBIT = (56, 56, 56)
 
 # Same deep-green hues as the approved lawn.
 # 2/9 (0, 170, 0), 3/9 (56, 113, 0), 3/9 (28, 113, 0), 1/9 (0, 113, 0).
@@ -363,6 +375,38 @@ _MARK_KINDS = frozenset(
         "port",
         "airport",
         "fountain",
+        "stadium",
+    }
+)
+# Batch 4 masses. A thin pavement stroke on these kinds is not a dirt edge.
+# Roads, houses, and commerce keep the locked rim.
+_RIM_KINDS = frozenset(
+    {
+        "airport",
+        "port",
+        "coal",
+        "nuclear",
+        "civic",
+        "fire",
+        "police",
+        "stadium",
+        "fountain",
+        "steam",
+    }
+)
+# A small red mark on a light panel is a sign. The fire station's red is the
+# building, so it stays dusty rose.
+_SYMBOL_KINDS = frozenset(
+    {
+        "civic",
+        "police",
+        "airport",
+        "coal",
+        "nuclear",
+        "port",
+        "fountain",
+        "stadium",
+        "steam",
     }
 )
 WATER_FAMILY = frozenset({SRC_LBLUE, SRC_BLUE, BLACK})
@@ -500,7 +544,8 @@ MATS["civic"][SRC_ORANGE] = _mat(AMBER_RAMP, "surface")
 MATS["fire"] = dict(MATS["civic"])
 MATS["fire"][SRC_YELLOW] = _mat(DOOR_RAMP, "surface")
 # Police matches the approved sample: blue roof, concrete forecourt, slate
-# wing, deep lawn. Walls use the calmed blue ramp. Red lights are rose.
+# wing, deep lawn. Walls use the calmed blue ramp. The roof lights are a
+# flat clear red, painted with the other signs.
 MATS["police"] = {
     SRC_GREEN: GRASS,
     SRC_DGREEN: HEDGE,
@@ -515,7 +560,7 @@ MATS["police"] = {
 }
 # Airport matches the sample's jobs: tan infield, dark-grey runways, concrete
 # hangar walls, light-grey roofs, glass, calmed blue. Runway paint stays flat.
-# Dirt is scheme B, and the red lights are dusty rose.
+# Dirt is scheme B. The nav lights are a flat clear red.
 MATS["airport"] = {
     SRC_TAN: DIRT,
     SRC_DTAN: _mat(SOIL_RAMP, "soil"),
@@ -539,7 +584,27 @@ MATS["nuclear"] = dict(MATS["civic"])
 # Fountain spray is water. The basin stays concrete.
 MATS["fountain"] = dict(MATS["civic"])
 MATS["fountain"][SRC_LBLUE] = WATER
+# The swirl cell is the reactor panel: grey field, dark orbits, yellow
+# electrons, a red core. The frames move those dots. Nothing else on the
+# tile is steam, so the field stays grey.
 MATS["steam"] = {
+    SRC_GREY: _flat(REACTOR),
+    SRC_DGREY: _flat(ORBIT),
+    SRC_YELLOW: _flat(RAIL_MARK),
+    SRC_RED: _flat(SYMBOL_RED),
+    SRC_ORANGE: _flat(ORANGE),
+}
+# Empty stadium, full stadium, and the football frames. The field is flat
+# so a cast shadow cannot mottle it. Players and the crowd stay bright.
+MATS["stadium"] = dict(MATS["civic"])
+MATS["stadium"][SRC_GREEN] = _flat(FIELD)
+MATS["stadium"][SRC_DGREEN] = _flat(FIELD_STRIPE)
+MATS["stadium"][SRC_RED] = _flat(SYMBOL_RED)
+MATS["stadium"][SRC_YELLOW] = _flat(RAIL_MARK)
+MATS["stadium"][SRC_BLUE] = _flat(SHIELD)
+MATS["stadium"][SRC_ORANGE] = _flat(ORANGE)
+# The pale-blue reactor, kept for the before half of the fix preview.
+_STEAM_BEFORE = {
     SRC_GREY: _flat(STEAM_BODY),
     SRC_DGREY: _flat(STEAM_ARM),
     SRC_YELLOW: _flat(RAIL_MARK),
@@ -684,9 +749,12 @@ def tile_kind(index: int) -> str:
     # Open drawbridge frames 828-831 and 948-951.
     if 64 <= index <= 222 or 224 <= index <= 239 or 828 <= index <= 831 or 948 <= index <= 951:
         return "road"
-    # Hospital 405-413, church 414-422, stadium 779-810, football 932-947.
-    if 405 <= index <= 422 or 779 <= index <= 810 or 932 <= index <= 947:
+    # Hospital 405-413 and church 414-422. The stadium has its own field.
+    if 405 <= index <= 422:
         return "civic"
+    # Empty stadium 779-794, full stadium 795-810, football 932-947.
+    if 779 <= index <= 810 or 932 <= index <= 947:
+        return "stadium"
     if 693 <= index <= 708:
         return "port"
     if 709 <= index <= 744 or 832 <= index <= 839:
@@ -697,7 +765,7 @@ def tile_kind(index: int) -> str:
         return "fire"
     if 770 <= index <= 778:
         return "police"
-    # The swirl cell 820 and frames 952-955 are vapour. The rest is the plant.
+    # Cell 820 and frames 952-955 are the reactor panel. The rest is the plant.
     if index == 820 or 952 <= index <= 955:
         return "steam"
     if 811 <= index <= 826:
@@ -717,8 +785,8 @@ def batch1_indices() -> list[int]:
 
 
 def _building_casts(kind: str, colour: tuple[int, int, int]) -> bool:
-    """Solid building masses cast. A runway, harbour, and steam cloud do not."""
-    if kind in ("building", "commerce", "civic", "fire", "police", "coal", "nuclear") and colour in BUILD_CAST:
+    """Solid building masses cast. A runway, harbour, and reactor panel do not."""
+    if kind in ("building", "commerce", "civic", "fire", "police", "coal", "nuclear", "stadium") and colour in BUILD_CAST:
         return True
     # Hangars cast. The runway is pavement, so its dark grey does not.
     if kind == "airport" and colour in BUILD_CAST and colour != SRC_DGREY:
@@ -729,7 +797,14 @@ def _building_casts(kind: str, colour: tuple[int, int, int]) -> bool:
     return False
 
 
-def _caster_mask(kinds: list[list[str]], src, w: int, h: int) -> list[list[bool]]:
+def _caster_mask(
+    kinds: list[list[str]],
+    src,
+    w: int,
+    h: int,
+    quiet: set[tuple[int, int]] | None = None,
+) -> list[list[bool]]:
+    quiet = quiet or set()
     mask = [[False] * w for _ in range(h)]
     for y in range(h):
         row = y // TILE
@@ -739,6 +814,9 @@ def _caster_mask(kinds: list[list[str]], src, w: int, h: int) -> list[list[bool]
             if kind == "tree" and colour in TREE_CAST:
                 mask[y][x] = True
             elif _building_casts(kind, colour):
+                # A thin apron draws a contact line beside itself. Skip it.
+                if kind in _RIM_KINDS and (x, y) in quiet:
+                    continue
                 mask[y][x] = True
     return mask
 
@@ -1082,7 +1160,16 @@ def _solid_marks(
             xs = [cell[0] for cell in cells]
             ys = [cell[1] for cell in cells]
             on_building = all(kinds[y // TILE][x // TILE] in _MARK_KINDS for x, y in cells)
-            glyph = on_building and len(cells) <= 80 and max(xs) - min(xs) <= 13 and max(ys) - min(ys) <= 13
+            # The end zone is a compact dark-green patch. It is not a lot glyph,
+            # so the stadium keeps it as the field stripe. A real hedge is a stroke.
+            on_stadium = any(kinds[y // TILE][x // TILE] == "stadium" for x, y in cells)
+            glyph = (
+                on_building
+                and not on_stadium
+                and len(cells) <= 80
+                and max(xs) - min(xs) <= 13
+                and max(ys) - min(ys) <= 13
+            )
             if stroke or glyph:
                 for cell in cells:
                     marks[cell] = solid
@@ -1261,14 +1348,160 @@ def _cables(src, w: int, h: int) -> set[tuple[int, int]]:
     return wires
 
 
+def _stroke_thin(cells: list[tuple[int, int]]) -> bool:
+    """A pavement stroke: a 1px line, or a bar only a few pixels thick."""
+    if len(cells) < 4:
+        return False
+    group = set(cells)
+    ends = sum(sum((x + dx, y + dy) in group for dx, dy in _ORTHO) <= 2 for x, y in cells)
+    xs = [cell[0] for cell in cells]
+    ys = [cell[1] for cell in cells]
+    span = min(max(xs) - min(xs) + 1, max(ys) - min(ys) + 1)
+    return ends / len(cells) >= 0.75 or span <= 4
+
+
+def _thin_pavement(src, w: int, h: int, kinds: list[list[str]]) -> set[tuple[int, int]]:
+    """Taxiways, aprons, and other thin grey strokes on batch-4 tiles.
+
+    A component that also sits on a locked tile is left alone, so a road
+    or a house cannot lose its rim through this set.
+    """
+    quiet: set[tuple[int, int]] = set()
+    # Yellow runway paint is a thin stroke too. It is one connected mark, and
+    # it must not cast a second reddish line beside the taxiway.
+    for colour in (SRC_GREY, SRC_DGREY, SRC_YELLOW):
+        for cells in _components(src, w, h, colour):
+            if not _stroke_thin(cells):
+                continue
+            if any(kinds[y // TILE][x // TILE] not in _RIM_KINDS for x, y in cells):
+                continue
+            quiet.update(cells)
+    return quiet
+
+
+def _civic_dirt_edge(
+    src, x: int, y: int, w: int, h: int, quiet: set[tuple[int, int]], kind: str
+) -> bool:
+    """Rim where dirt meets grass, a solid wall, or the main runway.
+
+    Thin grey pavement does not count, including through one black pixel.
+    On the airport, a fat dark-grey runway still gets the one-pixel rim.
+    """
+
+    def counts(nx: int, ny: int) -> bool:
+        if (nx, ny) in quiet:
+            return False
+        neighbour = src[nx, ny]
+        if neighbour in (SRC_GREEN, SRC_DGREEN, SRC_GREY):
+            return True
+        return kind == "airport" and neighbour == SRC_DGREY
+
+    for dx, dy in _ORTHO:
+        nx, ny = x + dx, y + dy
+        if not _in(nx, ny, w, h):
+            continue
+        if src[nx, ny] != BLACK:
+            if counts(nx, ny):
+                return True
+            continue
+        fx, fy = nx + dx, ny + dy
+        if _in(fx, fy, w, h) and counts(fx, fy):
+            return True
+    return False
+
+
+def _soil_rim(
+    src,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    quiet: set[tuple[int, int]],
+    kind: str,
+    civic_fixes: bool,
+) -> bool:
+    """Soil darkens against tan, and against pavement that is not a thin stroke."""
+    if _touches_ground(src, x, y, w, h, frozenset({SRC_TAN})):
+        return True
+    if not (civic_fixes and kind in _RIM_KINDS):
+        return _touches_ground(src, x, y, w, h, _PAVEMENT)
+    for dx, dy in _ORTHO:
+        nx, ny = x + dx, y + dy
+        if not _in(nx, ny, w, h) or (nx, ny) in quiet:
+            continue
+        if src[nx, ny] == SRC_GREY:
+            return True
+        if src[nx, ny] != BLACK:
+            continue
+        fx, fy = nx + dx, ny + dy
+        if _in(fx, fy, w, h) and (fx, fy) not in quiet and src[fx, fy] == SRC_GREY:
+            return True
+    return False
+
+
+def _symbol_red(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int, int], tuple[int, int, int]]:
+    """Clear red for a cross, a light, a core, or a player. Walls stay rose."""
+    marks: dict[tuple[int, int], tuple[int, int, int]] = {}
+    light = {WHITE, SRC_LGREY, SRC_GREY}
+    for cells in _components(src, w, h, SRC_RED):
+        if any(kinds[y // TILE][x // TILE] not in _SYMBOL_KINDS for x, y in cells):
+            continue
+        if len(cells) > 24:
+            group = set(cells)
+            lit = other = 0
+            for x, y in cells:
+                for dx, dy in _ORTHO:
+                    nx, ny = x + dx, y + dy
+                    if not _in(nx, ny, w, h) or (nx, ny) in group:
+                        continue
+                    if src[nx, ny] in light:
+                        lit += 1
+                    else:
+                        other += 1
+            if lit <= other:
+                continue
+        for cell in cells:
+            marks[cell] = SYMBOL_RED
+    return marks
+
+
+def _field_lines(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int, int], tuple[int, int, int]]:
+    """Yard lines are the light-grey pixels on the grass, not the stand paint."""
+    marks: dict[tuple[int, int], tuple[int, int, int]] = {}
+    for y in range(h):
+        row = y // TILE
+        for x in range(w):
+            if kinds[row][x // TILE] != "stadium" or src[x, y] != SRC_LGREY:
+                continue
+            on_field = beside_white = False
+            for dx, dy in _ORTHO:
+                nx, ny = x + dx, y + dy
+                if not _in(nx, ny, w, h):
+                    continue
+                neighbour = src[nx, ny]
+                if neighbour in (SRC_GREEN, SRC_DGREEN):
+                    on_field = True
+                elif neighbour == WHITE:
+                    beside_white = True
+            if on_field and not beside_white:
+                marks[(x, y)] = DASH
+    return marks
+
+
 def paint(
     original: Image.Image,
     kinds: list[list[str]],
     scheme: DirtScheme = SCHEME_B,
     bright_zones: bool = True,
     plain_wires: bool = True,
+    civic_fixes: bool = True,
 ) -> Image.Image:
-    """Recolour `original`. `kinds` is one label per 16px cell, row-major."""
+    """Recolour `original`. `kinds` is one label per 16px cell, row-major.
+
+    `civic_fixes` is the batch-4 correction: grey reactor, flat pitch, clear
+    signs, and no dirt rim along a thin taxiway. The preview's before half
+    passes False and gets the previous civic pass.
+    """
     w, h = original.size
     if w % TILE or h % TILE:
         raise SystemExit(f"image {w}x{h} is not a multiple of {TILE}")
@@ -1277,11 +1510,15 @@ def paint(
     dst = out.load()
     surface_colours = {SRC_GREY, SRC_DGREY, SRC_LGREY, SRC_LBLUE, SRC_BLUE, SRC_YELLOW, SRC_ORANGE}
     boxes = _component_boxes(src, w, h, surface_colours)
-    mask = _caster_mask(kinds, src, w, h)
+    quiet = _thin_pavement(src, w, h, kinds) if civic_fixes else set()
+    mask = _caster_mask(kinds, src, w, h, quiet)
     counts = _caster_counts(src, w, h, mask)
     solid = _solid_marks(src, w, h, kinds, bright_zones)
     solid.update(_badge_marks(src, w, h, kinds))
+    if civic_fixes:
+        solid.update(_field_lines(src, w, h, kinds))
     dither = _dither_recolour(src, w, h)
+    symbols = _symbol_red(src, w, h, kinds) if civic_fixes else {}
     cables = _cables(src, w, h)
     for y in range(h):
         kind_row = kinds[y // TILE]
@@ -1293,13 +1530,26 @@ def paint(
             if (x, y) in dither:
                 dst[x, y] = dither[(x, y)]
                 continue
-            mat = MATS[kind_row[x // TILE]].get(colour)
+            if (x, y) in symbols:
+                dst[x, y] = symbols[(x, y)]
+                continue
+            kind = kind_row[x // TILE]
+            lookup = kind
+            if not civic_fixes and kind == "stadium":
+                lookup = "civic"
+            if not civic_fixes and kind == "steam":
+                mat = _STEAM_BEFORE.get(colour)
+            else:
+                mat = MATS[lookup].get(colour)
             if mat is None:
-                raise SystemExit(
-                    f"no ramp for {colour} at {(x, y)} kind {kind_row[x // TILE]}"
-                )
+                raise SystemExit(f"no ramp for {colour} at {(x, y)} kind {lookup}")
             ramp = mat.ramp
             if mat.role == "flat":
+                # The stadium hedge is a thin stroke. It stays the dark border
+                # while the flat field behind it does not pick up a shadow.
+                if civic_fixes and kind == "stadium" and (x, y) in solid:
+                    dst[x, y] = solid[(x, y)]
+                    continue
                 dst[x, y] = ramp[0]
                 continue
             if mat.role == "soil":
@@ -1311,7 +1561,7 @@ def paint(
                     chosen = scheme.soil_rim
                 elif strength >= 2:
                     chosen = scheme.soil_contact
-                elif strength == 1 or _touches_ground(src, x, y, w, h, frozenset({SRC_TAN}) | _PAVEMENT):
+                elif strength == 1 or _soil_rim(src, x, y, w, h, quiet, kind, civic_fixes):
                     chosen = scheme.soil_rim
                 elif _touches_ground(src, x, y, w, h, frozenset({SRC_GREEN, SRC_DGREEN})):
                     chosen = _dirt_colour(x, y, True, scheme)
@@ -1336,11 +1586,15 @@ def paint(
                 continue
             if mat.role == "dirt":
                 edge = _touches_water(src, x, y, w, h) or _dirt_edge(src, x, y, w, h)
-                if kind_row[x // TILE] == "road":
+                if kind == "road":
                     if plain_wires:
                         edge = edge or _road_shoulder(src, x, y, w, h, cables)
                     elif _touches_ground(src, x, y, w, h, frozenset({SRC_DGREY, SRC_GREY})):
                         edge = True
+                elif civic_fixes and kind in _RIM_KINDS:
+                    edge = _touches_water(src, x, y, w, h) or _civic_dirt_edge(
+                        src, x, y, w, h, quiet, kind
+                    )
                 chosen = _dirt_colour(x, y, edge, scheme)
                 if shadowed is not None:
                     chosen = shadowed
@@ -1425,6 +1679,7 @@ def paint_grid(
     grid: list[list[int]],
     scheme: DirtScheme = SCHEME_B,
     plain_wires: bool = True,
+    civic_fixes: bool = True,
 ) -> tuple[Image.Image, Image.Image]:
     height = len(grid)
     width = len(grid[0])
@@ -1432,7 +1687,13 @@ def paint_grid(
     for y, row in enumerate(grid):
         for x, index in enumerate(row):
             classic.paste(crop_tile(atlas, index), (x * TILE, y * TILE))
-    return classic, paint(classic, kinds_for(grid), scheme, plain_wires=plain_wires)
+    return classic, paint(
+        classic,
+        kinds_for(grid),
+        scheme,
+        plain_wires=plain_wires,
+        civic_fixes=civic_fixes,
+    )
 
 
 def luma(rgb: tuple[int, int, int]) -> float:
@@ -1635,9 +1896,15 @@ def civic_quarter() -> list[list[int]]:
     return grid
 
 
-def paint_span(atlas: Image.Image, base: int, width: int, height: int) -> tuple[Image.Image, Image.Image]:
+def paint_span(
+    atlas: Image.Image,
+    base: int,
+    width: int,
+    height: int,
+    civic_fixes: bool = True,
+) -> tuple[Image.Image, Image.Image]:
     grid = [[base + y * width + x for x in range(width)] for y in range(height)]
-    return paint_grid(atlas, grid)
+    return paint_grid(atlas, grid, civic_fixes=civic_fixes)
 
 
 def radar_grid(frame: int) -> list[list[int]]:
@@ -1858,7 +2125,10 @@ def main() -> int:
         "hospital 405-413, church 414-422, port 693-708, airport 709-744,",
         "radar 832-839, coal 745-760, coal smoke 916-931, fire 761-769,",
         "police 770-778, stadium 779-810, football 932-947, nuclear 811-826,",
-        "nuclear steam 952-955, fountain 840-843, special sprites zoo/park/library",
+        "reactor panel 820 and 952-955, fountain 840-843, special sprites zoo/park/library",
+        "The reactor is a grey panel with dark orbits and a clear red core.",
+        "The pitch is flat (0, 170, 0). Signs and players use (170, 0, 0).",
+        "Dirt rim stays off thin taxiways. It remains on solid walls and the runway.",
         "held back: tiles 38-39 (unused), 956-959 (blank), rubble, flood,",
         "disaster fire 56-63, trash, lightning, explosions, teleport 844-851,",
         "the menu toggle",
@@ -2319,7 +2589,7 @@ def main() -> int:
     painted_football: list[tuple[int, Image.Image, Image.Image]] = []
     for index in range(932, 948):
         classic = crop_tile(atlas, index)
-        svga = paint(classic, [["civic"]])
+        svga = paint(classic, [["stadium"]])
         painted_football.append((index, classic, svga))
     painted_fountain: list[tuple[int, Image.Image, Image.Image]] = []
     for index in range(840, 844):
@@ -2333,12 +2603,12 @@ def main() -> int:
     def _civic(base: int) -> Image.Image:
         return next(image for origin, _classic, image in painted_civic if origin == base)
 
+    # (170, 0, 0) is a sign or a player. (255, 125, 0) is a reactor electron
+    # and a stadium player. Walls and the fire station do not use either.
     hot_civic = {
         (255, 255, 0),
         (255, 127, 0),
-        (255, 125, 0),
         (255, 0, 0),
-        (170, 0, 0),
         (0, 0, 255),
         (85, 85, 255),
         (85, 255, 85),
@@ -2380,7 +2650,7 @@ def main() -> int:
     for y in range(police.height):
         for x in range(police.width):
             colour = police_src[x, y]
-            if colour == SRC_RED and police_px[x, y] != ROSE_RAMP[1]:
+            if colour == SRC_RED and police_px[x, y] != SYMBOL_RED:
                 rose_lights += 1
     # The two lawn badges are the 2x3 blue marks. Everything else blue is the wall.
     for cells in _components(police_src, police.width, police.height, SRC_BLUE):
@@ -2435,7 +2705,7 @@ def main() -> int:
                 runway_bad += 1
             elif colour == SRC_YELLOW and out != RAIL_MARK:
                 mark_bad += 1
-            elif colour == SRC_RED and out != ROSE_RAMP[1]:
+            elif colour == SRC_RED and out != SYMBOL_RED:
                 light_bad += 1
             elif colour == SRC_TAN and out not in DIRT_RAMP:
                 dirt_miss += 1
@@ -2447,19 +2717,149 @@ def main() -> int:
     if DIRT_BASE not in set(_histogram(airport)):
         lines.append("FAIL the airport infield is not dirt B")
         failed = True
-
-    smoke_px = painted_smoke_coal[0][2].load()
-    smoke_src = painted_smoke_coal[0][1].load()
-    steam_px = painted_steam[0][2].load()
-    steam_src = painted_steam[0][1].load()
-    smoke_grey = {smoke_px[x, y] for y in range(16) for x in range(16) if smoke_src[x, y] == SRC_GREY}
-    steam_grey = {steam_px[x, y] for y in range(16) for x in range(16) if steam_src[x, y] == SRC_GREY}
-    if smoke_grey & steam_grey or steam_grey != {STEAM_BODY}:
-        lines.append(f"FAIL coal smoke and nuclear steam share a grey {smoke_grey & steam_grey}")
+    apron = _thin_pavement(airport_src, airport.width, airport.height, [["airport"] * 6 for _ in range(6)])
+    apron_mask = _caster_mask(
+        [["airport"] * 6 for _ in range(6)], airport_src, airport.width, airport.height, apron
+    )
+    apron_counts = _caster_counts(airport_src, airport.width, airport.height, apron_mask)
+    traced = 0
+    for y in range(airport.height):
+        for x in range(airport.width):
+            if airport_src[x, y] != SRC_TAN or airport_px[x, y] not in (DIRT_RIM, DIRT_CONTACT):
+                continue
+            from_stroke = from_mass = False
+            for dx, dy in _ORTHO:
+                nx, ny = x + dx, y + dy
+                if not _in(nx, ny, airport.width, airport.height):
+                    continue
+                if (nx, ny) in apron:
+                    from_stroke = True
+                    continue
+                neighbour = airport_src[nx, ny]
+                if neighbour in (SRC_GREY, SRC_DGREY, SRC_GREEN, SRC_DGREEN, SRC_LGREY, SRC_LBLUE, SRC_BLUE):
+                    from_mass = True
+                if neighbour != BLACK:
+                    continue
+                fx, fy = nx + dx, ny + dy
+                if not _in(fx, fy, airport.width, airport.height):
+                    continue
+                if (fx, fy) in apron:
+                    from_stroke = True
+                elif airport_src[fx, fy] in (SRC_GREY, SRC_DGREY, SRC_GREEN, SRC_DGREEN, SRC_LGREY):
+                    from_mass = True
+            for dx, dy in _NW:
+                for step in (1, 2):
+                    nx, ny = x + step * dx, y + step * dy
+                    if (nx, ny) not in apron_counts:
+                        continue
+                    if (nx, ny) in apron:
+                        from_stroke = True
+                    else:
+                        from_mass = True
+            if from_stroke and not from_mass:
+                traced += 1
+    if traced:
+        lines.append(f"FAIL dirt beside a thin taxiway is still a rim ({traced})")
         failed = True
-    steam_arm = {steam_px[x, y] for y in range(16) for x in range(16) if steam_src[x, y] == SRC_DGREY}
-    if steam_arm != {STEAM_ARM}:
-        lines.append(f"FAIL nuclear steam arms are not the pale blue {steam_arm}")
+    runway_rim = False
+    for y in range(airport.height):
+        for x in range(airport.width):
+            if airport_src[x, y] != SRC_TAN or airport_px[x, y] != DIRT_RIM:
+                continue
+            for dx, dy in _ORTHO:
+                nx, ny = x + dx, y + dy
+                if not _in(nx, ny, airport.width, airport.height):
+                    continue
+                far = (nx, ny)
+                if airport_src[nx, ny] == BLACK:
+                    fx, fy = nx + dx, ny + dy
+                    if _in(fx, fy, airport.width, airport.height):
+                        far = (fx, fy)
+                if airport_src[far] == SRC_DGREY and far not in apron:
+                    runway_rim = True
+    if not runway_rim:
+        lines.append("FAIL the main runway lost its dirt rim")
+        failed = True
+
+    hospital = _civic(405)
+    hospital_src = next(image for origin, image, _svga in painted_civic if origin == 405).load()
+    hospital_px = hospital.load()
+    cross_bad = sum(
+        hospital_px[x, y] != SYMBOL_RED
+        for y in range(hospital.height)
+        for x in range(hospital.width)
+        if hospital_src[x, y] == SRC_RED
+    )
+    if cross_bad:
+        lines.append(f"FAIL the hospital cross is not clear red ({cross_bad})")
+        failed = True
+
+    def _outputs(classic: Image.Image, svga: Image.Image, source: tuple[int, int, int]) -> set[tuple[int, int, int]]:
+        src, dst = classic.load(), svga.load()
+        return {dst[x, y] for y in range(classic.height) for x in range(classic.width) if src[x, y] == source}
+
+    pitch = painted_football[0]
+    muddy = {(0, 65, 32), (28, 113, 0), (0, 113, 0), (0, 65, 0), (0, 65, 16)}
+    for index, classic, svga in painted_football:
+        got = _outputs(classic, svga, SRC_GREEN)
+        if got != {FIELD}:
+            lines.append(f"FAIL football {index} field is not flat green {got}")
+            failed = True
+        stripe = _outputs(classic, svga, SRC_DGREEN)
+        if stripe != {FIELD_STRIPE}:
+            lines.append(f"FAIL football {index} end zone is not the stripe {stripe}")
+            failed = True
+        if muddy & set(_histogram(svga)):
+            lines.append(f"FAIL football {index} still has a dark grass colour")
+            failed = True
+        reds = _outputs(classic, svga, SRC_RED)
+        if reds and reds != {SYMBOL_RED}:
+            lines.append(f"FAIL football {index} players are not clear red {reds}")
+            failed = True
+        yellows = _outputs(classic, svga, SRC_YELLOW)
+        if yellows and yellows != {RAIL_MARK}:
+            lines.append(f"FAIL football {index} players are not clear yellow {yellows}")
+            failed = True
+        blues = _outputs(classic, svga, SRC_BLUE)
+        if blues and blues != {SHIELD}:
+            lines.append(f"FAIL football {index} marks are not clear blue {blues}")
+            failed = True
+        lines_bad = sum(
+            svga.load()[x, y] != DASH
+            for y in range(16)
+            for x in range(16)
+            if classic.load()[x, y] == SRC_LGREY
+        )
+        if lines_bad:
+            lines.append(f"FAIL football {index} yard lines are not white ({lines_bad})")
+            failed = True
+    for base in (779, 795):
+        classic = next(image for origin, image, _svga in painted_civic if origin == base)
+        svga = _civic(base)
+        if _outputs(classic, svga, SRC_GREEN) != {FIELD}:
+            lines.append(f"FAIL stadium {base} field is not flat green")
+            failed = True
+        if muddy & set(_histogram(svga)):
+            lines.append(f"FAIL stadium {base} still has a dark grass colour")
+            failed = True
+    if pitch[0] != 932:
+        lines.append("FAIL football frames are not in order")
+        failed = True
+
+    for index, classic, svga in painted_steam:
+        src, dst = classic.load(), svga.load()
+        grey = {dst[x, y] for y in range(16) for x in range(16) if src[x, y] == SRC_GREY}
+        arm = {dst[x, y] for y in range(16) for x in range(16) if src[x, y] == SRC_DGREY}
+        core = {dst[x, y] for y in range(16) for x in range(16) if src[x, y] == SRC_RED}
+        if grey != {REACTOR} or arm != {ORBIT} or core != {SYMBOL_RED}:
+            lines.append(f"FAIL reactor {index} panel={grey} orbits={arm} core={core}")
+            failed = True
+        if STEAM_BODY in set(_histogram(svga)) or STEAM_ARM in set(_histogram(svga)):
+            lines.append(f"FAIL reactor {index} is still a pale blue square")
+            failed = True
+    nuke = _civic(811)
+    if STEAM_BODY in set(_histogram(nuke)) or STEAM_ARM in set(_histogram(nuke)):
+        lines.append("FAIL the nuclear plant reactor is still pale blue")
         failed = True
 
     painted_special: list[tuple[str, Image.Image, Image.Image]] = []
@@ -2489,7 +2889,7 @@ def main() -> int:
                 f"FAIL special {name}: palette={bad_palette} ink={bad_ink} collapsed={collapsed}"
             )
             failed = True
-        present = hot_civic & {
+        present = (hot_civic | {SYMBOL_RED, ORANGE}) & {
             dst_s[x, y][:3] for y in range(classic_s.height) for x in range(classic_s.width)
         }
         if present:
@@ -2855,6 +3255,47 @@ def main() -> int:
     _save(special_sheet, PREVIEW_DIR / "special-buildings-3x.png")
     _save(quarter_sheet, PREVIEW_DIR / "civic-32.png")
 
+    def _fix_row(classic: Image.Image, before: Image.Image, after: Image.Image, caption: str, scale: int) -> Image.Image:
+        return _hstack(
+            [
+                _captioned(classic, f"{caption} CLASSIC", scale),
+                _captioned(before, "BEFORE", scale),
+                _captioned(after, "AFTER", scale),
+            ],
+            16,
+        )
+
+    fix_rows = []
+    nuke_classic, nuke_after = _stored(811)
+    _, nuke_before = paint_span(atlas, 811, 4, 4, civic_fixes=False)
+    fix_rows.append(_fix_row(nuke_classic, nuke_before, nuke_after, "NUCLEAR", 3))
+    for index in (952, 954):
+        frame = crop_tile(atlas, index)
+        before = paint(frame, [["steam"]], civic_fixes=False)
+        after = paint(frame, [["steam"]])
+        fix_rows.append(_fix_row(frame, before, after, str(index), 4))
+    for base, caption in ((779, "STADIUM EMPTY"), (795, "STADIUM FULL")):
+        classic, after = _stored(base)
+        _, before = paint_span(atlas, base, 4, 4, civic_fixes=False)
+        fix_rows.append(_fix_row(classic, before, after, caption, 3))
+    for index in (932, 940):
+        frame = crop_tile(atlas, index)
+        before = paint(frame, [["stadium"]], civic_fixes=False)
+        after = next(image for origin, _classic, image in painted_football if origin == index)
+        fix_rows.append(_fix_row(frame, before, after, str(index), 4))
+    hospital_classic, hospital_after = _stored(405)
+    _, hospital_before = paint_span(atlas, 405, 3, 3, civic_fixes=False)
+    fix_rows.append(_fix_row(hospital_classic, hospital_before, hospital_after, "HOSPITAL", 3))
+    airport_classic, airport_after = _stored(709)
+    _, airport_before = paint_span(atlas, 709, 6, 6, civic_fixes=False)
+    fix_rows.append(_fix_row(airport_classic, airport_before, airport_after, "AIRPORT", 2))
+    fix_w = max(row.width for row in fix_rows)
+    fixes = _vstack(
+        [_banner("CIVIC FIXES  CLASSIC  BEFORE  AFTER", fix_w), *fix_rows],
+        12,
+    )
+    _save(fixes, PREVIEW_DIR / "civic-fixes.png")
+
     lines.append("")
     lines.append(
         f"dirt tile 0: { {str(k): v for k, v in sorted(dirt_counts.items(), key=lambda kv: -kv[1])} }"
@@ -2886,6 +3327,7 @@ def main() -> int:
         "power-plants-3x.png",
         "special-buildings-3x.png",
         "civic-32.png",
+        "civic-fixes.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"
