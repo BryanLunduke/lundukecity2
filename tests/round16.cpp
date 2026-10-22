@@ -72,8 +72,12 @@ int main()
 
     const double hole[] = {5.0, 0.0, 5.0, 5.0};
     const double tail[] = {4.0, 4.0, 0.0, 0.0};
+    const double holes[] = {5.0, 0.0, 5.0, 0.0, 5.0};
+    const double run[] = {5.0, 0.0, 0.0, 5.0};
     if (!history_point_skipped(hole, 4, 1) || history_point_skipped(hole, 4, 0) ||
-        !history_point_skipped(tail, 4, 3) || history_point_skipped(tail, 4, 0)) {
+        !history_point_skipped(tail, 4, 3) || history_point_skipped(tail, 4, 0) ||
+        !history_point_skipped(holes, 5, 1) || !history_point_skipped(holes, 5, 3) ||
+        history_point_skipped(run, 4, 1) || history_point_skipped(run, 4, 2)) {
         return fail(8, "a history hole was drawn as a drop to zero");
     }
 
@@ -142,8 +146,9 @@ int main()
         }
         const std::string won = dull.scenario_outcome_text(true);
         if (won.find("You did it! Dullsville met the goal.") == std::string::npos ||
-            won.find("Keep playing continues at the previous speed") == std::string::npos) {
-            return fail(16, "the win text does not name the city and Keep playing");
+            won.find("Population") == std::string::npos ||
+            won.find("previous speed") != std::string::npos) {
+            return fail(16, "the win text does not name the city and a stat");
         }
         if (!dull.save_city_as(city_path.string())) {
             return fail(17, "could not save the scenario city");
@@ -173,9 +178,15 @@ int main()
         out << scenario_sidecar_text(done);
         out.close();
         ScenarioClock parsed;
-        if (!scenario_sidecar_parse(scenario_sidecar_text(done), parsed) || parsed.outcome != 1 ||
-            parsed.score_wait != 400) {
-            return fail(20, "the scenario sidecar did not round-trip");
+        const std::string side_text = scenario_sidecar_text(done);
+        if (side_text.find('{') == std::string::npos || side_text.find("\"scenario\"") == std::string::npos ||
+            !scenario_sidecar_parse(side_text, parsed) || parsed.outcome != 1 || parsed.score_wait != 400) {
+            return fail(20, "the scenario sidecar did not round-trip as JSON");
+        }
+        ScenarioClock legacy;
+        const char *old_side = "scenario=1\nscore_wait=400\nscore_type=1\noutcome=1\nmonth=3\nyear=1930\n";
+        if (!scenario_sidecar_parse(old_side, legacy) || legacy.outcome != 1 || legacy.year != 1930) {
+            return fail(20, "an older key=value sidecar no longer loads");
         }
         CitySession finished;
         if (!finished.load_city(city_path.string()) || finished.scenario_years_left() != -1 ||

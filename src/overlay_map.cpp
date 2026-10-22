@@ -15,6 +15,13 @@ namespace {
 constexpr int kW = CitySession::kWorldW;
 constexpr int kH = CitySession::kWorldH;
 
+// A fully funded, powered station deposits MAX_POLICE_STATION_EFFECT (1000)
+// into one coverage cluster. The engine then smooths that map three times.
+// On the 8-tile clusters the centre of that spike peaks at 218, so dividing
+// by 1000 never reached red. 218 is the fixed top of the ramp: full coverage
+// is the top colour, and a weaker or unpowered station stays below it.
+constexpr int kStationCoverageFull = 218;
+
 void heat(double t, unsigned char &r, unsigned char &g, unsigned char &b, unsigned char &a)
 {
     if (t <= 0.0) {
@@ -215,7 +222,7 @@ void OverlayMap::rebuild()
             }
             case CitySession::MapLayer::Police:
             case CitySession::MapLayer::Fire:
-                heat(static_cast<double>(value) / static_cast<double>(MAX_POLICE_STATION_EFFECT), r, g, b, a);
+                heat(static_cast<double>(value) / static_cast<double>(kStationCoverageFull), r, g, b, a);
                 break;
             default:
                 heat(static_cast<double>(value) / 255.0, r, g, b, a);

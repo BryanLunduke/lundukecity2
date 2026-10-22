@@ -9,9 +9,11 @@
 #include <vector>
 
 // A quick look at a classic .cty without loading it into the simulator.
-// Population, date, and funds come from the misc block. The swatch is one
-// colour per tile, classified the same way the minimap falls back when the
-// tile atlas is not used.
+// Date and funds come from the misc block (funds from the wide trailer when
+// the file has one). Population is counted from the zone tiles, so a stale
+// census in the file is not what the list shows. The swatch is one colour
+// per tile, classified the same way the minimap falls back when the tile
+// atlas is not used.
 
 struct CityGlance {
     bool ok = false;

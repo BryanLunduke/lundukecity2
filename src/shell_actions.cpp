@@ -434,6 +434,9 @@ void Shell::jump_notice(int index)
         return;
     }
     center_on_fraction((note.tile_x + 0.5) / CitySession::kWorldW, (note.tile_y + 0.5) / CitySession::kWorldH);
+    if (dialog_ == Dialog::Messages) {
+        close_dialog();
+    }
 }
 
 void Shell::arm_touch_tool()
@@ -444,6 +447,7 @@ void Shell::arm_touch_tool()
     touch_armed_ = true;
     touch_pending_ = false;
     pointer_on_map_ = true;
+    session_.begin_provisional_stroke();
     map_.press(map_local_x(touch_down_x_), map_local_y(touch_down_y_));
     map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
 }
@@ -1511,8 +1515,14 @@ void Shell::on_hotspot(int id, double x, double y)
                     "Little Falls", "West Ridge", "Copper Bend", "Green Hollow", "Stone Ferry",
                 };
                 const unsigned salt = static_cast<unsigned>(SDL_GetTicks());
-                *active_field() = names[salt % 10];
-                field_select_all(*active_field(), field_caret_, field_anchor_);
+                int pick = static_cast<int>(salt % 10);
+                if (pick == osk_last_name_) {
+                    pick = (pick + 1) % 10;
+                }
+                osk_last_name_ = pick;
+                *active_field() = names[pick];
+                field_caret_ = static_cast<int>(active_field()->size());
+                field_anchor_ = field_caret_;
             }
         } else if (key.kind == OskKind::Shift) {
             osk_shift_ = !osk_shift_;
@@ -1777,9 +1787,6 @@ void Shell::move_focus(int delta)
     }
     index = (index + delta + static_cast<int>(focus_order_.size())) % static_cast<int>(focus_order_.size());
     focus_id_ = focus_order_[static_cast<std::size_t>(index)];
-    if (focus_id_ == kFieldName || focus_id_ == kFieldSeed) {
-        select_field();
-    }
     if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
         if (dialog_ == Dialog::Files) {
             list_index_ = list_scroll_ + (focus_id_ - kListItem);

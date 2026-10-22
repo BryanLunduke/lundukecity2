@@ -856,6 +856,8 @@ bool CitySession::load_city(const std::string &path)
     clear_notices();
     clear_scenario_clock();
     read_scenario_sidecar(path);
+    recount_population_from_map();
+    refresh_loaded_meters();
     arm_eval_baseline();
     if (classify_city_path(path) == CityFileKind::Incomplete) {
         post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
@@ -929,6 +931,8 @@ bool CitySession::load_scenario(int id)
     eval_month_pending_ = false;
     clear_notices();
     clear_scenario_clock();
+    recount_population_from_map();
+    refresh_loaded_meters();
     arm_eval_baseline();
     post_message(std::string("Playing ") + entry->def.name + ".");
     return true;
@@ -1823,7 +1827,15 @@ std::string CitySession::scenario_outcome_text(bool won) const
         text += " ";
         text += def.goal;
     }
-    text += " Keep playing continues at the previous speed. Closing this window leaves the city paused.";
+    const std::string meter = scenario_meter();
+    if (!meter.empty()) {
+        text += " ";
+        text += meter;
+        text += ".";
+    } else {
+        const Evaluation report = evaluation();
+        text += " Population " + std::to_string(report.population) + ", score " + std::to_string(report.score) + ".";
+    }
     return text;
 }
 
@@ -2073,6 +2085,13 @@ void CitySession::remember_notice(std::string text, int tile_x, int tile_y, bool
     if (text.empty()) {
         return;
     }
+    // Dragging a blocked tile used to append the same line on every sample.
+    if (text == "Cannot build here." && !notices_.empty() && notices_.front().text == text) {
+        notices_.front().tile_x = tile_x;
+        notices_.front().tile_y = tile_y;
+        notices_.front().has_place = has_place && Micropolis::testBounds(tile_x, tile_y);
+        return;
+    }
     CityNotice notice;
     notice.text = std::move(text);
     notice.tile_x = tile_x;
@@ -2088,6 +2107,139 @@ void CitySession::remember_notice(std::string text, int tile_x, int tile_y, bool
     if (notices_.size() > 50) {
         notices_.resize(50);
     }
+}
+
+void CitySession::recount_population_from_map()
+{
+    if (engine_ == nullptr || !ready_) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    Quad res = 0;
+    Quad com = 0;
+    Quad ind = 0;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            const unsigned short raw = sim.map[x][y];
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int tile = raw & LOMASK;
+            // Same splits as doZone: houses below the hospital, then
+            // commercial, then industry through the last industrial tile.
+            // Hospitals and churches are zone centres and are not people.
+            if (tile == FREEZ) {
+                int homes = 0;
+                for (int nx = x - 1; nx <= x + 1; ++nx) {
+                    for (int ny = y - 1; ny <= y + 1; ++ny) {
+                        if (nx < 0 || ny < 0 || nx >= kWorldW || ny >= kWorldH) {
+                            continue;
+                        }
+                        const int near = sim.map[nx][ny] & LOMASK;
+                        if (near >= LHTHR && near <= HHTHR) {
+                            ++homes;
+                        }
+                    }
+                }
+                res += homes;
+            } else if (tile < HOSPITAL) {
+                res += ((tile - RZB) / 9) % 4 * 8 + 16;
+            } else if (tile >= COMBASE && tile < INDBASE) {
+                if (tile != COMCLR) {
+                    com += ((tile - CZB) / 9) % 5 + 1;
+                }
+            } else if (tile >= INDBASE && tile <= PORTBASE) {
+                if (tile != INDCLR) {
+                    ind += ((tile - IZB) / 9) % 4 + 1;
+                }
+            }
+        }
+    }
+    const Quad people = (res + (com + ind) * 8) * 20;
+    const Quad saved = (sim.resPop + (sim.comPop + sim.indPop) * 8) * 20;
+    // An empty generated map can still carry a wide census that is not on
+    // the tiles. A city with zones always shows the tiles, so a stale
+    // stored "Town" does not sit on screen until the next census.
+    if (people <= 0 && saved > 0) {
+        sim.cityPop = saved;
+        sim.cityClass = live_city_class(saved);
+        return;
+    }
+    sim.resPop = res;
+    sim.comPop = com;
+    sim.indPop = ind;
+    sim.snapResPop = res;
+    sim.snapComPop = com;
+    sim.snapIndPop = ind;
+    sim.censusSnapshotValid = true;
+    sim.liveCensusComplete = true;
+    sim.cityPop = people < 0 ? 0 : people;
+    sim.cityClass = live_city_class(people < 0 ? 0 : people);
+}
+
+void CitySession::refresh_loaded_meters()
+{
+    if (engine_ == nullptr || !ready_) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    if (live_population_count(sim) <= 0) {
+        return;
+    }
+    // doSimInit now scans density before crime. This pass refreshes the
+    // score and the traffic average the scenario meter reads, which otherwise
+    // stay on the file until the next evaluation.
+    sim.cityEvaluation();
+}
+
+void CitySession::begin_provisional_stroke()
+{
+    if (engine_ == nullptr || stroke_active_) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    stroke_funds_ = static_cast<std::int64_t>(sim.totalFunds);
+    stroke_message_ = message_;
+    stroke_message_serial_ = message_serial_;
+    stroke_notices_ = notices_.size();
+    stroke_dirty_ = dirty_;
+    stroke_tiles_.resize(static_cast<std::size_t>(kWorldW * kWorldH));
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            stroke_tiles_[static_cast<std::size_t>(y * kWorldW + x)] = sim.map[x][y];
+        }
+    }
+    stroke_active_ = true;
+}
+
+void CitySession::refund_provisional_stroke()
+{
+    if (!stroke_active_ || engine_ == nullptr) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            sim.map[x][y] = stroke_tiles_[static_cast<std::size_t>(y * kWorldW + x)];
+        }
+    }
+    sim.setFunds(static_cast<Quad>(stroke_funds_));
+    message_ = stroke_message_;
+    message_serial_ = stroke_message_serial_;
+    if (notices_.size() > stroke_notices_) {
+        const std::size_t extra = notices_.size() - stroke_notices_;
+        notices_.erase(notices_.begin(), notices_.begin() + extra);
+    }
+    dirty_ = stroke_dirty_;
+    stroke_active_ = false;
+    stroke_tiles_.clear();
+    ++sim.mapSerial;
+}
+
+void CitySession::commit_provisional_stroke()
+{
+    stroke_active_ = false;
+    stroke_tiles_.clear();
 }
 
 void CitySession::arm_eval_baseline()

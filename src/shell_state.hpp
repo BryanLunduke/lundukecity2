@@ -352,6 +352,9 @@ private:
     bool open_wheel_zooms_ = false;
     bool open_fullscreen_ = false;
     int controls_page_ = 0;
+    int controls_scroll_ = 0;
+    int controls_scroll_max_ = 0;
+    int osk_last_name_ = -1;
     bool goal_dismissed_ = false;
     int goal_scenario_ = -1;
     std::chrono::steady_clock::time_point goal_until_{};

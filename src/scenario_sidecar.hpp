@@ -28,18 +28,69 @@ inline std::string scenario_sidecar_path(const std::string &city_path)
 
 inline std::string scenario_sidecar_text(const ScenarioClock &clock)
 {
-    std::string out;
-    out += "scenario=" + std::to_string(clock.scenario) + "\n";
-    out += "score_wait=" + std::to_string(clock.score_wait) + "\n";
-    out += "score_type=" + std::to_string(clock.score_type) + "\n";
-    out += "outcome=" + std::to_string(clock.outcome) + "\n";
-    out += "month=" + std::to_string(clock.month) + "\n";
-    out += "year=" + std::to_string(clock.year) + "\n";
+    std::string out = "{\n";
+    out += "  \"scenario\": " + std::to_string(clock.scenario) + ",\n";
+    out += "  \"score_wait\": " + std::to_string(clock.score_wait) + ",\n";
+    out += "  \"score_type\": " + std::to_string(clock.score_type) + ",\n";
+    out += "  \"outcome\": " + std::to_string(clock.outcome) + ",\n";
+    out += "  \"month\": " + std::to_string(clock.month) + ",\n";
+    out += "  \"year\": " + std::to_string(clock.year) + "\n";
+    out += "}\n";
     return out;
+}
+
+inline int sidecar_json_int(const std::string &text, const char *key, bool &ok)
+{
+    const std::string token = std::string("\"") + key + "\"";
+    const auto at = text.find(token);
+    if (at == std::string::npos) {
+        ok = false;
+        return 0;
+    }
+    std::size_t i = at + token.size();
+    while (i < text.size() && (text[i] == ' ' || text[i] == '\t' || text[i] == '\r' || text[i] == '\n')) {
+        ++i;
+    }
+    if (i >= text.size() || text[i] != ':') {
+        ok = false;
+        return 0;
+    }
+    ++i;
+    while (i < text.size() && (text[i] == ' ' || text[i] == '\t')) {
+        ++i;
+    }
+    ok = i < text.size() && (text[i] == '-' || (text[i] >= '0' && text[i] <= '9'));
+    if (!ok) {
+        return 0;
+    }
+    return std::atoi(text.c_str() + i);
 }
 
 inline bool scenario_sidecar_parse(const std::string &text, ScenarioClock &clock)
 {
+    if (text.find('{') != std::string::npos) {
+        ScenarioClock parsed;
+        bool scenario_ok = false;
+        bool wait_ok = false;
+        bool type_ok = false;
+        bool outcome_ok = false;
+        bool month_ok = false;
+        bool year_ok = false;
+        parsed.scenario = sidecar_json_int(text, "scenario", scenario_ok);
+        parsed.score_wait = sidecar_json_int(text, "score_wait", wait_ok);
+        parsed.score_type = sidecar_json_int(text, "score_type", type_ok);
+        parsed.outcome = sidecar_json_int(text, "outcome", outcome_ok);
+        parsed.month = sidecar_json_int(text, "month", month_ok);
+        parsed.year = sidecar_json_int(text, "year", year_ok);
+        if (!scenario_ok && !wait_ok && !type_ok && !outcome_ok) {
+            return false;
+        }
+        (void)month_ok;
+        (void)year_ok;
+        parsed.present = true;
+        clock = parsed;
+        return true;
+    }
     ScenarioClock parsed;
     bool any = false;
     std::string line;
