@@ -34,17 +34,24 @@ public:
     // How many times the file was actually opened. A failure is not retried.
     int load_attempts() const { return attempts_; }
 
-    // Classic is the default. SVGA is used only when its sheet loaded.
-    // Switching does not reload the files. A missing sheet stays on Classic.
-    bool use_svga() const { return use_svga_; }
+    // Classic is 0, SVGA is 1, Spooky is 2. An optional sheet is drawn only
+    // when it loaded. Switching does not reload the files. A missing sheet
+    // stays on Classic. 0 and 1 keep those meanings.
+    int look() const { return look_; }
+    bool use_svga() const { return look_ == 1; }
+    bool use_spooky() const { return look_ == 2; }
     bool svga_available() const { return svga_ready_; }
-    bool set_look(bool svga);
+    bool spooky_available() const { return spooky_ready_; }
+    // True when the requested look is the one now drawn.
+    bool set_look(int look);
     // Bumps when the active sheet changes, so a cached map can redraw.
     int look_generation() const { return generation_; }
-    // Drop the SVGA sheet. The next SVGA request stays on Classic.
-    // The decoded pixels stay loaded; recall_svga() puts the sheet back.
+    // Drop one optional sheet. The next request for it stays on Classic.
+    // The decoded pixels stay loaded; recall puts the sheet back.
     void forget_svga();
     bool recall_svga();
+    void forget_spooky();
+    bool recall_spooky();
 
 private:
     void bind_active();
@@ -55,7 +62,8 @@ private:
     int generation_ = 0;
     bool tried_ = false;
     bool svga_ready_ = false;
-    bool use_svga_ = false;
+    bool spooky_ready_ = false;
+    int look_ = 0;
     std::string error_;
     // Tightly packed opaque pixels, 16*16 per tile, native ARGB32.
     // Held as bytes so the header stays free of containers' noise in TUs.

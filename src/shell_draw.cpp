@@ -349,9 +349,11 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             } else if (item.action == Action::Fast) {
                 on = speed_ == 3;
             } else if (item.action == Action::ClassicLook) {
-                on = !svga_look_;
+                on = drawn_look_ == 0;
             } else if (item.action == Action::SvgaLook) {
-                on = svga_look_;
+                on = drawn_look_ == 1;
+            } else if (item.action == Action::SpookyLook) {
+                on = drawn_look_ == 2;
             }
             cairo_set_source_rgb(cr, theme::kTextR, theme::kTextG, theme::kTextB);
             if (item.kind == ItemKind::Check) {

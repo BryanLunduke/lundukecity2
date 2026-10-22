@@ -87,6 +87,7 @@ install_data(
   [
     'data/special-tiles/zoo.png',
     'data/special-tiles/big-park.png',
+    'data/special-tiles/big-park-spooky.png',
     'data/special-tiles/library.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'special-tiles',

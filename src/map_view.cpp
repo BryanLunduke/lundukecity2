@@ -11,6 +11,7 @@
 #include "sprite_art.hpp"
 #include "tile_atlas.hpp"
 #include "tools.hpp"
+#include "vga_palette.hpp"
 #include "view_math.hpp"
 
 #include "micropolis.h"
@@ -170,33 +171,8 @@ void MapView::blit_tile(int x, int y, int shown, const TileAtlas &atlas)
 
 namespace {
 
-cairo_surface_t *special_sprite(int index)
+cairo_surface_t *load_png(const std::string &path)
 {
-    struct Slot {
-        cairo_surface_t *image = nullptr;
-        bool tried = false;
-    };
-    struct Cache {
-        Slot slots[8];
-        ~Cache()
-        {
-            for (Slot &slot : slots) {
-                if (slot.image != nullptr) {
-                    cairo_surface_destroy(slot.image);
-                }
-            }
-        }
-    };
-    static Cache cache;
-    if (index < 0 || index >= 8 || index >= special_building_count()) {
-        return nullptr;
-    }
-    Slot &slot = cache.slots[index];
-    if (slot.tried) {
-        return slot.image;
-    }
-    slot.tried = true;
-    const std::string path = ui_data_file(std::string("special-tiles/") + special_building(index).map_sprite + ".png");
     if (path.empty()) {
         return nullptr;
     }
@@ -207,8 +183,56 @@ cairo_surface_t *special_sprite(int index)
         }
         return nullptr;
     }
-    slot.image = surface;
     return surface;
+}
+
+cairo_surface_t *special_sprite(int index, bool &vga_snap)
+{
+    vga_snap = false;
+    struct Slot {
+        cairo_surface_t *image = nullptr;
+        bool tried = false;
+    };
+    struct Cache {
+        Slot slots[8];
+        Slot spooky_park;
+        ~Cache()
+        {
+            for (Slot &slot : slots) {
+                if (slot.image != nullptr) {
+                    cairo_surface_destroy(slot.image);
+                }
+            }
+            if (spooky_park.image != nullptr) {
+                cairo_surface_destroy(spooky_park.image);
+            }
+        }
+    };
+    static Cache cache;
+    if (index < 0 || index >= 8 || index >= special_building_count()) {
+        return nullptr;
+    }
+    // Big Park is a separate sprite, not an atlas cell. Spooky draws the
+    // graveyard sheet when it loaded. A missing file keeps the classic park
+    // and does not snap that fallback.
+    if (tile_atlas().look() == 2 && std::strcmp(special_building(index).map_sprite, "big-park") == 0) {
+        Slot &park = cache.spooky_park;
+        if (!park.tried) {
+            park.tried = true;
+            park.image = load_png(ui_data_file("special-tiles/big-park-spooky.png"));
+        }
+        if (park.image != nullptr) {
+            vga_snap = true;
+            return park.image;
+        }
+    }
+    Slot &slot = cache.slots[index];
+    if (slot.tried) {
+        return slot.image;
+    }
+    slot.tried = true;
+    slot.image = load_png(ui_data_file(std::string("special-tiles/") + special_building(index).map_sprite + ".png"));
+    return slot.image;
 }
 
 // 0 when this cell is not part of a special building. Otherwise a key that
@@ -266,7 +290,8 @@ void MapView::blit_special(int x, int y, int index, int cell)
             }
         }
     };
-    cairo_surface_t *sprite = special_sprite(index);
+    bool vga_snap = false;
+    cairo_surface_t *sprite = special_sprite(index, vga_snap);
     const int col = cell % 3;
     const int row = cell / 3;
     if (sprite == nullptr || col < 0 || row < 0) {
@@ -306,8 +331,12 @@ void MapView::blit_special(int x, int y, int index, int cell)
                 const std::uint32_t p10 = word_at(c * 2 + 1, r * 2);
                 const std::uint32_t p01 = word_at(c * 2, r * 2 + 1);
                 const std::uint32_t p11 = word_at(c * 2 + 1, r * 2 + 1);
-                out[c] = (mix(p00, p10, p01, p11, 24) << 24) | (mix(p00, p10, p01, p11, 16) << 16) |
-                         (mix(p00, p10, p01, p11, 8) << 8) | mix(p00, p10, p01, p11, 0);
+                const unsigned red = mix(p00, p10, p01, p11, 16);
+                const unsigned green = mix(p00, p10, p01, p11, 8);
+                const unsigned blue = mix(p00, p10, p01, p11, 0);
+                const unsigned alpha = mix(p00, p10, p01, p11, 24);
+                out[c] = vga_snap ? snap_vga_rgb(red, green, blue)
+                                  : ((alpha << 24) | (red << 16) | (green << 8) | blue);
             }
         }
         return;

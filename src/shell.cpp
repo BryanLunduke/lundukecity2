@@ -412,7 +412,7 @@ void Shell::save_window_settings()
     stored.auto_goto = session_.auto_goto() ? 1 : 0;
     stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
     stored.wheel_zoom = wheel_zooms_ ? 1 : 0;
-    // The drawn sheet may be Classic because the SVGA file is missing.
+    // The drawn sheet may be Classic because an optional file is missing.
     // That is not the player's choice, so it is not what gets stored.
     stored.look = look_pref_.setting();
     {
@@ -467,7 +467,11 @@ void Shell::apply_loaded_settings()
     if (stored.wheel_zoom >= 0) {
         wheel_zooms_ = stored.wheel_zoom != 0;
     }
-    set_look_preference(stored.look == 1);
+    int look = stored.look;
+    if (look != 1 && look != 2) {
+        look = 0;
+    }
+    set_look_preference(look);
     map_.invalidate_all();
     // These are the global preferences. A city file must not replace them.
     pref_speed_ = speed_;
@@ -475,13 +479,14 @@ void Shell::apply_loaded_settings()
     session_.accept_preferences();
 }
 
-void Shell::set_look_preference(bool svga)
+void Shell::set_look_preference(int look)
 {
-    look_pref_.svga = svga;
-    svga_look_ = look_pref_.active(tile_atlas().set_look(svga));
-    if (!svga_look_) {
-        tile_atlas().set_look(false);
+    if (look != 1 && look != 2) {
+        look = 0;
     }
+    look_pref_.look = look;
+    tile_atlas().set_look(look);
+    drawn_look_ = tile_atlas().look();
 }
 
 void Shell::restore_play_preferences()
@@ -842,7 +847,7 @@ std::string Shell::visual_stamp() const
         << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
         << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
         << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_
-        << ' ' << svga_look_;
+        << ' ' << drawn_look_;
     return out.str();
 }
 
@@ -1300,8 +1305,15 @@ void Shell::loop()
                     map_.set_tile_size(std::atoi(zoom));
                 }
                 if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
-                    const bool svga = look[0] == 's' || look[0] == 'S' || look[0] == '1';
-                    set_look_preference(svga);
+                    // "spooky" starts with s, so that prefix is checked first.
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0 ||
+                        std::strncmp(look, "Spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(which);
                     map_.invalidate_all();
                 }
                 center_on_fraction(0.45, 0.42);

@@ -392,6 +392,17 @@ test(
   timeout: 180,
 )
 
+test(
+  'spooky_atlas',
+  python,
+  args: [
+    meson.project_source_root() / 'art' / 'spooky' / 'make_atlas.py',
+    '--out', meson.project_build_root() / 'spooky-atlas',
+  ],
+  env: ['PYTHONDONTWRITEBYTECODE=1'],
+  timeout: 180,
+)
+
 # Evaluation / Budget wording restored from 0.9.5, and the query em dash.
 dialog_copy = executable(
   'dialog_copy',

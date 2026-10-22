@@ -216,15 +216,25 @@ inline Placement clamp_saved_window(int x, int y, int w, int h, int ax, int ay, 
     return place;
 }
 
-// The choice written to settings.txt. Drawing can still be Classic when
-// the SVGA sheet is missing. That fallback is not a new choice.
+// The choice written to settings.txt. 0 is Classic, 1 is SVGA, 2 is Spooky.
+// Drawing can still be Classic when the chosen sheet is missing. That
+// fallback is not a new choice.
 struct LookPreference {
-    bool svga = false;
+    int look = 0;
 
-    int setting() const { return svga ? 1 : 0; }
+    int setting() const { return look; }
 
-    // True only when this choice can be drawn from a loaded sheet.
-    bool active(bool sheet_ready) const { return svga && sheet_ready; }
+    // The sheet to draw. A missing optional sheet is Classic for this session.
+    int drawn(bool svga_ready, bool spooky_ready) const
+    {
+        if (look == 1 && svga_ready) {
+            return 1;
+        }
+        if (look == 2 && spooky_ready) {
+            return 2;
+        }
+        return 0;
+    }
 };
 
 struct StoredSettings {
@@ -246,7 +256,7 @@ struct StoredSettings {
     int pause_unfocused = -1;
     // -1 absent, 0 scroll, 1 zoom.
     int wheel_zoom = -1;
-    // -1 absent (Classic), 0 Classic, 1 SVGA.
+    // -1 absent (Classic), 0 Classic, 1 SVGA, 2 Spooky.
     int look = -1;
 };
 

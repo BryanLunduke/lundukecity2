@@ -210,7 +210,7 @@ private:
     void note_window_geometry();
     void apply_loaded_settings();
     // Remember the player's look. The drawn sheet may stay Classic.
-    void set_look_preference(bool svga);
+    void set_look_preference(int look);
     // Put the global speed and disasters back after a city file's own options.
     void restore_play_preferences();
     void note_keyboard_input();
@@ -247,7 +247,8 @@ private:
     int win_h_ = 800;
     float ui_scale_ = 1.0f;
     float user_scale_ = 0.0f;
-    bool svga_look_ = false;
+    // The sheet on screen: 0 Classic, 1 SVGA, 2 Spooky. A missing sheet stays 0.
+    int drawn_look_ = 0;
     ui_scale::LookPreference look_pref_{};
     float scale_env_ = 0.0f;
     std::string font_ui_ = "Sans 13";

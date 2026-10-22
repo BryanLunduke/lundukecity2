@@ -962,6 +962,13 @@ void Shell::apply_action(Action action)
         map_.invalidate_all();
         save_window_settings();
         break;
+    case Action::SpookyLook:
+        // Same fallback as SVGA: a missing sheet stays Classic on screen,
+        // the menu check follows the drawn sheet, and the stored choice stays.
+        set_look_preference(2);
+        map_.invalidate_all();
+        save_window_settings();
+        break;
     case Action::Fire:
     case Action::Flood:
     case Action::Tornado:

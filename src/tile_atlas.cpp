@@ -30,6 +30,7 @@ struct Sheet {
 struct Sheets {
     Sheet classic;
     Sheet svga;
+    Sheet spooky;
 };
 
 Sheets &sheets()
@@ -39,8 +40,8 @@ Sheets &sheets()
 }
 
 // 2×2 box filter. (sum + 2) / 4 matches the overview used since the crisp
-// 8px zoom. snap is only for the SVGA sheet, whose averages must stay on
-// the VGA palette. Classic passes false and is unchanged.
+// 8px zoom. snap is for the SVGA and Spooky sheets, whose averages must
+// stay on the VGA palette. Classic passes false and is unchanged.
 void build_overview(const std::uint32_t *pixels, int count, std::vector<std::uint32_t> &overview, bool snap)
 {
     overview.assign(static_cast<std::size_t>(count) * TileAtlas::kOverview * TileAtlas::kOverview, 0);
@@ -146,7 +147,7 @@ TileAtlas &tile_atlas()
 
 void TileAtlas::bind_active()
 {
-    const Sheet &sheet = use_svga_ ? sheets().svga : sheets().classic;
+    const Sheet &sheet = look_ == 1 ? sheets().svga : look_ == 2 ? sheets().spooky : sheets().classic;
     pixels_ = sheet.pixels.empty() ? nullptr : sheet.pixels.data();
     overview_ = sheet.overview.empty() ? nullptr : sheet.overview.data();
     average_ = sheet.averages.empty() ? nullptr : sheet.averages.data();
@@ -176,48 +177,59 @@ bool TileAtlas::ensure_loaded()
     }
     columns_ = columns;
     count_ = count;
-    use_svga_ = false;
+    look_ = 0;
     bind_active();
 
-    // A missing or unreadable SVGA sheet leaves Classic in place. It is not
-    // an error: the game still runs.
-    const std::string svga_path = asset_file("images/micropolisEngine/tiles-svga.png");
-    if (!svga_path.empty()) {
-        Sheet extra;
-        int svga_columns = 0;
-        int svga_count = 0;
-        std::string svga_error;
-        if (decode_png(svga_path, extra, true, svga_columns, svga_count, svga_error) && svga_count == count_ &&
-            svga_columns == columns_) {
-            sheets().svga = std::move(extra);
-            svga_ready_ = true;
-        } else if (!svga_error.empty()) {
-            std::cerr << "SVGA tiles unavailable, using Classic:\n" << svga_error << "\n";
+    // A missing or unreadable optional sheet leaves Classic in place. It is
+    // not an error: the game still runs. Both optional sheets snap the 8px
+    // overview onto the VGA palette.
+    auto take_sheet = [&](const char *relative, Sheet &dest, bool &ready, const char *label) {
+        const std::string path = asset_file(relative);
+        if (path.empty()) {
+            return;
         }
-    }
+        Sheet extra;
+        int extra_columns = 0;
+        int extra_count = 0;
+        std::string extra_error;
+        if (decode_png(path, extra, true, extra_columns, extra_count, extra_error) && extra_count == count_ &&
+            extra_columns == columns_) {
+            dest = std::move(extra);
+            ready = true;
+        } else if (!extra_error.empty()) {
+            std::cerr << label << " tiles unavailable, using Classic:\n" << extra_error << "\n";
+        }
+    };
+    take_sheet("images/micropolisEngine/tiles-svga.png", sheets().svga, svga_ready_, "SVGA");
+    take_sheet("images/micropolisEngine/tiles-spooky.png", sheets().spooky, spooky_ready_, "Spooky");
     return true;
 }
 
-bool TileAtlas::set_look(bool svga)
+bool TileAtlas::set_look(int look)
 {
     ensure_loaded();
-    const bool next = svga && svga_ready_ && count_ > 0;
-    if (next == use_svga_) {
-        return use_svga_;
+    int next = 0;
+    if (look == 1 && svga_ready_ && count_ > 0) {
+        next = 1;
+    } else if (look == 2 && spooky_ready_ && count_ > 0) {
+        next = 2;
     }
-    use_svga_ = next;
+    if (next == look_) {
+        return look_ == look;
+    }
+    look_ = next;
     bind_active();
     ++generation_;
-    return use_svga_;
+    return look_ == look;
 }
 
 void TileAtlas::forget_svga()
 {
     svga_ready_ = false;
-    if (!use_svga_) {
+    if (look_ != 1) {
         return;
     }
-    use_svga_ = false;
+    look_ = 0;
     bind_active();
     ++generation_;
 }
@@ -228,6 +240,26 @@ bool TileAtlas::recall_svga()
         return false;
     }
     svga_ready_ = true;
+    return true;
+}
+
+void TileAtlas::forget_spooky()
+{
+    spooky_ready_ = false;
+    if (look_ != 2) {
+        return;
+    }
+    look_ = 0;
+    bind_active();
+    ++generation_;
+}
+
+bool TileAtlas::recall_spooky()
+{
+    if (count_ <= 0 || sheets().spooky.pixels.empty()) {
+        return false;
+    }
+    spooky_ready_ = true;
     return true;
 }
 
