@@ -317,16 +317,21 @@ void Shell::clamp_scroll()
 
 void Shell::fit_map_to_view()
 {
-    const int cover = tile_size_to_cover(view_w_, view_h_, CitySession::kWorldW, CitySession::kWorldH, map_.tile_size(),
-                                         kMinMapTile, kMaxMapTile);
+    // 8px is the overview. It is allowed to letterbox so the whole city stays
+    // in view. Every larger zoom still grows until the window is covered, and
+    // a closer zoom is never shrunk.
+    const int cover = map_.tile_size() <= kMapTileOverview
+                          ? map_.tile_size()
+                          : tile_size_to_cover(view_w_, view_h_, CitySession::kWorldW, CitySession::kWorldH,
+                                               map_.tile_size(), kMapTileSource, kMaxMapTile);
     if (cover != map_.tile_size()) {
-        const double mw = std::max(1, map_.pixel_width());
-        const double mh = std::max(1, map_.pixel_height());
-        const double cx = (scroll_x_ + view_w_ * 0.5) / mw;
-        const double cy = (scroll_y_ + view_h_ * 0.5) / mh;
+        const double ax = view_x_ + view_w_ * 0.5;
+        const double ay = view_y_ + view_h_ * 0.5;
+        const double fx = map_point_fraction(ax, view_x_, map_ox_, scroll_x_, map_.pixel_width());
+        const double fy = map_point_fraction(ay, view_y_, map_oy_, scroll_y_, map_.pixel_height());
         map_.set_tile_size(cover);
-        scroll_x_ = cx * std::max(1, map_.pixel_width()) - view_w_ / 2.0;
-        scroll_y_ = cy * std::max(1, map_.pixel_height()) - view_h_ / 2.0;
+        scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox(view_w_, map_.pixel_width()), map_.pixel_width());
+        scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
         clamp_scroll();
     }
     map_ox_ = map_letterbox(view_w_, map_.pixel_width());
@@ -335,35 +340,72 @@ void Shell::fit_map_to_view()
 
 double Shell::map_local_x(double x) const
 {
-    return x - view_x_ - map_ox_ + scroll_x_;
+    // Same device pixel the map was drawn on. A fractional scroll is floored
+    // at paint time; hit testing has to follow that or an 8px tile boundary
+    // lands on the neighbour.
+    return x - snapped_map_origin(view_x_, map_ox_, scroll_x_);
 }
 
 double Shell::map_local_y(double y) const
 {
-    return y - view_y_ - map_oy_ + scroll_y_;
+    return y - snapped_map_origin(view_y_, map_oy_, scroll_y_);
 }
 
 void Shell::center_on_fraction(double fx, double fy)
 {
-    const double mw = std::max(1, map_.pixel_width());
-    const double mh = std::max(1, map_.pixel_height());
-    scroll_x_ = fx * mw - view_w_ / 2.0;
-    scroll_y_ = fy * mh - view_h_ / 2.0;
+    const double ax = view_x_ + view_w_ * 0.5;
+    const double ay = view_y_ + view_h_ * 0.5;
+    scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox(view_w_, map_.pixel_width()), map_.pixel_width());
+    scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
     clamp_scroll();
 }
 
 void Shell::zoom_by(int delta)
 {
-    const double mw = std::max(1, map_.pixel_width());
-    const double mh = std::max(1, map_.pixel_height());
-    const double cx = (scroll_x_ + view_w_ * 0.5) / mw;
-    const double cy = (scroll_y_ + view_h_ * 0.5) / mh;
+    zoom_by(delta, view_x_ + view_w_ * 0.5, view_y_ + view_h_ * 0.5);
+}
+
+void Shell::zoom_by(int delta, double anchor_x, double anchor_y)
+{
     const int before = map_.tile_size();
-    map_.set_tile_size(before + delta);
+    // Read the anchor before the tile size changes. The grey band is not
+    // part of the city; a centred 8px map would otherwise zoom in about
+    // 13 tiles to the right of the tile under the view centre.
+    const double fx = map_point_fraction(anchor_x, view_x_, map_ox_, scroll_x_, map_.pixel_width());
+    const double fy = map_point_fraction(anchor_y, view_y_, map_oy_, scroll_y_, map_.pixel_height());
+    map_.set_tile_size(step_map_tile(before, delta));
     if (map_.tile_size() == before) {
         return;
     }
-    center_on_fraction(cx, cy);
+    const int ox = map_letterbox(view_w_, map_.pixel_width());
+    const int oy = map_letterbox(view_h_, map_.pixel_height());
+    scroll_x_ = scroll_for_map_fraction(fx, anchor_x, view_x_, ox, map_.pixel_width());
+    scroll_y_ = scroll_for_map_fraction(fy, anchor_y, view_y_, oy, map_.pixel_height());
+    clamp_scroll();
+    map_ox_ = ox;
+    map_oy_ = oy;
+}
+
+void Shell::clamp_gamepad_cursor(float push_x, float push_y)
+{
+    if (!gamepad_nav_ || view_w_ < 1 || view_h_ < 1) {
+        return;
+    }
+    const double view_r = static_cast<double>(view_x_) + view_w_;
+    const double view_b = static_cast<double>(view_y_) + view_h_;
+    const double x = cursor_x_;
+    const double y = cursor_y_;
+    if (x < view_x_ || x >= view_r || y < view_y_ || y >= view_b) {
+        return;
+    }
+    const double map_left = snapped_map_origin(view_x_, map_ox_, scroll_x_);
+    const double map_top = snapped_map_origin(view_y_, map_oy_, scroll_y_);
+    const double vis_left = std::max(static_cast<double>(view_x_), map_left);
+    const double vis_top = std::max(static_cast<double>(view_y_), map_top);
+    const double vis_right = std::min(view_r, map_left + map_.pixel_width());
+    const double vis_bottom = std::min(view_b, map_top + map_.pixel_height());
+    cursor_x_ = static_cast<float>(clamp_cursor_off_letterbox(x, push_x, view_x_, view_r, vis_left, vis_right));
+    cursor_y_ = static_cast<float>(clamp_cursor_off_letterbox(y, push_y, view_y_, view_b, vis_top, vis_bottom));
 }
 
 void Shell::load_recent()

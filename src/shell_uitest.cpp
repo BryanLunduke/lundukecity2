@@ -138,6 +138,8 @@ void Shell::forget_gamepad(SDL_JoystickID id)
     pan_y_ = 0;
     trig_l_ = 0;
     trig_r_ = 0;
+    zoom_l_latched_ = false;
+    zoom_r_latched_ = false;
     release_pad_drag();
     int count = 0;
     SDL_JoystickID *ids = SDL_GetGamepads(&count);
