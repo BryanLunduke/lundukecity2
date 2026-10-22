@@ -49,8 +49,8 @@ SRC_TAN = (204, 127, 102)
 SRC_DTAN = (153, 127, 76)
 SRC_ORANGE = (255, 127, 0)
 
-# Two dirt schemes share one mask. A is the calm field already reviewed.
-# B is the same texture one value step lighter in the warm brown family.
+# The SVGA dirt is scheme B. Scheme A is the darker field kept only so the
+# A/B preview can still show the choice. Both share one mask.
 # Ramp order: base, neighbour, accent, rim (also the soft shadow), contact.
 # 31x31 world-locked mask. 31 does not divide 16, so a tile edge does not
 # restart it. C is the accent (at least two pixels from the next accent).
@@ -138,15 +138,32 @@ SCHEME_B = DirtScheme(
     (65, 16, 0),
 )
 SCHEMES = (SCHEME_A, SCHEME_B)
-# Names the rest of the file uses for the reviewed field.
-DIRT_BASE = SCHEME_A.base
-DIRT_NEAR = SCHEME_A.near
-DIRT_ACCENT = SCHEME_A.accent
-DIRT_RIM = SCHEME_A.rim
-DIRT_CONTACT = SCHEME_A.contact
-DIRT_RAMP = SCHEME_A.ramp
-SOIL_RAMP = SCHEME_A.soil_ramp
-BUILDING_RED = (170, 0, 0)
+# The SVGA field. Scheme A stays available for the historical comparison.
+DIRT_BASE = SCHEME_B.base
+DIRT_NEAR = SCHEME_B.near
+DIRT_ACCENT = SCHEME_B.accent
+DIRT_RIM = SCHEME_B.rim
+DIRT_CONTACT = SCHEME_B.contact
+DIRT_RAMP = SCHEME_B.ramp
+SOIL_RAMP = SCHEME_B.soil_ramp
+# Dusty rose. The face is (113, 56, 56). The highlight is the paler rose in
+# the same value band, (113, 81, 81): the next value step, (255, 125, 125),
+# is a hot pink. The shade is the value step below, (65, 32, 32).
+# Ramp order matches the other faces: highlight, lit face, shaded face,
+# shaded edge. The lit half stays on (113, 56, 56). The shaded half and the
+# SE edge use the darker step. A one-pixel checker cell lands on the lit face.
+ROSE_RAMP = (
+    (113, 81, 81),
+    (113, 56, 56),
+    (65, 32, 32),
+    (65, 32, 32),
+)
+# Blue pixels inside a red/blue dither that is meant to read red. One step
+# bluer than the rose face, so the seam stays a boundary without a second hue.
+ROSE_MATE = (113, 56, 69)
+# Red pixels inside a red/blue dither that is meant to read blue. One step
+# off the wall's darkest blue, so the stitches stay blue and the seam holds.
+BLUE_MATE = (16, 0, 65)
 GRASS_LINE = (0, 170, 0)
 HEDGE_LINE = (32, 65, 32)
 
@@ -331,7 +348,7 @@ MATS: dict[str, dict[tuple[int, int, int], Material]] = {
         SRC_BLUE: WALL,
         SRC_YELLOW: SIGN,
         WHITE: _flat(WHITE),
-        SRC_RED: _flat(BUILDING_RED),
+        SRC_RED: _mat(ROSE_RAMP, "surface"),
         SRC_ORANGE: _flat(ORANGE),
     },
 }
@@ -361,6 +378,9 @@ def _require_palette(palette: set[tuple[int, int, int]]) -> None:
                 continue
             for rgb in mat.ramp:
                 _claim(shared, rgb, src, palette, f"{kind} {src}")
+    # Dither mates are not on the face ramps. Each stays with one source.
+    _claim(shared, ROSE_MATE, SRC_BLUE, palette, "rose dither mate")
+    _claim(shared, BLUE_MATE, SRC_RED, palette, "blue dither mate")
     for scheme in SCHEMES:
         owner = dict(shared)
         for rgb in scheme.ramp:
@@ -587,7 +607,7 @@ def _touches_water(src, x: int, y: int, w: int, h: int) -> bool:
     return False
 
 
-def _dirt_colour(x: int, y: int, edge: bool, scheme: DirtScheme = SCHEME_A) -> tuple[int, int, int]:
+def _dirt_colour(x: int, y: int, edge: bool, scheme: DirtScheme = SCHEME_B) -> tuple[int, int, int]:
     """Calm field in world pixels. The edge is one solid darker pixel."""
     if edge:
         return scheme.rim
@@ -767,7 +787,89 @@ def _solid_marks(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int,
     return marks
 
 
-def paint(original: Image.Image, kinds: list[list[str]], scheme: DirtScheme = SCHEME_A) -> Image.Image:
+def _axis_opposed(src, x: int, y: int, w: int, h: int) -> bool:
+    """True when red and blue sit on both sides of one axis: a checker, not a seam."""
+    colour = src[x, y]
+    if colour not in (SRC_RED, SRC_BLUE):
+        return False
+    other = SRC_BLUE if colour == SRC_RED else SRC_RED
+    north = _in(x, y - 1, w, h) and src[x, y - 1] == other
+    south = _in(x, y + 1, w, h) and src[x, y + 1] == other
+    west = _in(x - 1, y, w, h) and src[x - 1, y] == other
+    east = _in(x + 1, y, w, h) and src[x + 1, y] == other
+    return (north and south) or (west and east)
+
+
+def _dither_recolour(src, w: int, h: int) -> dict[tuple[int, int], tuple[int, int, int]]:
+    """Calm a red/blue checker into one hue.
+
+    A diagonal corner where a red roof meets a blue wall is left alone.
+    A checker that continues into solid red, as on block 342's left wall,
+    becomes dusty rose. A checker of red stitches in a blue wall, as on
+    block 306, becomes a muted blue. The two classic colours keep different
+    outputs, so the seam does not collapse.
+    """
+    opposed = {(x, y) for y in range(h) for x in range(w) if _axis_opposed(src, x, y, w, h)}
+    chosen = set(opposed)
+    for y in range(h):
+        for x in range(w):
+            colour = src[x, y]
+            if colour not in (SRC_RED, SRC_BLUE) or (x, y) in opposed:
+                continue
+            touches = False
+            for dx, dy in _ORTHO:
+                nx, ny = x + dx, y + dy
+                if _in(nx, ny, w, h) and (nx, ny) in opposed and src[nx, ny] != colour:
+                    touches = True
+                    break
+            if not touches:
+                continue
+            # A cap of the checker has no solid face of its own colour behind it.
+            solid = 0
+            for dx, dy in _ORTHO:
+                nx, ny = x + dx, y + dy
+                if _in(nx, ny, w, h) and src[nx, ny] == colour and (nx, ny) not in opposed:
+                    solid += 1
+            if solid == 0:
+                chosen.add((x, y))
+    seen: set[tuple[int, int]] = set()
+    out: dict[tuple[int, int], tuple[int, int, int]] = {}
+    for start in chosen:
+        if start in seen:
+            continue
+        stack = [start]
+        seen.add(start)
+        cells: list[tuple[int, int]] = []
+        while stack:
+            cx, cy = stack.pop()
+            cells.append((cx, cy))
+            for dx, dy in _ORTHO:
+                nxt = (cx + dx, cy + dy)
+                if nxt in chosen and nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+        red_solid = blue_solid = 0
+        for cx, cy in cells:
+            for dx, dy in _ORTHO:
+                nx, ny = cx + dx, cy + dy
+                if not _in(nx, ny, w, h) or (nx, ny) in chosen:
+                    continue
+                neighbour = src[nx, ny]
+                if neighbour == SRC_RED:
+                    red_solid += 1
+                elif neighbour == SRC_BLUE:
+                    blue_solid += 1
+        # Block 342's strip runs into the red base. Block 306's stitches do not.
+        rose = red_solid >= blue_solid
+        for cx, cy in cells:
+            if rose:
+                out[(cx, cy)] = ROSE_RAMP[1] if src[cx, cy] == SRC_RED else ROSE_MATE
+            elif src[cx, cy] == SRC_RED:
+                out[(cx, cy)] = BLUE_MATE
+    return out
+
+
+def paint(original: Image.Image, kinds: list[list[str]], scheme: DirtScheme = SCHEME_B) -> Image.Image:
     """Recolour `original`. `kinds` is one label per 16px cell, row-major."""
     w, h = original.size
     if w % TILE or h % TILE:
@@ -780,12 +882,16 @@ def paint(original: Image.Image, kinds: list[list[str]], scheme: DirtScheme = SC
     mask = _caster_mask(kinds, src, w, h)
     counts = _caster_counts(src, w, h, mask)
     solid = _solid_marks(src, w, h, kinds)
+    dither = _dither_recolour(src, w, h)
     for y in range(h):
         kind_row = kinds[y // TILE]
         for x in range(w):
             colour = src[x, y]
             if colour == BLACK:
                 dst[x, y] = BLACK
+                continue
+            if (x, y) in dither:
+                dst[x, y] = dither[(x, y)]
                 continue
             mat = MATS[kind_row[x // TILE]].get(colour)
             if mat is None:
@@ -892,7 +998,7 @@ def kinds_for(indexes: list[list[int]]) -> list[list[str]]:
 
 
 def paint_grid(
-    atlas: Image.Image, grid: list[list[int]], scheme: DirtScheme = SCHEME_A
+    atlas: Image.Image, grid: list[list[int]], scheme: DirtScheme = SCHEME_B
 ) -> tuple[Image.Image, Image.Image]:
     height = len(grid)
     width = len(grid[0])
@@ -1185,14 +1291,14 @@ def main() -> int:
         "  69  (56, 20, 12)    (65, 16, 0)          185   15.52",
         "  48  (48, 16, 12)    (65, 16, 0)          185   20.81",
         "   5  (117, 65, 28)   (113, 69, 56)        137   28.57",
-        "Variant A field: (65, 32, 0) 79.1%, (65, 40, 32) 17.0%, (113, 56, 0) 4.0%.",
-        "Rim and soft shadow (65, 16, 0). Contact (65, 0, 16).",
-        "Variant B is the same mask one value step lighter:",
-        "base (113, 56, 0), neighbour (113, 69, 56), accent (170, 85, 0).",
-        "B rim (113, 28, 0), B contact (113, 0, 28).",
-        "(113, 56, 56) was the closer luma neighbour but reads pink, so B uses the warm step.",
-        "Building red is (170, 0, 0). Glass light step is (125, 158, 255).",
-        "Wall light step is (0, 0, 170). Lot borders and zone letters are solid.",
+        "SVGA dirt is variant B: base (113, 56, 0) 79.1%, neighbour (113, 69, 56) 17.0%,",
+        "accent (170, 85, 0) 4.0%. Rim (113, 28, 0). Contact (113, 0, 28).",
+        "Variant A remains only in the A/B preview.",
+        "Building red is dusty rose: face (113, 56, 56), highlight (113, 81, 81), shade (65, 32, 32).",
+        "Block 342's red/blue checker is the red wall, painted rose and (113, 56, 69).",
+        "Block 306's red stitches are a blue wall, painted (16, 0, 65).",
+        "Glass light step is (125, 158, 255). Wall light step is (0, 0, 170).",
+        "Lot borders and zone letters are solid.",
         "",
     ]
     failed = False
@@ -1247,18 +1353,21 @@ def main() -> int:
     dirt = paint(crop_tile(atlas, 0), [["ground"]])
     dirt_counts = _histogram(dirt)
     if dirt_counts.get(DIRT_BASE, 0) < dirt_counts.get(DIRT_NEAR, 0):
-        lines.append(f"FAIL dirt tile is not the calm base: {dirt_counts}")
+        lines.append(f"FAIL dirt tile is not the lighter base: {dirt_counts}")
         failed = True
-    if dirt_counts.get(DIRT_RIM, 0) or dirt_counts.get((113, 56, 56), 0) or dirt_counts.get((113, 69, 56), 0):
-        lines.append(f"FAIL open dirt tile picked up an edge or dropped colour: {dirt_counts}")
+    if dirt_counts.get(DIRT_RIM, 0) or dirt_counts.get((65, 32, 0), 0) or dirt_counts.get((113, 56, 56), 0):
+        lines.append(f"FAIL open dirt tile picked up an edge or the old field: {dirt_counts}")
+        failed = True
+    if dirt_counts.get(DIRT_NEAR, 0) == 0:
+        lines.append(f"FAIL dirt tile is missing the neighbour: {dirt_counts}")
         failed = True
     forbidden = {
         (85, 255, 85),
         (113, 113, 56),
         (113, 97, 56),
-        (113, 56, 56),
         (255, 127, 0),
         (255, 0, 0),
+        (170, 0, 0),
         (0, 0, 255),
         (125, 125, 255),
         (85, 85, 255),
@@ -1266,19 +1375,22 @@ def main() -> int:
         (255, 223, 125),
         (255, 158, 125),
         (255, 235, 182),
+        (65, 32, 0),
+        (65, 40, 32),
+        (65, 0, 16),
+        (65, 0, 32),
+        (65, 0, 48),
         SRC_TAN,
         SRC_DTAN,
     }
-    forbidden_a = forbidden | {(170, 85, 0), (113, 28, 0), (113, 69, 56), (113, 0, 28)}
-    forbidden_b = forbidden | {(65, 32, 0), (65, 40, 32), (65, 0, 16), (65, 0, 32), (65, 0, 48)}
     for image, name in ((svga_scene, "neighbourhood"), (dirt, "dirt")):
-        present = forbidden_a & set(_histogram(image))
+        present = forbidden & set(_histogram(image))
         if present:
             lines.append(f"FAIL {name} contains forbidden colours {sorted(present)}")
             failed = True
     for base in (261, 279, 315, 351):
         block = next(image for origin, _classic, image in painted_blocks if origin == base)
-        present = forbidden_a & set(_histogram(block))
+        present = forbidden & set(_histogram(block))
         if present:
             lines.append(f"FAIL block {base} still has classic or reddish ground {sorted(present)}")
             failed = True
@@ -1305,30 +1417,56 @@ def main() -> int:
         lines.append(f"FAIL lot 240 border is not a solid green line ({border_bad})")
         failed = True
 
-    painted_b: list[tuple[int, Image.Image, Image.Image]] = []
+    rose_colours = set(ROSE_RAMP)
+    block_297 = next(image for origin, _classic, image in painted_blocks if origin == 297)
+    classic_297 = next(image for origin, image, _svga in painted_blocks if origin == 297)
+    c297, s297 = classic_297.load(), block_297.load()
+    rose_bad = 0
+    for y in range(classic_297.height):
+        for x in range(classic_297.width):
+            if c297[x, y] == SRC_RED and s297[x, y] not in rose_colours:
+                rose_bad += 1
+    if rose_bad:
+        lines.append(f"FAIL block 297 red is not dusty rose ({rose_bad})")
+        failed = True
+
+    def _dither_bad(base: int, source: tuple[int, int, int], expect: tuple[int, int, int]) -> int:
+        classic = next(image for origin, image, _svga in painted_blocks if origin == base)
+        svga = next(image for origin, _classic, image in painted_blocks if origin == base)
+        src, dst = classic.load(), svga.load()
+        bad = 0
+        for y in range(classic.height):
+            for x in range(classic.width):
+                if src[x, y] == source and _axis_opposed(src, x, y, classic.width, classic.height):
+                    if dst[x, y] != expect:
+                        bad += 1
+        return bad
+
+    rose_wall = _dither_bad(342, SRC_BLUE, ROSE_MATE)
+    if rose_wall:
+        lines.append(f"FAIL block 342 checker is not the rose wall ({rose_wall})")
+        failed = True
+    blue_stitch = _dither_bad(306, SRC_RED, BLUE_MATE)
+    if blue_stitch:
+        lines.append(f"FAIL block 306 checker is not the muted blue ({blue_stitch})")
+        failed = True
+
+    # Variant A is history only. It still has to pass the same palette rules.
+    painted_a: list[tuple[int, Image.Image, Image.Image]] = []
     for index in singles:
         classic = crop_tile(atlas, index)
-        svga = paint(classic, [[tile_kind(index)]], SCHEME_B)
-        check(f"B tile {index}", classic, svga)
+        svga = paint(classic, [[tile_kind(index)]], SCHEME_A)
+        check(f"A tile {index}", classic, svga)
     for base, width, height in blocks:
         classic = assemble(atlas, base, width, height)
         kinds = [[tile_kind(base)] * width for _ in range(height)]
-        svga = paint(classic, kinds, SCHEME_B)
-        painted_b.append((base, classic, svga))
-        check(f"B block {base} {width}x{height}", classic, svga)
-    _classic_b, svga_b_scene = paint_grid(atlas, scene, SCHEME_B)
-    check("B neighbourhood", classic_scene, svga_b_scene)
-    dirt_b = paint(crop_tile(atlas, 0), [["ground"]], SCHEME_B)
-    for image, name in ((svga_b_scene, "B neighbourhood"), (dirt_b, "B dirt")):
-        present = forbidden_b & set(_histogram(image))
-        if present:
-            lines.append(f"FAIL {name} contains forbidden colours {sorted(present)}")
-            failed = True
-    if _histogram(dirt_b).get(SCHEME_B.base, 0) < _histogram(dirt_b).get(SCHEME_B.near, 0):
-        lines.append(f"FAIL variant B dirt is not the lighter base: {_histogram(dirt_b)}")
-        failed = True
+        svga = paint(classic, kinds, SCHEME_A)
+        painted_a.append((base, classic, svga))
+        check(f"A block {base} {width}x{height}", classic, svga)
+    _classic_a, svga_a_scene = paint_grid(atlas, scene, SCHEME_A)
+    check("A neighbourhood", classic_scene, svga_a_scene)
 
-    # Previews. Each pair is classic on the left and SVGA variant A on the right.
+    # Previews. Each pair is classic on the left and the SVGA look on the right.
     water_cells = []
     for index in [0, 1, *range(2, 21)]:
         classic = crop_tile(atlas, index)
@@ -1399,20 +1537,20 @@ def main() -> int:
 
     ab_blocks = []
     for base in (240, 261, 297, 315, 342):
-        left = next(image for origin, _classic, image in painted_blocks if origin == base)
-        right = next(image for origin, _classic, image in painted_b if origin == base)
+        left = next(image for origin, _classic, image in painted_a if origin == base)
+        right = next(image for origin, _classic, image in painted_blocks if origin == base)
         ab_blocks.append(_pair(left, right, str(base), 3))
     ab_res_grid = _grid(ab_blocks, 3)
     ab_residential = _vstack(
         [
             _banner("DIRT A LEFT  DIRT B RIGHT  3X", ab_res_grid.width),
-            _banner("LOTS 240 261 297 315 342", ab_res_grid.width),
+            _banner("LOTS 240 261 297 315 342  B IS THE SVGA DIRT", ab_res_grid.width),
             ab_res_grid,
         ],
         14,
     )
-    ab_left = _scheme_panel(svga_scene, "DIRT A", 2)
-    ab_right = _scheme_panel(svga_b_scene, "DIRT B", 2)
+    ab_left = _scheme_panel(svga_a_scene, "DIRT A", 2)
+    ab_right = _scheme_panel(svga_scene, "DIRT B", 2)
     ab_panels = _hstack([ab_left, ab_right], 24)
     ab_neighbourhood = _vstack(
         [
@@ -1463,6 +1601,7 @@ def main() -> int:
         "dirt-AB-neighbourhood-32.png",
         "dirt-AB-residential-3x.png",
         "dirt-AB-patch-3x.png",
+        "blocks-297-342-before-after.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"
