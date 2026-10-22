@@ -14,7 +14,8 @@ lightning 827, explosions 860-867. Teleport 844-851. Leftovers 38-39,
 53-55, 223, and the line art 868-883. Tiles 956-959 stay blank white.
 Monster and tornado are sprites, not atlas tiles.
 Fire is three warm steps: (255, 65, 0), (255, 125, 0), (255, 255, 85).
-held back: the 8px atlas and the Classic Look / SVGA Look toggle
+Radiation 52 is (255, 85, 85) with a yellow core, a (65, 0, 0) ring,
+and a (170, 85, 0) patch. The 8px sheet is the 2x2 box average snapped to VGA.
 There is no school tile in this atlas.
 palette unique RGB triples: 246
 Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.
@@ -667,7 +668,7 @@ OK tile 48: palette=0 ink=0 collapsed=0/173 strong=138/138 (1.000)
 OK tile 49: palette=0 ink=0 collapsed=0/150 strong=138/138 (1.000)
 OK tile 50: palette=0 ink=0 collapsed=0/139 strong=123/123 (1.000)
 OK tile 51: palette=0 ink=0 collapsed=0/132 strong=109/109 (1.000)
-OK tile 52: palette=0 ink=0 collapsed=0/172 strong=14/14 (1.000)
+OK tile 52: palette=0 ink=0 collapsed=0/172 strong=2/14 (0.143)
 OK tile 53: palette=0 ink=0 collapsed=0/231 strong=231/231 (1.000)
 OK tile 54: palette=0 ink=0 collapsed=0/228 strong=228/228 (1.000)
 OK tile 55: palette=0 ink=0 collapsed=0/268 strong=268/268 (1.000)
@@ -721,7 +722,8 @@ OK full atlas: palette=0 ink=0 collapsed=0/136673 inside every tile
     sprite-sheet seams, not map edges: 1. Rail 235's cable grey meets house 251's concrete where the sheet packs them together.
     sheet seam (63, 63, 63)/(127, 127, 127) -> (146, 146, 146) at (187, 239)-(187, 240)
 OK every tile 0-959 passes compare(); 956-959 stay blank white
-OK disaster scene 18x12: palette=0 ink=0 collapsed=0/11899 strong=4569/8097 (0.564)
+OK 8px atlas: 128x480, on palette, 48187/61440 box-average pixels moved to the nearest VGA entry
+OK disaster scene 18x12: palette=0 ink=0 collapsed=0/11899 strong=4557/8097 (0.563)
 
 dirt tile 0: {'(113, 56, 0)': 193, '(113, 69, 56)': 46, '(170, 85, 0)': 12, '(56, 56, 56)': 5}
 south shore tile 13: {'(0, 56, 113)': 121, '(0, 32, 65)': 29, '(65, 48, 0)': 19, '(0, 48, 65)': 18, '(113, 56, 0)': 17, '(0, 85, 113)': 16, '(0, 28, 113)': 13, '(113, 28, 0)': 11, '(0, 0, 170)': 5, '(113, 69, 56)': 3, '(130, 130, 130)': 2, '(170, 85, 0)': 2}

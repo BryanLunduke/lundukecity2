@@ -37,6 +37,7 @@ private:
     std::function<void(double &, double &, double &, double &)> viewport_;
     cairo_surface_t *pixels_ = nullptr;
     std::vector<int> cached_raw_;
+    int look_generation_ = -1;
 };
 
 class DemandView {

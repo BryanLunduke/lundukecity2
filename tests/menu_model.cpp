@@ -18,8 +18,8 @@ int fail(const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 43) {
-        return fail("expected 43 actionable menu rows");
+    if (menu_table::actionable_count() != 45) {
+        return fail("expected 45 actionable menu rows");
     }
     if (mnemonic_of("Rename Cit_y…") != 'y') {
         return fail("Rename should use Y");
@@ -52,6 +52,13 @@ int main()
     if (menu_table::hidden_zoom_accel(AccelKey::Plus, static_cast<int>(AccelMod::Ctrl)) != Action::ZoomIn ||
         menu_table::hidden_zoom_accel(AccelKey::KpSub, static_cast<int>(AccelMod::Ctrl)) != Action::ZoomOut) {
         return fail("hidden zoom accelerators");
+    }
+    const int options = menu_table::column_count(1);
+    const MenuEntry *option_items = menu_table::column_items(1);
+    if (options < 2 || option_items[options - 2].action != Action::ClassicLook ||
+        option_items[options - 1].action != Action::SvgaLook || option_items[options - 1].kind != ItemKind::Radio ||
+        option_items[options - 1].radio_group != 2) {
+        return fail("Classic Look and SVGA Look should be the last Options radios");
     }
     MenuNav nav;
     if (!nav.handle_key(AccelKey::None, static_cast<int>(AccelMod::Alt), 's')) {

@@ -245,6 +245,7 @@ private:
     int win_h_ = 800;
     float ui_scale_ = 1.0f;
     float user_scale_ = 0.0f;
+    bool svga_look_ = false;
     float scale_env_ = 0.0f;
     std::string font_ui_ = "Sans 13";
     std::string font_body_ = "Sans 14";

@@ -235,6 +235,8 @@ struct StoredSettings {
     int pause_unfocused = -1;
     // -1 absent, 0 scroll, 1 zoom.
     int wheel_zoom = -1;
+    // -1 absent (Classic), 0 Classic, 1 SVGA.
+    int look = -1;
 };
 
 inline std::string settings_text(const StoredSettings &settings)
@@ -262,6 +264,7 @@ inline std::string settings_text(const StoredSettings &settings)
     put("auto_goto", settings.auto_goto);
     put("pause_unfocused", settings.pause_unfocused);
     put("wheel_zoom", settings.wheel_zoom);
+    put("look", settings.look);
     return out.str();
 }
 
@@ -366,6 +369,9 @@ inline StoredSettings settings_parse(const std::string &text)
         } else if (key == "wheel_zoom") {
             bool saw = false;
             as_int(settings.wheel_zoom, saw);
+        } else if (key == "look") {
+            bool saw = false;
+            as_int(settings.look, saw);
         }
     }
     if (saw_w && saw_h && settings.w >= 320 && settings.h >= 240) {

@@ -348,6 +348,10 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
                 on = speed_ == 2;
             } else if (item.action == Action::Fast) {
                 on = speed_ == 3;
+            } else if (item.action == Action::ClassicLook) {
+                on = !svga_look_;
+            } else if (item.action == Action::SvgaLook) {
+                on = svga_look_;
             }
             cairo_set_source_rgb(cr, theme::kTextR, theme::kTextG, theme::kTextB);
             if (item.kind == ItemKind::Check) {

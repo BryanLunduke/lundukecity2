@@ -13,6 +13,7 @@
 #include "platform.hpp"
 #include "save_path.hpp"
 #include "special_buildings.hpp"
+#include "tile_atlas.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 
@@ -948,6 +949,18 @@ void Shell::apply_action(Action action)
         break;
     case Action::ZoomOut:
         zoom_by(-2);
+        break;
+    case Action::ClassicLook:
+        svga_look_ = false;
+        tile_atlas().set_look(false);
+        map_.invalidate_all();
+        save_window_settings();
+        break;
+    case Action::SvgaLook:
+        // A missing sheet stays on Classic. The menu check follows that.
+        svga_look_ = tile_atlas().set_look(true);
+        map_.invalidate_all();
+        save_window_settings();
         break;
     case Action::Fire:
     case Action::Flood:

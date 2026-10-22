@@ -306,6 +306,12 @@ SHIELD = (0, 0, 170)
 # Signs and symbols stay readable. Dusty rose is for walls and roofs.
 # (170, 0, 0) is the clear red the hospital cross and the reactor core use.
 SYMBOL_RED = (170, 0, 0)
+# The radiation trefoil sits on dirt B. (170, 0, 0) disappears into that
+# brown, so the mark is the brighter VGA red, the core stays yellow, and a
+# one-pixel (65, 0, 0) ring separates them from the field.
+RAD_RED = (255, 85, 85)
+RAD_OUTLINE = (65, 0, 0)
+RAD_PATCH = (170, 85, 0)
 # Fire and blasts keep three warm steps, one notch off the neon primaries.
 # The body is (255, 65, 0), the middle is (255, 125, 0), the tip is (255, 255, 85).
 FLAME_RED = (255, 65, 0)
@@ -638,7 +644,7 @@ MATS["flood"] = dict(MATS["water"])
 MATS["flood"][WHITE] = _flat(WHITE)
 # The radiation marks are a symbol. Rose would disappear into dirt B.
 MATS["rad"] = dict(MATS["rubble"])
-MATS["rad"][SRC_RED] = _flat(SYMBOL_RED)
+MATS["rad"][SRC_RED] = _flat(RAD_RED)
 MATS["rad"][SRC_YELLOW] = _flat(FLAME_YELLOW)
 # The lightning tile does not animate. Flat colours keep the bolt crisp.
 MATS["bolt"] = {
@@ -1530,6 +1536,54 @@ def _soil_rim(
     return False
 
 
+def _radiation_marks(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int, int], tuple[int, int, int]]:
+    """Bright trefoil, yellow core, dark ring, and a lighter patch behind it.
+
+    Black ink is left alone. The ring and the patch recolour tan only.
+    """
+    marks: dict[tuple[int, int], tuple[int, int, int]] = {}
+    symbol: list[tuple[int, int]] = []
+    for y in range(h):
+        row = y // TILE
+        for x in range(w):
+            if kinds[row][x // TILE] != "rad":
+                continue
+            colour = src[x, y]
+            if colour == SRC_RED:
+                marks[(x, y)] = RAD_RED
+                symbol.append((x, y))
+            elif colour == SRC_YELLOW:
+                marks[(x, y)] = FLAME_YELLOW
+                symbol.append((x, y))
+    if not symbol:
+        return marks
+    outline: set[tuple[int, int]] = set()
+    for x, y in symbol:
+        for dx, dy in _ORTHO:
+            nx, ny = x + dx, y + dy
+            if not _in(nx, ny, w, h) or src[nx, ny] != SRC_TAN:
+                continue
+            if kinds[ny // TILE][nx // TILE] != "rad":
+                continue
+            outline.add((nx, ny))
+    for cell in outline:
+        marks[cell] = RAD_OUTLINE
+    # Tan inside the trefoil's box, outside the ring, is the warning patch.
+    # The tile's outer dirt stays dirt B so the cell still meets the ground.
+    xs = [cell[0] for cell in symbol]
+    ys = [cell[1] for cell in symbol]
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if (x, y) in marks or src[x, y] != SRC_TAN:
+                continue
+            if kinds[y // TILE][x // TILE] != "rad":
+                continue
+            marks[(x, y)] = RAD_PATCH
+    return marks
+
+
 def _symbol_red(src, w: int, h: int, kinds: list[list[str]]) -> dict[tuple[int, int], tuple[int, int, int]]:
     """Clear red for a cross, a light, a core, or a player. Walls stay rose."""
     marks: dict[tuple[int, int], tuple[int, int, int]] = {}
@@ -1610,6 +1664,7 @@ def paint(
         solid.update(_field_lines(src, w, h, kinds))
     dither = _dither_recolour(src, w, h)
     symbols = _symbol_red(src, w, h, kinds) if civic_fixes else {}
+    radiation = _radiation_marks(src, w, h, kinds)
     cables = _cables(src, w, h)
     for y in range(h):
         kind_row = kinds[y // TILE]
@@ -1623,6 +1678,9 @@ def paint(
                 continue
             if (x, y) in symbols:
                 dst[x, y] = symbols[(x, y)]
+                continue
+            if (x, y) in radiation:
+                dst[x, y] = radiation[(x, y)]
                 continue
             kind = kind_row[x // TILE]
             lookup = kind
@@ -1791,6 +1849,74 @@ def paint_grid(
 def luma(rgb: tuple[int, int, int]) -> float:
     red, green, blue = rgb
     return 0.299 * red + 0.587 * green + 0.114 * blue
+
+
+def _box_half(image: Image.Image) -> Image.Image:
+    """2×2 box average, matching the overview filter in tile_atlas.cpp.
+
+    Each channel is (sum + 2) / 4. The four samples stay inside one tile.
+    """
+    width, height = image.size
+    src = image.load()
+    out = Image.new("RGB", (width // 2, height // 2))
+    dst = out.load()
+    for y in range(height // 2):
+        for x in range(width // 2):
+            samples = (
+                src[x * 2, y * 2],
+                src[x * 2 + 1, y * 2],
+                src[x * 2, y * 2 + 1],
+                src[x * 2 + 1, y * 2 + 1],
+            )
+
+            def mix(channel: int) -> int:
+                return (sum(sample[channel] for sample in samples) + 2) // 4
+
+            dst[x, y] = (mix(0), mix(1), mix(2))
+    return out
+
+
+def _snap_vga(
+    image: Image.Image,
+    order: list[tuple[int, int, int]],
+    palette: set[tuple[int, int, int]],
+) -> tuple[Image.Image, int]:
+    """Map a box-averaged tile onto the standard VGA palette.
+
+    An average that is already a palette entry stays. Otherwise the nearest
+    entry wins, and a tie keeps the earlier palette slot.
+    """
+    width, height = image.size
+    src = image.load()
+    out = Image.new("RGB", (width, height))
+    dst = out.load()
+    cache: dict[tuple[int, int, int], tuple[int, int, int]] = {}
+    moved = 0
+    for y in range(height):
+        for x in range(width):
+            colour = src[x, y]
+            snapped = cache.get(colour)
+            if snapped is None:
+                if colour in palette:
+                    snapped = colour
+                else:
+                    best = order[0]
+                    best_d = 1 << 30
+                    for entry in order:
+                        distance = (
+                            (entry[0] - colour[0]) ** 2
+                            + (entry[1] - colour[1]) ** 2
+                            + (entry[2] - colour[2]) ** 2
+                        )
+                        if distance < best_d:
+                            best_d = distance
+                            best = entry
+                    snapped = best
+                cache[colour] = snapped
+            if snapped != colour:
+                moved += 1
+            dst[x, y] = snapped
+    return out, moved
 
 
 def compare(
@@ -2278,7 +2404,8 @@ def main() -> int:
         "53-55, 223, and the line art 868-883. Tiles 956-959 stay blank white.",
         "Monster and tornado are sprites, not atlas tiles.",
         "Fire is three warm steps: (255, 65, 0), (255, 125, 0), (255, 255, 85).",
-        "held back: the 8px atlas and the Classic Look / SVGA Look toggle",
+        "Radiation 52 is (255, 85, 85) with a yellow core, a (65, 0, 0) ring,",
+        "and a (170, 85, 0) patch. The 8px sheet is the 2x2 box average snapped to VGA.",
         "There is no school tile in this atlas.",
         f"palette unique RGB triples: {len(palette)}",
         "Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.",
@@ -3113,11 +3240,27 @@ def main() -> int:
             failed = True
     rad_c, rad_s = painted_disaster[52]
     rad_src, rad_px = rad_c.load(), rad_s.load()
-    if any(rad_px[x, y] != SYMBOL_RED for y in range(16) for x in range(16) if rad_src[x, y] == SRC_RED):
-        lines.append("FAIL the radiation marks are not clear red")
+    if any(rad_px[x, y] != RAD_RED for y in range(16) for x in range(16) if rad_src[x, y] == SRC_RED):
+        lines.append("FAIL the radiation marks are not bright red")
         failed = True
     if any(rad_px[x, y] != FLAME_YELLOW for y in range(16) for x in range(16) if rad_src[x, y] == SRC_YELLOW):
         lines.append("FAIL the radiation marks lost their yellow")
+        failed = True
+    rad_ring = 0
+    rad_ink = 0
+    for y in range(16):
+        for x in range(16):
+            if rad_src[x, y] == BLACK and rad_px[x, y] != BLACK:
+                rad_ink += 1
+            if rad_src[x, y] != SRC_TAN or rad_px[x, y] != RAD_OUTLINE:
+                continue
+            if any(
+                _in(x + dx, y + dy, 16, 16) and rad_src[x + dx, y + dy] in (SRC_RED, SRC_YELLOW)
+                for dx, dy in _ORTHO
+            ):
+                rad_ring += 1
+    if rad_ink or rad_ring == 0:
+        lines.append(f"FAIL the radiation outline is missing ({rad_ring} ring, {rad_ink} ink)")
         failed = True
     bolt_c, bolt_s = painted_disaster[827]
     bolt_src, bolt_px = bolt_c.load(), bolt_s.load()
@@ -3201,9 +3344,29 @@ def main() -> int:
         lines.append(f"FAIL unpainted tiles {uncovered}")
         failed = True
     tile_bad = 0
+    sheet16 = Image.new("RGB", (atlas.size[0], atlas.size[1]))
+    sheet8 = Image.new("RGB", (atlas.size[0] // 2, atlas.size[1] // 2))
+    palette_order = []
+    seen_colour = set()
+    for rgb in vga_palette_8bit():
+        if rgb not in seen_colour:
+            seen_colour.add(rgb)
+            palette_order.append(rgb)
+    digest_all = hashlib.sha256()
+    snapped_off = 0
+    overview_pixels = 0
     for index in range(960):
         classic = crop_tile(atlas, index)
         single = paint(classic, [[tile_kind(index)]])
+        digest_all.update(single.tobytes())
+        col, row = index % columns, index // columns
+        sheet16.paste(single, (col * TILE, row * TILE))
+        half = _box_half(single)
+        snapped, moved = _snap_vga(half, palette_order, palette)
+        snapped_off += moved
+        overview_pixels += half.size[0] * half.size[1]
+        digest_all.update(snapped.tobytes())
+        sheet8.paste(snapped, (col * TILE // 2, row * TILE // 2))
         stats = compare(classic, single, palette)
         if _ok(stats):
             continue
@@ -3220,6 +3383,38 @@ def main() -> int:
         lines.append(f"FAIL {tile_bad} of 960 tiles failed compare()")
     else:
         lines.append("OK every tile 0-959 passes compare(); 956-959 stay blank white")
+    half_px = sheet8.load()
+    off8 = sum(
+        1
+        for y in range(sheet8.size[1])
+        for x in range(sheet8.size[0])
+        if half_px[x, y] not in palette
+    )
+    if off8:
+        lines.append(f"FAIL 8px atlas has {off8} off-palette pixels")
+        failed = True
+    else:
+        lines.append(
+            f"OK 8px atlas: {sheet8.size[0]}x{sheet8.size[1]}, on palette, "
+            f"{snapped_off}/{overview_pixels} box-average pixels moved to the nearest VGA entry"
+        )
+    atlas_sha = "f52025ef83195f674be2d7a45935da7d7e534df8b9da9befe4552fdacb38e8f3"
+    if digest_all.hexdigest() != atlas_sha:
+        lines.append(f"FAIL SVGA atlas changed: {digest_all.hexdigest()}")
+        failed = True
+    svga_path = ATLAS_PATH.with_name("tiles-svga.png")
+    sheet16.save(svga_path)
+    reread = Image.open(svga_path).convert("RGB")
+    src_px = sheet16.load()
+    got_px = reread.load()
+    png_mismatch = reread.size != sheet16.size or any(
+        got_px[x, y] != src_px[x, y]
+        for y in range(sheet16.size[1])
+        for x in range(sheet16.size[0])
+    )
+    if png_mismatch:
+        lines.append("FAIL tiles-svga.png does not match the painted atlas")
+        failed = True
 
     strike = disaster_scene()
     classic_strike, svga_strike = paint_grid(atlas, strike)

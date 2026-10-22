@@ -17,6 +17,7 @@
 #include "ui_scale.hpp"
 
 #include <csignal>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -123,6 +124,55 @@ void Shell::run_review_checks()
     if (!tile_atlas().loaded() && tile_atlas().load_error().find("tiles.png") == std::string::npos) {
         fail("missing tiles did not name tiles.png");
         return;
+    }
+
+    // The look toggle repaints the map from the other sheet and round-trips
+    // through the settings text. Classic pixels come back unchanged.
+    {
+        unsigned char classic_px[16 * 16 * 4];
+        tile_atlas().blit(0, classic_px, 16 * 4);
+        map_.sync();
+        const int before_blits = map_.last_sync_blits();
+        if (!tile_atlas().svga_available() || !tile_atlas().set_look(true)) {
+            fail("SVGA tiles did not load");
+            return;
+        }
+        svga_look_ = true;
+        unsigned char svga_px[16 * 16 * 4];
+        tile_atlas().blit(0, svga_px, 16 * 4);
+        if (std::memcmp(classic_px, svga_px, sizeof(classic_px)) == 0) {
+            fail("SVGA look did not change the ground tile");
+            return;
+        }
+        map_.invalidate_all();
+        map_.sync();
+        if (map_.last_sync_blits() < 1 || map_.last_sync_blits() < before_blits) {
+            fail("switching look did not redraw the map");
+            return;
+        }
+        minimap_.sync();
+        ui_scale::StoredSettings saved;
+        saved.look = 1;
+        const ui_scale::StoredSettings restored = ui_scale::settings_parse(ui_scale::settings_text(saved));
+        if (restored.look != 1) {
+            fail("SVGA look did not persist");
+            return;
+        }
+        const ui_scale::StoredSettings absent = ui_scale::settings_parse("ui_scale=1\n");
+        if (absent.look != -1) {
+            fail("a settings file without look should stay unset");
+            return;
+        }
+        tile_atlas().set_look(false);
+        svga_look_ = false;
+        unsigned char back[16 * 16 * 4];
+        tile_atlas().blit(0, back, 16 * 4);
+        if (std::memcmp(classic_px, back, sizeof(classic_px)) != 0) {
+            fail("Classic look did not restore the ground tile");
+            return;
+        }
+        map_.invalidate_all();
+        map_.sync();
     }
 
     // H5: headless play stays at the classic size and a 1x scale. A saved

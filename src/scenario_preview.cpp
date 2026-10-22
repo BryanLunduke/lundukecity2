@@ -16,6 +16,7 @@ namespace {
 
 struct Cache {
     bool built = false;
+    int look = -1;
     std::vector<cairo_surface_t *> images;
 
     ~Cache()
@@ -70,10 +71,18 @@ void paint_map(CitySession &session, cairo_surface_t *surface)
 void build()
 {
     Cache &stored = cache();
-    if (stored.built) {
+    const int look = tile_atlas().look_generation();
+    if (stored.built && stored.look == look) {
         return;
     }
+    for (cairo_surface_t *surface : stored.images) {
+        if (surface != nullptr) {
+            cairo_surface_destroy(surface);
+        }
+    }
+    stored.images.clear();
     stored.built = true;
+    stored.look = look;
     CitySession session;
     session.set_speed(0);
     stored.images.reserve(static_cast<std::size_t>(CitySession::kScenarioCount));

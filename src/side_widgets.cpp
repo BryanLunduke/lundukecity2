@@ -116,6 +116,11 @@ void MinimapView::sync()
     if (cached_raw_.size() != cells) {
         cached_raw_.assign(cells, -1);
     }
+    const int look = tile_atlas().look_generation();
+    if (look != look_generation_) {
+        look_generation_ = look;
+        std::fill(cached_raw_.begin(), cached_raw_.end(), -1);
+    }
 
     unsigned char *data = cairo_image_surface_get_data(pixels_);
     const int stride = cairo_image_surface_get_stride(pixels_);

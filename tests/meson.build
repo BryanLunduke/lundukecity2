@@ -364,6 +364,28 @@ menu_model = executable(
 
 test('menu_model', menu_model)
 
+svga_look = executable(
+  'svga_look',
+  'svga_look.cpp',
+  '../src/assets.cpp',
+  '../src/tile_atlas.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [cairo_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+  ],
+)
+
+test('svga_look', svga_look)
+
+python = find_program('python3', required: true)
+test(
+  'svga_atlas',
+  python,
+  args: [meson.project_source_root() / 'art' / 'svga' / 'make_atlas.py'],
+  timeout: 180,
+)
+
 # Evaluation / Budget wording restored from 0.9.5, and the query em dash.
 dialog_copy = executable(
   'dialog_copy',

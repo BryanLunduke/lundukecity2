@@ -412,6 +412,7 @@ void Shell::save_window_settings()
     stored.auto_goto = session_.auto_goto() ? 1 : 0;
     stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
     stored.wheel_zoom = wheel_zooms_ ? 1 : 0;
+    stored.look = svga_look_ ? 1 : 0;
     {
         const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
         const bool maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
@@ -464,6 +465,11 @@ void Shell::apply_loaded_settings()
     if (stored.wheel_zoom >= 0) {
         wheel_zooms_ = stored.wheel_zoom != 0;
     }
+    svga_look_ = stored.look == 1 && tile_atlas().set_look(true);
+    if (!svga_look_) {
+        tile_atlas().set_look(false);
+    }
+    map_.invalidate_all();
     // These are the global preferences. A city file must not replace them.
     pref_speed_ = speed_;
     pref_disasters_ = session_.disasters() ? 1 : 0;
@@ -827,7 +833,8 @@ std::string Shell::visual_stamp() const
         << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
         << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
         << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
-        << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_;
+        << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_
+        << ' ' << svga_look_;
     return out.str();
 }
 
@@ -1163,9 +1170,9 @@ void Shell::loop()
                 focus_id_ = kOsk;
             } else if (demo_ == "options") {
                 menu_.open_menu = 1;
-                menu_.cursor = 7;
+                menu_.cursor = menu_table::column_count(1) - 1;
                 menu_.alt_shown = true;
-                gamepad_nav_ = true;
+                gamepad_nav_ = deck_;
             } else if (demo_ == "scenario") {
                 scenario_index_ = 2;
                 list_index_ = 2;
@@ -1278,6 +1285,21 @@ void Shell::loop()
                 }
                 gamepad_nav_ = deck_;
             } else if (demo_ == "city" || demo_ == "paused") {
+                session_.load_scenario(CitySession::scenario_def(0).id);
+                speed_ = 0;
+                session_.set_speed(0);
+                if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
+                    map_.set_tile_size(std::atoi(zoom));
+                }
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    const bool svga = look[0] == 's' || look[0] == 'S' || look[0] == '1';
+                    svga_look_ = svga && tile_atlas().set_look(true);
+                    if (!svga_look_) {
+                        tile_atlas().set_look(false);
+                    }
+                    map_.invalidate_all();
+                }
+                center_on_fraction(0.45, 0.42);
                 gamepad_nav_ = deck_;
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
