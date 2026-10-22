@@ -91,15 +91,16 @@ FONT = {
 class Material:
     """One source flat colour, repainted from a light-to-dark VGA ramp.
 
-    body_last is the darkest ramp index used for the ordinary surface.
-    Indexes past it are only reached by the shadow rim and the contact shadow.
+    role:
+      flat     one entry, for marks that must stay crisp
+      grass    soft 1px speckle, darker where a building or pavement casts
+      dirt     warm speckle, same shadow rule
+      asphalt  smooth body, 1px lit edge on the north/west, dark on the south/east
+      surface  roof or wall: gradient from the upper left, darker on the south/east
     """
 
     ramp: tuple[tuple[int, int, int], ...]
-    texture: str = "none"  # none | grass | ground
-    fleck: tuple[int, tuple[int, int, int]] | None = None
-    flat: tuple[int, int, int] | None = None
-    body_last: int = 0
+    role: str = "flat"
 
 
 @dataclass(frozen=True)
@@ -131,33 +132,32 @@ def _assert_disjoint(style: Style) -> None:
 
     for src, mat in style.materials.items():
         who = f"{style.name}:{src}"
-        if mat.flat is not None:
-            claim(mat.flat, who)
         for rgb in mat.ramp:
             claim(rgb, who)
-        if mat.fleck is not None:
-            claim(mat.fleck[1], who)
     if style.ink is not None:
         claim(style.ink, f"{style.name}:ink")
 
 
-def _grain(x: int, y: int) -> int:
-    """0..15 texture value. Scrambled so it does not form a visible grid."""
-    return ((x * 73) ^ (y * 151) ^ (x * 13 + y * 7)) & 15
+def _hash(x: int, y: int) -> int:
+    """Full-coordinate hash. The low bits depend on x and y, not on x%16."""
+    n = (x * 374761393 + y * 668265263) & 0xFFFFFFFF
+    n ^= n >> 13
+    n = (n * 1274126177) & 0xFFFFFFFF
+    n ^= n >> 16
+    return n
 
 
 def police_style() -> Style:
-    # Bright lawn in the EGA / high-value greens. The dark end is shadow only,
-    # so the lawn does not sink into olive across the tile.
+    # Natural mid greens, still green rather than olive. The last two are the shadow.
     grass = Material(
         ramp=(
-            (85, 255, 85),
-            (65, 255, 0),
-            (0, 255, 0),
-            (0, 170, 0),
+            (81, 113, 81),
+            (56, 113, 69),
+            (56, 113, 56),
+            (0, 113, 56),
+            (0, 113, 0),
         ),
-        texture="grass",
-        body_last=2,
+        role="grass",
     )
     hedge = Material(
         ramp=(
@@ -166,53 +166,51 @@ def police_style() -> Style:
             (16, 65, 0),
             (0, 65, 0),
         ),
-        texture="grass",
-        body_last=1,
+        role="grass",
     )
-    # Pale blue roof and the light-blue trim. Equal red/green so it stays blue,
-    # not the pink cast of the low-saturation magenta side of the wheel.
+    # Light blue trim and roof, kept on the blue axis (red == green).
     roof = Material(
         ramp=(
-            (182, 182, 255),
             (125, 125, 255),
+            (85, 85, 255),
+            (56, 56, 113),
         ),
-        body_last=1,
+        role="surface",
     )
-    # Saturated police blue. Kept well below the pale roof so the eave still reads.
     wall = Material(
         ramp=(
+            (0, 0, 255),
             (0, 0, 170),
             (0, 0, 113),
         ),
-        body_last=0,
+        role="surface",
     )
-    # Flat roof, forecourt and the driveway. Same source grey, one concrete ramp.
+    # Forecourt, flat roof and driveway. Neutral greys around the classic 127.
     concrete = Material(
         ramp=(
-            (182, 182, 182),
             (162, 162, 162),
             (146, 146, 146),
             (130, 130, 130),
             (113, 113, 113),
         ),
-        body_last=2,
+        role="surface",
     )
-    # Left wing and other dark structure. Sign letters are pulled out as ink.
+    # Left wing. Sign letters that touch the yellow are pulled out as ink.
     slate = Material(
         ramp=(
-            (97, 97, 97),
             (81, 81, 81),
             (69, 69, 69),
             (56, 56, 56),
         ),
-        body_last=1,
+        role="surface",
     )
     sign = Material(
         ramp=(
             (255, 255, 125),
+            (255, 255, 85),
             (255, 255, 0),
         ),
-        body_last=1,
+        role="surface",
     )
     return Style(
         name="police",
@@ -224,11 +222,13 @@ def police_style() -> Style:
             SRC_GREY: concrete,
             SRC_DGREY: slate,
             SRC_YELLOW: sign,
-            SRC_LGREY: Material(ramp=((227, 227, 227),), flat=(227, 227, 227)),
-            WHITE: Material(ramp=(WHITE,), flat=WHITE),
-            SRC_RED: Material(ramp=((255, 0, 0),), flat=(255, 0, 0)),
+            SRC_LGREY: Material(ramp=((203, 203, 203),)),
+            WHITE: Material(ramp=(WHITE,)),
+            SRC_RED: Material(ramp=((255, 0, 0),)),
         },
-        casters=frozenset({SRC_LBLUE, SRC_BLUE, SRC_DGREY, SRC_YELLOW, SRC_LGREY, WHITE, SRC_RED, SRC_DGREEN}),
+        # Lights and the small highlight do not cast. The wing, walls, roof,
+        # sign, and hedge do.
+        casters=frozenset({SRC_LBLUE, SRC_BLUE, SRC_DGREY, SRC_YELLOW, SRC_DGREEN}),
         receivers=frozenset({SRC_GREEN, SRC_DGREEN, SRC_GREY}),
         ink_touch=SRC_YELLOW,
         ink=(32, 32, 32),
@@ -236,71 +236,64 @@ def police_style() -> Style:
 
 
 def airport_style() -> Style:
-    # Clear-land tan, lifted into the light earth ramp so it stays lighter than
-    # the asphalt. The VGA wheel has no brown between luma ~110 and ~180.
+    # Same hue family as classic (204, 127, 102): red above green above blue.
+    # VGA has no mid-value of that hue, so the field is EGA brown plus the
+    # three darker reddish earths. The last entry is the cast shadow only.
     dirt = Material(
         ramp=(
-            (255, 219, 182),
-            (255, 190, 125),
-            (255, 158, 125),
+            (170, 85, 0),
+            (113, 97, 56),
+            (113, 85, 56),
+            (113, 69, 56),
+            (113, 56, 0),
         ),
-        texture="ground",
-        # Sparse darker specks, about one per 64 dirt pixels.
-        fleck=(7, (113, 69, 56)),
-        body_last=1,
+        role="dirt",
     )
-    soil = Material(
-        ramp=((113, 85, 56),),
-        flat=(113, 85, 56),
-    )
+    # A step darker than the lot, still a brown, not a pit beside the walls.
+    soil = Material(ramp=((113, 85, 0),))
+    # Smooth asphalt. Classic runway grey is 63; these three sit against it.
     tarmac = Material(
         ramp=(
-            (97, 97, 97),
-            (81, 81, 81),
             (69, 69, 69),
             (56, 56, 56),
             (44, 44, 44),
         ),
-        texture="ground",
-        body_last=2,
+        role="asphalt",
     )
     concrete = Material(
         ramp=(
-            (203, 203, 203),
-            (182, 182, 182),
             (162, 162, 162),
             (146, 146, 146),
             (130, 130, 130),
+            (113, 113, 113),
         ),
-        body_last=2,
+        role="surface",
     )
-    # Cool highlight on hangar roofs. Stays off the neutral concrete ramp.
+    # Neutral light grey. The classic roof is 191; white panes stay pure white.
     roof = Material(
         ramp=(
-            (182, 199, 255),
-            (199, 182, 255),
-            (182, 182, 255),
-            (125, 158, 255),
+            (227, 227, 227),
+            (203, 203, 203),
+            (182, 182, 182),
+            (170, 170, 170),
         ),
-        body_last=2,
+        role="surface",
     )
-    # Terminal glass. Kept off the pale roof ramp above.
     glass = Material(
         ramp=(
-            (158, 125, 255),
             (125, 125, 255),
-            (81, 81, 113),
+            (85, 85, 255),
             (56, 56, 113),
         ),
-        body_last=1,
+        role="surface",
     )
     deep = Material(
         ramp=(
-            (69, 56, 113),
-            (32, 32, 65),
+            (0, 0, 255),
+            (0, 0, 170),
             (0, 0, 113),
         ),
-        body_last=1,
+        role="surface",
     )
     return Style(
         name="airport",
@@ -312,13 +305,14 @@ def airport_style() -> Style:
             SRC_LGREY: roof,
             SRC_LBLUE: glass,
             SRC_BLUE: deep,
-            SRC_YELLOW: Material(ramp=((255, 255, 0),), flat=(255, 255, 0)),
-            WHITE: Material(ramp=(WHITE,), flat=WHITE),
-            SRC_RED: Material(ramp=((255, 0, 0),), flat=(255, 0, 0)),
-            SRC_ORANGE: Material(ramp=((255, 125, 0),), flat=(255, 125, 0)),
-            SRC_DGREEN: Material(ramp=((0, 65, 0),), flat=(0, 65, 0)),
+            SRC_YELLOW: Material(ramp=((255, 255, 0),)),
+            WHITE: Material(ramp=(WHITE,)),
+            SRC_RED: Material(ramp=((255, 0, 0),)),
+            SRC_ORANGE: Material(ramp=((255, 125, 0),)),
+            SRC_DGREEN: Material(ramp=((0, 65, 0),)),
         },
-        casters=frozenset({SRC_GREY, SRC_LGREY, SRC_LBLUE, SRC_BLUE, WHITE, SRC_RED, SRC_ORANGE}),
+        # Paint (yellow, white dashes, lights, orange) stays flat and does not cast.
+        casters=frozenset({SRC_GREY, SRC_LGREY, SRC_LBLUE, SRC_BLUE}),
         receivers=frozenset({SRC_TAN, SRC_DTAN, SRC_DGREY}),
     )
 
@@ -368,6 +362,36 @@ def assemble(atlas: Image.Image, base: int, width: int, height: int) -> Image.Im
     return image
 
 
+# Mostly warm brown, with a fine darker speckle. The last ramp step is shadow only.
+_DIRT_BUCKETS = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3)
+
+# Bevel where the dirt shoulder meets the pavement. Internal black lines stay smooth.
+_ASPHALT_EDGE = frozenset({SRC_TAN, SRC_DTAN})
+
+# Dither dots and 1px marks are not buildings, so they do not cast a shadow.
+_MIN_CAST = 8
+_PAVEMENT = frozenset({SRC_GREY})
+
+_ORTHO = ((0, -1), (0, 1), (-1, 0), (1, 0))
+_NW = ((0, -1), (-1, 0))
+_SE = ((0, 1), (1, 0))
+
+
+def _assert_hash_aperiodic() -> None:
+    """The speckle hash must not repeat on a 16px tile grid."""
+    same = 0
+    total = 0
+    for y in range(48):
+        for x in range(48):
+            base = _hash(x, y) & 15
+            same += base == (_hash(x + 16, y) & 15)
+            same += base == (_hash(x, y + 16) & 15)
+            total += 2
+    rate = same / total
+    if rate > 0.2:
+        raise SystemExit(f"speckle hash still tiles at 16px (match rate {rate:.3f})")
+
+
 def _ink_mask(original: Image.Image, touch: tuple[int, int, int] | None) -> list[list[bool]]:
     """Dark-grey pixels connected to a pixel that touches `touch`."""
     w, h = original.size
@@ -402,47 +426,227 @@ def _ink_mask(original: Image.Image, touch: tuple[int, int, int] | None) -> list
     return mask
 
 
-def _is_frame(x: int, y: int, w: int, h: int) -> bool:
-    return x < 2 or y < 2 or x >= w - 2 or y >= h - 2
+def _in(x: int, y: int, w: int, h: int) -> bool:
+    return 0 <= x < w and 0 <= y < h
 
 
-def _contact(src, x: int, y: int, w: int, h: int, style: Style) -> bool:
-    colour = src[x, y]
-    if colour not in style.receivers:
-        return False
-    for dx, dy in ((0, -1), (-1, 0)):
-        nx, ny = x + dx, y + dy
-        if not (0 <= nx < w and 0 <= ny < h) or _is_frame(nx, ny, w, h):
-            continue
-        neighbour = src[nx, ny]
-        if neighbour in style.casters and neighbour != colour:
-            return True
-        if neighbour == BLACK:
-            fx, fy = nx + dx, ny + dy
-            if not (0 <= fx < w and 0 <= fy < h) or _is_frame(fx, fy, w, h):
+def _caster_counts(src, w: int, h: int, casters: frozenset[tuple[int, int, int]]) -> dict[tuple[int, int], int]:
+    """Pixel count of each caster region big enough to throw a shadow."""
+    counts: dict[tuple[int, int], int] = {}
+    seen = [[False] * w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            if seen[y][x] or src[x, y] not in casters:
                 continue
-            beyond = src[fx, fy]
-            if beyond in style.casters and beyond != colour:
+            colour = src[x, y]
+            stack = [(x, y)]
+            seen[y][x] = True
+            pixels: list[tuple[int, int]] = []
+            while stack:
+                cx, cy = stack.pop()
+                pixels.append((cx, cy))
+                for dx, dy in _ORTHO:
+                    nx, ny = cx + dx, cy + dy
+                    if _in(nx, ny, w, h) and not seen[ny][nx] and src[nx, ny] == colour:
+                        seen[ny][nx] = True
+                        stack.append((nx, ny))
+            if len(pixels) < _MIN_CAST:
+                continue
+            for px, py in pixels:
+                counts[(px, py)] = len(pixels)
+    return counts
+
+
+def _casts(
+    src,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    receiver: tuple[int, int, int],
+    counts: dict[tuple[int, int], int],
+) -> bool:
+    """A real building pixel, or a black outline with one beside it."""
+    if not _in(x, y, w, h):
+        return False
+    if (x, y) in counts and src[x, y] != receiver:
+        return True
+    if src[x, y] == BLACK:
+        for dx, dy in _ORTHO:
+            nx, ny = x + dx, y + dy
+            if (nx, ny) in counts and src[nx, ny] != receiver:
                 return True
     return False
 
 
-def _differs(src, x: int, y: int, w: int, h: int, dx: int, dy: int) -> bool:
-    nx, ny = x + dx, y + dy
-    if not (0 <= nx < w and 0 <= ny < h):
-        return False
-    return src[nx, ny] != src[x, y]
+def _shadow_strength(
+    src,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    style: Style,
+    counts: dict[tuple[int, int], int],
+) -> int:
+    """2 on the pixel touching a building's south or east side, 1 one pixel further."""
+    colour = src[x, y]
+    if colour not in style.receivers:
+        return 0
+    strength = 0
+    for dx, dy in _NW:
+        nx, ny = x + dx, y + dy
+        if _casts(src, nx, ny, w, h, colour, counts):
+            strength = max(strength, 2)
+            continue
+        if not _in(nx, ny, w, h):
+            continue
+        mid = src[nx, ny]
+        if mid != colour and mid != BLACK:
+            continue
+        if _casts(src, x + 2 * dx, y + 2 * dy, w, h, colour, counts):
+            strength = max(strength, 1)
+    return strength
 
 
-def recolour(original: Image.Image, style: Style) -> Image.Image:
+def _apply_shadow(ramp: tuple[tuple[int, int, int], ...], strength: int) -> tuple[int, int, int] | None:
+    if strength >= 2:
+        return ramp[-1]
+    if strength == 1 and len(ramp) >= 2:
+        return ramp[-2]
+    if strength == 1:
+        return ramp[-1]
+    return None
+
+
+def _grass_rim(src, x: int, y: int, w: int, h: int, counts: dict[tuple[int, int], int]) -> bool:
+    """Darker grass where it meets a building or the pavement, including through an outline."""
+    for dx, dy in _ORTHO:
+        nx, ny = x + dx, y + dy
+        if not _in(nx, ny, w, h):
+            continue
+        neighbour = src[nx, ny]
+        if (nx, ny) in counts or neighbour in _PAVEMENT:
+            return True
+        if neighbour == BLACK:
+            fx, fy = nx + dx, ny + dy
+            if _in(fx, fy, w, h) and ((fx, fy) in counts or src[fx, fy] in _PAVEMENT):
+                return True
+    return False
+
+
+def _touches(src, x: int, y: int, w: int, h: int, dirs: tuple[tuple[int, int], ...], colours: frozenset) -> bool:
+    for dx, dy in dirs:
+        nx, ny = x + dx, y + dy
+        if _in(nx, ny, w, h) and src[nx, ny] in colours:
+            return True
+    return False
+
+
+def _same_count(src, x: int, y: int, w: int, h: int) -> int:
+    colour = src[x, y]
+    count = 0
+    for dx, dy in _ORTHO:
+        nx, ny = x + dx, y + dy
+        if _in(nx, ny, w, h) and src[nx, ny] == colour:
+            count += 1
+    return count
+
+
+def _component_boxes(src, w: int, h: int, colours: set[tuple[int, int, int]]) -> dict[tuple[int, int], tuple[int, int, int, int]]:
+    """Bounding box of each 4-connected region, so every roof gets its own gradient."""
+    boxes: dict[tuple[int, int], tuple[int, int, int, int]] = {}
+    seen = [[False] * w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            if seen[y][x] or src[x, y] not in colours:
+                continue
+            colour = src[x, y]
+            stack = [(x, y)]
+            seen[y][x] = True
+            pixels: list[tuple[int, int]] = []
+            x0 = x1 = x
+            y0 = y1 = y
+            while stack:
+                cx, cy = stack.pop()
+                pixels.append((cx, cy))
+                x0, y0 = min(x0, cx), min(y0, cy)
+                x1, y1 = max(x1, cx), max(y1, cy)
+                for dx, dy in _ORTHO:
+                    nx, ny = cx + dx, cy + dy
+                    if _in(nx, ny, w, h) and not seen[ny][nx] and src[nx, ny] == colour:
+                        seen[ny][nx] = True
+                        stack.append((nx, ny))
+            box = (x0, y0, x1, y1)
+            for px, py in pixels:
+                boxes[(px, py)] = box
+    return boxes
+
+
+def _speckle(role: str, x: int, y: int, body: int) -> int:
+    if role == "dirt":
+        return _DIRT_BUCKETS[_hash(x, y) & 15]
+    # Grass and hedge: soft, mostly the middle shade.
+    bucket = _hash(x, y) & 7
+    if body <= 1:
+        return 0
+    if body == 2:
+        return 0 if bucket < 2 else 1
+    if bucket < 2:
+        return 0
+    if bucket < 6:
+        return 1
+    return 2
+
+
+def _paint_surface(src, x: int, y: int, w: int, h: int, ramp: tuple, box: tuple[int, int, int, int]) -> tuple[int, int, int]:
+    n = len(ramp)
+    if n == 1:
+        return ramp[0]
+    x0, y0, x1, y1 = box
+    tx = (x - x0) / max(1, x1 - x0)
+    ty = (y - y0) / max(1, y1 - y0)
+    t = (tx + ty) / 2
+    # On a longer ramp the lightest entry is only the highlight and the
+    # darkest is only the south/east edge. The face uses the steps between.
+    if n >= 4:
+        idx = 1 + int(t * (n - 3) + 0.5)
+        idx = max(1, min(n - 2, idx))
+    else:
+        idx = int(t * (n - 2) + 0.5)
+        idx = max(0, min(n - 2, idx))
+    # A one-pixel line has different neighbours on both sides. Leave the
+    # gradient there so a dither pattern does not strobe.
+    if _same_count(src, x, y, w, h) >= 2:
+        colour = src[x, y]
+        nw = any(_in(x + dx, y + dy, w, h) and src[x + dx, y + dy] != colour for dx, dy in _NW)
+        se = any(_in(x + dx, y + dy, w, h) and src[x + dx, y + dy] != colour for dx, dy in _SE)
+        if nw and not se:
+            idx -= 1
+        elif se and not nw:
+            idx += 1
+    return ramp[max(0, min(n - 1, idx))]
+
+
+def recolour(original: Image.Image, style: Style, cells: set[tuple[int, int]] | None = None) -> Image.Image:
+    """Repaint `original`. With `cells`, only those 16px cells change.
+
+    Coordinates are the image's own pixels, so a speckle pattern continues
+    across a tile edge instead of restarting every 16px.
+    """
     w, h = original.size
     src = original.load()
     out = Image.new("RGB", (w, h))
     dst = out.load()
     ink = _ink_mask(original, style.ink_touch)
+    surface_colours = {colour for colour, mat in style.materials.items() if mat.role == "surface"}
+    boxes = _component_boxes(src, w, h, surface_colours)
+    counts = _caster_counts(src, w, h, style.casters)
     for y in range(h):
         for x in range(w):
             colour = src[x, y]
+            if cells is not None and (x // TILE, y // TILE) not in cells:
+                dst[x, y] = colour
+                continue
             if colour == BLACK:
                 dst[x, y] = BLACK
                 continue
@@ -454,51 +658,44 @@ def recolour(original: Image.Image, style: Style) -> Image.Image:
             mat = style.materials.get(colour)
             if mat is None:
                 raise SystemExit(f"{style.name}: no ramp for source colour {colour} at {(x, y)}")
-            if mat.flat is not None:
-                dst[x, y] = mat.flat
-                continue
             ramp = mat.ramp
-            n = len(ramp)
-            ty = y / max(1, h - 1)
-            tx = x / max(1, w - 1)
-            # Upper-left is lighter. Body stops at body_last; darker steps are
-            # the shadow rim and the 1px contact shadow.
-            last = mat.body_last
-            pos = ty * 0.65 + tx * 0.35
-            idx = int(round(pos * last))
-            grain = _grain(x, y)
-            if mat.texture == "grass":
-                if grain >= 13:
-                    idx -= 1
-                elif grain <= 1:
-                    idx += 1
-            elif mat.texture == "ground":
-                if grain >= 14:
-                    idx -= 1
-                elif grain == 0:
-                    idx += 1
-            idx = max(0, min(last, idx))
-            light = _differs(src, x, y, w, h, 0, -1) or _differs(src, x, y, w, h, -1, 0)
-            shadow = _differs(src, x, y, w, h, 0, 1) or _differs(src, x, y, w, h, 1, 0)
-            contact = _contact(src, x, y, w, h, style)
-            if contact:
-                light = False
-                idx += 1
-            if light:
-                idx -= 1
-            if shadow:
-                idx += 1
-            idx = max(0, min(n - 1, idx))
-            chosen = ramp[idx]
-            if (
-                mat.fleck is not None
-                and grain == mat.fleck[0]
-                and ((x ^ y) & 3) == 0
-                and not contact
-                and not shadow
-            ):
-                chosen = mat.fleck[1]
-            dst[x, y] = chosen
+            strength = _shadow_strength(src, x, y, w, h, style, counts)
+            shadowed = _apply_shadow(ramp, strength)
+            if mat.role == "flat":
+                dst[x, y] = ramp[0]
+                continue
+            if mat.role in ("grass", "dirt"):
+                body = ramp[:-2] if mat.role == "grass" else ramp[:-1]
+                idx = _speckle(mat.role, x, y, len(body))
+                if mat.role == "grass" and _grass_rim(src, x, y, w, h, counts):
+                    idx = len(body) - 1
+                chosen = body[min(idx, len(body) - 1)]
+                if shadowed is not None:
+                    chosen = shadowed
+                dst[x, y] = chosen
+                continue
+            if mat.role == "asphalt":
+                lit = _touches(src, x, y, w, h, _NW, _ASPHALT_EDGE)
+                dark = _touches(src, x, y, w, h, _SE, _ASPHALT_EDGE)
+                if lit and dark:
+                    chosen = ramp[1]
+                elif lit:
+                    chosen = ramp[0]
+                elif dark:
+                    chosen = ramp[2]
+                else:
+                    chosen = ramp[1]
+                if shadowed is not None:
+                    chosen = shadowed
+                dst[x, y] = chosen
+                continue
+            if mat.role == "surface":
+                chosen = _paint_surface(src, x, y, w, h, ramp, boxes.get((x, y), (x, y, x, y)))
+                if shadowed is not None:
+                    chosen = shadowed
+                dst[x, y] = chosen
+                continue
+            raise SystemExit(f"{style.name}: unknown role {mat.role}")
     return out
 
 
@@ -527,21 +724,44 @@ def build_indexed_tiles(atlas: Image.Image) -> dict[int, Image.Image]:
     aw, ah = AIRPORT_SIZE
     for i, tile in enumerate(slice_tiles(airport, aw, ah)):
         tiles[AIRPORT_BASE + i] = tile
-    # Radar frames are recoloured in place on the full airport so the dish
-    # pixels see the same neighbours as the static cell.
+    # Radar frames are recoloured in place on the full airport. Pixels the
+    # frame shares with the static cell keep the static colour, so the dish
+    # meets the neighbouring tiles.
     ax, ay = RADAR_CELL
+    x0, y0 = ax * TILE, ay * TILE
+    classic_px = airport_classic.load()
+    static_px = airport.load()
     for frame in RADAR_FRAMES:
         patched = airport_classic.copy()
-        patched.paste(crop_tile(atlas, frame), (ax * TILE, ay * TILE))
+        patched.paste(crop_tile(atlas, frame), (x0, y0))
         painted = recolour(patched, airport_style())
-        tiles[frame] = painted.crop((ax * TILE, ay * TILE, ax * TILE + TILE, ay * TILE + TILE))
-    for index in (DIRT, ROAD_H):
-        tiles[index] = recolour(crop_tile(atlas, index), terrain_style())
+        patched_px = patched.load()
+        painted_px = painted.load()
+        tile = Image.new("RGB", (TILE, TILE))
+        dst = tile.load()
+        for y in range(TILE):
+            for x in range(TILE):
+                if patched_px[x0 + x, y0 + y] == classic_px[x0 + x, y0 + y]:
+                    dst[x, y] = static_px[x0 + x, y0 + y]
+                else:
+                    dst[x, y] = painted_px[x0 + x, y0 + y]
+        tiles[frame] = tile
     return tiles
 
 
 def classic_tile(atlas: Image.Image, index: int) -> Image.Image:
     return crop_tile(atlas, index)
+
+
+def _scene_style(grid: list[list[int]], building_cells: set[tuple[int, int]]) -> Style:
+    for y, row in enumerate(grid):
+        for x, index in enumerate(row):
+            if (x, y) not in building_cells:
+                continue
+            if POLICE_BASE <= index < POLICE_BASE + POLICE_SIZE[0] * POLICE_SIZE[1]:
+                return police_style()
+            return airport_style()
+    return airport_style()
 
 
 def paint_grid(
@@ -553,56 +773,70 @@ def paint_grid(
 ) -> Image.Image:
     height = len(grid)
     width = len(grid[0])
-    image = Image.new("RGB", (width * TILE, height * TILE))
+    classic = Image.new("RGB", (width * TILE, height * TILE))
     for y, row in enumerate(grid):
         for x, index in enumerate(row):
-            if use_svga:
-                tile = svga[index]
-            else:
-                tile = classic_tile(atlas, index)
-            image.paste(tile, (x * TILE, y * TILE))
-    if use_svga:
-        _external_shadow(image, grid, building_cells)
-    return image
+            classic.paste(classic_tile(atlas, index), (x * TILE, y * TILE))
+    if not use_svga:
+        return classic
+    # Ground is recoloured in scene coordinates so neighbouring dirt tiles
+    # share one speckle field. Building cells are pasted from the assembly,
+    # which was shaded the same way.
+    ground = {(x, y) for y in range(height) for x in range(width) if (x, y) not in building_cells}
+    painted = recolour(classic, terrain_style(), cells=ground)
+    for y, row in enumerate(grid):
+        for x, index in enumerate(row):
+            if (x, y) in building_cells:
+                painted.paste(svga[index], (x * TILE, y * TILE))
+    _external_shadow(painted, classic, building_cells, _scene_style(grid, building_cells))
+    return painted
 
 
-def _step_darker(rgb: tuple[int, int, int], ramps: list[tuple[tuple[int, int, int], ...]]) -> tuple[int, int, int]:
-    for ramp in ramps:
-        if rgb in ramp:
-            idx = ramp.index(rgb)
-            return ramp[min(len(ramp) - 1, idx + 1)]
-    return rgb
-
-
-def _external_shadow(image: Image.Image, grid: list[list[int]], building_cells: set[tuple[int, int]]) -> None:
-    """1px contact shadow on lot/road pixels that touch the building footprint."""
+def _external_shadow(
+    painted: Image.Image,
+    classic: Image.Image,
+    building_cells: set[tuple[int, int]],
+    style: Style,
+) -> None:
+    """1–2px south-east shadow on the lot, in a darker shade of that ground."""
     terrain = terrain_style()
-    ramps = [mat.ramp for mat in terrain.materials.values()]
-    for mat in terrain.materials.values():
-        if mat.fleck is not None:
-            ramps.append((mat.fleck[1], mat.ramp[-1]))
-    src = image.load()
-    w = len(grid[0])
-    h = len(grid)
-    darker: dict[tuple[int, int], tuple[int, int, int]] = {}
+    src = classic.load()
+    dst = painted.load()
+    w, h = classic.size
+    counts = _caster_counts(src, w, h, style.casters)
     for y in range(h):
         for x in range(w):
-            if (x, y) in building_cells:
+            if (x // TILE, y // TILE) in building_cells:
                 continue
-            for dx, dy in ((0, -1), (-1, 0)):
+            colour = src[x, y]
+            mat = terrain.materials.get(colour)
+            if mat is None or colour in (BLACK, WHITE):
+                continue
+            strength = 0
+            for dx, dy in _NW:
                 nx, ny = x + dx, y + dy
-                if (nx, ny) not in building_cells:
+                if (
+                    _casts(src, nx, ny, w, h, colour, counts)
+                    and _in(nx, ny, w, h)
+                    and (nx // TILE, ny // TILE) in building_cells
+                ):
+                    strength = max(strength, 2)
                     continue
-                # Only the pixels of this cell that actually touch the footprint.
-                if dy == -1:
-                    span = [(px, y * TILE) for px in range(x * TILE, x * TILE + TILE)]
-                else:
-                    span = [(x * TILE, py) for py in range(y * TILE, y * TILE + TILE)]
-                for px, py in span:
-                    darker[(px, py)] = _step_darker(src[px, py], ramps)
-                break
-    for (px, py), rgb in darker.items():
-        src[px, py] = rgb
+                if not _in(nx, ny, w, h):
+                    continue
+                mid = src[nx, ny]
+                if mid != colour and mid != BLACK:
+                    continue
+                fx, fy = x + 2 * dx, y + 2 * dy
+                if (
+                    _casts(src, fx, fy, w, h, colour, counts)
+                    and _in(fx, fy, w, h)
+                    and (fx // TILE, fy // TILE) in building_cells
+                ):
+                    strength = max(strength, 1)
+            shadowed = _apply_shadow(mat.ramp, strength)
+            if shadowed is not None:
+                dst[x, y] = shadowed
 
 
 def police_grid(origin_x: int, origin_y: int, width: int, height: int) -> tuple[list[list[int]], set[tuple[int, int]]]:
@@ -726,32 +960,57 @@ def palette_swatch(pal: list[tuple[int, int, int]]) -> Image.Image:
 
 def ramp_report(palette: list[tuple[int, int, int]]) -> str:
     index = {rgb: i for i, rgb in enumerate(palette)}
-    lines = ["VGA ramp assignments (palette index, 8-bit RGB)", ""]
+    lines = ["VGA ramp assignments (palette index, 8-bit RGB), light to dark", ""]
     for style in (police_style(), airport_style()):
         lines.append(f"[{style.name}]")
         for src, mat in style.materials.items():
-            colours = [mat.flat] if mat.flat is not None else list(mat.ramp)
-            if mat.fleck is not None:
-                colours.append(mat.fleck[1])
-            described = ", ".join(f"{index[c]}:{c}" for c in colours if c is not None)
-            lines.append(f"  source {src} -> {described}")
+            described = ", ".join(f"{index[c]}:{c}" for c in mat.ramp)
+            lines.append(f"  source {src} {mat.role} -> {described}")
         if style.ink is not None:
             lines.append(f"  letter ink -> {index[style.ink]}:{style.ink}")
         lines.append("")
     return "\n".join(lines)
 
 
+def combined_sheet(
+    panels: list[tuple[str, Image.Image, Image.Image]],
+    scale: int,
+) -> Image.Image:
+    """Police and airport, each Classic | SVGA, on one sheet."""
+    gap = max(4, scale * 2)
+    group_gap = gap * 4
+    header = 28
+    scaled: list[tuple[str, Image.Image, Image.Image]] = []
+    for title, classic, svga in panels:
+        left = classic.resize((classic.size[0] * scale, classic.size[1] * scale), NEAREST)
+        right = svga.resize((svga.size[0] * scale, svga.size[1] * scale), NEAREST)
+        scaled.append((title, left, right))
+    width = sum(left.size[0] + gap + right.size[0] for _, left, right in scaled)
+    width += group_gap * (len(scaled) - 1)
+    height = header + max(left.size[1] for _, left, _ in scaled)
+    canvas = Image.new("RGB", (width, height), (32, 32, 32))
+    x = 0
+    for title, left, right in scaled:
+        canvas.paste(left, (x, header))
+        canvas.paste(right, (x + left.size[0] + gap, header))
+        draw_text(canvas, (x + 4, 4), title, WHITE)
+        draw_text(canvas, (x + 4, 16), "CLASSIC", WHITE)
+        draw_text(canvas, (x + left.size[0] + gap + 4, 16), "SVGA", WHITE)
+        x += left.size[0] + gap + right.size[0] + group_gap
+    sample = "SAMPLE"
+    sample_w, _ = text_size(sample)
+    draw_text(canvas, (width - sample_w - 4, 4), sample, (255, 255, 85))
+    return canvas
+
+
 def main() -> None:
+    _assert_hash_aperiodic()
     palette = vga_palette_8bit()
     palette_set = set(palette)
     for style in (police_style(), airport_style(), terrain_style()):
         colours: set[tuple[int, int, int]] = set()
         for mat in style.materials.values():
             colours.update(mat.ramp)
-            if mat.flat is not None:
-                colours.add(mat.flat)
-            if mat.fleck is not None:
-                colours.add(mat.fleck[1])
         if style.ink is not None:
             colours.add(style.ink)
         _require_in_palette(colours, palette_set)
@@ -809,6 +1068,13 @@ def main() -> None:
         )
     for scale, name in ((3, "3x"), (6, "6x")):
         radar_sheet(atlas, svga, scale).save(cmp_dir / f"radar-{name}.png", optimize=True)
+    combined_sheet(
+        (
+            ("POLICE", police_classic, police_svga),
+            ("AIRPORT", airport_classic, airport_svga),
+        ),
+        3,
+    ).save(cmp_dir / "police-airport-3x.png", optimize=True)
 
     # Wider lot, still a road along the south. Mock-up radar is frame 833 (face-on dish).
     mock_dir = HERE / "mockups"

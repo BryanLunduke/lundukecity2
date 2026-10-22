@@ -35,26 +35,43 @@ only black used.
 
 The stock tiles are flat colours. The recolour keeps every pixel in its
 original colour region and only changes which VGA entry that region uses.
+Hues stay with the classic tile: blue walls stay blue, the yellow sign stays
+yellow, grey roofs stay neutral grey. The aim is a richer 16-bit pass of the
+same city, not a new scheme.
 
 - Original black stays index 0, and nothing else becomes black. Outlines,
   window holes, and the tile frame stay on the same pixels.
 - Each other source colour gets a light-to-dark ramp. Ramps for colours that
   touch are disjoint, so a boundary cannot disappear.
-- Light comes from the upper left, the same way SNES SimCity shades a tile.
-  The face of a surface uses the light end of its ramp (`body_last` in
-  `make_svga_sample.py`). The south and east edges step one entry darker.
-  The north and west edges step one entry lighter.
-- A receiver pixel (lawn, hedge, concrete apron, dirt, soil, tarmac) that
-  sits immediately south or east of a building colour, or of an interior
-  black outline with a building colour beyond it, steps one entry darker.
-  That is the 1px contact shadow. The outer two pixels of the assembled
-  building are the frame and do not cast.
-- Lawn, hedge, dirt, and tarmac also take a scrambled ±1 step inside the
-  body of the ramp, so the texture is grain rather than a flat fill. Dirt
-  additionally gets a sparse darker speck (about one pixel in 64).
+- Light comes from the upper left. A roof or wall is shaded inside its own
+  connected region, so each building gets its own gradient. On a four-step
+  ramp the face uses the middle two steps, the lightest entry is only the
+  north/west highlight, and the darkest is only the south/east edge. A
+  three-step ramp gradients across the first two and keeps the last for that
+  edge. A pixel with fewer than two same-colour neighbours skips the edge
+  step, so a dither pattern does not strobe.
+- Ground south or east of a building takes a 2px shadow, then a 1px softer
+  step. The shadow is a darker entry of that ground's own ramp, never black.
+  Only a solid region (8 pixels or more) casts, so a 1px dither dot does not.
+  A black outline with a building pixel beside it does cast, which lets the
+  shadow cross the stroke. Grass is also one step darker where it simply
+  touches pavement or a building.
+- Dirt and grass use a full-coordinate hash, so the speckle does not repeat
+  every 16px. Building tiles are painted as one assembly and then sliced, and
+  the lot in the comparison sheets is painted in scene coordinates, so
+  neighbouring tiles share one field. Dirt is ten sixteenths EGA brown with
+  three darker reddish earths as the speck. The VGA wheel has no reddish
+  brown between that brown and the pale high-value earths, so the lot stays
+  on the brown instead of the peach cycle.
+- Asphalt has no grain. A pixel whose north or west neighbour is dirt steps
+  one grey lighter, and one whose south or east neighbour is dirt steps one
+  grey darker. A thin strip with dirt on both sides stays the body colour.
+  White and yellow paint are not an edge, so the dashes and runway marks
+  stay crisp. Classic black lines stay the dark stroke.
 - Marks that have to stay crisp are a single entry: runway yellow, the
-  emergency lights, white panes, the orange detail, and the police sign's
-  letter strokes (dark grey connected to the yellow sign, index 18).
+  emergency lights, white panes, the orange detail, the small police
+  highlight, and the sign's letter strokes (dark grey connected to the yellow
+  sign, index 18).
 
 There is no water in these tiles. The blues are roof, wall, and glass.
 
@@ -66,31 +83,33 @@ same disjoint-ramp rule.
 ## Ramps
 
 Indexes match `palette/vga-mode13h.gpl`. `ramps-used.txt` is the same list,
-written by the generator. Entries are light to dark.
+written by the generator. Entries are light to dark. Where a ramp has a
+shadow-only tail, the speckle uses the earlier entries and the cast shadow
+uses the last.
 
 **Police**
 
-- Lawn `(0, 230, 0)`: 10, 47, 48, then EGA green 2 `(0, 170, 0)` for the shadow step.
+- Lawn `(0, 230, 0)`: 168, 145, 144, then 122 and 120 for the shadow. Mid greens, not the neon high-value greens.
 - Hedge `(0, 127, 0)`: 240, 216, 191, 192. Darker than the lawn, so the shrub row stays a separate band.
-- Roof and trim `(102, 102, 230)`: 80, 56. Pale blue, equal red and green.
-- Walls `(0, 0, 230)`: EGA blue 1 `(0, 0, 170)`, then 104 for the shadow edge.
-- Concrete roof, forecourt, driveway `(127, 127, 127)`: grey indexes 28–24.
-- Left wing `(63, 63, 63)`: grey indexes 23–20. Sign letters that touch the yellow are ink 18 instead.
-- Sign `(255, 255, 0)`: 68, then pure yellow 44.
-- Small light-grey highlight: grey 30. White panes: 31. Red lights: 40.
+- Roof and trim `(102, 102, 230)`: 56, EGA blue 9 `(85, 85, 255)`, 128. Red stays equal to green.
+- Walls `(0, 0, 230)`: 32 `(0, 0, 255)`, EGA blue 1 `(0, 0, 170)`, 104.
+- Concrete roof, forecourt, driveway `(127, 127, 127)`: grey indexes 27–24. The face sits on 26 and 25, around the classic 127.
+- Left wing `(63, 63, 63)`: grey indexes 22–20. Sign letters that touch the yellow are ink 18 instead.
+- Sign `(255, 255, 0)`: 68, EGA yellow 14, pure yellow 44.
+- Small light-grey highlight: grey 29. White panes: 31. Red lights: 40.
 
 **Airport**
 
-- Infield and clear land `(204, 127, 102)`: 90, 66, 65, plus speck 137. The VGA wheel has no brown between luma about 110 and about 180, so the field sits in the light earth cycle and the asphalt stays in the dark greys. That keeps the runway edge.
-- Darker soil marks `(153, 127, 76)`: 138, flat.
-- Runways and aprons `(63, 63, 63)`: grey indexes 23–19.
-- Hangar walls `(127, 127, 127)`: grey indexes 29–25.
-- Hangar roofs `(191, 191, 191)`: 103, 81, 80, 79. A cool highlight, off the neutral wall ramp.
-- Glass `(102, 102, 230)`: 57, 56, 152, 128.
-- Deep blue `(0, 0, 230)`: 129, 200, 104.
-- Runway paint: yellow 44, held flat so the marks do not pick up a gradient. White 31. Red 40. Orange 42. The few dark-green pixels: 192.
+- Infield and clear land `(204, 127, 102)`: EGA brown 6 `(170, 85, 0)`, then 139, 138, 137, and 114 for the shadow only.
+- Darker soil marks `(153, 127, 76)`: 115, flat, so the marks stay a step off the speckled lot.
+- Runways and aprons `(63, 63, 63)`: grey indexes 21, 20, 19. Index 20 is the body. 21 and 19 are only the dirt-side edges.
+- Hangar walls `(127, 127, 127)`: grey indexes 27–24, same shape of ramp as the police concrete.
+- Hangar roofs `(191, 191, 191)`: grey 30, 29, 28, and EGA 7 `(170, 170, 170)`. Neutral grey. The face is 29 and 28, around the classic 191. White panes stay index 31, off this ramp.
+- Glass `(102, 102, 230)`: 56, 9, 128.
+- Deep blue `(0, 0, 230)`: 32, EGA blue 1, 104.
+- Runway paint: yellow 44, held flat. White 31. Red 40. Orange 42. The few dark-green pixels: 192.
 
-Radar frames are painted in place on the 6×6, then cropped, so a background pixel that did not move matches the static cell.
+Radar frames are painted on the 6×6 and then cropped. A pixel the frame shares with the static cell keeps the static colour, so the dish meets the neighbouring tiles.
 
 ## Sheets
 
@@ -104,6 +123,7 @@ Comparisons sit the building on one tile of clear land and a horizontal road (ti
 - `comparisons/airport-1x.png`
 - `comparisons/airport-3x.png`
 - `comparisons/airport-6x.png`
+- `comparisons/police-airport-3x.png` — both buildings, Classic and SVGA, on one sheet at 3×
 
 The airport comparison uses radar frame 834 so the dish is in the picture.
 `comparisons/radar-3x.png` and `comparisons/radar-6x.png` show all eight frames.
@@ -115,7 +135,7 @@ Mock-ups are a wider lot with the same road, at 16px per tile and at 32px per ti
 - `mockups/airport-classic-vs-svga-16px.png`
 - `mockups/airport-classic-vs-svga-32px.png`
 
-Clear land and the road in those sheets use the airport dirt and tarmac ramps so the building meets the lot. Those two tiles are not part of the delivered set.
+Clear land and the road in those sheets use the airport dirt and tarmac ramps so the building meets the lot. The ground is shaded in scene coordinates rather than by stamping one recoloured tile. Those two tiles are not part of the delivered set.
 
 ## Check
 
@@ -130,4 +150,7 @@ colour boundary is still a colour change. The assembled 3×3 and 6×6 are
 checked the same way, so a seam between tiles is included. The last run is
 `verify-report.txt`: 53 tiles, 0 palette violations, 0 ink mismatches,
 0 collapsed boundaries. Strong classic edges (luma delta ≥ 80) still read at
-half that delta on 2492 of 2496 pairs.
+half that delta on 2119 of 2496 pairs. That recall is lower than a
+high-contrast recolour because the brown lot and the asphalt sit closer in
+luma than the classic tan and dark grey; the boundary is still a different
+colour, which is what the pass rule checks.

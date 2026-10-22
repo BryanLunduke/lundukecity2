@@ -2,11 +2,11 @@ SVGA sample verification
 palette entries in gpl: 256 (246 unique RGB triples)
 
 tiles checked: 53
-assembly police 3x3: palette=0 ink=0 collapsed=0/1520 strong-edge recall=1.000 (754/754) new-strong-inside-flat=10 OK
-assembly airport 6x6: palette=0 ink=0 collapsed=0/3897 strong-edge recall=0.997 (1408/1412) new-strong-inside-flat=30 OK
+assembly police 3x3: palette=0 ink=0 collapsed=0/1520 strong-edge recall=0.971 (732/754) new-strong-inside-flat=8 OK
+assembly airport 6x6: palette=0 ink=0 collapsed=0/3897 strong-edge recall=0.846 (1195/1412) new-strong-inside-flat=3 OK
 
 per-tile totals: pixels=13568 palette_violations=0 ink_mismatches=0 collapsed_boundaries=0/5997
-strong classic edges (luma delta >= 80) still visible at half that delta: 2492/2496 (0.998)
-new strong edges inside a classic flat region (classic delta < 12, svga delta >= 80): 40
+strong classic edges (luma delta >= 80) still visible at half that delta: 2119/2496 (0.849)
+new strong edges inside a classic flat region (classic delta < 12, svga delta >= 80): 11
 
 RESULT: PASS
