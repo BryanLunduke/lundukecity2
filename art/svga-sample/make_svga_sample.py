@@ -148,14 +148,15 @@ def _hash(x: int, y: int) -> int:
 
 
 def police_style() -> Style:
-    # Natural mid greens, still green rather than olive. The last two are the shadow.
+    # Fresh greens near the classic brightness. Less saturated than pure neon.
+    # The last two are only the darker edge and the cast shadow.
     grass = Material(
         ramp=(
-            (81, 113, 81),
-            (56, 113, 69),
-            (56, 113, 56),
-            (0, 113, 56),
-            (0, 113, 0),
+            (125, 255, 125),
+            (85, 255, 85),
+            (0, 255, 65),
+            (0, 255, 0),
+            (0, 170, 0),
         ),
         role="grass",
     )
@@ -166,7 +167,7 @@ def police_style() -> Style:
             (16, 65, 0),
             (0, 65, 0),
         ),
-        role="grass",
+        role="hedge",
     )
     # Light blue trim and roof, kept on the blue axis (red == green).
     roof = Material(
@@ -236,16 +237,15 @@ def police_style() -> Style:
 
 
 def airport_style() -> Style:
-    # Same hue family as classic (204, 127, 102): red above green above blue.
-    # VGA has no mid-value of that hue, so the field is EGA brown plus the
-    # three darker reddish earths. The last entry is the cast shadow only.
+    # Classic tan is (204, 127, 102). These three are the close VGA salmons:
+    # same red-over-green-over-blue hue, a little lighter, low contrast.
+    # The last entry is only the cast shadow.
     dirt = Material(
         ramp=(
-            (170, 85, 0),
-            (113, 97, 56),
-            (113, 85, 56),
-            (113, 69, 56),
-            (113, 56, 0),
+            (255, 190, 125),
+            (255, 158, 125),
+            (255, 125, 125),
+            (255, 85, 85),
         ),
         role="dirt",
     )
@@ -362,8 +362,7 @@ def assemble(atlas: Image.Image, base: int, width: int, height: int) -> Image.Im
     return image
 
 
-# Mostly warm brown, with a fine darker speckle. The last ramp step is shadow only.
-_DIRT_BUCKETS = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3)
+# Ground texture returns 0 or 2 for a sparse cluster, 1 for the calm base.
 
 # Bevel where the dirt shoulder meets the pavement. Internal black lines stay smooth.
 _ASPHALT_EDGE = frozenset({SRC_TAN, SRC_DTAN})
@@ -390,6 +389,19 @@ def _assert_hash_aperiodic() -> None:
     rate = same / total
     if rate > 0.2:
         raise SystemExit(f"speckle hash still tiles at 16px (match rate {rate:.3f})")
+    # The ground clusters must not line up with the tile grid either.
+    # A period-16 pattern matches itself at +16; a calm field matches by chance.
+    clustered = 0
+    cluster_total = 0
+    for y in range(64):
+        for x in range(64):
+            here = _ground_index(x, y, 0)
+            clustered += here == _ground_index(x + 16, y, 0)
+            clustered += here == _ground_index(x, y + 16, 0)
+            cluster_total += 2
+    cluster_rate = clustered / cluster_total
+    if cluster_rate > 0.95:
+        raise SystemExit(f"ground clusters still tile at 16px (match rate {cluster_rate:.3f})")
 
 
 def _ink_mask(original: Image.Image, touch: tuple[int, int, int] | None) -> list[list[bool]]:
@@ -582,20 +594,29 @@ def _component_boxes(src, w: int, h: int, colours: set[tuple[int, int, int]]) ->
     return boxes
 
 
-def _speckle(role: str, x: int, y: int, body: int) -> int:
-    if role == "dirt":
-        return _DIRT_BUCKETS[_hash(x, y) & 15]
-    # Grass and hedge: soft, mostly the middle shade.
-    bucket = _hash(x, y) & 7
-    if body <= 1:
-        return 0
-    if body == 2:
-        return 0 if bucket < 2 else 1
-    if bucket < 2:
-        return 0
-    if bucket < 6:
+def _ground_index(x: int, y: int, salt: int) -> int:
+    """Calm base (1), with a few 2–4px clusters of the neighbour shades.
+
+    The cluster grid is 2px and the choice comes from the full-coordinate
+    hash, so the pattern does not repeat every tile.
+    """
+    cell = _hash((x // 2) + salt * 17, (y // 2) + salt * 29)
+    kind = cell & 15
+    if kind > 2:
         return 1
-    return 2
+    shade = 0 if (cell & 16) == 0 else 2
+    ox, oy = x & 1, y & 1
+    if kind == 0:
+        return shade
+    if kind == 1:
+        # Three pixels of the 2×2.
+        if ((ox << 1) | oy) == ((cell >> 5) & 3):
+            return 1
+        return shade
+    # A 2px pair, either the top row or the left column.
+    if (cell & 32) == 0:
+        return shade if oy == 0 else 1
+    return shade if ox == 0 else 1
 
 
 def _paint_surface(src, x: int, y: int, w: int, h: int, ramp: tuple, box: tuple[int, int, int, int]) -> tuple[int, int, int]:
@@ -664,9 +685,22 @@ def recolour(original: Image.Image, style: Style, cells: set[tuple[int, int]] | 
             if mat.role == "flat":
                 dst[x, y] = ramp[0]
                 continue
+            if mat.role == "hedge":
+                # Kept on the pass-2 speckle so the shrubs do not move.
+                body = ramp[:-2]
+                idx = 0 if (_hash(x, y) & 7) < 2 else min(1, len(body) - 1)
+                if _grass_rim(src, x, y, w, h, counts):
+                    idx = len(body) - 1
+                chosen = body[idx]
+                if shadowed is not None:
+                    chosen = shadowed
+                dst[x, y] = chosen
+                continue
             if mat.role in ("grass", "dirt"):
+                # Grass keeps two shadow steps. Dirt keeps one, so the three
+                # salmons stay in the texture and only the rose is the shadow.
                 body = ramp[:-2] if mat.role == "grass" else ramp[:-1]
-                idx = _speckle(mat.role, x, y, len(body))
+                idx = _ground_index(x, y, 0 if mat.role == "dirt" else 1)
                 if mat.role == "grass" and _grass_rim(src, x, y, w, h, counts):
                     idx = len(body) - 1
                 chosen = body[min(idx, len(body) - 1)]
