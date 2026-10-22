@@ -423,8 +423,15 @@ void Shell::clamp_gamepad_cursor(float push_x, float push_y)
     // A right push used to step onto the port edge and stay there: the next
     // frame treats that edge as outside the port. At 8px the edge is the
     // grey band. The toolbar is on the left, so the right side is not a control.
-    if (y >= view_y_ && y < view_b && x >= vis_right && x >= view_x_) {
+    if (y >= view_y_ && x >= vis_right && x >= view_x_) {
         x = vis_right - 1.0;
+    }
+    // Holding the stick down used to step past the map into the hint bar.
+    // The next frame treats that as outside the port, and the D-pad pans
+    // instead of moving the cursor, so only the stick could come back.
+    // The visible map is the limit at every zoom, including the 8px overview.
+    if (x >= static_cast<double>(view_x_) && y >= vis_bottom && vis_bottom > vis_top) {
+        y = vis_bottom - 1.0;
     }
     cursor_x_ = static_cast<float>(x);
     cursor_y_ = static_cast<float>(y);
@@ -499,6 +506,8 @@ void Shell::reset_touch_state()
     touch_minimap_ = false;
     pinch_dist_ = 0;
     list_touch_y_ = -1.0f;
+    list_touch_row_ = false;
+    list_touch_dragged_ = false;
     fingers_.clear();
 }
 
@@ -1877,6 +1886,7 @@ void Shell::move_focus(int delta)
 
 void Shell::reveal_file_list()
 {
+    list_scroll_free_ = false;
     const bool scenarios = dialog_ == Dialog::Scenario;
     const bool messages = dialog_ == Dialog::Messages;
     const int count = scenarios ? CitySession::kScenarioCount
@@ -1887,6 +1897,62 @@ void Shell::reveal_file_list()
     if (scenarios) {
         list_index_ = scenario_index_;
     }
+}
+
+void Shell::scroll_open_list(int delta)
+{
+    if (delta == 0) {
+        return;
+    }
+    const bool scenarios = dialog_ == Dialog::Scenario;
+    const bool messages = dialog_ == Dialog::Messages;
+    const bool files = dialog_ == Dialog::Files;
+    if (!scenarios && !messages && !files) {
+        return;
+    }
+    const int count = scenarios ? CitySession::kScenarioCount
+                                : messages ? static_cast<int>(session_.notices().size())
+                                           : static_cast<int>(files_.size());
+    const int visible = std::max(1, files_visible_);
+    int next = list_scroll_ + delta;
+    const int max_scroll = list_max_scroll(count, visible);
+    if (next < 0) {
+        next = 0;
+    }
+    if (next > max_scroll) {
+        next = max_scroll;
+    }
+    if (next == list_scroll_) {
+        return;
+    }
+    list_scroll_ = next;
+    list_scroll_free_ = true;
+    const int selected = scenarios ? scenario_index_ : list_index_;
+    if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
+        const int row = selected - list_scroll_;
+        if (row >= 0 && row < visible && row < 64) {
+            focus_id_ = kListItem + row;
+        } else {
+            // Keep D-pad on the list without ringing a different row.
+            focus_id_ = kListItem + 63;
+        }
+    }
+}
+
+void Shell::place_list_window(int index, int count)
+{
+    const int visible = std::max(1, files_visible_);
+    if (list_scroll_free_) {
+        const int max_scroll = list_max_scroll(count, visible);
+        if (list_scroll_ < 0) {
+            list_scroll_ = 0;
+        }
+        if (list_scroll_ > max_scroll) {
+            list_scroll_ = max_scroll;
+        }
+        return;
+    }
+    list_reveal(list_scroll_, index, visible, count);
 }
 
 bool Shell::nudge_file_list(int delta, bool page, bool force)

@@ -855,7 +855,7 @@ void Shell::draw_dialog(cairo_t *cr)
             scenario_index_ = count - 1;
         }
         list_index_ = scenario_index_;
-        list_reveal(list_scroll_, scenario_index_, visible, count);
+        place_list_window(scenario_index_, count);
         const double track_w = dp(12);
         const double row_w = dw - margin - track_w - dp(16);
         const int preview_w = dp(72);
@@ -1054,7 +1054,7 @@ void Shell::draw_dialog(cairo_t *cr)
             if (list_index_ >= count) {
                 list_index_ = count - 1;
             }
-            list_reveal(list_scroll_, list_index_, visible, count);
+            place_list_window(list_index_, count);
         }
         const double row_w = dw - 24 - 16;
         for (int row = 0; row < visible; ++row) {
@@ -1586,7 +1586,7 @@ void Shell::draw_dialog(cairo_t *cr)
             if (list_index_ >= count) {
                 list_index_ = count - 1;
             }
-            list_reveal(list_scroll_, list_index_, visible, count);
+            place_list_window(list_index_, count);
             for (int row = 0; row < visible; ++row) {
                 const int i = list_scroll_ + row;
                 if (i < 0 || i >= count) {

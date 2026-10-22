@@ -84,6 +84,12 @@ int main()
             std::fprintf(stderr, "won '%s'\n", won.c_str());
             return fail(6, "the outcome dialog does not name the goal or the paused close");
         }
+        const std::string meter = dull.scenario_meter();
+        if (meter.find("Population ") == std::string::npos || meter.find('$') != std::string::npos ||
+            won.find('$') != std::string::npos || lost.find('$') != std::string::npos) {
+            std::fprintf(stderr, "meter '%s'\nwon '%s'\n", meter.c_str(), won.c_str());
+            return fail(19, "the population goal is shown as money");
+        }
     }
 
     for (int i = 0; i < CitySession::kScenarioCount; ++i) {

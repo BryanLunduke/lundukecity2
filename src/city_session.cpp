@@ -26,7 +26,9 @@
 
 namespace {
 
-std::string with_commas(std::int64_t value)
+// Thousands separators for a count such as population or score. No currency
+// symbol: a city of 17,940 people is not $17,940.
+std::string grouped_count(std::int64_t value)
 {
     const bool neg = value < 0;
     std::uint64_t mag = static_cast<std::uint64_t>(neg ? -value : value);
@@ -41,7 +43,17 @@ std::string with_commas(std::int64_t value)
         ++count;
     }
     std::reverse(grouped.begin(), grouped.end());
-    return (neg ? "-$" : "$") + grouped;
+    if (neg) {
+        grouped.insert(grouped.begin(), '-');
+    }
+    return grouped;
+}
+
+// Funds, taxes, and department costs. The sign sits in front of the dollar.
+std::string with_commas(std::int64_t value)
+{
+    const bool neg = value < 0;
+    return (neg ? "-$" : "$") + grouped_count(neg ? -value : value);
 }
 
 const char *kMonths[] = {
@@ -1812,9 +1824,9 @@ std::string CitySession::scenario_meter() const
         return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < 80";
     }
     if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
-        return "Score " + std::to_string(static_cast<int>(sim.cityScore)) + " → goal > 500";
+        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + " → goal > 500";
     }
-    return "Population " + with_commas(people > 0 ? people : 0) + " → 100,000";
+    return "Population " + grouped_count(people > 0 ? people : 0) + " → 100,000";
 }
 
 std::string CitySession::scenario_outcome_text(bool won) const
@@ -1834,7 +1846,7 @@ std::string CitySession::scenario_outcome_text(bool won) const
         text += ".";
     } else {
         const Evaluation report = evaluation();
-        text += " Population " + with_commas(report.population) + ", score " + with_commas(report.score) + ".";
+        text += " Population " + grouped_count(report.population) + ", score " + grouped_count(report.score) + ".";
     }
     return text;
 }

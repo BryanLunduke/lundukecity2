@@ -863,9 +863,133 @@ void Shell::run_review_checks()
         fail("population " + number + " has no thousands separator");
         return;
     }
+    if (meter.find('$') != std::string::npos) {
+        fail("population goal shows a dollar sign: " + meter);
+        return;
+    }
+    const std::string outcome = session_.scenario_outcome_text(false);
+    if (outcome.find("Population ") == std::string::npos || outcome.find('$') != std::string::npos) {
+        fail("the scenario result shows population as money: " + outcome);
+        return;
+    }
+
+    // A touch drag scrolls the Scenario and Load lists. The highlight stays
+    // on the row that was already chosen. A short lift is the tap that changes it.
+    auto find_row = [&](int id) -> const Hotspot * {
+        for (const Hotspot &hot : hot_) {
+            if (hot.id == id) {
+                return &hot;
+            }
+        }
+        return nullptr;
+    };
+    dialog_ = Dialog::Scenario;
+    scenario_index_ = 6;
+    list_index_ = 6;
+    list_scroll_ = 0;
+    list_scroll_free_ = false;
+    focus_id_ = kListItem;
+    render();
+    const int boston_row = scenario_index_ - list_scroll_;
+    const Hotspot *boston = find_row(kListItem + boston_row);
+    if (boston == nullptr) {
+        fail("Boston is not on the scenario list");
+        return;
+    }
+    const int boston_index = scenario_index_;
+    const float boston_x = static_cast<float>(boston->x + boston->w * 0.5);
+    const float boston_y = static_cast<float>(boston->y + boston->h * 0.5);
+    finger(SDL_EVENT_FINGER_DOWN, 1, boston_x, boston_y);
+    finger(SDL_EVENT_FINGER_MOTION, 1, boston_x, boston_y - 96.0f);
+    finger(SDL_EVENT_FINGER_UP, 1, boston_x, boston_y - 96.0f);
+    if (scenario_index_ != boston_index) {
+        fail("a touch drag moved the scenario selection from Boston to " +
+             std::string(CitySession::scenario_def(scenario_index_).name));
+        return;
+    }
+    render();
+    const int rio_row = 7 - list_scroll_;
+    const Hotspot *rio = rio_row >= 0 ? find_row(kListItem + rio_row) : nullptr;
+    if (rio == nullptr) {
+        fail("Rio is not on the scenario list");
+        return;
+    }
+    const float rio_x = static_cast<float>(rio->x + rio->w * 0.5);
+    const float rio_y = static_cast<float>(rio->y + rio->h * 0.5);
+    finger(SDL_EVENT_FINGER_DOWN, 1, rio_x, rio_y);
+    finger(SDL_EVENT_FINGER_MOTION, 1, rio_x, rio_y + 4.0f);
+    finger(SDL_EVENT_FINGER_UP, 1, rio_x, rio_y + 4.0f);
+    if (scenario_index_ != 7) {
+        fail("a tap did not select Rio");
+        return;
+    }
+
+    files_.clear();
+    for (int i = 0; i < 40; ++i) {
+        files_.push_back("city-" + std::to_string(i) + ".cty");
+    }
+    files_save_ = false;
+    dialog_ = Dialog::Files;
+    list_index_ = 4;
+    list_scroll_ = 0;
+    list_scroll_free_ = false;
+    focus_id_ = kListItem;
+    render();
+    if (list_max_scroll(static_cast<int>(files_.size()), std::max(1, files_visible_)) < 1) {
+        fail("the load list does not scroll");
+        return;
+    }
+    const int load_row = list_index_ - list_scroll_;
+    const Hotspot *load_hot = find_row(kListItem + load_row);
+    if (load_hot == nullptr) {
+        fail("the load list row is missing");
+        return;
+    }
+    const float load_x = static_cast<float>(load_hot->x + load_hot->w * 0.5);
+    const float load_y = static_cast<float>(load_hot->y + load_hot->h * 0.5);
+    finger(SDL_EVENT_FINGER_DOWN, 1, load_x, load_y);
+    finger(SDL_EVENT_FINGER_MOTION, 1, load_x, load_y - 96.0f);
+    finger(SDL_EVENT_FINGER_UP, 1, load_x, load_y - 96.0f);
+    if (list_index_ != 4) {
+        fail("a touch drag moved the load selection");
+        return;
+    }
+    if (list_scroll_ < 1) {
+        fail("a touch drag did not scroll the load list");
+        return;
+    }
+    const Hotspot *other = nullptr;
+    int other_index = -1;
+    for (const Hotspot &hot : hot_) {
+        if (hot.id < kListItem || hot.id >= kListItem + 64) {
+            continue;
+        }
+        const int index = list_scroll_ + (hot.id - kListItem);
+        if (index != list_index_ && index >= 0 && index < static_cast<int>(files_.size())) {
+            other = &hot;
+            other_index = index;
+            break;
+        }
+    }
+    if (other == nullptr) {
+        fail("the load list has no other row to tap");
+        return;
+    }
+    const float other_x = static_cast<float>(other->x + other->w * 0.5);
+    const float other_y = static_cast<float>(other->y + other->h * 0.5);
+    finger(SDL_EVENT_FINGER_DOWN, 1, other_x, other_y);
+    finger(SDL_EVENT_FINGER_MOTION, 1, other_x + 3.0f, other_y + 3.0f);
+    finger(SDL_EVENT_FINGER_UP, 1, other_x + 3.0f, other_y + 3.0f);
+    if (list_index_ != other_index) {
+        fail("a tap did not select the load row under the finger");
+        return;
+    }
+    dialog_ = Dialog::None;
+    list_scroll_free_ = false;
 
     map_.set_tile_size(kMapTileOverview);
     layout();
+    clamp_scroll();
     gamepad_nav_ = true;
     cursor_x_ = static_cast<float>(win_w_ - 1);
     cursor_y_ = static_cast<float>(view_y_ + view_h_ * 0.5);
@@ -873,6 +997,36 @@ void Shell::run_review_checks()
     const double map_right = snapped_map_origin(view_x_, map_ox_, scroll_x_) + map_.pixel_width();
     if (cursor_y_ >= view_y_ && cursor_y_ < view_y_ + view_h_ && cursor_x_ >= map_right - 0.5) {
         fail("the gamepad cursor rests in the right grey band");
+        return;
+    }
+    auto stick_down_stays_on_map = [&](const char *zoom) {
+        const double map_bottom = snapped_map_origin(view_y_, map_oy_, scroll_y_) + map_.pixel_height();
+        const double limit = std::min(static_cast<double>(view_y_) + view_h_, map_bottom);
+        cursor_x_ = static_cast<float>(view_x_ + view_w_ * 0.5);
+        cursor_y_ = static_cast<float>(win_h_ - 2);
+        clamp_gamepad_cursor(0.0f, 1.0f);
+        if (!(cursor_y_ < limit - 0.5)) {
+            fail(std::string("the gamepad cursor starts in the hint bar at ") + zoom);
+            return false;
+        }
+        for (int frame = 0; frame < 40; ++frame) {
+            const double step = 700.0 * (16.0 / 1000.0);
+            cursor_y_ = static_cast<float>(std::min<double>(win_h_ - 1, cursor_y_ + step));
+            clamp_gamepad_cursor(0.0f, 1.0f);
+        }
+        if (!(cursor_y_ < limit - 0.5) || cursor_y_ >= static_cast<float>(view_y_ + view_h_)) {
+            fail(std::string("holding the stick down left the map at ") + zoom);
+            return false;
+        }
+        return true;
+    };
+    if (!stick_down_stays_on_map("8px")) {
+        return;
+    }
+    map_.set_tile_size(32);
+    layout();
+    clamp_scroll();
+    if (!stick_down_stays_on_map("32px")) {
         return;
     }
     gamepad_nav_ = false;

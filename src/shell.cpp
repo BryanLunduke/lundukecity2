@@ -1931,6 +1931,10 @@ void Shell::handle_event(const SDL_Event &event)
         // 8px. A shorter move is still a tap. Past that, the drag builds.
         constexpr float kTouchArm2 = 8.0f * 8.0f;
         if (fingers_.size() >= 2) {
+            // A second finger is not a tap on the list row under the first.
+            if (list_touch_row_) {
+                list_touch_dragged_ = true;
+            }
             // Pending: nothing was built, so cancel. Armed: end the stroke
             // and keep the tiles. Never restore a map or the treasury.
             if (touch_armed_) {
@@ -1965,6 +1969,18 @@ void Shell::handle_event(const SDL_Event &event)
             // The finger is already gone, so this must not look at fingers_.
             pointer_x_ = x;
             pointer_y_ = y;
+            // A list row selects on lift. Crossing 8px is a drag: it only scrolled.
+            if (list_touch_row_ && !list_touch_dragged_) {
+                const float dx = x - list_touch_origin_x_;
+                const float dy = y - list_touch_origin_y_;
+                if (dx * dx + dy * dy <= kTouchArm2 &&
+                    (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages)) {
+                    const int id = hit(x, y);
+                    if (id >= kListItem && id < kListItem + 64) {
+                        on_hotspot(id, x, y);
+                    }
+                }
+            }
             if (touch_pending_ && !touch_armed_) {
                 const float dx = x - touch_down_x_;
                 const float dy = y - touch_down_y_;
@@ -1980,6 +1996,7 @@ void Shell::handle_event(const SDL_Event &event)
             reset_touch_state();
         } else if (up) {
             // One finger of a pinch lifted. The one still down is not a tap.
+            list_touch_dragged_ = true;
             pinch_dist_ = 0;
             touch_pending_ = false;
             touch_armed_ = false;
@@ -1995,7 +2012,11 @@ void Shell::handle_event(const SDL_Event &event)
             pointer_y_ = fingers_[0].y;
             if (down) {
                 pointer_down_ = true;
+                list_touch_row_ = false;
+                list_touch_dragged_ = false;
                 const int id = hit(pointer_x_, pointer_y_);
+                const bool list_dialog =
+                    dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages;
                 if (id == kPaletteId && dialog_ == Dialog::None) {
                     press_palette(pointer_x_ - side_x_, pointer_y_ - pal_y_);
                 } else if (id == kMinimapId && dialog_ == Dialog::None) {
@@ -2009,10 +2030,15 @@ void Shell::handle_event(const SDL_Event &event)
                     touch_armed_ = false;
                     touch_down_x_ = pointer_x_;
                     touch_down_y_ = pointer_y_;
+                } else if (list_dialog && id >= kListItem && id < kListItem + 64) {
+                    // Selection waits for the lift, so a drag cannot change it.
+                    list_touch_row_ = true;
+                    list_touch_origin_x_ = x;
+                    list_touch_origin_y_ = y;
                 } else {
                     on_hotspot(id, pointer_x_, pointer_y_);
                 }
-                if (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages) {
+                if (list_dialog) {
                     list_touch_y_ = y;
                 }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_minimap_) {
@@ -2021,9 +2047,26 @@ void Shell::handle_event(const SDL_Event &event)
                        (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages) &&
                        list_touch_y_ >= 0.0f) {
                 const int rows = static_cast<int>((y - list_touch_y_) / 32.0f);
-                if (rows != 0) {
-                    nudge_file_list(-rows, false, true);
-                    list_touch_y_ += static_cast<float>(rows) * 32.0f;
+                if (list_dragging_) {
+                    // The scrollbar still tracks the finger by moving the selection.
+                    if (rows != 0) {
+                        nudge_file_list(-rows, false, true);
+                        list_touch_y_ += static_cast<float>(rows) * 32.0f;
+                    }
+                } else {
+                    if (list_touch_row_) {
+                        const float dx = x - list_touch_origin_x_;
+                        const float dy = y - list_touch_origin_y_;
+                        if (dx * dx + dy * dy > kTouchArm2) {
+                            list_touch_dragged_ = true;
+                        }
+                    }
+                    // A row that has not crossed 8px is still a tap. Anything
+                    // else only scrolls; the highlighted city stays put.
+                    if ((!list_touch_row_ || list_touch_dragged_) && rows != 0) {
+                        scroll_open_list(-rows);
+                        list_touch_y_ += static_cast<float>(rows) * 32.0f;
+                    }
                 }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_pending_ && !touch_armed_) {
                 const float dx = pointer_x_ - touch_down_x_;

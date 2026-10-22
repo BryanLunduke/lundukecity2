@@ -145,6 +145,7 @@ private:
     void zoom_by(int delta, double anchor_x, double anchor_y);
     // Pull a resting gamepad cursor off the grey band beside the map.
     // push_* is the stick; a push outward steps off the port onto the UI.
+    // Down is clamped onto the map so the cursor cannot fall into the hint bar.
     void clamp_gamepad_cursor(float push_x, float push_y);
     void toggle_fullscreen();
     void toggle_overlay(CitySession::MapLayer layer);
@@ -191,6 +192,10 @@ private:
     bool adjust_focused_slider(int direction);
     bool nudge_file_list(int delta, bool page, bool force);
     void reveal_file_list();
+    // Touch drag. Moves the window and leaves the selection where it is.
+    void scroll_open_list(int delta);
+    // Keep a touch-scrolled window put. A selection change reveals that row.
+    void place_list_window(int index, int count);
     void run_review_checks();
     int dp(int px) const;
     const char *ui_font() const;
@@ -329,7 +334,14 @@ private:
     double list_track_y_ = 0;
     double list_track_h_ = 1;
     bool list_dragging_ = false;
+    // Set while a touch drag has moved the window away from the selection.
+    // Paint must not snap the scroll back until the selection itself moves.
+    bool list_scroll_free_ = false;
     float list_touch_y_ = -1.0f;
+    float list_touch_origin_x_ = 0;
+    float list_touch_origin_y_ = 0;
+    bool list_touch_row_ = false;
+    bool list_touch_dragged_ = false;
     int scenario_index_ = 0;
     bool files_save_ = false;
     std::string files_dir_;
