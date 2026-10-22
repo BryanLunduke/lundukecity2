@@ -217,6 +217,14 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
         const bool flat = max_v <= min_v;
         if (flat) {
             max_v = min_v + 1.0;
+        } else if (min_v > 0.0) {
+            // A narrow range used to pin every trough on the axis. Leave a
+            // gap under the lowest real sample. A sample of zero still sits
+            // on the axis, because that reading is zero.
+            const double span = max_v - min_v;
+            const double lifted = min_v - span * 0.2;
+            min_v = lifted > 0.0 ? lifted : 0.0;
+            max_v += span * 0.05;
         }
         if (!labeled) {
             labeled = true;
