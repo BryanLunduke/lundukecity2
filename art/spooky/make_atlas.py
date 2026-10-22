@@ -45,8 +45,8 @@ CHANGED = PARK_TILES + FOUNTAIN_TILES + HOUSE_TILES + MANOR_TURRET + MANOR_FENCE
 
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
 # 8px overview, in tile order. The big-park sprite has its own hash.
-ATLAS_SHA = "c80b261913a7f61fba4b055e294553e541d20a10087c964fe81ecbd91a134fae"
-PARK_SHA = "a81b2c980f86d8c63ac1027f90e8d2013d1d81d1e36df9092acfcfb6967bc8c6"
+ATLAS_SHA = "2d3189e47c5ee06072ba3eb64f821650e9e55e38323e4add05e3455dabd81378"
+PARK_SHA = "7ee8b7ef45f17b50ce40a4a628d4321bab107a8c1117250e5358cb72e9a20ac5"
 
 GRASS = (0, 113, 0)
 LAWN = (0, 170, 0)
@@ -332,90 +332,202 @@ def _join_letters(rows: tuple[tuple[str, ...], ...], gap: str = ".") -> tuple[st
     return tuple(lines)
 
 
-def _stone_sprite(wide: bool) -> tuple[tuple[str, ...], dict[str, tuple[int, int, int] | None]]:
-    """Upright RIP slab. The wide one is for the 48px Big Park."""
-    ink = {
-        " ": None,
-        "o": INK,
-        "h": FACE_LIT,
-        "f": FACE,
-        "m": FACE_MID,
-        "s": FACE_SHADE,
-        "#": BLACK,
-        ".": FACE,
-        "d": BASE_STEP,
-        # Lighter than the grey field, so the step reads past the slab.
-        "e": (113, 113, 113),
-    }
-    if not wide:
-        # 3px letters. R is a top bar, a left bowl, and two feet. P closes.
-        letters = _join_letters((("###", "##.", "#.#"), ("#", "#", "#"), ("###", "#.#", "##.")))
-        rows = (
-            "     ooo     ",
-            "    ohhho    ",
-            "  omffffsso  ",
-            " o" + letters[0] + "o ",
-            " o" + letters[1] + "o ",
-            " o" + letters[2] + "o ",
-            " ooooooooooo ",
-            "eddddddddddde",
-        )
-    else:
-        letters = _join_letters(
-            (
-                ("####", "#..#", "###.", "#..#"),
-                ("###", ".#.", ".#.", "###"),
-                ("####", "#..#", "###.", "#..."),
-            )
-        )
-        rows = (
-            "       ooo       ",
-            "      ohhho      ",
-            "    ohffffso     ",
-            "   omffffffso    ",
-            " o" + letters[0] + "o ",
-            " o" + letters[1] + "o ",
-            " o" + letters[2] + "o ",
-            " o" + letters[3] + "o ",
-            "  offffffffffso  ",
-            " ooooooooooooooo ",
-            "eddddddddddddddde",
-        )
+# Light slab, dark outline, darker RIP. `e` is the step end, lighter than
+# the grey field so the base reads wider than the slab. `k` is a crack.
+_STONE_INK = {
+    " ": None,
+    "o": INK,
+    "h": FACE_LIT,
+    "f": FACE,
+    "m": FACE_MID,
+    "s": FACE_SHADE,
+    "#": BLACK,
+    ".": FACE,
+    "d": BASE_STEP,
+    "e": (113, 113, 113),
+    "k": INK,
+    "c": BLACK,
+}
+
+
+def _rect_rows(rows: tuple[str, ...], name: str) -> tuple[str, ...]:
     width = len(rows[0])
     if any(len(row) != width for row in rows):
-        raise SystemExit("tombstone rows are not rectangular")
-    return rows, ink
+        raise SystemExit(f"{name} rows are not rectangular")
+    return rows
+
+
+def _rip_letters(wide: bool) -> tuple[str, ...]:
+    """RIP. The wide face is 7px so it reads when the 16px tile is doubled."""
+    if wide:
+        glyphs = (("###", "#.#", "##.", "#.#"), ("#", "#", "#", "#"), ("###", "#.#", "##.", "#.."))
+    else:
+        # 5px. A stem, a gap, a stem: suggested at 16px, clearer at 32px.
+        glyphs = (("##", "#.", "##", "#."), ("#", "#", "#", "#"), ("##", "#.", "##", "#."))
+    return _join_letters(glyphs, gap="")
+
+
+def _stone_rows(kind: str) -> tuple[str, ...]:
+    """Upright light slabs. The base row is wider than the arch."""
+    if kind in ("tall", "crack"):
+        letters = _rip_letters(True)
+        rows = _rect_rows(
+            (
+                "   ooo   ",
+                "  ohhho  ",
+                " ofmmmso ",
+                "o" + letters[0] + "o",
+                "o" + letters[1] + "o",
+                "o" + letters[2] + "o",
+                "o" + letters[3] + "o",
+                " ofmmmso ",
+                " ofmmmso ",
+                " ooooooo ",
+                "eddddddde",
+            ),
+            kind,
+        )
+        if kind == "crack":
+            cracked = []
+            for index, row in enumerate(rows):
+                chars = list(row)
+                column = 3 + (index - 3)
+                if 3 <= index <= 8 and 0 <= column < len(chars) and chars[column] in "fms#.":
+                    chars[column] = "k"
+                cracked.append("".join(chars))
+            rows = tuple(cracked)
+        return rows
+    if kind == "mid":
+        letters = _rip_letters(False)
+        return _rect_rows(
+            (
+                "  ooo  ",
+                " ohhho ",
+                "ofmmmfo",
+                "o" + letters[0] + "o",
+                "o" + letters[1] + "o",
+                "o" + letters[2] + "o",
+                "o" + letters[3] + "o",
+                "ofmmmfo",
+                " ooooo ",
+                "eddddde",
+            ),
+            kind,
+        )
+    if kind == "tiny":
+        return _rect_rows(
+            (
+                " oo ",
+                "ohho",
+                "o#.o",
+                "o#.o",
+                "oooo",
+                "dddd",
+            ),
+            kind,
+        )
+    if kind == "cross":
+        return _rect_rows(
+            (
+                "  c  ",
+                " ccc ",
+                "  c  ",
+                "  c  ",
+                " ccc ",
+                "ddddd",
+            ),
+            kind,
+        )
+    if kind == "mark":
+        # Narrow cross, for the gutter beside a wide slab.
+        return _rect_rows(
+            (
+                " c ",
+                "ccc",
+                " c ",
+                " c ",
+                "ddd",
+            ),
+            kind,
+        )
+    if kind == "lean":
+        # Bottom shifts right, so the slab leans instead of standing in the row.
+        straight = (
+            "  ooo  ",
+            " ohhho ",
+            "of#m#fo",
+            "of#.#fo",
+            "ofmmmfo",
+            " ooooo ",
+            "ddddddd",
+        )
+        amount = 2
+        width = len(straight[0]) + amount
+        leaned = []
+        for index, row in enumerate(straight):
+            shift = amount * index // (len(straight) - 1)
+            leaned.append(" " * shift + row + " " * (width - shift - len(row)))
+        return _rect_rows(tuple(leaned), kind)
+    raise SystemExit(f"unknown stone {kind}")
 
 
 def _stamp_sprite(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...], ink: dict[str, tuple[int, int, int] | None]) -> None:
     _blit_rows(image, x0, y0, rows, ink)
 
 
+def _shadow_sprite(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...], ink: dict, limit: int | None) -> None:
+    """One-pixel drop shadow, down and right, only on the grey field."""
+    px = image.load()
+    width, height = image.size
+    for dy, row in enumerate(rows):
+        for dx, char in enumerate(row):
+            if ink.get(char) is None:
+                continue
+            sx, sy = x0 + dx + 1, y0 + dy + 1
+            if not (0 <= sx < width and 0 <= sy < height):
+                continue
+            if limit is not None and not (1 <= sx < limit and 1 <= sy < limit):
+                continue
+            colour = px[sx, sy]
+            rgb = colour[:3] if len(colour) == 4 else colour
+            if rgb not in GREY_SET:
+                continue
+            shaded = (32, 32, 32)
+            px[sx, sy] = (*shaded, 255) if len(colour) == 4 else shaded
+
+
 def _paint_parks(atlas: Image.Image) -> None:
-    """One RIP stone on grey dirt. The 1px rim is the shared stipple."""
-    rows, ink = _stone_sprite(False)
-    # Kept off the rim so the four parks tile into each other.
+    """Several different stones per park. The 1px rim stays the shared stipple."""
+    # Corners change from tile to tile, so a block of parks is not one grid.
     plans = {
-        40: ((1, 3), ((4, 13), (5, 13), (14, 5))),
-        41: ((2, 6), ((4, 2), (5, 2), (8, 14))),
-        42: ((1, 4), ((6, 13), (7, 13), (14, 2))),
-        43: ((2, 2), ((4, 12), (5, 13), (14, 8))),
+        40: (("tall", 1, 1), ("mark", 12, 2), ("tiny", 11, 8), ((10, 13), (1, 14))),
+        41: (("tiny", 1, 1), ("mark", 1, 8), ("tall", 6, 3), ((5, 1), (5, 14))),
+        42: (("lean", 1, 1), ("tiny", 1, 9), ("mark", 12, 2), ((10, 4), (14, 12))),
+        43: (("mark", 1, 1), ("tiny", 1, 8), ("crack", 6, 2), ((5, 6), (14, 14))),
     }
-    stone_h = len(rows)
-    stone_w = len(rows[0])
     borders = []
-    for index, (origin, tufts) in plans.items():
+    for index, items in plans.items():
         tile = _grey_tile()
-        sx, sy = origin
-        if sx <= 0 or sy <= 0 or sx + stone_w >= TILE or sy + stone_h >= TILE:
-            raise SystemExit(f"park {index} stone touches the rim")
-        _stamp_sprite(tile, sx, sy, rows, ink)
+        tufts = items[-1]
+        for kind, sx, sy in items[:-1]:
+            rows = _stone_rows(kind)
+            if sx <= 0 or sy <= 0 or sx + len(rows[0]) >= TILE or sy + len(rows) >= TILE:
+                raise SystemExit(f"park {index} {kind} touches the rim")
+            px = tile.load()
+            for dy, row in enumerate(rows):
+                for dx, char in enumerate(row):
+                    if _STONE_INK.get(char) is None:
+                        continue
+                    if px[sx + dx, sy + dy] not in GREY_SET:
+                        raise SystemExit(f"park {index} {kind} overlaps another stone")
+            _stamp_sprite(tile, sx, sy, rows, _STONE_INK)
+            _shadow_sprite(tile, sx, sy, rows, _STONE_INK, TILE - 1)
         px = tile.load()
         for tx, ty in tufts:
             if not (1 <= tx < TILE - 1 and 1 <= ty < TILE - 1):
                 raise SystemExit(f"park {index} tuft on the rim")
             if px[tx, ty] not in GREY_SET:
-                raise SystemExit(f"park {index} tuft landed on the stone")
+                raise SystemExit(f"park {index} tuft landed on a stone")
             px[tx, ty] = TUFT if (tx + ty) % 2 == 0 else TUFT_LIT
         borders.append(_rim(tile))
         _paste(atlas, index, tile)
@@ -437,26 +549,25 @@ def _rim(tile: Image.Image) -> tuple:
 
 
 def _crypt_rows(glow: tuple[int, int, int]) -> tuple[tuple[str, ...], dict[str, tuple[int, int, int] | None]]:
-    """Gothic mausoleum. Only the doorway candle changes between frames."""
-    # Pointed slate roof, a cross, columns, and an iron door. The candle
-    # is the only pixel that moves.
+    """Crypt in the same 3/4 as the houses: roof from above, door on the front.
+
+    The left roof slope is lit. The right slope, the right buttress, and the
+    right wall are in shade. Only the candle pixels change between frames.
+    """
     rows = (
-        "     ss     ",
-        "    ssss    ",
-        "     rr     ",
-        "    rLSr    ",
-        "   rLLSSr   ",
-        "  rLLLSSSr  ",
-        " rLLLLSSSSr ",
-        " oCWWWWWWCo ",
-        " oC#dddd#Co ",
-        " oC#diid#Co ",
-        " oC#dggd#Co ",
-        " oooooooooo ",
-        "TTTTTTTTTTTT",
+        "   ss   ",
+        "  ssss  ",
+        "   rr   ",
+        "  rLSr  ",
+        " rLLSSr ",
+        "rLLLSSSr",
+        "oBWWWWDo",
+        "oB#dd#Do",
+        "oB#gg#Do",
+        "TTTTTTTT",
     )
-    if any(len(row) != 12 for row in rows):
-        raise SystemExit("crypt rows are not 12 wide")
+    if any(len(row) != 8 for row in rows):
+        raise SystemExit("crypt rows are not 8 wide")
     ink = {
         " ": None,
         "s": SPIKE,
@@ -465,10 +576,10 @@ def _crypt_rows(glow: tuple[int, int, int]) -> tuple[tuple[str, ...], dict[str, 
         "S": (56, 56, 56),
         "o": INK,
         "W": (113, 113, 113),
-        "C": COLUMN_LIT,
+        "B": COLUMN_LIT,
+        "D": (81, 81, 81),
         "#": BLACK,
         "d": (32, 32, 32),
-        "i": (182, 182, 182),
         "g": glow,
         "T": STEP,
     }
@@ -479,6 +590,10 @@ def _paint_fountains(atlas: Image.Image) -> None:
     hedge = HEDGE
     base = _crop(atlas, 840)
     glows = (WIN_ORANGE, WIN_YELLOW, WIN_HOT, WIN_DIM)
+    # 3x4, so they sit in the three free pixels beside the crypt and stop
+    # above the hedge on the bottom row.
+    foot = _rect_rows((" o ", "o#o", "ooo", "ddd"), "crypt foot")
+    mark = _rect_rows((" c ", "ccc", " c ", "ddd"), "crypt cross")
     frames = []
     for glow in glows:
         tile = _grey_tile()
@@ -490,7 +605,13 @@ def _paint_fountains(atlas: Image.Image) -> None:
                     px[x, y] = hedge
         rows, ink = _crypt_rows(glow)
         # Interior only: the hedge rim stays put on every frame.
-        _stamp_sprite(tile, 2, 1, rows, ink)
+        _stamp_sprite(tile, 4, 1, rows, ink)
+        # A slab and a cross at the foot, on grey dirt, off the hedge rim.
+        _stamp_sprite(tile, 1, 11, foot, _STONE_INK)
+        _stamp_sprite(tile, 12, 11, mark, _STONE_INK)
+        _shadow_sprite(tile, 4, 1, rows, ink, TILE - 1)
+        _shadow_sprite(tile, 1, 11, foot, _STONE_INK, TILE - 1)
+        _shadow_sprite(tile, 12, 11, mark, _STONE_INK, TILE - 1)
         frames.append(tile)
     if len({_rim(frame) for frame in frames}) != 1:
         raise SystemExit("crypt frames do not share a rim")
@@ -698,36 +819,6 @@ def _draw_fence(image: Image.Image, original: Image.Image) -> None:
             px[x, bottom] = WALL
 
 
-def _roof(put, x0: int, y0: int, x1: int, y1: int, peak_x: int) -> None:
-    """Steep gable from (peak_x, y0) down to a base on y1 between x0 and x1."""
-    span = max(1, y1 - y0)
-    for y in range(y0, y1 + 1):
-        t = (y - y0) / span
-        left = int(round(peak_x + (x0 - peak_x) * t))
-        right = int(round(peak_x + (x1 - peak_x) * t))
-        if left > right:
-            left, right = right, left
-        for x in range(left, right + 1):
-            if x == left or x == right or y == y0:
-                put(x, y, INK)
-            elif x < peak_x:
-                put(x, y, SLATE_LIT if (x + y) % 2 == 0 else SLATE_LIT2)
-            else:
-                put(x, y, SLATE_SHADE if (x + y) % 2 == 0 else WALL_SHADE)
-
-
-def _fill_rect(put, x0: int, y0: int, x1: int, y1: int, colour) -> None:
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            put(x, y, colour(x, y) if callable(colour) else colour)
-
-
-def _wall(x: int, y: int) -> tuple[int, int, int]:
-    if x < 24:
-        return PURPLE_FACE if (x + y) % 2 == 0 else PURPLE_DEEP
-    return (32, 32, 32) if (x + y) % 2 == 0 else PURPLE_DEEP
-
-
 def _stamp_pattern(put, x0: int, y0: int, rows: tuple[str, ...], ink: dict[str, tuple[int, int, int]]) -> None:
     for dy, row in enumerate(rows):
         for dx, char in enumerate(row):
@@ -736,42 +827,13 @@ def _stamp_pattern(put, x0: int, y0: int, rows: tuple[str, ...], ink: dict[str, 
                 put(x0 + dx, y0 + dy, colour)
 
 
-def _window_pair(put, x: int, y: int, left: tuple[int, int, int], right: tuple[int, int, int]) -> None:
-    def one(ox: int, glow: tuple[int, int, int]) -> None:
-        _stamp_pattern(
-            put,
-            ox,
-            y,
-            ("####", "#gg#", "#gg#", "#gg#", "####"),
-            {"#": BLACK, "g": glow},
-        )
-
-    one(x, left)
-    one(x + 5, right)
-
-
-def _lancet(put, x: int, y: int, glow: tuple[int, int, int]) -> None:
-    _stamp_pattern(
-        put,
-        x,
-        y,
-        ("  #  ", " ### ", "#ggg#", "#ggg#", "#ggg#", "#ggg#", "#####"),
-        {"#": BLACK, "g": glow},
-    )
-
-
-def _arch(put, x: int, y: int, glow: tuple[int, int, int]) -> None:
-    _stamp_pattern(
-        put,
-        x,
-        y,
-        (" ### ", "#ggg#", "#ggg#", "#ggg#", "#####"),
-        {"#": BLACK, "g": glow},
-    )
-
-
 def _paint_haunted(src: Image.Image) -> Image.Image:
-    """Gothic mansion across the 3x3. The lot border stays the SVGA ground."""
+    """Gothic mansion in the residential 3/4: roof from above, front along the bottom.
+
+    Light falls from the upper left, same as the neighbouring blocks, so the
+    left roof slopes are pale and the right wall is the dark side. The lot
+    border stays the SVGA ground.
+    """
     out = _lot_fill(src)
     px = out.load()
     sp = src.load()
@@ -788,72 +850,100 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
         px[x, y] = colour
         painted.add((x, y))
 
-    _fill_rect(put, 5, 17, 42, 39, _wall)
-    # Side gables, then the taller central tower over them.
-    _roof(put, 5, 8, 17, 17, 11)
-    _roof(put, 30, 8, 42, 17, 36)
-    _roof(put, 16, 4, 32, 17, 24)
-    # Floor courses and a porch roof.
-    for y in (24, 31, 37):
-        for x in range(5, 43):
-            put(x, y, STONE_DARK if x < 24 else (56, 56, 56))
-    # Porch deck first, then the windows and the door on top of it.
-    _fill_rect(put, 5, 38, 42, 42, lambda x, y: STEP if (x + y) % 2 == 0 else COLUMN)
-    for x in range(5, 43):
-        put(x, 37, INK)
-    for post in (6, 13, 34, 40):
-        for y in range(37, 43):
-            put(post, y, COLUMN_LIT if y == 37 else COLUMN)
-            put(post + 1, y, STONE_DARK)
-    for x in range(5, 43):
-        if x % 2 == 0:
-            put(x, 41, (81, 81, 81))
-    _window_pair(put, 6, 19, WIN_YELLOW, WIN_ORANGE)
-    _window_pair(put, 6, 26, WIN_ORANGE, WIN_DIM)
-    _window_pair(put, 6, 32, WIN_HOT, WIN_YELLOW)
-    _lancet(put, 18, 18, WIN_ORANGE)
-    _lancet(put, 26, 18, WIN_YELLOW)
-    _arch(put, 21, 26, WIN_HOT)
-    _window_pair(put, 32, 19, WIN_ORANGE, WIN_YELLOW)
-    _window_pair(put, 32, 26, WIN_YELLOW, WIN_ORANGE)
-    _window_pair(put, 32, 32, WIN_DIM, WIN_HOT)
-    # Red-brown door under the porch beam, with a knob and front steps.
+    def tower(peak_x: int, peak_y: int, base_y: int, half: int) -> None:
+        span = max(1, base_y - peak_y)
+        for y in range(peak_y, base_y + 1):
+            reach = max(0, int(round(half * (y - peak_y) / span)))
+            left, right = peak_x - reach, peak_x + reach
+            for x in range(left, right + 1):
+                if x == left or x == right or y == peak_y:
+                    put(x, y, INK)
+                elif x == peak_x:
+                    put(x, y, (130, 130, 130))
+                elif x < peak_x:
+                    put(x, y, (113, 113, 113) if (x + y) % 2 == 0 else SLATE_LIT2)
+                else:
+                    put(x, y, ROOF if (x + y) % 2 == 0 else SLATE_SHADE)
+
+    # Side towers first. The centre one is taller and paints over them.
+    tower(12, 10, 22, 7)
+    tower(36, 10, 22, 7)
+    tower(24, 6, 20, 9)
+    # Roof plane of the house itself, seen from above, under the towers.
+    for y in range(21, 33):
+        for x in range(6, 40):
+            if x < 23:
+                put(x, y, SLATE_LIT if (x + y) % 2 == 0 else SLATE_LIT2)
+            elif x == 23:
+                put(x, y, (130, 130, 130))
+            else:
+                put(x, y, SLATE_SHADE if (x + y) % 2 == 0 else ROOF)
+        put(5, y, INK)
+        put(39, y, INK)
+    # Right-hand wall. This is the shaded side the other houses show.
+    for y in range(22, 42):
+        for x in range(40, 44):
+            put(x, y, WALL if (x + y) % 2 == 0 else PURPLE_DEEP)
+        put(43, y, INK)
+    # Front wall, a short band under the eave.
+    for y in range(33, 41):
+        for x in range(6, 40):
+            if x < 22:
+                put(x, y, PURPLE_FACE if (x + y) % 2 == 0 else PURPLE_DEEP)
+            else:
+                put(x, y, PURPLE_DEEP if (x + y) % 2 == 0 else WALL_SHADE)
+    for x in range(5, 40):
+        put(x, 33, INK)
+
+    def window(x: int, y: int, glow: tuple[int, int, int], wide: int = 3, high: int = 2) -> None:
+        for yy in range(y, y + high + 2):
+            for xx in range(x, x + wide + 2):
+                put(xx, yy, BLACK)
+        for yy in range(y + 1, y + high + 1):
+            for xx in range(x + 1, x + wide + 1):
+                put(xx, yy, glow)
+
+    window(8, 35, WIN_YELLOW)
+    window(14, 35, WIN_ORANGE)
+    window(29, 35, WIN_ORANGE)
+    window(34, 35, WIN_YELLOW)
+    window(40, 26, WIN_ORANGE, 2, 2)
+    window(40, 34, WIN_YELLOW, 2, 2)
     _stamp_pattern(
         put,
         21,
-        31,
+        34,
         (
-            "######",
-            "#d##d#",
-            "#d##d#",
-            "#d##d#",
-            "#d##d#",
-            "#dk#d#",
-            "######",
+            "#####",
+            "#d#d#",
+            "#d#d#",
+            "#dkd#",
+            "#####",
         ),
         {"#": DOOR_DARK, "d": DOOR_RED, "k": KNOB},
     )
-    _fill_rect(put, 19, 39, 29, 40, STEP)
-    _fill_rect(put, 18, 41, 30, 42, STEP_DARK)
-    _fill_rect(put, 26, 43, 30, 47, lambda x, y: STEP if y % 2 == 0 else STEP_DARK)
-    # Silhouette against the lot, then the spires, which stay light.
-    skip = {BLACK, WIN_YELLOW, WIN_HOT, WIN_ORANGE, WIN_DIM, DOOR_RED, DOOR_DARK, KNOB, STEP, STEP_DARK}
-    for y in range(48):
-        for x in range(48):
-            if (x, y) not in painted or px[x, y] in skip:
-                continue
-            for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):
-                nx, ny = x + dx, y + dy
-                if not (0 <= nx < 48 and 0 <= ny < 48) or (nx, ny) not in painted:
-                    px[x, y] = INK
-                    break
-    for peak_x, peak_y in ((11, 6), (36, 6), (24, 3)):
-        put(peak_x, peak_y, SPIKE)
-        put(peak_x, peak_y + 1, SPIKE)
-        put(peak_x - 1, peak_y + 1, SPIKE)
-        put(peak_x + 1, peak_y + 1, SPIKE)
-        put(peak_x, peak_y + 2, INK)
-    # Anything we did not claim keeps the SVGA lot, including the lawn rim.
+    # Stone porch along the front, with a short return on the shaded side.
+    for y in range(41, 44):
+        for x in range(6, 40):
+            put(x, y, STEP if (x + y) % 2 == 0 else COLUMN)
+        for x in range(40, 44):
+            put(x, y, STEP_DARK)
+    for x in range(6, 44):
+        put(x, 41, INK)
+    for post in (8, 15, 31, 37, 41):
+        for y in range(41, 44):
+            put(post, y, COLUMN_LIT if y == 41 else COLUMN)
+    for y in range(42, 44):
+        for x in range(21, 28):
+            put(x, y, STEP)
+    for y in range(44, 48):
+        for x in range(26, 31):
+            put(x, y, STEP if (x + y) % 2 == 0 else STEP_DARK)
+    for x, y in ((12, 8), (36, 8), (24, 4)):
+        put(x, y, SPIKE)
+        put(x, y + 1, SPIKE)
+        put(x - 1, y + 1, SPIKE)
+        put(x + 1, y + 1, SPIKE)
     for y in range(48):
         for x in range(48):
             if (x, y) not in painted and sp[x, y] in GROUND:
@@ -954,22 +1044,28 @@ def _paint_big_park(classic: Image.Image) -> Image.Image:
             if ty + 1 < 48 and px[tx, ty + 1][:3] in GREY_SET:
                 px[tx, ty + 1] = (*TUFT_LIT, 255)
     rgb = image.convert("RGB")
-    # The open ground is the old pond and the bottom lawn. Two wide RIP
-    # slabs there, and one smaller slab that still clears the trees.
-    wide_rows, wide_ink = _stone_sprite(True)
-    small_rows, small_ink = _stone_sprite(False)
-    for rows, ink, ox, oy in (
-        (wide_rows, wide_ink, 23, 25),
-        (wide_rows, wide_ink, 16, 37),
-        (small_rows, small_ink, 34, 40),
+    # Scattered through the clearings. Sizes and corners differ, so the
+    # graves do not line up with the park tiles outside the sprite.
+    for kind, ox, oy in (
+        ("tall", 27, 24),
+        ("crack", 36, 36),
+        ("mid", 40, 0),
+        ("lean", 20, 40),
+        ("cross", 4, 41),
+        ("tiny", 42, 16),
+        ("mark", 30, 42),
     ):
+        rows = _stone_rows(kind)
+        op = rgb.load()
         for dy, row in enumerate(rows):
             for dx, char in enumerate(row):
-                if ink.get(char) is None:
+                if _STONE_INK.get(char) is None:
                     continue
-                if trees[oy + dy][ox + dx]:
-                    raise SystemExit(f"tombstone at {(ox, oy)} covers a tree")
-        _stamp_sprite(rgb, ox, oy, rows, ink)
+                x, y = ox + dx, oy + dy
+                if trees[y][x] or op[x, y] not in GREY_SET:
+                    raise SystemExit(f"tombstone {kind} at {(ox, oy)} hits {(x, y)}")
+        _stamp_sprite(rgb, ox, oy, rows, _STONE_INK)
+        _shadow_sprite(rgb, ox, oy, rows, _STONE_INK, None)
     painted = rgb.convert("RGBA")
     painted.putalpha(image.getchannel("A"))
     return painted
