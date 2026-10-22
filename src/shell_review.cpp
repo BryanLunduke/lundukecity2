@@ -137,7 +137,7 @@ void Shell::run_review_checks()
             fail("SVGA tiles did not load");
             return;
         }
-        svga_look_ = true;
+        drawn_look_ = 1;
         unsigned char svga_px[16 * 16 * 4];
         tile_atlas().blit(0, svga_px, 16 * 4);
         if (std::memcmp(classic_px, svga_px, sizeof(classic_px)) == 0) {
@@ -163,8 +163,8 @@ void Shell::run_review_checks()
             fail("a settings file without look should stay unset");
             return;
         }
-        tile_atlas().set_look(false);
-        svga_look_ = false;
+        tile_atlas().set_look(0);
+        drawn_look_ = 0;
         unsigned char back[16 * 16 * 4];
         tile_atlas().blit(0, back, 16 * 4);
         if (std::memcmp(classic_px, back, sizeof(classic_px)) != 0) {
@@ -186,22 +186,22 @@ void Shell::run_review_checks()
         const int stored_look = loaded_.look;
         loaded_.look = 1;
         set_look_preference(loaded_.look == 1);
-        if (svga_look_ || tile_atlas().use_svga() || look_pref_.setting() != 1) {
+        if (drawn_look_ != 0 || tile_atlas().use_svga() || look_pref_.setting() != 1) {
             fail("loading SVGA with no sheet stored Classic");
             return;
         }
         apply_action(Action::SvgaLook);
-        if (svga_look_ || tile_atlas().use_svga() || look_pref_.setting() != 1) {
+        if (drawn_look_ != 0 || tile_atlas().use_svga() || look_pref_.setting() != 1) {
             fail("picking SVGA with no sheet stored Classic");
             return;
         }
         apply_action(Action::ClassicLook);
-        if (svga_look_ || tile_atlas().use_svga() || look_pref_.setting() != 0) {
+        if (drawn_look_ != 0 || tile_atlas().use_svga() || look_pref_.setting() != 0) {
             fail("picking Classic did not store Classic");
             return;
         }
         set_look_preference(true);
-        if (svga_look_ || look_pref_.setting() != 1) {
+        if (drawn_look_ != 0 || look_pref_.setting() != 1) {
             fail("quitting would replace a stored SVGA choice with Classic");
             return;
         }
@@ -211,8 +211,69 @@ void Shell::run_review_checks()
         }
         set_look_preference(false);
         loaded_.look = stored_look;
-        if (svga_look_ || tile_atlas().use_svga()) {
+        if (drawn_look_ != 0 || tile_atlas().use_svga()) {
             fail("Classic did not come back after the missing-sheet check");
+            return;
+        }
+    }
+
+    // Spooky changes the park tile and leaves the rest of the SVGA sheet
+    // alone. A missing Spooky sheet is Classic on screen. The stored choice
+    // stays Spooky, the same way a missing SVGA sheet stays stored as SVGA.
+    {
+        if (!tile_atlas().spooky_available() || !tile_atlas().set_look(1)) {
+            fail("SVGA sheet was not ready for the Spooky compare");
+            return;
+        }
+        unsigned char svga_park[16 * 16 * 4];
+        unsigned char svga_dirt[16 * 16 * 4];
+        tile_atlas().blit(40, svga_park, 16 * 4);
+        tile_atlas().blit(0, svga_dirt, 16 * 4);
+        if (!tile_atlas().set_look(2) || !tile_atlas().use_spooky()) {
+            fail("Spooky tiles did not load");
+            return;
+        }
+        drawn_look_ = 2;
+        unsigned char spooky_park[16 * 16 * 4];
+        unsigned char spooky_dirt[16 * 16 * 4];
+        tile_atlas().blit(40, spooky_park, 16 * 4);
+        tile_atlas().blit(0, spooky_dirt, 16 * 4);
+        if (std::memcmp(svga_park, spooky_park, sizeof(svga_park)) == 0) {
+            fail("Spooky look did not change the park tile");
+            return;
+        }
+        if (std::memcmp(svga_dirt, spooky_dirt, sizeof(svga_dirt)) != 0) {
+            fail("Spooky look changed a tile that should match SVGA");
+            return;
+        }
+        map_.invalidate_all();
+        map_.sync();
+        minimap_.sync();
+        ui_scale::StoredSettings saved;
+        saved.look = 2;
+        const ui_scale::StoredSettings restored = ui_scale::settings_parse(ui_scale::settings_text(saved));
+        if (restored.look != 2) {
+            fail("Spooky look did not persist");
+            return;
+        }
+        tile_atlas().forget_spooky();
+        set_look_preference(2);
+        if (drawn_look_ != 0 || tile_atlas().use_spooky() || look_pref_.setting() != 2) {
+            fail("a missing Spooky sheet stored Classic");
+            return;
+        }
+        apply_action(Action::SpookyLook);
+        if (drawn_look_ != 0 || tile_atlas().use_spooky() || look_pref_.setting() != 2) {
+            fail("picking Spooky with no sheet stored Classic");
+            return;
+        }
+        if (!tile_atlas().recall_spooky() || !tile_atlas().spooky_available()) {
+            fail("Spooky sheet could not be restored");
+            return;
+        }
+        set_look_preference(0);
+        if (drawn_look_ != 0 || tile_atlas().use_svga() || tile_atlas().use_spooky()) {
+            fail("Classic did not come back after the Spooky check");
             return;
         }
     }

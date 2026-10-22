@@ -177,8 +177,8 @@ int main()
         return fail("SVGA 16px atlas left the VGA palette");
     }
 
-    if (atlas.set_look(false) || atlas.use_svga()) {
-        return fail("set_look(false) did not return to Classic");
+    if (!atlas.set_look(0) || atlas.use_svga()) {
+        return fail("set_look(0) did not return to Classic");
     }
     std::vector<std::uint32_t> back(classic_ground.size());
     atlas.blit(0, reinterpret_cast<unsigned char *>(back.data()), TileAtlas::kSize * 4);
@@ -187,6 +187,85 @@ int main()
     }
     std::vector<std::uint32_t> tile0(classic16.size());
     atlas.blit(52, reinterpret_cast<unsigned char *>(tile0.data()), TileAtlas::kSize * 4);
+
+    // Spooky is the SVGA sheet with a new look value. Dirt stays, the park
+    // tile changes, and the 8px overview of that tile is the snapped average.
+    if (!atlas.set_look(1)) {
+        return fail("could not return to SVGA for the Spooky compare");
+    }
+    std::vector<std::uint32_t> svga_dirt(classic16.size());
+    std::vector<std::uint32_t> svga_park(classic16.size());
+    std::vector<std::uint32_t> svga_park8(classic8.size());
+    atlas.blit(0, reinterpret_cast<unsigned char *>(svga_dirt.data()), TileAtlas::kSize * 4);
+    atlas.blit(40, reinterpret_cast<unsigned char *>(svga_park.data()), TileAtlas::kSize * 4);
+    atlas.blit_overview(40, reinterpret_cast<unsigned char *>(svga_park8.data()), TileAtlas::kOverview * 4);
+    if (!atlas.spooky_available() || !atlas.set_look(2) || !atlas.use_spooky()) {
+        return fail("set_look(2) did not switch to Spooky");
+    }
+    std::vector<std::uint32_t> spooky_dirt(classic16.size());
+    std::vector<std::uint32_t> spooky_park(classic16.size());
+    std::vector<std::uint32_t> spooky_park8(classic8.size());
+    atlas.blit(0, reinterpret_cast<unsigned char *>(spooky_dirt.data()), TileAtlas::kSize * 4);
+    atlas.blit(40, reinterpret_cast<unsigned char *>(spooky_park.data()), TileAtlas::kSize * 4);
+    atlas.blit_overview(40, reinterpret_cast<unsigned char *>(spooky_park8.data()), TileAtlas::kOverview * 4);
+    if (std::memcmp(spooky_dirt.data(), svga_dirt.data(), svga_dirt.size() * sizeof(std::uint32_t)) != 0) {
+        return fail("Spooky dirt does not match SVGA");
+    }
+    if (std::memcmp(spooky_park.data(), svga_park.data(), svga_park.size() * sizeof(std::uint32_t)) == 0) {
+        return fail("Spooky park matches SVGA");
+    }
+    for (int y = 0; y < TileAtlas::kSize; ++y) {
+        for (int x = 0; x < TileAtlas::kSize; ++x) {
+            const std::uint32_t px = spooky_park[static_cast<std::size_t>(y * TileAtlas::kSize + x)];
+            const auto snapped = snap_vga_rgb((px >> 16) & 255u, (px >> 8) & 255u, px & 255u);
+            if (((px & 0x00ffffffu) | (255u << 24)) != snapped) {
+                return fail("Spooky park left the VGA palette");
+            }
+        }
+    }
+    for (int y = 0; y < TileAtlas::kOverview; ++y) {
+        for (int x = 0; x < TileAtlas::kOverview; ++x) {
+            const std::uint32_t p00 = spooky_park[static_cast<std::size_t>((y * 2) * TileAtlas::kSize + x * 2)];
+            const std::uint32_t p10 = spooky_park[static_cast<std::size_t>((y * 2) * TileAtlas::kSize + x * 2 + 1)];
+            const std::uint32_t p01 = spooky_park[static_cast<std::size_t>((y * 2 + 1) * TileAtlas::kSize + x * 2)];
+            const std::uint32_t p11 = spooky_park[static_cast<std::size_t>((y * 2 + 1) * TileAtlas::kSize + x * 2 + 1)];
+            const unsigned r = mix4(p00, p10, p01, p11, 16);
+            const unsigned g = mix4(p00, p10, p01, p11, 8);
+            const unsigned b = mix4(p00, p10, p01, p11, 0);
+            if (spooky_park8[static_cast<std::size_t>(y * TileAtlas::kOverview + x)] != snap_vga_rgb(r, g, b)) {
+                return fail("Spooky 8px overview is not the snapped box average");
+            }
+        }
+    }
+    if (std::memcmp(spooky_park8.data(), svga_park8.data(), svga_park8.size() * sizeof(std::uint32_t)) == 0) {
+        return fail("Spooky 8px park matches SVGA");
+    }
+    ui_scale::StoredSettings spooky_saved;
+    spooky_saved.look = 2;
+    const std::string spooky_text = ui_scale::settings_text(spooky_saved);
+    if (spooky_text.find("look=2") == std::string::npos || ui_scale::settings_parse(spooky_text).look != 2) {
+        return fail("look=2 did not round-trip");
+    }
+    ui_scale::LookPreference spooky_pref;
+    spooky_pref.look = 2;
+    if (spooky_pref.drawn(true, true) != 2 || spooky_pref.setting() != 2) {
+        return fail("Spooky should be drawn when the sheet is ready");
+    }
+    atlas.forget_spooky();
+    if (atlas.set_look(2) || atlas.use_spooky() || atlas.look() != 0) {
+        return fail("a missing Spooky sheet must fall back to Classic");
+    }
+    std::vector<std::uint32_t> spooky_fell(classic16.size());
+    atlas.blit(52, reinterpret_cast<unsigned char *>(spooky_fell.data()), TileAtlas::kSize * 4);
+    if (std::memcmp(tile0.data(), spooky_fell.data(), tile0.size() * sizeof(std::uint32_t)) != 0) {
+        return fail("Spooky fallback changed Classic pixels");
+    }
+    if (spooky_pref.drawn(atlas.svga_available(), atlas.spooky_available()) != 0 || spooky_pref.setting() != 2) {
+        return fail("a missing Spooky sheet must not replace the stored choice");
+    }
+    if (!atlas.recall_spooky() || !atlas.set_look(0) || atlas.use_spooky()) {
+        return fail("Classic did not come back after Spooky");
+    }
 
     atlas.forget_svga();
     if (atlas.set_look(true) || atlas.use_svga()) {
@@ -199,20 +278,20 @@ int main()
     }
     // The stored choice stays SVGA. Only the drawn sheet falls back.
     ui_scale::LookPreference stored_svga;
-    stored_svga.svga = true;
-    if (stored_svga.active(atlas.svga_available()) || stored_svga.setting() != 1) {
+    stored_svga.look = 1;
+    if (stored_svga.drawn(atlas.svga_available(), atlas.spooky_available()) != 0 || stored_svga.setting() != 1) {
         return fail("a missing SVGA sheet must not replace the stored choice");
     }
     ui_scale::LookPreference picked_svga;
-    picked_svga.svga = true;
-    if (picked_svga.active(false) || picked_svga.setting() != 1) {
+    picked_svga.look = 1;
+    if (picked_svga.drawn(false, true) != 0 || picked_svga.setting() != 1) {
         return fail("picking SVGA with no sheet must not store Classic");
     }
     const ui_scale::LookPreference picked_classic;
-    if (picked_classic.setting() != 0 || picked_classic.active(true)) {
+    if (picked_classic.setting() != 0 || picked_classic.drawn(true, true) != 0) {
         return fail("picking Classic must store Classic");
     }
-    if (!stored_svga.active(true)) {
+    if (stored_svga.drawn(true, false) != 1) {
         return fail("SVGA should be drawn when the sheet is ready");
     }
     std::cout << "svga look ok\n";

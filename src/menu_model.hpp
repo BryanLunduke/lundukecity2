@@ -4,9 +4,9 @@
 
 #pragma once
 
-// Menu model for the SDL shell. 45 actionable rows: 8 System, 15 Options,
+// Menu model for the SDL shell. 46 actionable rows: 8 System, 16 Options,
 // 6 Disasters, 14 Windows, 2 Help. Fullscreen, the zone and coverage
-// maps, and Messages are the rows past the original 37. The look pair
+// maps, and Messages are the rows past the original 37. The look trio
 // sits at the bottom of Options. Hidden zoom accelerators are extra
 // bindings, not extra rows.
 
@@ -47,7 +47,7 @@ enum class Action {
     About, Settings, Controls,
     Fullscreen,
     Zones, PoliceMap, FireMap, Population, Growth, Messages,
-    ClassicLook, SvgaLook,
+    ClassicLook, SvgaLook, SpookyLook,
     RecentIndex
 };
 
@@ -131,6 +131,7 @@ inline constexpr MenuEntry kOptions[] = {
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Classic Look", nullptr, ItemKind::Radio, Action::ClassicLook, AccelKey::None, 0, 2},
     {"SVGA Loo_k", nullptr, ItemKind::Radio, Action::SvgaLook, AccelKey::None, 0, 2},
+    {"Spook_y Look", nullptr, ItemKind::Radio, Action::SpookyLook, AccelKey::None, 0, 2},
 };
 
 inline constexpr MenuEntry kDisasters[] = {
