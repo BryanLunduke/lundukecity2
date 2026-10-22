@@ -238,15 +238,16 @@ def police_style() -> Style:
 
 
 def airport_style() -> Style:
-    # Warm mid-brown, the closest VGA entries to the Warcraft path.
-    # The first three dither; the last two are the shadow. No orange fleck.
+    # Warm reddish brown. The olive entries (113, 113, 56) and (113, 97, 56)
+    # read khaki. These three stay on the red side of that; the last two shadow.
+    # (113, 85, 28) and (113, 69, 28) are not in the VGA palette.
     dirt = Material(
         ramp=(
-            (113, 113, 56),
-            (113, 97, 56),
             (113, 85, 56),
             (113, 69, 56),
             (113, 56, 56),
+            (113, 56, 0),
+            (113, 28, 0),
         ),
         role="dirt",
     )
@@ -363,8 +364,8 @@ def assemble(atlas: Image.Image, base: int, width: int, height: int) -> Image.Im
     return image
 
 
-# Dirt: index 1 is the base, 0 and 2 are the close neighbours. Grass stays even.
-_DIRT_WEIGHTS = (1, 1, 1, 1, 1, 1, 0, 2)
+# Dirt: index 0 is the warm base, 1 and 2 are the darker warm neighbours.
+_DIRT_WEIGHTS = (0, 0, 0, 0, 0, 0, 1, 2)
 _GRASS_WEIGHTS = (0, 1, 1, 1, 2, 2, 2, 3, 3)
 
 # Bevel where the dirt shoulder meets the pavement. Internal black lines stay smooth.
