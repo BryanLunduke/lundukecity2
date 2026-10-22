@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -206,6 +207,17 @@ int Shell::run(int argc, char **argv)
 #ifdef CITY_REVIEW_CHECKS
     if (const char *review = std::getenv("LUNDUKE_CITY2_REVIEW")) {
         review_ = review[0] != '\0' && review[0] != '0';
+    }
+    // The self-test locks a 1280x800 window. A Deck flag or a size override
+    // inherited from the environment must not change that.
+    if (review_) {
+#ifdef _WIN32
+        _putenv_s("SteamDeck", "");
+        _putenv_s("LUNDUKE_CITY2_SIZE", "");
+#else
+        unsetenv("SteamDeck");
+        unsetenv("LUNDUKE_CITY2_SIZE");
+#endif
     }
 #endif
     if (const char *demo = std::getenv("LUNDUKE_CITY2_DEMO")) {
@@ -752,12 +764,8 @@ void Shell::bind_session()
     };
     palette_.on_selected = [this](int index) { select_tool(index); };
     minimap_.set_viewport_provider([this](double &fx, double &fy, double &fw, double &fh) {
-        const double mw = std::max(1, map_.pixel_width());
-        const double mh = std::max(1, map_.pixel_height());
-        fx = scroll_x_ / mw;
-        fy = scroll_y_ / mh;
-        fw = view_w_ / mw;
-        fh = view_h_ / mh;
+        map_viewport_fraction(scroll_x_, scroll_y_, map_.pixel_width(), map_.pixel_height(), view_w_, view_h_, fx, fy, fw,
+                              fh);
     });
     minimap_.on_jump = [this](double fx, double fy) { center_on_fraction(fx, fy); };
     session_.set_listener([this] { note_message(); });
@@ -902,9 +910,6 @@ void Shell::loop()
         // year does not take minutes. See sim_pace.hpp.
         sim_acc += std::min(elapsed, 500);
         blink_drew_ = map_.tick(elapsed);
-        if (zoom_cool_ > 0) {
-            zoom_cool_ -= elapsed;
-        }
         while (sim_acc >= 100) {
             sim_acc -= 100;
             const int bursts = sim_bursts_for_speed(speed_);
@@ -949,13 +954,12 @@ void Shell::loop()
             scroll_x_ += pan_x_ * step;
             scroll_y_ += pan_y_ * step;
             clamp_scroll();
-            if (zoom_cool_ <= 0 && trig_r_ > 0.6f) {
+            clamp_gamepad_cursor(stick_x_, stick_y_);
+            if (trigger_zoom_edge(trig_r_, zoom_r_latched_)) {
                 zoom_by(2);
-                zoom_cool_ = 180;
             }
-            if (zoom_cool_ <= 0 && trig_l_ > 0.6f) {
+            if (trigger_zoom_edge(trig_l_, zoom_l_latched_)) {
                 zoom_by(-2);
-                zoom_cool_ = 180;
             }
         }
         if (pad_dragging_ && pad_ != nullptr && dialog_ == Dialog::None && !menu_.open()) {
@@ -979,6 +983,7 @@ void Shell::loop()
                     const float tile = static_cast<float>(std::max(map_.tile_size(), 8));
                     cursor_x_ = static_cast<float>(std::max(0.0, std::min<double>(win_w_ - 1, cursor_x_ + dx * tile)));
                     cursor_y_ = static_cast<float>(std::max(0.0, std::min<double>(win_h_ - 1, cursor_y_ + dy * tile)));
+                    clamp_gamepad_cursor(static_cast<float>(dx), static_cast<float>(dy));
                     pad_repeat_ms_ = 70;
                 }
                 pad_repeat_ms_ -= tick;
@@ -1482,12 +1487,9 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (ctrl || wheel_zooms_) {
-            const int step = event.wheel.y > 0 ? 2 : -2;
-            if (wheel_zooms_) {
-                zoom_at(step, pointer_x_, pointer_y_);
-            } else {
-                zoom_by(step);
-            }
+            pointer_x_ = event.wheel.mouse_x;
+            pointer_y_ = event.wheel.mouse_y;
+            zoom_by(event.wheel.y > 0 ? 2 : -2, pointer_x_, pointer_y_);
         } else if (dialog_ == Dialog::None && !menu_.open()) {
             scroll_x_ -= event.wheel.x * 48.0;
             scroll_y_ -= event.wheel.y * 48.0;
@@ -1936,19 +1938,19 @@ void Shell::handle_event(const SDL_Event &event)
             const float dist = std::sqrt(dx * dx + dy * dy);
             const float cx = (fingers_[0].x + fingers_[1].x) * 0.5f;
             const float cy = (fingers_[0].y + fingers_[1].y) * 0.5f;
-            if (event.type == SDL_EVENT_FINGER_MOTION && pinch_dist_ > 1.0f) {
+            if (!(pinch_dist_ > 1.0f)) {
+                pinch_dist_ = dist;
+            } else if (event.type == SDL_EVENT_FINGER_MOTION) {
                 scroll_x_ -= (cx - pointer_x_);
                 scroll_y_ -= (cy - pointer_y_);
                 clamp_scroll();
-                if (pinch_dist_ > 0 && dist > pinch_dist_ * 1.08f) {
-                    zoom_by(2);
-                    pinch_dist_ = dist;
-                } else if (dist < pinch_dist_ * 0.92f) {
-                    zoom_by(-2);
-                    pinch_dist_ = dist;
+                const int pinch = pinch_zoom_step(dist, pinch_dist_);
+                if (pinch > 0) {
+                    zoom_by(2, cx, cy);
+                } else if (pinch < 0) {
+                    zoom_by(-2, cx, cy);
                 }
             }
-            pinch_dist_ = dist;
             pointer_x_ = cx;
             pointer_y_ = cy;
         } else if (fingers_.size() == 1) {

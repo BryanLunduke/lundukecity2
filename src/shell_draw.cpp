@@ -26,6 +26,7 @@
 
 #include <cstdlib>
 #include "version.hpp"
+#include "view_math.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -131,6 +132,7 @@ void Shell::layout()
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
     cursor_y_ = std::max(0.0f, std::min(cursor_y_, static_cast<float>(win_h_ - 1)));
     fit_map_to_view();
+    clamp_gamepad_cursor(0.0f, 0.0f);
 }
 
 void Shell::button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary)
@@ -1727,7 +1729,12 @@ void Shell::draw(cairo_t *cr)
         TargetCr live(cr);
         cairo_rectangle(live.cr, view_x_, view_y_, view_w_, view_h_);
         cairo_clip(live.cr);
-        cairo_translate(live.cr, view_x_ + map_ox_ - scroll_x_, view_y_ + map_oy_ - scroll_y_);
+        cairo_translate(live.cr, snapped_map_origin(view_x_, map_ox_, scroll_x_),
+                        snapped_map_origin(view_y_, map_oy_, scroll_y_));
+        if (gamepad_nav_ && !pad_dragging_ && !map_.dragging() && dialog_ == Dialog::None && !menu_.open()) {
+            // The footprint outlines the target tile before A is pressed.
+            map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
+        }
         map_.sync();
         map_.draw(live.cr);
         if (overlay_on_) {
@@ -1877,15 +1884,32 @@ void Shell::draw(cairo_t *cr)
         }
     }
     if (gamepad_nav_ && dialog_ == Dialog::None) {
-        const int arm = std::max(dp(8), map_.tile_size() / 2);
+        double hx = cursor_x_;
+        double hy = cursor_y_;
+        double arm = 10.0;
+        double radius = 9.0;
+        int tx = 0;
+        int ty = 0;
+        const int tile = map_.tile_size();
+        // At 8px the old 20px crosshair covers the tile it is aiming at.
+        // Sit a short cross on the tile centre, and the footprint outlines
+        // that tile before A is pressed.
+        if (tile <= kMapTileOverview &&
+            map_tile_at(map_local_x(cursor_x_), map_local_y(cursor_y_), map_.shake_x(), map_.shake_y(), tile,
+                        CitySession::kWorldW, CitySession::kWorldH, tx, ty)) {
+            arm = 3.0;
+            radius = 2.5;
+            hx = snapped_map_origin(view_x_, map_ox_, scroll_x_) + map_.shake_x() + (tx + 0.5) * tile;
+            hy = snapped_map_origin(view_y_, map_oy_, scroll_y_) + map_.shake_y() + (ty + 0.5) * tile;
+        }
         cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
-        cairo_set_line_width(cr, std::max(2, dp(2)));
-        cairo_move_to(cr, cursor_x_ - arm, cursor_y_);
-        cairo_line_to(cr, cursor_x_ + arm, cursor_y_);
-        cairo_move_to(cr, cursor_x_, cursor_y_ - arm);
-        cairo_line_to(cr, cursor_x_, cursor_y_ + arm);
+        cairo_set_line_width(cr, tile <= kMapTileOverview ? 1.0 : 2.0);
+        cairo_move_to(cr, hx - arm, hy);
+        cairo_line_to(cr, hx + arm, hy);
+        cairo_move_to(cr, hx, hy - arm);
+        cairo_line_to(cr, hx, hy + arm);
         cairo_stroke(cr);
-        cairo_arc(cr, cursor_x_, cursor_y_, std::max(6.0, arm * 0.8), 0, 6.3);
+        cairo_arc(cr, hx, hy, radius, 0, 6.3);
         cairo_stroke(cr);
     }
     // Drop-down last, above the map, palette, dialog, and gamepad cursor.

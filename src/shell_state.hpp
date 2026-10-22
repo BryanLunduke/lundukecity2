@@ -141,7 +141,11 @@ private:
     double map_local_x(double x) const;
     double map_local_y(double y) const;
     void zoom_by(int delta);
-    void zoom_at(int delta, double px, double py);
+    // Keep the map point under (anchor_x, anchor_y) fixed. Window pixels.
+    void zoom_by(int delta, double anchor_x, double anchor_y);
+    // Pull a resting gamepad cursor off the grey band beside the map.
+    // push_* is the stick; a push outward steps off the port onto the UI.
+    void clamp_gamepad_cursor(float push_x, float push_y);
     void toggle_fullscreen();
     void toggle_overlay(CitySession::MapLayer layer);
     void reroll_terrain();
@@ -422,7 +426,8 @@ private:
     float pan_y_ = 0;
     float trig_l_ = 0;
     float trig_r_ = 0;
-    int zoom_cool_ = 0;
+    bool zoom_l_latched_ = false;
+    bool zoom_r_latched_ = false;
     bool pad_dragging_ = false;
     int pad_repeat_ms_ = 0;
     bool osk_shift_ = false;
