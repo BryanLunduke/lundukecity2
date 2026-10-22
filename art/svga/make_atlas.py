@@ -49,20 +49,47 @@ SRC_TAN = (204, 127, 102)
 SRC_DTAN = (153, 127, 76)
 SRC_ORANGE = (255, 127, 0)
 
-# SNES-style sand. VGA has no desaturated khaki near (195, 170, 135):
-# the nearest entry is roof grey (170, 170, 170), distance 43, which would
-# disappear into buildings. (255, 190, 125) is the nearest warm non-pink,
-# distance 64.0. The dot is one step darker in that same hue so the stipple
-# stays low-contrast. The last two steps are the building shadow.
-DIRT_LIGHT = (255, 223, 125)
-DIRT_BASE = (255, 190, 125)
-DIRT_DOT = (255, 158, 125)
+# Warcraft II path. The screenshot is a doubled 320x200 frame and the path
+# is eight colours. None of them is a mode 13h entry, so each name below is
+# the nearest standard colour. (73, 32, 16) and (65, 28, 16) tie between
+# (65, 32, 0) and (65, 32, 32); the warm entry is the one used.
+# Shares are the upper path (996 px) plus the clean stretch past the
+# catapults (185 px), scaled to 1000.
+DIRT_A = (65, 32, 0)       # 39.4%
+DIRT_B = (65, 40, 32)      # 27.1%
+DIRT_C = (113, 56, 0)      # 16.9%
+DIRT_D = (65, 16, 0)       #  9.9%
+DIRT_E = (113, 56, 56)     #  6.3%
+DIRT_F = (113, 69, 56)     #  0.4%
+# No mode 13h brown is darker than (65, 16, 0). The shadow steps drop green.
+DIRT_SOFT = (65, 0, 16)
+DIRT_CONTACT = (65, 0, 0)
+DIRT_BODY = (
+    (DIRT_A, 394),
+    (DIRT_B, 271),
+    (DIRT_C, 169),
+    (DIRT_D, 99),
+    (DIRT_E, 63),
+    (DIRT_F, 4),
+)
+# Outermost path pixels, where dirt meets grass. Same colours, shifted
+# toward (65, 32, 0). The counts are the 299 edge pixels.
+DIRT_EDGE = (
+    (DIRT_A, 148),
+    (DIRT_B, 85),
+    (DIRT_C, 38),
+    (DIRT_D, 16),
+    (DIRT_E, 12),
+)
 DIRT_RAMP = (
-    DIRT_LIGHT,
-    DIRT_BASE,
-    DIRT_DOT,
-    (113, 69, 56),
-    (113, 56, 0),
+    DIRT_A,
+    DIRT_B,
+    DIRT_C,
+    DIRT_D,
+    DIRT_E,
+    DIRT_F,
+    DIRT_SOFT,
+    DIRT_CONTACT,
 )
 GRASS_RAMP = (
     (0, 170, 0),
@@ -119,13 +146,13 @@ WATER_RAMP = (
     (0, 48, 65),
     (0, 32, 65),
 )
-# Soil is the other classic ground colour. Its open field uses the sand
+# Soil is the other classic ground colour. Its open field uses the path
 # stipple (those RGB values belong to tan; a soil pixel only keeps one where
-# it does not touch tan). The rim and the shadow are soil's own darker steps.
-SOIL_RIM = (113, 85, 56)
-SOIL_SAND = (255, 235, 182)
-SOIL_CONTACT = (113, 85, 0)
-SOIL_RAMP = (SOIL_RIM, SOIL_SAND, SOIL_CONTACT)
+# it does not touch tan). The rim and the contact shadow are darker steps
+# that tan does not use, so the shared stipple cannot collapse a boundary.
+SOIL_RIM = (65, 0, 48)
+SOIL_CONTACT = (65, 0, 32)
+SOIL_RAMP = (SOIL_RIM, SOIL_CONTACT)
 DEEP = (0, 0, 170)
 SPECK = (56, 56, 56)
 STONE = (130, 130, 130)
@@ -133,11 +160,11 @@ ROCK = (44, 44, 44)
 LEAF = (162, 162, 162)
 ORANGE = (255, 125, 0)
 
-_DIRT_WEIGHTS = (0, 0, 0, 0, 0, 0, 1, 2)
-# Same deep-green hues. More of the light step, so lawns are not a dark hole
-# in the new sand. 2/9 (0, 170, 0), 3/9 (56, 113, 0), 3/9 (28, 113, 0), 1/9 (0, 113, 0).
+# Same deep-green hues as the approved lawn.
+# 2/9 (0, 170, 0), 3/9 (56, 113, 0), 3/9 (28, 113, 0), 1/9 (0, 113, 0).
 _GRASS_WEIGHTS = (0, 0, 1, 1, 1, 2, 2, 2, 3)
-_WATER_WEIGHTS = _DIRT_WEIGHTS
+_WATER_WEIGHTS = (0, 0, 0, 0, 0, 0, 1, 2)
+_EDGE_GROUND = frozenset({SRC_GREEN, SRC_DGREEN, SRC_GREY})
 _MIN_CAST = 8
 _ORTHO = ((0, -1), (0, 1), (-1, 0), (1, 0))
 _NW = ((0, -1), (-1, 0))
@@ -157,6 +184,7 @@ FONT = {
     "C": [" ### ", "#   #", "#    ", "#    ", "#    ", "#   #", " ### "],
     "D": ["#### ", "#   #", "#   #", "#   #", "#   #", "#   #", "#### "],
     "E": ["#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#####"],
+    "F": ["#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#    "],
     "G": [" ### ", "#   #", "#    ", "# ###", "#   #", "#   #", " ### "],
     "H": ["#   #", "#   #", "#   #", "#####", "#   #", "#   #", "#   #"],
     "I": ["#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "#####"],
@@ -298,35 +326,50 @@ def _assert_hash_aperiodic() -> None:
     cluster_total = 0
     for y in range(64):
         for x in range(64):
-            here = _dither_index(x, y, 0, _DIRT_WEIGHTS)
-            clustered += here == _dither_index(x + 16, y, 0, _DIRT_WEIGHTS)
-            clustered += here == _dither_index(x, y + 16, 0, _DIRT_WEIGHTS)
+            here = _dither_index(x, y, 2, _WATER_WEIGHTS)
+            clustered += here == _dither_index(x + 16, y, 2, _WATER_WEIGHTS)
+            clustered += here == _dither_index(x, y + 16, 2, _WATER_WEIGHTS)
             cluster_total += 2
     if clustered / cluster_total > 0.95:
         raise SystemExit(
-            f"ground clusters still tile at 16px (match rate {clustered / cluster_total:.3f})"
+            f"water clusters still tile at 16px (match rate {clustered / cluster_total:.3f})"
         )
-    dots = 0
-    repeated = 0
-    for y in range(64):
-        for x in range(64):
-            if _dirt_tone(x, y) != 2:
-                continue
-            dots += 1
-            repeated += _dirt_tone(x + 16, y) == 2
-            repeated += _dirt_tone(x, y + 16) == 2
-    if dots == 0 or repeated / (dots * 2) > 0.2:
-        raise SystemExit(f"sand dots still repeat every 16px ({repeated} of {dots * 2})")
-    touching = 0
-    for y in range(40):
-        for x in range(40):
-            if _dirt_tone(x, y) != 2:
-                continue
-            for dx, dy in _ORTHO:
-                if _dirt_tone(x + dx, y + dy) == 2:
-                    touching += 1
-    if touching:
-        raise SystemExit(f"sand dots touch their neighbours ({touching})")
+    # The path's own neighbour-match rate is 0.249. An independent mix lands
+    # near sum(p^2) ≈ 0.27, and a 16px tile would land near 1.
+    same = 0
+    total = 0
+    neigh = 0
+    neigh_total = 0
+    counts: dict[tuple[int, int, int], int] = {}
+    span = 96
+    for y in range(span):
+        for x in range(span):
+            here = _dirt_colour(x, y, False)
+            counts[here] = counts.get(here, 0) + 1
+            same += here == _dirt_colour(x + 16, y, False)
+            same += here == _dirt_colour(x, y + 16, False)
+            total += 2
+            if x + 1 < span:
+                neigh += here == _dirt_colour(x + 1, y, False)
+                neigh_total += 1
+    if same / total > 0.45:
+        raise SystemExit(f"dirt still tiles at 16px (match rate {same / total:.3f})")
+    rate = neigh / neigh_total
+    if not 0.18 <= rate <= 0.38:
+        raise SystemExit(f"dirt neighbour match {rate:.3f} is outside the path's range")
+    expected = {
+        DIRT_A: 0.394,
+        DIRT_B: 0.271,
+        DIRT_C: 0.169,
+        DIRT_D: 0.099,
+        DIRT_E: 0.063,
+        DIRT_F: 0.004,
+    }
+    pixels = span * span
+    for rgb, share in expected.items():
+        got = counts.get(rgb, 0) / pixels
+        if abs(got - share) > 0.02:
+            raise SystemExit(f"dirt share {rgb} is {got:.3f}, wanted {share:.3f}")
 
 
 def _in(x: int, y: int, w: int, h: int) -> bool:
@@ -468,17 +511,26 @@ def _touches_water(src, x: int, y: int, w: int, h: int) -> bool:
     return False
 
 
-def _dirt_tone(x: int, y: int) -> int:
-    """0 rare light, 1 flat base, 2 isolated darker dot.
+def _weighted_rgb(
+    x: int, y: int, salt: int, table: tuple[tuple[tuple[int, int, int], int], ...]
+) -> tuple[int, int, int]:
+    total = 0
+    for _rgb, count in table:
+        total += count
+    h = _hash(x + salt * 13, y + salt * 29) % total
+    acc = 0
+    for rgb, count in table:
+        acc += count
+        if h < acc:
+            return rgb
+    return table[-1][0]
 
-    The lattices are in world pixels. Their periods (3 and 7) are not 16, so
-    a tile edge does not restart the pattern.
-    """
-    if (x % 3) == 1 and (y % 3) == 1 and (_hash(x // 3, y // 3) % 5) != 0:
-        return 2
-    if (x % 7) == 3 and (y % 7) == 5:
-        return 0
-    return 1
+
+def _dirt_colour(x: int, y: int, edge: bool) -> tuple[int, int, int]:
+    """Path mix in world pixels. The edge table is the grass-side share."""
+    if edge:
+        return _weighted_rgb(x, y, 4, DIRT_EDGE)
+    return _weighted_rgb(x, y, 0, DIRT_BODY)
 
 
 def _touches_ground(src, x: int, y: int, w: int, h: int, colours: frozenset) -> bool:
@@ -496,9 +548,9 @@ def _touches_ground(src, x: int, y: int, w: int, h: int, colours: frozenset) -> 
     return False
 
 
-def _dirt_rim(src, x: int, y: int, w: int, h: int) -> bool:
-    """1px darker tan where sand meets concrete. Soil carries its own rim."""
-    return _touches_ground(src, x, y, w, h, _PAVEMENT)
+def _dirt_edge(src, x: int, y: int, w: int, h: int) -> bool:
+    """1px where dirt meets grass or pavement, including through one black pixel."""
+    return _touches_ground(src, x, y, w, h, _EDGE_GROUND)
 
 
 def _is_land(colour: tuple[int, int, int]) -> bool:
@@ -627,18 +679,20 @@ def paint(original: Image.Image, kinds: list[list[str]]) -> Image.Image:
                 dst[x, y] = ramp[0]
                 continue
             if mat.role == "soil":
-                # Open soil is the same sand as tan. Only the pixels that touch
-                # tan, concrete, or water change, so a soil fill cannot stay
-                # the old dark brown and cannot share an edge colour with tan.
+                # Open soil is the same path mix as tan. Only the pixels that
+                # touch tan, concrete, or water change, so a soil fill cannot
+                # share an edge colour with tan.
                 strength = _shadow_strength(src, x, y, w, h, counts)
                 if _touches_water(src, x, y, w, h):
-                    chosen = SOIL_SAND
+                    chosen = SOIL_RIM
                 elif strength >= 2:
                     chosen = SOIL_CONTACT
                 elif strength == 1 or _touches_ground(src, x, y, w, h, frozenset({SRC_TAN}) | _PAVEMENT):
                     chosen = SOIL_RIM
+                elif _touches_ground(src, x, y, w, h, frozenset({SRC_GREEN, SRC_DGREEN})):
+                    chosen = _dirt_colour(x, y, True)
                 else:
-                    chosen = DIRT_RAMP[_dirt_tone(x, y)]
+                    chosen = _dirt_colour(x, y, False)
                 dst[x, y] = chosen
                 continue
             strength = _shadow_strength(src, x, y, w, h, counts)
@@ -654,11 +708,8 @@ def paint(original: Image.Image, kinds: list[list[str]]) -> Image.Image:
                 dst[x, y] = chosen
                 continue
             if mat.role == "dirt":
-                chosen = ramp[_dirt_tone(x, y)]
-                if _touches_water(src, x, y, w, h):
-                    chosen = ramp[0]
-                elif _dirt_rim(src, x, y, w, h):
-                    chosen = ramp[-2]
+                edge = _touches_water(src, x, y, w, h) or _dirt_edge(src, x, y, w, h)
+                chosen = _dirt_colour(x, y, edge)
                 if shadowed is not None:
                     chosen = shadowed
                 dst[x, y] = chosen
@@ -946,6 +997,48 @@ def _histogram(image: Image.Image) -> dict[tuple[int, int, int], int]:
     return counts
 
 
+def _warcraft_compare() -> Image.Image:
+    """The sampled path beside a same-size patch of the new dirt, at 3x.
+
+    The patch is painted in world coordinates. A grass margin on each side
+    shows the darker edge mix; the middle is the field mix.
+    """
+    ref = ROOT / "svga-refs" / "warcraft.png"
+    if not ref.is_file():
+        raise SystemExit(f"missing Warcraft reference: {ref}")
+    shot = Image.open(ref).convert("RGB")
+    if shot.size != (640, 400):
+        raise SystemExit(f"Warcraft shot is {shot.size}, expected 640x400")
+    small = shot.resize((320, 200), Image.Resampling.BOX)
+    # Upper path bbox is x 186-229, y 12-105. Four pixels of grass around it.
+    crop = small.crop((182, 8, 234, 110))
+    width, height = crop.size
+    patch = Image.new("RGB", (width, height))
+    dst = patch.load()
+    grass = GRASS_RAMP[:-2]
+    margin = 6
+    for y in range(height):
+        for x in range(width):
+            wx, wy = x + 128, y + 64
+            if x < margin or x >= width - margin:
+                idx = _dither_index(wx, wy, 1, _GRASS_WEIGHTS)
+                dst[x, y] = grass[min(idx, len(grass) - 1)]
+            elif x == margin or x == width - margin - 1:
+                dst[x, y] = _dirt_colour(wx, wy, True)
+            else:
+                dst[x, y] = _dirt_colour(wx, wy, False)
+    left = _vstack([_text("WARCRAFT", 2), _scaled(crop, 3)], 6)
+    right = _vstack([_text("SVGA", 2), _scaled(patch, 3)], 6)
+    pair = _hstack([left, right], 16)
+    return _vstack(
+        [
+            _banner("WARCRAFT PATH AND SVGA DIRT  3X", pair.width),
+            pair,
+        ],
+        12,
+    )
+
+
 def main() -> int:
     _assert_hash_aperiodic()
     palette = set(vga_palette_8bit())
@@ -957,15 +1050,24 @@ def main() -> int:
         "held back: tiles 38-39 (unused), rubble, flood, fire, roads, rails, power,",
         "commercial, industrial, hospital, church, civic buildings, animations, the menu toggle",
         f"palette unique RGB triples: {len(palette)}",
-        "sand base (255, 190, 125): distance 64.0 from (195, 170, 135).",
-        "nearest palette colour is roof grey (170, 170, 170) at 43.0, not used.",
-        "nearest warm colour (255, 158, 125) is 62.0 but reads salmon, so it is only the dot.",
-        "dot target (150, 120, 90): nearest is olive (113, 113, 81) at 38.7.",
-        "that olive is far darker than the sand, so the dot is (255, 158, 125), distance 117.0,",
-        "one VGA step below the base. Rare light is (255, 223, 125).",
-        "shadows (113, 69, 56) and (113, 56, 0). Soil rim (113, 85, 56),",
-        "soil shore (255, 235, 182), soil contact (113, 85, 0).",
-        "grass hues unchanged; weights now 2/9 of (0, 170, 0) so lawns sit nearer the light sand.",
+        "Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.",
+        "Upper path 996 px (bbox x 186-229, y 12-105) plus the clean stretch",
+        "past the catapults, 185 px. Combined 1181 px. None of the eight is a mode 13h entry.",
+        "combined count  rgb       nearest VGA          idx   dist",
+        " 320  (85, 40, 20)    (65, 40, 32)         209   23.32",
+        " 312  (73, 32, 16)    (65, 32, 0)          186   17.89  tie with (65, 32, 32); warm kept",
+        " 200  (97, 48, 24)    (113, 56, 0)         114   29.93",
+        " 153  (65, 28, 16)    (65, 32, 0)          186   16.49  tie with (65, 32, 32); warm kept",
+        "  74  (105, 53, 30)   (113, 56, 56)        136   27.37",
+        "  69  (56, 20, 12)    (65, 16, 0)          185   15.52",
+        "  48  (48, 16, 12)    (65, 16, 0)          185   20.81",
+        "   5  (117, 65, 28)   (113, 69, 56)        137   28.57",
+        "Merged field: (65, 32, 0) 39.4%, (65, 40, 32) 27.1%, (113, 56, 0) 16.9%,",
+        "(65, 16, 0) 9.9%, (113, 56, 56) 6.3%, (113, 69, 56) 0.4%.",
+        "Edge against grass, 299 px, shifts to (65, 32, 0) 49.5%, (65, 40, 32) 28.4%,",
+        "(113, 56, 0) 12.7%, (65, 16, 0) 5.4%, (113, 56, 56) 4.0%.",
+        "No standard brown is darker than (65, 16, 0). Shadows are (65, 0, 16) and (65, 0, 0).",
+        "Soil rim (65, 0, 48), soil contact (65, 0, 32). Grass and water unchanged.",
         "",
     ]
     failed = False
@@ -1019,22 +1121,21 @@ def main() -> int:
 
     dirt = paint(crop_tile(atlas, 0), [["ground"]])
     dirt_counts = _histogram(dirt)
-    base_n = dirt_counts.get(DIRT_BASE, 0)
-    if base_n < 180:
-        lines.append(f"FAIL sand base is not the flat field: {dirt_counts}")
-        failed = True
-    dot_n = dirt_counts.get(DIRT_DOT, 0)
-    if dot_n < 8 or dot_n > 40:
-        lines.append(f"FAIL sand dots are not a sparse stipple ({dot_n})")
+    body_n = sum(dirt_counts.get(rgb, 0) for rgb, _count in DIRT_BODY)
+    if body_n < 200 or dirt_counts.get(DIRT_A, 0) < dirt_counts.get(DIRT_B, 0):
+        lines.append(f"FAIL dirt tile is not the path mix: {dirt_counts}")
         failed = True
     forbidden = {
         (85, 255, 85),
         (113, 113, 56),
         (113, 97, 56),
-        (113, 56, 56),
         (113, 28, 0),
         (170, 85, 0),
         (255, 127, 0),
+        (255, 190, 125),
+        (255, 223, 125),
+        (255, 158, 125),
+        (255, 235, 182),
         SRC_TAN,
         SRC_DTAN,
     }
@@ -1125,10 +1226,12 @@ def main() -> int:
         12,
     )
 
+    compare_sheet = _warcraft_compare()
     _save(terrain, PREVIEW_DIR / "terrain-water-3x.png")
     _save(trees, PREVIEW_DIR / "trees-3x.png")
     _save(residential, PREVIEW_DIR / "residential-3x.png")
     _save(neighbourhood_sheet, PREVIEW_DIR / "neighbourhood-32.png")
+    _save(compare_sheet, PREVIEW_DIR / "warcraft-dirt-compare.png")
 
     lines.append("")
     lines.append(
@@ -1142,6 +1245,7 @@ def main() -> int:
         "trees-3x.png",
         "residential-3x.png",
         "neighbourhood-32.png",
+        "warcraft-dirt-compare.png",
     ):
         lines.append(f"  previews/{name}")
     result = "PASS" if not failed else "FAIL"

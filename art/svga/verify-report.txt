@@ -3,35 +3,44 @@ groups: dirt, marked dirt, water and coast, trees and woods, residential 240-404
 held back: tiles 38-39 (unused), rubble, flood, fire, roads, rails, power,
 commercial, industrial, hospital, church, civic buildings, animations, the menu toggle
 palette unique RGB triples: 246
-sand base (255, 190, 125): distance 64.0 from (195, 170, 135).
-nearest palette colour is roof grey (170, 170, 170) at 43.0, not used.
-nearest warm colour (255, 158, 125) is 62.0 but reads salmon, so it is only the dot.
-dot target (150, 120, 90): nearest is olive (113, 113, 81) at 38.7.
-that olive is far darker than the sand, so the dot is (255, 158, 125), distance 117.0,
-one VGA step below the base. Rare light is (255, 223, 125).
-shadows (113, 69, 56) and (113, 56, 0). Soil rim (113, 85, 56),
-soil shore (255, 235, 182), soil contact (113, 85, 0).
-grass hues unchanged; weights now 2/9 of (0, 170, 0) so lawns sit nearer the light sand.
+Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.
+Upper path 996 px (bbox x 186-229, y 12-105) plus the clean stretch
+past the catapults, 185 px. Combined 1181 px. None of the eight is a mode 13h entry.
+combined count  rgb       nearest VGA          idx   dist
+ 320  (85, 40, 20)    (65, 40, 32)         209   23.32
+ 312  (73, 32, 16)    (65, 32, 0)          186   17.89  tie with (65, 32, 32); warm kept
+ 200  (97, 48, 24)    (113, 56, 0)         114   29.93
+ 153  (65, 28, 16)    (65, 32, 0)          186   16.49  tie with (65, 32, 32); warm kept
+  74  (105, 53, 30)   (113, 56, 56)        136   27.37
+  69  (56, 20, 12)    (65, 16, 0)          185   15.52
+  48  (48, 16, 12)    (65, 16, 0)          185   20.81
+   5  (117, 65, 28)   (113, 69, 56)        137   28.57
+Merged field: (65, 32, 0) 39.4%, (65, 40, 32) 27.1%, (113, 56, 0) 16.9%,
+(65, 16, 0) 9.9%, (113, 56, 56) 6.3%, (113, 69, 56) 0.4%.
+Edge against grass, 299 px, shifts to (65, 32, 0) 49.5%, (65, 40, 32) 28.4%,
+(113, 56, 0) 12.7%, (65, 16, 0) 5.4%, (113, 56, 56) 4.0%.
+No standard brown is darker than (65, 16, 0). Shadows are (65, 0, 16) and (65, 0, 0).
+Soil rim (65, 0, 48), soil contact (65, 0, 32). Grass and water unchanged.
 
-OK tile 0: palette=0 ink=0 collapsed=0/20 strong=20/20 (1.000)
-OK tile 1: palette=0 ink=0 collapsed=0/10 strong=10/10 (1.000)
+OK tile 0: palette=0 ink=0 collapsed=0/20 strong=0/20 (0.000)
+OK tile 1: palette=0 ink=0 collapsed=0/10 strong=3/10 (0.300)
 OK tile 2: palette=0 ink=0 collapsed=0/58 strong=8/58 (0.138)
 OK tile 3: palette=0 ink=0 collapsed=0/55 strong=4/55 (0.073)
 OK tile 4: palette=0 ink=0 collapsed=0/58 strong=8/58 (0.138)
-OK tile 5: palette=0 ink=0 collapsed=0/114 strong=11/62 (0.177)
-OK tile 6: palette=0 ink=0 collapsed=0/126 strong=11/77 (0.143)
-OK tile 7: palette=0 ink=0 collapsed=0/91 strong=7/40 (0.175)
-OK tile 8: palette=0 ink=0 collapsed=0/112 strong=14/63 (0.222)
-OK tile 9: palette=0 ink=0 collapsed=0/129 strong=9/69 (0.130)
-OK tile 10: palette=0 ink=0 collapsed=0/138 strong=16/77 (0.208)
-OK tile 11: palette=0 ink=0 collapsed=0/124 strong=17/54 (0.315)
-OK tile 12: palette=0 ink=0 collapsed=0/109 strong=23/45 (0.511)
+OK tile 5: palette=0 ink=0 collapsed=0/114 strong=5/62 (0.081)
+OK tile 6: palette=0 ink=0 collapsed=0/126 strong=6/77 (0.078)
+OK tile 7: palette=0 ink=0 collapsed=0/91 strong=1/40 (0.025)
+OK tile 8: palette=0 ink=0 collapsed=0/112 strong=2/63 (0.032)
+OK tile 9: palette=0 ink=0 collapsed=0/129 strong=3/69 (0.043)
+OK tile 10: palette=0 ink=0 collapsed=0/138 strong=6/77 (0.078)
+OK tile 11: palette=0 ink=0 collapsed=0/124 strong=2/54 (0.037)
+OK tile 12: palette=0 ink=0 collapsed=0/109 strong=2/45 (0.044)
 OK tile 13: palette=0 ink=0 collapsed=0/86 strong=0/20 (0.000)
 OK tile 14: palette=0 ink=0 collapsed=0/68 strong=1/16 (0.062)
-OK tile 15: palette=0 ink=0 collapsed=0/109 strong=5/28 (0.179)
-OK tile 16: palette=0 ink=0 collapsed=0/115 strong=8/41 (0.195)
-OK tile 17: palette=0 ink=0 collapsed=0/104 strong=20/53 (0.377)
-OK tile 18: palette=0 ink=0 collapsed=0/79 strong=5/32 (0.156)
+OK tile 15: palette=0 ink=0 collapsed=0/109 strong=2/28 (0.071)
+OK tile 16: palette=0 ink=0 collapsed=0/115 strong=0/41 (0.000)
+OK tile 17: palette=0 ink=0 collapsed=0/104 strong=5/53 (0.094)
+OK tile 18: palette=0 ink=0 collapsed=0/79 strong=3/32 (0.094)
 OK tile 19: palette=0 ink=0 collapsed=0/109 strong=2/24 (0.083)
 OK tile 20: palette=0 ink=0 collapsed=0/103 strong=4/30 (0.133)
 OK tile 21: palette=0 ink=0 collapsed=0/114 strong=0/0 (1.000)
@@ -55,45 +64,46 @@ OK tile 40: palette=0 ink=0 collapsed=0/195 strong=0/0 (1.000)
 OK tile 41: palette=0 ink=0 collapsed=0/180 strong=0/0 (1.000)
 OK tile 42: palette=0 ink=0 collapsed=0/214 strong=0/0 (1.000)
 OK tile 43: palette=0 ink=0 collapsed=0/188 strong=0/0 (1.000)
-OK tile 249: palette=0 ink=0 collapsed=0/134 strong=25/26 (0.962)
-OK tile 250: palette=0 ink=0 collapsed=0/161 strong=43/47 (0.915)
-OK tile 251: palette=0 ink=0 collapsed=0/271 strong=32/43 (0.744)
-OK tile 252: palette=0 ink=0 collapsed=0/273 strong=19/19 (1.000)
-OK tile 253: palette=0 ink=0 collapsed=0/240 strong=16/17 (0.941)
-OK tile 254: palette=0 ink=0 collapsed=0/247 strong=11/11 (1.000)
-OK tile 255: palette=0 ink=0 collapsed=0/212 strong=31/32 (0.969)
+OK tile 249: palette=0 ink=0 collapsed=0/134 strong=16/26 (0.615)
+OK tile 250: palette=0 ink=0 collapsed=0/161 strong=12/47 (0.255)
+OK tile 251: palette=0 ink=0 collapsed=0/271 strong=19/43 (0.442)
+OK tile 252: palette=0 ink=0 collapsed=0/273 strong=15/19 (0.789)
+OK tile 253: palette=0 ink=0 collapsed=0/240 strong=5/17 (0.294)
+OK tile 254: palette=0 ink=0 collapsed=0/247 strong=5/11 (0.455)
+OK tile 255: palette=0 ink=0 collapsed=0/212 strong=23/32 (0.719)
 OK tile 256: palette=0 ink=0 collapsed=0/199 strong=48/55 (0.873)
 OK tile 257: palette=0 ink=0 collapsed=0/212 strong=3/5 (0.600)
 OK tile 258: palette=0 ink=0 collapsed=0/188 strong=43/43 (1.000)
-OK tile 259: palette=0 ink=0 collapsed=0/336 strong=98/101 (0.970)
+OK tile 259: palette=0 ink=0 collapsed=0/336 strong=92/101 (0.911)
 OK tile 260: palette=0 ink=0 collapsed=0/202 strong=91/91 (1.000)
-OK block 240 3x3: palette=0 ink=0 collapsed=0/476 strong=346/346 (1.000)
-OK block 261 3x3: palette=0 ink=0 collapsed=0/1002 strong=285/297 (0.960)
-OK block 270 3x3: palette=0 ink=0 collapsed=0/1146 strong=136/186 (0.731)
-OK block 279 3x3: palette=0 ink=0 collapsed=0/1383 strong=233/272 (0.857)
-OK block 288 3x3: palette=0 ink=0 collapsed=0/1361 strong=299/301 (0.993)
-OK block 297 3x3: palette=0 ink=0 collapsed=0/1129 strong=94/99 (0.949)
-OK block 306 3x3: palette=0 ink=0 collapsed=0/1092 strong=178/189 (0.942)
-OK block 315 3x3: palette=0 ink=0 collapsed=0/1275 strong=64/64 (1.000)
-OK block 324 3x3: palette=0 ink=0 collapsed=0/1357 strong=197/209 (0.943)
-OK block 333 3x3: palette=0 ink=0 collapsed=0/1197 strong=165/168 (0.982)
+OK block 240 3x3: palette=0 ink=0 collapsed=0/476 strong=267/346 (0.772)
+OK block 261 3x3: palette=0 ink=0 collapsed=0/1002 strong=202/297 (0.680)
+OK block 270 3x3: palette=0 ink=0 collapsed=0/1146 strong=105/186 (0.565)
+OK block 279 3x3: palette=0 ink=0 collapsed=0/1383 strong=252/272 (0.926)
+OK block 288 3x3: palette=0 ink=0 collapsed=0/1361 strong=233/301 (0.774)
+OK block 297 3x3: palette=0 ink=0 collapsed=0/1129 strong=72/99 (0.727)
+OK block 306 3x3: palette=0 ink=0 collapsed=0/1092 strong=84/189 (0.444)
+OK block 315 3x3: palette=0 ink=0 collapsed=0/1275 strong=61/64 (0.953)
+OK block 324 3x3: palette=0 ink=0 collapsed=0/1357 strong=131/209 (0.627)
+OK block 333 3x3: palette=0 ink=0 collapsed=0/1197 strong=134/168 (0.798)
 OK block 342 3x3: palette=0 ink=0 collapsed=0/1456 strong=145/165 (0.879)
-OK block 351 3x3: palette=0 ink=0 collapsed=0/1731 strong=478/482 (0.992)
-OK block 360 3x3: palette=0 ink=0 collapsed=0/1468 strong=416/416 (1.000)
+OK block 351 3x3: palette=0 ink=0 collapsed=0/1731 strong=462/482 (0.959)
+OK block 360 3x3: palette=0 ink=0 collapsed=0/1468 strong=413/416 (0.993)
 OK block 369 3x3: palette=0 ink=0 collapsed=0/1111 strong=121/129 (0.938)
 OK block 378 3x3: palette=0 ink=0 collapsed=0/1224 strong=348/371 (0.938)
 OK block 387 3x3: palette=0 ink=0 collapsed=0/1367 strong=174/174 (1.000)
-OK block 396 3x3: palette=0 ink=0 collapsed=0/1329 strong=482/494 (0.976)
-OK neighbourhood 22x15: palette=0 ink=0 collapsed=0/19436 strong=5845/7484 (0.781)
-OK shore strip: palette=0 ink=0 collapsed=0/4663 strong=980/2531 (0.387)
+OK block 396 3x3: palette=0 ink=0 collapsed=0/1329 strong=493/494 (0.998)
+OK neighbourhood 22x15: palette=0 ink=0 collapsed=0/19436 strong=1336/7484 (0.179)
+OK shore strip: palette=0 ink=0 collapsed=0/4663 strong=215/2531 (0.085)
 
-dirt tile 0: {'(255, 190, 125)': 231, '(255, 158, 125)': 16, '(56, 56, 56)': 5, '(255, 223, 125)': 4}
-south shore tile 13: {'(0, 56, 113)': 121, '(0, 32, 65)': 29, '(255, 190, 125)': 21, '(0, 48, 65)': 18, '(0, 85, 113)': 16, '(255, 235, 182)': 16, '(0, 28, 113)': 13, '(255, 223, 125)': 11, '(0, 0, 170)': 5, '(113, 85, 56)': 3, '(130, 130, 130)': 2, '(255, 158, 125)': 1}
+dirt tile 0: {'(65, 32, 0)': 107, '(65, 40, 32)': 62, '(65, 16, 0)': 37, '(113, 56, 0)': 31, '(113, 56, 56)': 14, '(56, 56, 56)': 5}
+south shore tile 13: {'(0, 56, 113)': 121, '(0, 32, 65)': 29, '(65, 0, 48)': 19, '(0, 48, 65)': 18, '(0, 85, 113)': 16, '(65, 32, 0)': 15, '(0, 28, 113)': 13, '(113, 56, 0)': 8, '(65, 40, 32)': 6, '(0, 0, 170)': 5, '(65, 16, 0)': 4, '(130, 130, 130)': 2}
 
 previews:
   previews/terrain-water-3x.png
   previews/trees-3x.png
   previews/residential-3x.png
   previews/neighbourhood-32.png
+  previews/warcraft-dirt-compare.png
 
 RESULT: PASS
