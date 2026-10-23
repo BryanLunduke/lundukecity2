@@ -1,12 +1,19 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 
 // How the city map sits in the view. Tiles grow to cover a large window and
 // never shrink a closer zoom. A leftover band is centered. The R/C/I meters
 // stay a fixed height instead of stretching with the window.
 
-inline constexpr int kMinMapTile = 6;
+// Atlas tiles are 16px. Drawn sizes of 16, 32, 48, and 64 are whole multiples
+// of that source, so nearest-neighbour sampling copies each pixel as an N×N
+// block. 8px is the overview: a half-size atlas filtered once at load, drawn
+// 1:1. Anything else (12, 14, 18, …) drops rows and columns.
+inline constexpr int kMapTileSource = 16;
+inline constexpr int kMapTileOverview = 8;
+inline constexpr int kMinMapTile = kMapTileOverview;
 inline constexpr int kMaxMapTile = 64;
 // The toolbar is nine rows. A 176px graph crowds it on a 1280x800 window.
 inline constexpr int kMaxDemandPx = 128;
@@ -38,6 +45,110 @@ inline int tile_size_to_cover(int view_w, int view_h, int world_w, int world_h, 
         need = max_tile;
     }
     return need;
+}
+
+// Smallest legal drawn size that is at least `pixels`. Covering a large
+// window rounds up, so the city still fills the view. 8 is the only step
+// below the 16px source.
+inline int snap_map_tile(int pixels)
+{
+    if (pixels > kMaxMapTile) {
+        return kMaxMapTile;
+    }
+    if (pixels <= kMapTileOverview) {
+        return kMapTileOverview;
+    }
+    const int snapped = ((pixels + kMapTileSource - 1) / kMapTileSource) * kMapTileSource;
+    if (snapped > kMaxMapTile) {
+        return kMaxMapTile;
+    }
+    return snapped;
+}
+
+// One zoom step. The sign of `delta` is the direction. Steps are 8, 16, 32,
+// 48, and 64.
+inline int step_map_tile(int current, int delta)
+{
+    const int size = snap_map_tile(current);
+    if (delta > 0) {
+        if (size < kMapTileSource) {
+            return kMapTileSource;
+        }
+        return snap_map_tile(size + 1);
+    }
+    if (delta < 0) {
+        if (size <= kMapTileSource) {
+            return kMapTileOverview;
+        }
+        return size - kMapTileSource;
+    }
+    return size;
+}
+
+// Right trigger zooms in, left trigger zooms out. One step per press: holding
+// the trigger does not repeat until it is released.
+inline constexpr float kTriggerZoomPress = 0.6f;
+inline constexpr float kTriggerZoomRelease = 0.4f;
+
+inline bool trigger_zoom_edge(float amount, bool &latched)
+{
+    if (amount >= kTriggerZoomPress) {
+        if (latched) {
+            return false;
+        }
+        latched = true;
+        return true;
+    }
+    if (amount <= kTriggerZoomRelease) {
+        latched = false;
+    }
+    return false;
+}
+
+// A pinch step waits until the finger distance has grown to 1.4× or shrunk
+// to 0.7× the distance at the start of the gesture, or at the last step.
+inline constexpr float kPinchZoomIn = 1.4f;
+inline constexpr float kPinchZoomOut = 0.7f;
+
+inline int pinch_zoom_step(float distance, float &baseline)
+{
+    if (!(distance > 1.0f)) {
+        return 0;
+    }
+    if (!(baseline > 1.0f)) {
+        baseline = distance;
+        return 0;
+    }
+    if (distance > baseline * kPinchZoomIn) {
+        baseline = distance;
+        return 1;
+    }
+    if (distance < baseline * kPinchZoomOut) {
+        baseline = distance;
+        return -1;
+    }
+    return 0;
+}
+
+// Device-pixel origin of the scrolled map. Fractional scroll would make a
+// 2× or 3× nearest-neighbour scale paint some source pixels 1px wide and
+// others 3px wide.
+inline double snapped_map_origin(double view, int letterbox, double scroll)
+{
+    return std::floor(view + static_cast<double>(letterbox) - scroll);
+}
+
+// Minimap rectangle as fractions of the city. Scroll and the map size are
+// both in the current zoom's pixels, including the 8px overview.
+inline void map_viewport_fraction(double scroll_x, double scroll_y, int map_w, int map_h, int view_w, int view_h,
+                                  double &fx, double &fy, double &fw, double &fh)
+{
+    const double mw = std::max(1, map_w);
+    const double mh = std::max(1, map_h);
+    fx = scroll_x / mw;
+    fy = scroll_y / mh;
+    fw = static_cast<double>(view_w) / mw;
+    fh = static_cast<double>(view_h) / mh;
 }
 
 inline int map_letterbox(int view, int map_pixels)

@@ -419,7 +419,8 @@ private:
     float pan_y_ = 0;
     float trig_l_ = 0;
     float trig_r_ = 0;
-    int zoom_cool_ = 0;
+    bool zoom_l_latched_ = false;
+    bool zoom_r_latched_ = false;
     bool pad_dragging_ = false;
     int pad_repeat_ms_ = 0;
     bool osk_shift_ = false;

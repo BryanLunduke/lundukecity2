@@ -204,6 +204,13 @@ if posix_host
 
   # This test starts the real binary and reads the window tree. It does not
   # share the display with the other GUI tests.
+  argv_env = environment()
+  argv_env.set('SDL_VIDEODRIVER', 'x11')
+  # Empty overrides a Deck flag or a size inherited from the caller. The
+  # test also unsets both before it launches the city. Meson 1.3 has no
+  # environment.unset().
+  argv_env.set('SteamDeck', '')
+  argv_env.set('LUNDUKE_CITY2_SIZE', '')
   test(
     'argv_open',
     argv_open,
@@ -211,6 +218,7 @@ if posix_host
     depends: lunduke_city_exe,
     timeout: 120,
     is_parallel: false,
+    env: argv_env,
   )
 endif
 
@@ -470,14 +478,18 @@ test(
 # Headless checks for the numbered review fixes. The binary drives itself.
 # Release builds omit the self-test, so this test is not registered there.
 if lunduke_review_checks_on
+  review_env = environment()
+  review_env.set('SDL_VIDEODRIVER', 'dummy')
+  review_env.set('SDL_AUDIODRIVER', 'dummy')
+  review_env.set('LUNDUKE_CITY2_REVIEW', '1')
+  review_env.set('LUNDUKE_CITY2_SIZE', '1280x800')
+  # The review build clears this itself. An empty value also keeps a Deck
+  # flag in the parent environment from forcing fullscreen.
+  review_env.set('SteamDeck', '')
   test(
     'review_ui',
     lunduke_city_exe,
-    env: [
-      'SDL_VIDEODRIVER=dummy',
-      'SDL_AUDIODRIVER=dummy',
-      'LUNDUKE_CITY2_REVIEW=1',
-    ],
+    env: review_env,
     timeout: 180,
     is_parallel: false,
   )

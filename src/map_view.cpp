@@ -86,7 +86,7 @@ void MapView::clear_hover()
 
 void MapView::set_tile_size(int pixels)
 {
-    tile_size_ = std::max(kMinMapTile, std::min(kMaxMapTile, pixels));
+    tile_size_ = snap_map_tile(pixels);
 }
 
 void MapView::set_shake(int dx, int dy)
@@ -110,10 +110,15 @@ bool MapView::tile_at(double x, double y, int &tx, int &ty) const
     return map_tile_at(x, y, shake_x_, shake_y_, tile_size_, CitySession::kWorldW, CitySession::kWorldH, tx, ty);
 }
 
+int MapView::source_px() const
+{
+    return tile_size_ <= kMapTileOverview ? TileAtlas::kOverview : TileAtlas::kSize;
+}
+
 void MapView::ensure_surface()
 {
-    const int width = CitySession::kWorldW * TileAtlas::kSize;
-    const int height = CitySession::kWorldH * TileAtlas::kSize;
+    const int width = CitySession::kWorldW * source_px();
+    const int height = CitySession::kWorldH * source_px();
     if (map_pixels_ == nullptr || cairo_image_surface_get_width(map_pixels_) != width ||
         cairo_image_surface_get_height(map_pixels_) != height) {
         if (map_pixels_ != nullptr) {
@@ -142,18 +147,23 @@ int MapView::display_tile(int raw, const TileAtlas &atlas) const
 
 void MapView::blit_tile(int x, int y, int shown, const TileAtlas &atlas)
 {
+    const int px = source_px();
     unsigned char *data = cairo_image_surface_get_data(map_pixels_);
     const int stride = cairo_image_surface_get_stride(map_pixels_);
-    unsigned char *dest = data + y * TileAtlas::kSize * stride + x * TileAtlas::kSize * 4;
+    unsigned char *dest = data + y * px * stride + x * px * 4;
     if (atlas.loaded()) {
-        atlas.blit(shown, dest, stride);
+        if (px == TileAtlas::kOverview) {
+            atlas.blit_overview(shown, dest, stride);
+        } else {
+            atlas.blit(shown, dest, stride);
+        }
         return;
     }
     const std::uint32_t dirt = (255u << 24) | (204u << 16) | (127u << 8) | 102u;
-    for (int row = 0; row < TileAtlas::kSize; ++row) {
-        auto *px = reinterpret_cast<std::uint32_t *>(dest + row * stride);
-        for (int col = 0; col < TileAtlas::kSize; ++col) {
-            px[col] = dirt;
+    for (int row = 0; row < px; ++row) {
+        auto *out = reinterpret_cast<std::uint32_t *>(dest + row * stride);
+        for (int col = 0; col < px; ++col) {
+            out[col] = dirt;
         }
     }
 }
@@ -244,14 +254,15 @@ int special_display_key(const CitySession *session, int x, int y, int &index, in
 
 void MapView::blit_special(int x, int y, int index, int cell)
 {
+    const int px = source_px();
     unsigned char *data = cairo_image_surface_get_data(map_pixels_);
     const int stride = cairo_image_surface_get_stride(map_pixels_);
-    unsigned char *dest = data + y * TileAtlas::kSize * stride + x * TileAtlas::kSize * 4;
+    unsigned char *dest = data + y * px * stride + x * px * 4;
     auto fill = [&](std::uint32_t color) {
-        for (int row = 0; row < TileAtlas::kSize; ++row) {
-            auto *px = reinterpret_cast<std::uint32_t *>(dest + row * stride);
-            for (int col = 0; col < TileAtlas::kSize; ++col) {
-                px[col] = color;
+        for (int row = 0; row < px; ++row) {
+            auto *out = reinterpret_cast<std::uint32_t *>(dest + row * stride);
+            for (int col = 0; col < px; ++col) {
+                out[col] = color;
             }
         }
     };
@@ -278,6 +289,29 @@ void MapView::blit_special(int x, int y, int index, int cell)
     }
     const int sstride = cairo_image_surface_get_stride(sprite);
     const unsigned char *src = cairo_image_surface_get_data(sprite);
+    if (px == TileAtlas::kOverview) {
+        auto word_at = [&](int rx, int ry) {
+            const unsigned char *p = src + (sy + ry) * sstride + (sx + rx) * 4;
+            return static_cast<std::uint32_t>(p[0]) | (static_cast<std::uint32_t>(p[1]) << 8) |
+                   (static_cast<std::uint32_t>(p[2]) << 16) | (static_cast<std::uint32_t>(p[3]) << 24);
+        };
+        auto mix = [](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d, int shift) {
+            const unsigned sum = ((a >> shift) & 255u) + ((b >> shift) & 255u) + ((c >> shift) & 255u) + ((d >> shift) & 255u);
+            return (sum + 2u) / 4u;
+        };
+        for (int r = 0; r < TileAtlas::kOverview; ++r) {
+            auto *out = reinterpret_cast<std::uint32_t *>(dest + r * stride);
+            for (int c = 0; c < TileAtlas::kOverview; ++c) {
+                const std::uint32_t p00 = word_at(c * 2, r * 2);
+                const std::uint32_t p10 = word_at(c * 2 + 1, r * 2);
+                const std::uint32_t p01 = word_at(c * 2, r * 2 + 1);
+                const std::uint32_t p11 = word_at(c * 2 + 1, r * 2 + 1);
+                out[c] = (mix(p00, p10, p01, p11, 24) << 24) | (mix(p00, p10, p01, p11, 16) << 16) |
+                         (mix(p00, p10, p01, p11, 8) << 8) | mix(p00, p10, p01, p11, 0);
+            }
+        }
+        return;
+    }
     for (int r = 0; r < TileAtlas::kSize; ++r) {
         std::memcpy(dest + r * stride, src + (sy + r) * sstride + sx * 4, static_cast<std::size_t>(TileAtlas::kSize * 4));
     }
@@ -450,7 +484,11 @@ void MapView::draw(cairo_t *cr)
 
     cairo_save(cr);
     cairo_translate(cr, shake_x_, shake_y_);
-    const double scale = static_cast<double>(tile_size_) / static_cast<double>(TileAtlas::kSize);
+    // 8px draws the prefiltered half atlas 1:1. Larger steps scale the 16px
+    // atlas by an integer. Sprite positions are in 16px map pixels.
+    const int source = source_px();
+    const double scale = static_cast<double>(tile_size_) / static_cast<double>(source);
+    const double sprite_to_source = static_cast<double>(source) / static_cast<double>(TileAtlas::kSize);
     cairo_save(cr);
     cairo_scale(cr, scale, scale);
     cairo_set_source_surface(cr, map_pixels_, 0, 0);
@@ -464,7 +502,8 @@ void MapView::draw(cairo_t *cr)
                 continue;
             }
             cairo_save(cr);
-            cairo_translate(cr, dot.x + dot.x_offset, dot.y + dot.y_offset);
+            cairo_translate(cr, (dot.x + dot.x_offset) * sprite_to_source, (dot.y + dot.y_offset) * sprite_to_source);
+            cairo_scale(cr, sprite_to_source, sprite_to_source);
             cairo_set_source_surface(cr, image, 0, 0);
             cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
             cairo_paint(cr);

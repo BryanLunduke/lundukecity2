@@ -118,8 +118,30 @@ bool TileAtlas::ensure_loaded()
         averages[static_cast<std::size_t>(tile) * 3 + 2] = static_cast<unsigned char>(sum_b / n);
     }
 
+    static std::vector<std::uint32_t> overview;
+    overview.assign(static_cast<std::size_t>(count_) * kOverview * kOverview, 0);
+    for (int tile = 0; tile < count_; ++tile) {
+        const std::uint32_t *tile_px = stored.data() + static_cast<std::size_t>(tile) * kSize * kSize;
+        std::uint32_t *dst = overview.data() + static_cast<std::size_t>(tile) * kOverview * kOverview;
+        for (int y = 0; y < kOverview; ++y) {
+            for (int x = 0; x < kOverview; ++x) {
+                const std::uint32_t p00 = tile_px[(y * 2) * kSize + x * 2];
+                const std::uint32_t p10 = tile_px[(y * 2) * kSize + x * 2 + 1];
+                const std::uint32_t p01 = tile_px[(y * 2 + 1) * kSize + x * 2];
+                const std::uint32_t p11 = tile_px[(y * 2 + 1) * kSize + x * 2 + 1];
+                auto mix = [&](int shift) {
+                    const unsigned sum = ((p00 >> shift) & 255u) + ((p10 >> shift) & 255u) + ((p01 >> shift) & 255u) +
+                                         ((p11 >> shift) & 255u);
+                    return (sum + 2u) / 4u;
+                };
+                dst[y * kOverview + x] = (mix(24) << 24) | (mix(16) << 16) | (mix(8) << 8) | mix(0);
+            }
+        }
+    }
+
     cairo_surface_destroy(surface);
     pixels_ = stored.data();
+    overview_ = overview.data();
     average_ = averages.data();
     return true;
 }
@@ -151,6 +173,23 @@ void TileAtlas::blit(int tile, unsigned char *dest, int stride) const
         auto *row = reinterpret_cast<std::uint32_t *>(dest + y * stride);
         for (int x = 0; x < kSize; ++x) {
             row[x] = src[y * kSize + x];
+        }
+    }
+}
+
+void TileAtlas::blit_overview(int tile, unsigned char *dest, int stride) const
+{
+    if (dest == nullptr || overview_ == nullptr) {
+        return;
+    }
+    if (tile < 0 || tile >= count_) {
+        tile = 0;
+    }
+    const std::uint32_t *src = overview_ + static_cast<std::size_t>(tile) * kOverview * kOverview;
+    for (int y = 0; y < kOverview; ++y) {
+        auto *row = reinterpret_cast<std::uint32_t *>(dest + y * stride);
+        for (int x = 0; x < kOverview; ++x) {
+            row[x] = src[y * kOverview + x];
         }
     }
 }
