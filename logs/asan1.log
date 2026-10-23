@@ -1,0 +1,8 @@
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+-----------------------------------------------------
+Suppressions used:
+  count      bytes template
+      5        357 libfontconfig
+    481     108124 libGLX_mesa
+-----------------------------------------------------
+

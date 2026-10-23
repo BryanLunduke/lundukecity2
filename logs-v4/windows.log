@@ -1,0 +1,132 @@
+mingw64.db signed by 5F944B027F7FE2091985AA2EFA11531AA0AA7F57 (trusted via MSYS2 master keys)
+ok mingw-w64-x86_64-brotli-1.2.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst
+ok mingw-w64-x86_64-cairo-1.18.6-2-any.pkg.tar.zst
+ok mingw-w64-x86_64-cc-libs-16.2.0-6-any.pkg.tar.zst
+ok mingw-w64-x86_64-expat-2.9.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-fontconfig-2.18.3-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-freetype-2.15.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-fribidi-1.0.17-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-glib2-2.90.1-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-harfbuzz-14.6.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libffi-3.8.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libgcc-16.2.0-6-any.pkg.tar.zst
+ok mingw-w64-x86_64-libiconv-1.19-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libpng-1.6.59-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libstdc++-16.2.0-6-any.pkg.tar.zst
+ok mingw-w64-x86_64-libthai-0.1.30-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libwinpthread-14.0.0.r495.g63ebe6cdb-2-any.pkg.tar.zst
+ok mingw-w64-x86_64-lzo2-2.10-3-any.pkg.tar.zst
+ok mingw-w64-x86_64-pango-1.58.2-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-pcre2-10.49-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-pixman-0.46.4-3-any.pkg.tar.zst
+ok mingw-w64-x86_64-python-packaging-26.3-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-sdl3-3.4.18-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-ttf-dejavu-2.37-4-any.pkg.tar.zst
+ok mingw-w64-x86_64-tzdata-2026e-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-vulkan-loader-1~1.4.363.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-wineditline-2.208-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-zlib-1.3.2-2-any.pkg.tar.zst
+31 packages verified and unpacked into /workspace/city2-pr10/repo-v2/build-windows/sysroot/mingw64
+ninja: Entering directory `/workspace/city2-pr10/repo-v2/build-windows/build'
+[0/1] Regenerating build files
+Cleaning... 0 files.
+The Meson build system
+Version: 1.7.0
+Source dir: /workspace/city2-pr10/repo-v2
+Build dir: /workspace/city2-pr10/repo-v2/build-windows/build
+Build type: cross build
+Project name: lunduke-city-2
+Project version: 2.0.0
+C++ compiler for the host machine: x86_64-w64-mingw32-g++-posix (gcc 14.0.0 "x86_64-w64-mingw32-g++-posix (GCC) 14-posix")
+C++ linker for the host machine: x86_64-w64-mingw32-g++-posix ld.bfd 2.44
+C++ compiler for the build machine: c++ (gcc 14.2.0 "c++ (Debian 14.2.0-19) 14.2.0")
+C++ linker for the build machine: c++ ld.bfd 2.44
+Build machine cpu family: x86_64
+Build machine cpu: x86_64
+Host machine cpu family: x86_64
+Host machine cpu: x86_64
+Target machine cpu family: x86_64
+Target machine cpu: x86_64
+Dependency sdl3 found: YES 3.4.18 (cached)
+Dependency cairo found: YES 1.18.6 (cached)
+Dependency pangocairo found: YES 1.58.2 (cached)
+Dependency threads found: YES unknown (cached)
+Windows resource compiler: GNU windres (GNU Binutils) 2.44
+Dependency fontconfig found: YES 2.18.3 (cached)
+Program appstreamcli found: YES (/usr/bin/appstreamcli)
+Build targets in project: 25
+
+lunduke-city-2 2.0.0
+
+  User defined options
+    Cross files: /workspace/city2-pr10/repo-v2/cross/mingw-w64-x86_64.txt
+                 /workspace/city2-pr10/repo-v2/build-windows/sysroot.ini
+    buildtype  : release
+
+Found ninja-1.12.1 at /usr/bin/ninja
+[1/24] Compiling C++ object src/lunduke-city-2.exe.p/city_session.cpp.obj
+[2/24] Compiling C++ object src/lunduke-city-2.exe.p/shell.cpp.obj
+[3/24] Compiling C++ object src/lunduke-city-2.exe.p/shell_actions.cpp.obj
+[4/24] Compiling C++ object src/lunduke-city-2.exe.p/shell_draw.cpp.obj
+[5/24] Compiling C++ object src/lunduke-city-2.exe.p/shell_uitest.cpp.obj
+[6/24] Compiling C++ object tests/features.exe.p/.._src_city_session.cpp.obj
+[7/24] Compiling C++ object tests/round4.exe.p/.._src_city_session.cpp.obj
+[8/24] Compiling C++ object tests/round6.exe.p/round6.cpp.obj
+[9/24] Compiling C++ object tests/round5.exe.p/.._src_city_session.cpp.obj
+[10/24] Compiling C++ object tests/round6.exe.p/.._src_city_session.cpp.obj
+[11/24] Compiling C++ object tests/round8.exe.p/.._src_city_session.cpp.obj
+[12/24] Compiling C++ object tests/special_buildings.exe.p/.._src_city_session.cpp.obj
+[13/24] Compiling C++ object tests/scenario_preview.exe.p/.._src_city_session.cpp.obj
+[14/24] Linking target src/lunduke-city-2.exe
+[15/24] Linking target tests/features.exe
+[16/24] Linking target tests/round4.exe
+[17/24] Linking target tests/round5.exe
+[18/24] Linking target tests/round6.exe
+[19/24] Linking target tests/round8.exe
+[20/24] Linking target tests/special_buildings.exe
+[21/24] Linking target tests/scenario_preview.exe
+[22/24] Compiling C++ object tests/round16.exe.p/.._src_city_session.cpp.obj
+[23/24] Linking target tests/round16.exe
+ninja: Entering directory `/workspace/city2-pr10/repo-v2/build-windows/build'
+ninja: no work to do.
+ 1/25 engine_fixes      OK               1.65s
+ 2/25 engine_smoke      OK               1.69s
+ 3/25 features          OK               0.94s
+ 4/25 round5            OK               0.21s
+ 5/25 round6            OK               0.19s
+ 6/25 round7            OK               0.03s
+ 7/25 production_binary OK               0.05s
+ 8/25 round8            OK               0.25s
+ 9/25 round9            OK               0.04s
+10/25 round10           OK               0.04s
+11/25 round11           SKIP             0.03s   exit status 77
+12/25 round13           OK               0.11s
+13/25 round14           OK               0.03s
+14/25 menu_model        OK               0.02s
+15/25 dialog_copy       OK               0.02s
+16/25 hotspots          OK               0.02s
+17/25 tool_icons        OK               0.64s
+18/25 special_buildings OK               0.21s
+19/25 scenario_preview  OK               0.19s
+20/25 review            OK               0.02s
+21/25 round16           OK               0.22s
+22/25 round4            OK               4.31s
+23/25 ui_input          OK               4.11s
+24/25 sdl_smoke         OK               3.04s
+25/25 metainfo          OK               0.02s
+
+Ok:                 24  
+Expected Fail:      0   
+Fail:               0   
+Unexpected Pass:    0   
+Skipped:            1   
+Timeout:            0   
+
+Full log written to /workspace/city2-pr10/repo-v2/build-windows/build/meson-logs/testlog.txt
+packaged /workspace/city2-pr10/repo-v2/build-windows/dist/lunduke-city-2
+-rw-r--r-- 1 box box 13414576 Oct 21 21:39 /workspace/city2-pr10/repo-v2/build-windows/dist/lunduke-city-2-windows-x86_64.zip
+EXIT=0

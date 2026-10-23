@@ -1,0 +1,7 @@
+ninja: Entering directory `/workspace/city2-pr10/repo-v2/build-windows/build'
+[1/2] Cleaning custom target directories
+[2/2] Cleaning
+Cleaning... 149 files.
+INFO: autodetecting backend as ninja
+INFO: calculating backend command to run: /usr/bin/ninja -C /workspace/city2-pr10/repo-v2/build-windows/build clean
+CLEAN=0

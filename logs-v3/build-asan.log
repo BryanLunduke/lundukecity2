@@ -1,0 +1,56 @@
+ninja: Entering directory `/workspace/city2-pr10/repo-v2/build-asan'
+[1/52] Compiling C++ object src/lunduke-city-2.p/chart.cpp.o
+[2/52] Compiling C++ object src/lunduke-city-2.p/map_view.cpp.o
+[3/52] Compiling C++ object src/lunduke-city-2.p/city_session.cpp.o
+[4/52] Compiling C++ object src/lunduke-city-2.p/overlay_map.cpp.o
+[5/52] Compiling C++ object src/lunduke-city-2.p/shell_actions.cpp.o
+[6/52] Compiling C++ object src/lunduke-city-2.p/shell.cpp.o
+[7/52] Compiling C++ object src/lunduke-city-2.p/shell_uitest.cpp.o
+[8/52] Compiling C++ object src/lunduke-city-2.p/scenario_preview.cpp.o
+[9/52] Compiling C++ object src/lunduke-city-2.p/side_widgets.cpp.o
+[10/52] Compiling C++ object src/lunduke-city-2.p/shell_draw.cpp.o
+[11/52] Compiling C++ object tests/features.p/features.cpp.o
+[12/52] Compiling C++ object src/lunduke-city-2.p/shell_review.cpp.o
+[13/52] Compiling C++ object tests/features.p/.._src_city_session.cpp.o
+[14/52] Compiling C++ object tests/regressions.p/regressions.cpp.o
+[15/52] Compiling C++ object tests/round3.p/round3.cpp.o
+[16/52] Compiling C++ object tests/regressions.p/.._src_city_session.cpp.o
+[17/52] Compiling C++ object tests/round4.p/round4.cpp.o
+[18/52] Compiling C++ object tests/round3.p/.._src_city_session.cpp.o
+[19/52] Compiling C++ object tests/round5.p/round5.cpp.o
+[20/52] Compiling C++ object tests/round4.p/.._src_city_session.cpp.o
+[21/52] Compiling C++ object tests/round6.p/round6.cpp.o
+[22/52] Compiling C++ object tests/round5.p/.._src_city_session.cpp.o
+[23/52] Compiling C++ object tests/round6.p/.._src_city_session.cpp.o
+[24/52] Compiling C++ object tests/argv_open.p/argv_open.cpp.o
+[25/52] Compiling C++ object tests/round8.p/round8.cpp.o
+[26/52] Compiling C++ object tests/argv_open.p/.._src_city_session.cpp.o
+[27/52] Compiling C++ object tests/round8.p/.._src_city_session.cpp.o
+[28/52] Compiling C++ object tests/round15.p/round15.cpp.o
+[29/52] Compiling C++ object tests/dialog_copy.p/dialog_copy.cpp.o
+[30/52] Compiling C++ object tests/special_buildings.p/special_buildings.cpp.o
+[31/52] Compiling C++ object tests/round15.p/.._src_city_session.cpp.o
+[32/52] Compiling C++ object tests/scenario_preview.p/scenario_preview.cpp.o
+[33/52] Compiling C++ object tests/scenario_preview.p/.._src_scenario_preview.cpp.o
+[34/52] Compiling C++ object tests/special_buildings.p/.._src_city_session.cpp.o
+[35/52] Compiling C++ object tests/scenario_preview.p/.._src_city_session.cpp.o
+[36/52] Compiling C++ object tests/round16.p/round16.cpp.o
+[37/52] Compiling C++ object tests/round16.p/.._src_overlay_map.cpp.o
+[38/52] Linking target src/lunduke-city-2
+[39/52] Linking target tests/features
+[40/52] Linking target tests/regressions
+[41/52] Linking target tests/round3
+[42/52] Linking target tests/round4
+[43/52] Linking target tests/round5
+[44/52] Compiling C++ object tests/round16.p/.._src_city_session.cpp.o
+[45/52] Linking target tests/round6
+[46/52] Linking target tests/argv_open
+[47/52] Linking target tests/round8
+[48/52] Linking target tests/dialog_copy
+[49/52] Linking target tests/round15
+[50/52] Linking target tests/special_buildings
+[51/52] Linking target tests/scenario_preview
+[52/52] Linking target tests/round16
+INFO: autodetecting backend as ninja
+INFO: calculating backend command to run: /usr/bin/ninja -C /workspace/city2-pr10/repo-v2/build-asan -j 2
+BA=0
