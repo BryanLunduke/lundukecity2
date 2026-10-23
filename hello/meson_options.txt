@@ -1,0 +1,2 @@
+option('sdl', type: 'feature', value: 'auto')
+option('gtk', type: 'feature', value: 'auto')
