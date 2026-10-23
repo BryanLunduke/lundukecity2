@@ -19,6 +19,7 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include "win_compat.hpp"
 
 namespace {
 
@@ -268,12 +269,14 @@ int main()
     if (remembered_city_folder() != folder) {
         return fail(14, "an XFCE path replaced the remembered folder");
     }
+#ifndef _WIN32 // An XFCE home only exists on the desktop Linux build.
     setenv("HOME", "/tmp/xfce-home-round7", 1);
     remember_city_folder(folder + "/Tokyo.cty");
     if (std::filesystem::exists("/tmp/xfce-home-round7", ec)) {
         return fail(15, "the folder memory wrote an XFCE home");
     }
     setenv("HOME", home, 1);
+#endif
 
 #ifndef LUNDUKE_CITY_SOURCE_DIR
     return fail(16, "the packaging files were not located");

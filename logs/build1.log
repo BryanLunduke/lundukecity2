@@ -1,0 +1,776 @@
+ninja: Entering directory `build-win'
+[1/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_budget.cpp.obj
+[2/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_allocate.cpp.obj
+[3/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_animate.cpp.obj
+[4/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_connect.cpp.obj
+[5/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/evaluate.cpp
+../third_party/micropolis/MicropolisEngine/src/evaluate.cpp: In member function ‘short int Micropolis::getUnemployment()’:
+../third_party/micropolis/MicropolisEngine/src/evaluate.cpp:405:12: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  405 |     return min(saturateToShort(scaled), (short)255);
+      |            ^~~
+      |            std::min
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/evaluate.cpp:69:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/evaluate.cpp: In member function ‘short int Micropolis::getFireSeverity()’:
+../third_party/micropolis/MicropolisEngine/src/evaluate.cpp:415:12: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  415 |     return min(firePop * 5, 255);
+      |            ^~~
+      |            std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/evaluate.cpp: In member function ‘void Micropolis::getScore(const short int*)’:
+../third_party/micropolis/MicropolisEngine/src/evaluate.cpp:439:9: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  439 |     x = min(x, 256);
+      |         ^~~
+      |         std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+[6/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_disasters.cpp.obj
+[7/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_generate.cpp.obj
+[8/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/fileio.cpp
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp: In member function ‘bool Micropolis::loadFile(const char*)’:
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:798:16: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  798 |     cityTime = max((Quad)0, cityTime);
+      |                ^~~
+      |                std::max
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/fileio.cpp:69:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp: In static member function ‘static int Micropolis::removeStaleSaveTemps(const std::string&, const std::string&, long int)’:
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:932:55: error: ‘O_DIRECTORY’ was not declared in this scope; did you mean ‘DOF_DIRECTORY’?
+  932 |     const int dfd = open(open_dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+      |                                                       ^~~~~~~~~~~
+      |                                                       DOF_DIRECTORY
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:932:69: error: ‘O_CLOEXEC’ was not declared in this scope
+  932 |     const int dfd = open(open_dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+      |                                                                     ^~~~~~~~~
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:936:14: error: ‘fdopendir’ was not declared in this scope; did you mean ‘opendir’?
+  936 |     DIR *d = fdopendir(dfd);
+      |              ^~~~~~~~~
+      |              opendir
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:949:45: error: ‘AT_SYMLINK_NOFOLLOW’ was not declared in this scope
+  949 |         if (fstatat(dfd, name.c_str(), &st, AT_SYMLINK_NOFOLLOW) != 0 || !S_ISREG(st.st_mode) ||
+      |                                             ^~~~~~~~~~~~~~~~~~~
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:949:13: error: ‘fstatat’ was not declared in this scope; did you mean ‘fstat’?
+  949 |         if (fstatat(dfd, name.c_str(), &st, AT_SYMLINK_NOFOLLOW) != 0 || !S_ISREG(st.st_mode) ||
+      |             ^~~~~~~
+      |             fstat
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:950:26: error: ‘geteuid’ was not declared in this scope; did you mean ‘getpid’?
+  950 |             st.st_uid != geteuid()) {
+      |                          ^~~~~~~
+      |                          getpid
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:956:13: error: ‘unlinkat’ was not declared in this scope; did you mean ‘unlink’?
+  956 |         if (unlinkat(dfd, name.c_str(), 0) == 0) {
+      |             ^~~~~~~~
+      |             unlink
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp: In member function ‘bool Micropolis::saveFile(const char*, bool)’:
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:984:9: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+  984 |     if (lstat(requestedFilename, &existing) == 0 && S_ISLNK(existing.st_mode)) {
+      |         ^~~~~
+      |         wstat
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:984:53: error: ‘S_ISLNK’ was not declared in this scope; did you mean ‘S_ISBLK’?
+  984 |     if (lstat(requestedFilename, &existing) == 0 && S_ISLNK(existing.st_mode)) {
+      |                                                     ^~~~~~~
+      |                                                     S_ISBLK
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:985:22: error: ‘realpath’ was not declared in this scope
+  985 |         char *real = realpath(requestedFilename, NULL);
+      |                      ^~~~~~~~
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1005:9: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+ 1005 |     if (lstat(filename, &existing) == 0) {
+      |         ^~~~~
+      |         wstat
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1006:13: error: ‘S_ISLNK’ was not declared in this scope; did you mean ‘S_ISBLK’?
+ 1006 |         if (S_ISLNK(existing.st_mode)) {
+      |             ^~~~~~~
+      |             S_ISBLK
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1021:32: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+ 1021 |     const bool had_existing = (lstat(filename, &existing) == 0);
+      |                                ^~~~~
+      |                                wstat
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1030:44: error: ‘O_CLOEXEC’ was not declared in this scope
+ 1030 |     const int fd = mkostemp(tmpbuf.data(), O_CLOEXEC);
+      |                                            ^~~~~~~~~
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1030:20: error: ‘mkostemp’ was not declared in this scope; did you mean ‘mkstemp’?
+ 1030 |     const int fd = mkostemp(tmpbuf.data(), O_CLOEXEC);
+      |                    ^~~~~~~~
+      |                    mkstemp
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1050:13: error: ‘fchown’ was not declared in this scope
+ 1050 |         if (fchown(fd, existing.st_uid, existing.st_gid) != 0) {
+      |             ^~~~~~
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1051:29: error: ‘uid_t’ was not declared in this scope; did you mean ‘pid_t’?
+ 1051 |             if (fchown(fd, (uid_t)-1, existing.st_gid) != 0) {
+      |                             ^~~~~
+      |                             pid_t
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1056:9: error: ‘fchmod’ was not declared in this scope; did you mean ‘chmod’?
+ 1056 |     if (fchmod(fd, want_mode) != 0) {
+      |         ^~~~~~
+      |         chmod
+../third_party/micropolis/MicropolisEngine/src/fileio.cpp:1138:19: error: ‘fsync’ was not declared in this scope
+ 1138 |     if (result && fsync(fd) != 0) {
+      |                   ^~~~~
+[9/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/graph.cpp
+../third_party/micropolis/MicropolisEngine/src/graph.cpp: In member function ‘void Micropolis::initGraphMax()’:
+../third_party/micropolis/MicropolisEngine/src/graph.cpp:160:24: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  160 |         resHist10Max = max(resHist10Max, resHist[x]);
+      |                        ^~~
+      |                        std::max
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/graph.cpp:69:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/graph.cpp:168:13: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  168 |             max(comHist10Max,
+      |             ^~~
+      |             std::max
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/graph.cpp:167:9: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  167 |         max(resHist10Max,
+      |         ^~~
+      |         std::max
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/graph.cpp: In member function ‘void Micropolis::getHistoryRange(int, int, short int*, short int*)’:
+../third_party/micropolis/MicropolisEngine/src/graph.cpp:261:18: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  261 |         minVal = min(val, minVal);
+      |                  ^~~
+      |                  std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/graph.cpp:262:18: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  262 |         maxVal = max(val, maxVal);
+      |                  ^~~
+      |                  std::max
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+[10/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_initialize.cpp.obj
+[11/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_main.cpp.obj
+[12/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_map.cpp.obj
+[13/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_message.cpp.obj
+[14/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_micropolis.cpp.obj
+[15/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_position.cpp.obj
+[16/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_power.cpp.obj
+[17/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/random.cpp
+../third_party/micropolis/MicropolisEngine/src/random.cpp: In member function ‘short int Micropolis::getERandom(short int)’:
+../third_party/micropolis/MicropolisEngine/src/random.cpp:150:12: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  150 |     return min(z, x);
+      |            ^~~
+      |            std::min
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/random.cpp:77:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+[18/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_resource.cpp.obj
+[19/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/scan.cpp
+../third_party/micropolis/MicropolisEngine/src/scan.cpp: In member function ‘void Micropolis::populationDensityScan()’:
+../third_party/micropolis/MicropolisEngine/src/scan.cpp:139:23: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  139 |                 pop = min(pop, 254);
+      |                       ^~~
+      |                       std::min
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/scan.cpp:69:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/scan.cpp: In member function ‘void Micropolis::pollutionTerrainLandValueScan()’:
+../third_party/micropolis/MicropolisEngine/src/scan.cpp:261:30: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  261 |             pollutionLevel = min(pollutionLevel, 255);
+      |                              ^~~
+      |                              std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/scan.cpp: In member function ‘int Micropolis::getCityCenterDistance(int, int)’:
+../third_party/micropolis/MicropolisEngine/src/scan.cpp:398:12: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  398 |     return min(xDis + yDis, 64);
+      |            ^~~
+      |            std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/scan.cpp: In member function ‘void Micropolis::crimeScan()’:
+../third_party/micropolis/MicropolisEngine/src/scan.cpp:420:21: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  420 |                 z = min(z, 300);
+      |                     ^~~
+      |                     std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+[20/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/simulate.cpp
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp: In member function ‘void Micropolis::setValves()’:
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp:649:23: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  649 |     projectedIndPop = max(projectedIndPop, projectedIndPopMin);
+      |                       ^~~
+      |                       std::max
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/simulate.cpp:69:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp:669:16: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  669 |     resRatio = min(resRatio, resRatioMax);
+      |                ^~~
+      |                std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp: In member function ‘void Micropolis::take10Census()’:
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp:774:24: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  774 |         resHist10Max = max(resHist10Max, resHist[x]);
+      |                        ^~~
+      |                        std::max
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp:790:18: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  790 |     graph10Max = max(graph10Max, comHist10Max);
+      |                  ^~~
+      |                  std::max
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp:798:20: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  798 |     crimeHist[0] = min(crimeRamp, (short)255);
+      |                    ^~~
+      |                    std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp: In member function ‘void Micropolis::take120Census()’:
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp:865:25: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  865 |         resHist120Max = max(resHist120Max, resHist[x]);
+      |                         ^~~
+      |                         std::max
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp:881:19: error: ‘max’ was not declared in this scope; did you mean ‘std::max’?
+  881 |     graph120Max = max(graph120Max, comHist120Max);
+      |                   ^~~
+      |                   std::max
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:303:5: note: ‘std::max’ declared here
+  303 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp: In member function ‘int Micropolis::getBoatDistance(const Position&)’:
+../third_party/micropolis/MicropolisEngine/src/simulate.cpp:1390:20: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+ 1390 |             dist = min(dist, sprDist);
+      |                    ^~~
+      |                    std::min
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+[21/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_sprite.cpp.obj
+[22/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/tool.cpp
+../third_party/micropolis/MicropolisEngine/src/tool.cpp: In member function ‘bool Micropolis::toolDrag(EditingTool, short int, short int, short int, short int)’:
+../third_party/micropolis/MicropolisEngine/src/tool.cpp:1603:25: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+ 1603 |     short numSubsteps = min(dx, dy); // Number of sub-steps we can do.
+      |                         ^~~
+      |                         std::min
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/tool.cpp:69:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+[23/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_stubs.cpp.obj
+[24/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/traffic.cpp
+../third_party/micropolis/MicropolisEngine/src/traffic.cpp: In member function ‘void Micropolis::addToTrafficDensityMap()’:
+../third_party/micropolis/MicropolisEngine/src/traffic.cpp:169:27: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  169 |                 traffic = min(traffic, 240);
+      |                           ^~~
+      |                           std::min
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/traffic.cpp:69:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+[25/133] Compiling C++ object src/lunduke-city-2.exe.p/main.cpp.obj
+[26/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_update.cpp.obj
+[27/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_utilities.cpp.obj
+[28/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.obj
+FAILED: third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Ithird_party/micropolis/libmicropolis.a.p -Ithird_party/micropolis -I../third_party/micropolis -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -std=c++17 -O0 -g -Wno-register -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-implicit-fallthrough -MD -MQ third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.obj -MF third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.obj.d -o third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.obj -c ../third_party/micropolis/MicropolisEngine/src/zone.cpp
+../third_party/micropolis/MicropolisEngine/src/zone.cpp: In member function ‘short int Micropolis::evalRes(const Position&, int)’:
+../third_party/micropolis/MicropolisEngine/src/zone.cpp:736:17: error: ‘min’ was not declared in this scope; did you mean ‘std::min’?
+  736 |         value = min(value * 32, 6000); /* Cap at 6000 */
+      |                 ^~~
+      |                 std::min
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/specfun.h:43,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cmath:3906,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/math.h:36,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:77,
+                 from ../third_party/micropolis/MicropolisEngine/src/zone.cpp:69:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/stl_algobase.h:281:5: note: ‘std::min’ declared here
+  281 |     min(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+[29/133] Compiling C++ object src/lunduke-city-2.exe.p/chart.cpp.obj
+[30/133] Compiling C++ object src/lunduke-city-2.exe.p/assets.cpp.obj
+[31/133] Compiling C++ object src/lunduke-city-2.exe.p/messages.cpp.obj
+[32/133] Compiling C++ object src/lunduke-city-2.exe.p/overlay_map.cpp.obj
+[33/133] Compiling C++ object src/lunduke-city-2.exe.p/map_view.cpp.obj
+[34/133] Compiling C++ object src/lunduke-city-2.exe.p/city_session.cpp.obj
+[35/133] Compiling C++ object src/lunduke-city-2.exe.p/shell.cpp.obj
+FAILED: src/lunduke-city-2.exe.p/shell.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Isrc/lunduke-city-2.exe.p -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -I/workspace/city2-win/sysroot/mingw64/include/cairo -I/workspace/city2-win/sysroot/mingw64/include/libpng16 -I/workspace/city2-win/sysroot/mingw64/include/freetype2 -I/workspace/city2-win/sysroot/mingw64/include/harfbuzz -I/workspace/city2-win/sysroot/mingw64/include/glib-2.0 -I/workspace/city2-win/sysroot/mingw64/lib/glib-2.0/include -I/workspace/city2-win/sysroot/mingw64/include/pixman-1 -I/workspace/city2-win/sysroot/mingw64/include/pango-1.0 -I/workspace/city2-win/sysroot/mingw64/include/fribidi -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ src/lunduke-city-2.exe.p/shell.cpp.obj -MF src/lunduke-city-2.exe.p/shell.cpp.obj.d -o src/lunduke-city-2.exe.p/shell.cpp.obj -c ../src/shell.cpp
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:108:9: error: ‘lstat’ was not declared in this scope; did you mean ‘stat’?
+  108 |     if (lstat(out.c_str(), &st) != 0) {
+      |         ^~~~~
+      |         stat
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:384:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  384 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[36/133] Compiling C++ object src/lunduke-city-2.exe.p/shell_actions.cpp.obj
+FAILED: src/lunduke-city-2.exe.p/shell_actions.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Isrc/lunduke-city-2.exe.p -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -I/workspace/city2-win/sysroot/mingw64/include/cairo -I/workspace/city2-win/sysroot/mingw64/include/libpng16 -I/workspace/city2-win/sysroot/mingw64/include/freetype2 -I/workspace/city2-win/sysroot/mingw64/include/harfbuzz -I/workspace/city2-win/sysroot/mingw64/include/glib-2.0 -I/workspace/city2-win/sysroot/mingw64/lib/glib-2.0/include -I/workspace/city2-win/sysroot/mingw64/include/pixman-1 -I/workspace/city2-win/sysroot/mingw64/include/pango-1.0 -I/workspace/city2-win/sysroot/mingw64/include/fribidi -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ src/lunduke-city-2.exe.p/shell_actions.cpp.obj -MF src/lunduke-city-2.exe.p/shell_actions.cpp.obj.d -o src/lunduke-city-2.exe.p/shell_actions.cpp.obj -c ../src/shell_actions.cpp
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_actions.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:108:9: error: ‘lstat’ was not declared in this scope; did you mean ‘stat’?
+  108 |     if (lstat(out.c_str(), &st) != 0) {
+      |         ^~~~~
+      |         stat
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:384:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  384 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[37/133] Compiling C++ object src/lunduke-city-2.exe.p/shell_uitest.cpp.obj
+FAILED: src/lunduke-city-2.exe.p/shell_uitest.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Isrc/lunduke-city-2.exe.p -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -I/workspace/city2-win/sysroot/mingw64/include/cairo -I/workspace/city2-win/sysroot/mingw64/include/libpng16 -I/workspace/city2-win/sysroot/mingw64/include/freetype2 -I/workspace/city2-win/sysroot/mingw64/include/harfbuzz -I/workspace/city2-win/sysroot/mingw64/include/glib-2.0 -I/workspace/city2-win/sysroot/mingw64/lib/glib-2.0/include -I/workspace/city2-win/sysroot/mingw64/include/pixman-1 -I/workspace/city2-win/sysroot/mingw64/include/pango-1.0 -I/workspace/city2-win/sysroot/mingw64/include/fribidi -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ src/lunduke-city-2.exe.p/shell_uitest.cpp.obj -MF src/lunduke-city-2.exe.p/shell_uitest.cpp.obj.d -o src/lunduke-city-2.exe.p/shell_uitest.cpp.obj -c ../src/shell_uitest.cpp
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_uitest.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:108:9: error: ‘lstat’ was not declared in this scope; did you mean ‘stat’?
+  108 |     if (lstat(out.c_str(), &st) != 0) {
+      |         ^~~~~
+      |         stat
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:384:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  384 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[38/133] Compiling C++ object src/lunduke-city-2.exe.p/shell_draw.cpp.obj
+FAILED: src/lunduke-city-2.exe.p/shell_draw.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Isrc/lunduke-city-2.exe.p -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -I/workspace/city2-win/sysroot/mingw64/include/cairo -I/workspace/city2-win/sysroot/mingw64/include/libpng16 -I/workspace/city2-win/sysroot/mingw64/include/freetype2 -I/workspace/city2-win/sysroot/mingw64/include/harfbuzz -I/workspace/city2-win/sysroot/mingw64/include/glib-2.0 -I/workspace/city2-win/sysroot/mingw64/lib/glib-2.0/include -I/workspace/city2-win/sysroot/mingw64/include/pixman-1 -I/workspace/city2-win/sysroot/mingw64/include/pango-1.0 -I/workspace/city2-win/sysroot/mingw64/include/fribidi -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ src/lunduke-city-2.exe.p/shell_draw.cpp.obj -MF src/lunduke-city-2.exe.p/shell_draw.cpp.obj.d -o src/lunduke-city-2.exe.p/shell_draw.cpp.obj -c ../src/shell_draw.cpp
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_draw.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:108:9: error: ‘lstat’ was not declared in this scope; did you mean ‘stat’?
+  108 |     if (lstat(out.c_str(), &st) != 0) {
+      |         ^~~~~
+      |         stat
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:384:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  384 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[39/133] Compiling C++ object src/lunduke-city-2.exe.p/side_widgets.cpp.obj
+[40/133] Compiling C++ object src/lunduke-city-2.exe.p/sprite_art.cpp.obj
+[41/133] Compiling C++ object src/lunduke-city-2.exe.p/tile_atlas.cpp.obj
+[42/133] Compiling C++ object src/lunduke-city-2.exe.p/sound_player.cpp.obj
+[43/133] Compiling C++ object src/lunduke-city-2.exe.p/tool_palette.cpp.obj
+[44/133] Compiling C++ object src/lunduke-city-2.exe.p/tools.cpp.obj
+[45/133] Compiling C++ object tests/engine_smoke.exe.p/engine_smoke.cpp.obj
+[46/133] Compiling C++ object tests/engine_fixes.exe.p/engine_fixes.cpp.obj
+FAILED: tests/engine_fixes.exe.p/engine_fixes.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/engine_fixes.exe.p -Itests -I../tests -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -MD -MQ tests/engine_fixes.exe.p/engine_fixes.cpp.obj -MF tests/engine_fixes.exe.p/engine_fixes.cpp.obj.d -o tests/engine_fixes.exe.p/engine_fixes.cpp.obj -c ../tests/engine_fixes.cpp
+../tests/engine_fixes.cpp:106:46: error: missing binary operator before token "("
+  106 | #if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+      |                                              ^
+../tests/engine_fixes.cpp:118:46: error: missing binary operator before token "("
+  118 | #if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+      |                                              ^
+[47/133] Compiling C++ object tests/features.exe.p/.._src_messages.cpp.obj
+[48/133] Compiling C++ object tests/features.exe.p/.._src_assets.cpp.obj
+[49/133] Compiling C++ object tests/features.exe.p/features.cpp.obj
+[50/133] Compiling C++ object tests/features.exe.p/.._src_city_session.cpp.obj
+[51/133] Compiling C++ object tests/features.exe.p/.._src_tools.cpp.obj
+[52/133] Compiling C++ object tests/features.exe.p/.._src_sound_player.cpp.obj
+[53/133] Compiling C++ object tests/regressions.exe.p/.._src_messages.cpp.obj
+[54/133] Compiling C++ object tests/regressions.exe.p/.._src_assets.cpp.obj
+[55/133] Compiling C++ object tests/regressions.exe.p/regressions.cpp.obj
+FAILED: tests/regressions.exe.p/regressions.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/regressions.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/regressions.exe.p/regressions.cpp.obj -MF tests/regressions.exe.p/regressions.cpp.obj.d -o tests/regressions.exe.p/regressions.cpp.obj -c ../tests/regressions.cpp
+../tests/regressions.cpp:46:11: error: expected unqualified-id before ‘float’
+   46 | bool near(float value, float expected)
+      |           ^~~~~
+../tests/regressions.cpp:46:11: error: expected ‘)’ before ‘float’
+   46 | bool near(float value, float expected)
+      |          ~^~~~~
+      |           )
+../tests/regressions.cpp: In function ‘int test_save_round_trip()’:
+../tests/regressions.cpp:134:22: warning: left operand of comma operator has no effect [-Wunused-value]
+  134 |     if (!near(loaded.roadPercent, 0.4f) || !near(loaded.policePercent, 0.4f) ||
+      |               ~~~~~~~^~~~~~~~~~~
+../tests/regressions.cpp:134:57: warning: left operand of comma operator has no effect [-Wunused-value]
+  134 |     if (!near(loaded.roadPercent, 0.4f) || !near(loaded.policePercent, 0.4f) ||
+      |                                                  ~~~~~~~^~~~~~~~~~~~~
+../tests/regressions.cpp:135:22: warning: left operand of comma operator has no effect [-Wunused-value]
+  135 |         !near(loaded.firePercent, 0.4f)) {
+      |               ~~~~~~~^~~~~~~~~~~
+../tests/regressions.cpp: In function ‘int test_hostile_review()’:
+../tests/regressions.cpp:584:10: error: too many arguments to function ‘int mkdir(const char*)’
+  584 |     mkdir(atomic_dir.c_str(), 0755);
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/share/mingw-w64/include/sys/stat.h:14,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:79,
+                 from ../tests/regressions.cpp:14:
+/usr/share/mingw-w64/include/io.h:282:15: note: declared here
+  282 |   int __cdecl mkdir (const char *) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/regressions.cpp:611:13: error: ‘symlink’ was not declared in this scope; did you mean ‘std::filesystem::file_type::symlink’?
+  611 |         if (symlink(atomic.c_str(), link.c_str()) != 0 || !kept.saveFile(link.c_str()) ||
+      |             ^~~~~~~
+      |             std::filesystem::file_type::symlink
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/filesystem:51,
+                 from ../src/save_path.hpp:10,
+                 from ../tests/regressions.cpp:11:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/fs_fwd.h:79:61: note: ‘std::filesystem::file_type::symlink’ declared here
+   79 |       none = 0, not_found = -1, regular = 1, directory = 2, symlink = 3,
+      |                                                             ^~~~~~~
+../tests/regressions.cpp:612:13: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+  612 |             lstat(link.c_str(), &lst) != 0 || !S_ISLNK(lst.st_mode) || read_bytes(atomic).size() != previous.size()) {
+      |             ^~~~~
+      |             wstat
+../tests/regressions.cpp:612:48: error: ‘S_ISLNK’ was not declared in this scope; did you mean ‘S_ISBLK’?
+  612 |             lstat(link.c_str(), &lst) != 0 || !S_ISLNK(lst.st_mode) || read_bytes(atomic).size() != previous.size()) {
+      |                                                ^~~~~~~
+      |                                                S_ISBLK
+../tests/regressions.cpp:730:10: error: too many arguments to function ‘int mkdir(const char*)’
+  730 |     mkdir(sound_dir.c_str(), 0755);
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/share/mingw-w64/include/io.h:282:15: note: declared here
+  282 |   int __cdecl mkdir (const char *) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/regressions.cpp:745:5: error: ‘symlink’ was not declared in this scope; did you mean ‘std::filesystem::file_type::symlink’?
+  745 |     symlink(small_wav.c_str(), linked.c_str());
+      |     ^~~~~~~
+      |     std::filesystem::file_type::symlink
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/fs_fwd.h:79:61: note: ‘std::filesystem::file_type::symlink’ declared here
+   79 |       none = 0, not_found = -1, regular = 1, directory = 2, symlink = 3,
+      |                                                             ^~~~~~~
+[56/133] Compiling C++ object tests/round3.exe.p/round3.cpp.obj
+FAILED: tests/round3.exe.p/round3.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round3.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round3.exe.p/round3.cpp.obj -MF tests/round3.exe.p/round3.cpp.obj.d -o tests/round3.exe.p/round3.cpp.obj -c ../tests/round3.cpp
+../tests/round3.cpp:20:10: fatal error: sys/resource.h: No such file or directory
+   20 | #include <sys/resource.h>
+      |          ^~~~~~~~~~~~~~~~
+compilation terminated.
+[57/133] Compiling C++ object tests/regressions.exe.p/.._src_city_session.cpp.obj
+[58/133] Compiling C++ object tests/regressions.exe.p/.._src_tools.cpp.obj
+[59/133] Compiling C++ object tests/round3.exe.p/.._src_messages.cpp.obj
+[60/133] Compiling C++ object tests/regressions.exe.p/.._src_sound_player.cpp.obj
+[61/133] Compiling C++ object tests/round3.exe.p/.._src_assets.cpp.obj
+[62/133] Compiling C++ object tests/round3.exe.p/.._src_tools.cpp.obj
+[63/133] Compiling C++ object tests/round3.exe.p/.._src_city_session.cpp.obj
+[64/133] Compiling C++ object tests/round3.exe.p/.._src_sound_player.cpp.obj
+[65/133] Compiling C++ object tests/round4.exe.p/.._src_messages.cpp.obj
+[66/133] Compiling C++ object tests/round4.exe.p/round4.cpp.obj
+[67/133] Compiling C++ object tests/round4.exe.p/.._src_assets.cpp.obj
+[68/133] Compiling C++ object tests/round4.exe.p/.._src_tools.cpp.obj
+[69/133] Compiling C++ object tests/round4.exe.p/.._src_city_session.cpp.obj
+[70/133] Compiling C++ object tests/round4.exe.p/.._src_sound_player.cpp.obj
+[71/133] Compiling C++ object tests/round5.exe.p/.._src_messages.cpp.obj
+[72/133] Compiling C++ object tests/round5.exe.p/round5.cpp.obj
+../tests/round5.cpp: In function ‘int main()’:
+../tests/round5.cpp:158:70: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  158 |         if (!loaded.loadCity(wide_path.c_str()) || loaded.totalFunds != 3000000000LL || loaded.resPop != 32800 ||
+      |                                                    ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+../tests/round5.cpp:171:66: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  171 |             session.budget().fire_need != 400 || session.funds() != 3000000000L ||
+      |                                                  ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+../tests/round5.cpp:192:31: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  192 |             loaded.totalFunds != 2147483648LL) {
+      |             ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+../tests/round5.cpp:196:23: warning: overflow in conversion from ‘long long int’ to ‘Quad’ {aka ‘long int’} changes value from ‘-3000000000’ to ‘1294967296’ [-Woverflow]
+  196 |         rich.setFunds(-3000000000LL);
+      |                       ^~~~~~~~~~~~~
+../tests/round5.cpp:203:29: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  203 |             debt.totalFunds != -3000000000LL) {
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+[73/133] Compiling C++ object tests/round5.exe.p/.._src_assets.cpp.obj
+[74/133] Compiling C++ object tests/round6.exe.p/round6.cpp.obj
+[75/133] Compiling C++ object tests/round6.exe.p/.._src_assets.cpp.obj
+[76/133] Compiling C++ object tests/round5.exe.p/.._src_city_session.cpp.obj
+[77/133] Compiling C++ object tests/round5.exe.p/.._src_tools.cpp.obj
+[78/133] Compiling C++ object tests/round6.exe.p/.._src_messages.cpp.obj
+[79/133] Compiling C++ object tests/round5.exe.p/.._src_sound_player.cpp.obj
+[80/133] Compiling C++ object tests/round7.exe.p/round7.cpp.obj
+FAILED: tests/round7.exe.p/round7.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round7.exe.p -Itests -I../tests -Isrc -I../src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g '-DLUNDUKE_CITY_SOURCE_DIR="/workspace/city2-win"' -MD -MQ tests/round7.exe.p/round7.cpp.obj -MF tests/round7.exe.p/round7.cpp.obj.d -o tests/round7.exe.p/round7.cpp.obj -c ../tests/round7.cpp
+../tests/round7.cpp: In function ‘int main()’:
+../tests/round7.cpp:250:18: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+  250 |     char *home = mkdtemp(home_template);
+      |                  ^~~~~~~
+      |                  mktemp
+../tests/round7.cpp:254:5: error: ‘setenv’ was not declared in this scope; did you mean ‘getenv’?
+  254 |     setenv("HOME", home, 1);
+      |     ^~~~~~
+      |     getenv
+[81/133] Compiling C++ object tests/production_binary.exe.p/production_binary.cpp.obj
+[82/133] Compiling C++ object tests/argv_open.exe.p/argv_open.cpp.obj
+FAILED: tests/argv_open.exe.p/argv_open.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/argv_open.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ tests/argv_open.exe.p/argv_open.cpp.obj -MF tests/argv_open.exe.p/argv_open.cpp.obj.d -o tests/argv_open.exe.p/argv_open.cpp.obj -c ../tests/argv_open.cpp
+../tests/argv_open.cpp:11:10: fatal error: sys/wait.h: No such file or directory
+   11 | #include <sys/wait.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+[83/133] Compiling C++ object tests/round6.exe.p/.._src_tools.cpp.obj
+[84/133] Compiling C++ object tests/round6.exe.p/.._src_sound_player.cpp.obj
+[85/133] Compiling C++ object tests/round6.exe.p/.._src_city_session.cpp.obj
+[86/133] Compiling C++ object tests/argv_open.exe.p/.._src_messages.cpp.obj
+[87/133] Compiling C++ object tests/argv_open.exe.p/.._src_assets.cpp.obj
+[88/133] Compiling C++ object tests/argv_open.exe.p/.._src_tools.cpp.obj
+[89/133] Compiling C++ object tests/argv_open.exe.p/.._src_city_session.cpp.obj
+[90/133] Compiling C++ object tests/round8.exe.p/round8.cpp.obj
+FAILED: tests/round8.exe.p/round8.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round8.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round8.exe.p/round8.cpp.obj -MF tests/round8.exe.p/round8.cpp.obj.d -o tests/round8.exe.p/round8.cpp.obj -c ../tests/round8.cpp
+../tests/round8.cpp: In function ‘int main()’:
+../tests/round8.cpp:55:17: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   55 |     char *dir = mkdtemp(dir_template);
+      |                 ^~~~~~~
+      |                 mktemp
+[91/133] Compiling C++ object tests/argv_open.exe.p/.._src_sound_player.cpp.obj
+[92/133] Compiling C++ object tests/round8.exe.p/.._src_messages.cpp.obj
+[93/133] Compiling C++ object tests/round8.exe.p/.._src_assets.cpp.obj
+[94/133] Compiling C++ object tests/round8.exe.p/.._src_tools.cpp.obj
+[95/133] Compiling C++ object tests/round8.exe.p/.._src_city_session.cpp.obj
+[96/133] Compiling C++ object tests/round9.exe.p/round9.cpp.obj
+FAILED: tests/round9.exe.p/round9.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round9.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round9.exe.p/round9.cpp.obj -MF tests/round9.exe.p/round9.cpp.obj.d -o tests/round9.exe.p/round9.cpp.obj -c ../tests/round9.cpp
+../tests/round9.cpp: In function ‘int main()’:
+../tests/round9.cpp:40:17: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   40 |     char *dir = mkdtemp(dir_template);
+      |                 ^~~~~~~
+      |                 mktemp
+../tests/round9.cpp:80:24: warning: comparison is always false due to limited range of data type [-Wtype-limits]
+   80 |     if (sim.totalFunds > 1000000000000LL || sim.totalFunds < -1000000000000LL) {
+      |         ~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+../tests/round9.cpp:80:60: warning: comparison is always false due to limited range of data type [-Wtype-limits]
+   80 |     if (sim.totalFunds > 1000000000000LL || sim.totalFunds < -1000000000000LL) {
+      |                                             ~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+[97/133] Compiling C++ object tests/round8.exe.p/.._src_sound_player.cpp.obj
+[98/133] Compiling C++ object tests/round10.exe.p/round10.cpp.obj
+FAILED: tests/round10.exe.p/round10.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round10.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round10.exe.p/round10.cpp.obj -MF tests/round10.exe.p/round10.cpp.obj.d -o tests/round10.exe.p/round10.cpp.obj -c ../tests/round10.cpp
+../tests/round10.cpp: In function ‘int main()’:
+../tests/round10.cpp:61:17: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   61 |     char *dir = mkdtemp(dir_template);
+      |                 ^~~~~~~
+      |                 mktemp
+[99/133] Compiling C++ object tests/round11.exe.p/round11.cpp.obj
+[100/133] Compiling C++ object tests/round13.exe.p/round13.cpp.obj
+FAILED: tests/round13.exe.p/round13.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round13.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' -MD -MQ tests/round13.exe.p/round13.cpp.obj -MF tests/round13.exe.p/round13.cpp.obj.d -o tests/round13.exe.p/round13.cpp.obj -c ../tests/round13.cpp
+../tests/round13.cpp: In function ‘int main()’:
+../tests/round13.cpp:66:17: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   66 |     char *dir = mkdtemp(dir_template);
+      |                 ^~~~~~~
+      |                 mktemp
+[101/133] Compiling C++ object tests/round14.exe.p/round14.cpp.obj
+FAILED: tests/round14.exe.p/round14.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round14.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread -MD -MQ tests/round14.exe.p/round14.cpp.obj -MF tests/round14.exe.p/round14.cpp.obj.d -o tests/round14.exe.p/round14.cpp.obj -c ../tests/round14.cpp
+../tests/round14.cpp: In function ‘int main()’:
+../tests/round14.cpp:54:10: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   54 |     if (!mkdtemp(tmpl)) return fail(1, "mkdtemp");
+      |          ^~~~~~~
+      |          mktemp
+[102/133] Compiling C++ object tests/round15.exe.p/.._src_messages.cpp.obj
+[103/133] Compiling C++ object tests/round15.exe.p/.._src_assets.cpp.obj
+[104/133] Compiling C++ object tests/round15.exe.p/round15.cpp.obj
+FAILED: tests/round15.exe.p/round15.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round15.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round15.exe.p/round15.cpp.obj -MF tests/round15.exe.p/round15.cpp.obj.d -o tests/round15.exe.p/round15.cpp.obj -c ../tests/round15.cpp
+In file included from ../tests/round15.cpp:16:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:108:9: error: ‘lstat’ was not declared in this scope; did you mean ‘stat’?
+  108 |     if (lstat(out.c_str(), &st) != 0) {
+      |         ^~~~~
+      |         stat
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:384:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  384 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+../tests/round15.cpp: In function ‘bool {anonymous}::is_link(const std::string&)’:
+../tests/round15.cpp:49:12: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+   49 |     return lstat(p.c_str(), &st) == 0 && S_ISLNK(st.st_mode);
+      |            ^~~~~
+      |            wstat
+../tests/round15.cpp:49:42: error: ‘S_ISLNK’ was not declared in this scope; did you mean ‘S_ISBLK’?
+   49 |     return lstat(p.c_str(), &st) == 0 && S_ISLNK(st.st_mode);
+      |                                          ^~~~~~~
+      |                                          S_ISBLK
+../tests/round15.cpp: In function ‘bool {anonymous}::exists(const std::string&)’:
+../tests/round15.cpp:54:12: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+   54 |     return lstat(p.c_str(), &st) == 0;
+      |            ^~~~~
+      |            wstat
+../tests/round15.cpp: In function ‘void {anonymous}::make_old(const std::string&, long int)’:
+../tests/round15.cpp:63:5: error: ‘utimes’ was not declared in this scope; did you mean ‘timeb’?
+   63 |     utimes(p.c_str(), tv);
+      |     ^~~~~~
+      |     timeb
+../tests/round15.cpp: In function ‘int main()’:
+../tests/round15.cpp:70:10: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   70 |     if (!mkdtemp(tmpl)) {
+      |          ^~~~~~~
+      |          mktemp
+../tests/round15.cpp:74:5: error: ‘setenv’ was not declared in this scope; did you mean ‘getenv’?
+   74 |     setenv("HOME", root.c_str(), 1);
+      |     ^~~~~~
+      |     getenv
+../tests/round15.cpp:79:10: error: too many arguments to function ‘int mkdir(const char*)’
+   79 |     mkdir(real_dir.c_str(), 0755);
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../src/city_recovery.hpp:34:
+/usr/share/mingw-w64/include/direct.h:65:15: note: declared here
+   65 |   int __cdecl mkdir(const char *_Path) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/round15.cpp:80:10: error: too many arguments to function ‘int mkdir(const char*)’
+   80 |     mkdir(link_dir.c_str(), 0755);
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/share/mingw-w64/include/direct.h:65:15: note: declared here
+   65 |   int __cdecl mkdir(const char *_Path) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/round15.cpp:93:9: error: ‘symlink’ was not declared in this scope; did you mean ‘link’?
+   93 |         symlink(real.c_str(), link.c_str());
+      |         ^~~~~~~
+      |         link
+../tests/round15.cpp:105:17: error: ‘DIR’ was not declared in this scope; did you mean ‘DIRT’?
+  105 |             if (DIR *dp = opendir(d.c_str())) {
+      |                 ^~~
+      |                 DIRT
+../tests/round15.cpp:105:22: error: ‘dp’ was not declared in this scope; did you mean ‘d’?
+  105 |             if (DIR *dp = opendir(d.c_str())) {
+      |                      ^~
+      |                      d
+../tests/round15.cpp:105:27: error: ‘opendir’ was not declared in this scope; did you mean ‘open’?
+  105 |             if (DIR *dp = opendir(d.c_str())) {
+      |                           ^~~~~~~
+      |                           open
+../tests/round15.cpp:106:24: error: ‘dirent’ was not declared in this scope
+  106 |                 while (dirent *e = readdir(dp)) {
+      |                        ^~~~~~
+../tests/round15.cpp:106:32: error: ‘e’ was not declared in this scope
+  106 |                 while (dirent *e = readdir(dp)) {
+      |                                ^
+../tests/round15.cpp:106:36: error: ‘readdir’ was not declared in this scope; did you mean ‘real_dir’?
+  106 |                 while (dirent *e = readdir(dp)) {
+      |                                    ^~~~~~~
+      |                                    real_dir
+../tests/round15.cpp:109:17: error: ‘closedir’ was not declared in this scope; did you mean ‘close’?
+  109 |                 closedir(dp);
+      |                 ^~~~~~~~
+      |                 close
+../tests/round15.cpp:127:9: error: ‘gid_t’ was not declared in this scope; did you mean ‘pid_t’?
+  127 |         gid_t groups[64];
+      |         ^~~~~
+      |         pid_t
+../tests/round15.cpp:128:37: error: ‘groups’ was not declared in this scope
+  128 |         const int n = getgroups(64, groups);
+      |                                     ^~~~~~
+../tests/round15.cpp:128:23: error: ‘getgroups’ was not declared in this scope
+  128 |         const int n = getgroups(64, groups);
+      |                       ^~~~~~~~~
+../tests/round15.cpp:129:14: error: expected ‘;’ before ‘other’
+  129 |         gid_t other = (gid_t)-1;
+      |              ^~~~~~
+      |              ;
+../tests/round15.cpp:131:30: error: ‘getegid’ was not declared in this scope; did you mean ‘getpid’?
+  131 |             if (groups[i] != getegid()) {
+      |                              ^~~~~~~
+      |                              getpid
+../tests/round15.cpp:132:17: error: ‘other’ was not declared in this scope
+  132 |                 other = groups[i];
+      |                 ^~~~~
+../tests/round15.cpp:136:13: error: ‘other’ was not declared in this scope
+  136 |         if (other == (gid_t)-1) {
+      |             ^~~~~
+../tests/round15.cpp:141:42: error: ‘uid_t’ was not declared in this scope; did you mean ‘pid_t’?
+  141 |             check(chown(shared.c_str(), (uid_t)-1, other) == 0, "give it a shared group");
+      |                                          ^~~~~
+      |                                          pid_t
+../tests/round15.cpp:141:19: error: ‘chown’ was not declared in this scope
+  141 |             check(chown(shared.c_str(), (uid_t)-1, other) == 0, "give it a shared group");
+      |                   ^~~~~
+../tests/round15.cpp:153:14: error: too many arguments to function ‘int mkdir(const char*)’
+  153 |         mkdir(d.c_str(), 0755);
+      |         ~~~~~^~~~~~~~~~~~~~~~~
+/usr/share/mingw-w64/include/direct.h:65:15: note: declared here
+   65 |   int __cdecl mkdir(const char *_Path) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/round15.cpp:163:9: error: ‘symlink’ was not declared in this scope
+  163 |         symlink(user_file.c_str(), link_tmp.c_str());
+      |         ^~~~~~~
+../tests/round15.cpp:261:14: error: too many arguments to function ‘int mkdir(const char*)’
+  261 |         mkdir(evil_state.c_str(), 0700);
+      |         ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/share/mingw-w64/include/direct.h:65:15: note: declared here
+   65 |   int __cdecl mkdir(const char *_Path) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/round15.cpp:262:9: error: ‘symlink’ was not declared in this scope
+  262 |         symlink(real_dir.c_str(), (evil_state + "/lunduke-city-2").c_str());
+      |         ^~~~~~~
+[105/133] Compiling C++ object tests/menu_model.exe.p/menu_model.cpp.obj
+[106/133] Compiling C++ object tests/dialog_copy.exe.p/dialog_copy.cpp.obj
+[107/133] Compiling C++ object tests/round15.exe.p/.._src_tools.cpp.obj
+[108/133] Linking target tests/production_binary.exe
+[109/133] Linking target tests/menu_model.exe
+[110/133] Linking target tests/dialog_copy.exe
+[111/133] Compiling C++ object tests/round15.exe.p/.._src_city_session.cpp.obj
+[112/133] Compiling C++ object tests/hotspots.exe.p/hotspots.cpp.obj
+[113/133] Linking target tests/hotspots.exe
+[114/133] Compiling C++ object tests/round15.exe.p/.._src_sound_player.cpp.obj
+ninja: build stopped: cannot make progress due to previous errors.

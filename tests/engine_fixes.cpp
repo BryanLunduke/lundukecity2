@@ -14,6 +14,12 @@
 #include <string>
 #include <vector>
 
+#if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
+#if __GLIBC_PREREQ(2, 33)
+#define LC_HAVE_MALLINFO2 1
+#endif
+#endif
+
 namespace {
 
 int fail(int code, const char *message)
@@ -102,8 +108,9 @@ int lunduke_city_test_destroy_sprites()
         exercise();
     }
     // mallinfo2 needs glibc 2.33. Sniper's runtime is 2.31 and still has mallinfo.
+    // Other C libraries (MinGW, musl) skip the heap check.
     long baseline = -1;
-#if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+#ifdef LC_HAVE_MALLINFO2
     baseline = static_cast<long>(mallinfo2().uordblks);
 #elif defined(__GLIBC__) || defined(__linux__)
     baseline = static_cast<long>(mallinfo().uordblks);
@@ -115,7 +122,7 @@ int lunduke_city_test_destroy_sprites()
         exercise();
     }
     long grown = -1;
-#if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+#ifdef LC_HAVE_MALLINFO2
     grown = static_cast<long>(mallinfo2().uordblks) - baseline;
 #elif defined(__GLIBC__) || defined(__linux__)
     grown = static_cast<long>(mallinfo().uordblks) - baseline;

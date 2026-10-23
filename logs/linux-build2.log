@@ -1,0 +1,18 @@
+ninja: Entering directory `build-linux'
+[1/17] Compiling C++ object tests/round7.p/round7.cpp.o
+[2/17] Compiling C++ object tests/regressions.p/regressions.cpp.o
+[3/17] Compiling C++ object src/lunduke-city-2.p/shell.cpp.o
+[4/17] Compiling C++ object tests/round8.p/round8.cpp.o
+[5/17] Compiling C++ object src/lunduke-city-2.p/shell_actions.cpp.o
+[6/17] Compiling C++ object tests/round9.p/round9.cpp.o
+[7/17] Compiling C++ object tests/round10.p/round10.cpp.o
+[8/17] Compiling C++ object tests/round14.p/round14.cpp.o
+[9/17] Linking target tests/regressions
+[10/17] Linking target src/lunduke-city-2
+[11/17] Linking target tests/round7
+[12/17] Linking target tests/round9
+[13/17] Linking target tests/round10
+[14/17] Linking target tests/round8
+[15/17] Compiling C++ object tests/round13.p/round13.cpp.o
+[16/17] Linking target tests/round14
+[17/17] Linking target tests/round13

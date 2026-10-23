@@ -89,6 +89,9 @@
 #endif
 
 #define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
+#ifndef NOMINMAX
+#define NOMINMAX                        // Keep min/max as functions, not macros
+#endif
 // Windows Header Files:
 #include <windows.h>
 

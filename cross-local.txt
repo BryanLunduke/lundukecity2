@@ -1,0 +1,22 @@
+[binaries]
+c = 'x86_64-w64-mingw32-gcc-posix'
+cpp = 'x86_64-w64-mingw32-g++-posix'
+ar = 'x86_64-w64-mingw32-ar'
+strip = 'x86_64-w64-mingw32-strip'
+windres = 'x86_64-w64-mingw32-windres'
+pkg-config = 'pkg-config'
+exe_wrapper = ['/workspace/city2-win/wine-wrap.sh']
+
+[built-in options]
+pkg_config_path = ''
+
+[properties]
+pkg_config_libdir = ['/workspace/city2-win/sysroot/mingw64/lib/pkgconfig', '/workspace/city2-win/sysroot/mingw64/share/pkgconfig']
+sys_root = '/workspace/city2-win/sysroot'
+needs_exe_wrapper = true
+
+[host_machine]
+system = 'windows'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'

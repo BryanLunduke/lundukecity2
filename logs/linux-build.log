@@ -1,0 +1,134 @@
+ninja: Entering directory `build-linux'
+[1/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_animate.cpp.o
+[2/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_allocate.cpp.o
+[3/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_budget.cpp.o
+[4/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_connect.cpp.o
+[5/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_disasters.cpp.o
+[6/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.o
+[7/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_generate.cpp.o
+[8/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.o
+[9/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_initialize.cpp.o
+[10/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.o
+[11/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_main.cpp.o
+[12/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_map.cpp.o
+[13/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_message.cpp.o
+[14/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_micropolis.cpp.o
+[15/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_position.cpp.o
+[16/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_power.cpp.o
+[17/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.o
+[18/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_resource.cpp.o
+[19/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.o
+[20/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.o
+[21/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_sprite.cpp.o
+[22/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_stubs.cpp.o
+[23/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_update.cpp.o
+[24/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.o
+[25/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.o
+[26/133] Compiling C++ object src/lunduke-city-2.p/main.cpp.o
+[27/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_utilities.cpp.o
+[28/133] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.o
+[29/133] Linking static target third_party/micropolis/libmicropolis.a
+[30/133] Compiling C++ object src/lunduke-city-2.p/assets.cpp.o
+[31/133] Compiling C++ object src/lunduke-city-2.p/chart.cpp.o
+[32/133] Compiling C++ object src/lunduke-city-2.p/messages.cpp.o
+[33/133] Compiling C++ object src/lunduke-city-2.p/map_view.cpp.o
+[34/133] Compiling C++ object src/lunduke-city-2.p/overlay_map.cpp.o
+[35/133] Compiling C++ object src/lunduke-city-2.p/city_session.cpp.o
+[36/133] Compiling C++ object src/lunduke-city-2.p/shell.cpp.o
+[37/133] Compiling C++ object src/lunduke-city-2.p/shell_uitest.cpp.o
+[38/133] Compiling C++ object src/lunduke-city-2.p/shell_draw.cpp.o
+[39/133] Compiling C++ object src/lunduke-city-2.p/shell_actions.cpp.o
+[40/133] Compiling C++ object src/lunduke-city-2.p/side_widgets.cpp.o
+[41/133] Compiling C++ object src/lunduke-city-2.p/sprite_art.cpp.o
+[42/133] Compiling C++ object src/lunduke-city-2.p/tile_atlas.cpp.o
+[43/133] Compiling C++ object src/lunduke-city-2.p/tool_palette.cpp.o
+[44/133] Compiling C++ object src/lunduke-city-2.p/tools.cpp.o
+[45/133] Compiling C++ object tests/engine_smoke.p/engine_smoke.cpp.o
+[46/133] Compiling C++ object tests/engine_fixes.p/engine_fixes.cpp.o
+[47/133] Compiling C++ object src/lunduke-city-2.p/sound_player.cpp.o
+[48/133] Compiling C++ object tests/features.p/.._src_assets.cpp.o
+[49/133] Compiling C++ object tests/features.p/.._src_messages.cpp.o
+[50/133] Compiling C++ object tests/features.p/features.cpp.o
+[51/133] Compiling C++ object tests/features.p/.._src_tools.cpp.o
+[52/133] Compiling C++ object tests/features.p/.._src_city_session.cpp.o
+[53/133] Compiling C++ object tests/regressions.p/.._src_assets.cpp.o
+[54/133] Compiling C++ object tests/regressions.p/.._src_messages.cpp.o
+[55/133] Compiling C++ object tests/features.p/.._src_sound_player.cpp.o
+[56/133] Compiling C++ object tests/regressions.p/regressions.cpp.o
+[57/133] Compiling C++ object tests/regressions.p/.._src_tools.cpp.o
+[58/133] Compiling C++ object tests/regressions.p/.._src_city_session.cpp.o
+[59/133] Compiling C++ object tests/round3.p/.._src_assets.cpp.o
+[60/133] Compiling C++ object tests/round3.p/round3.cpp.o
+[61/133] Compiling C++ object tests/round3.p/.._src_messages.cpp.o
+[62/133] Compiling C++ object tests/regressions.p/.._src_sound_player.cpp.o
+[63/133] Compiling C++ object tests/round3.p/.._src_tools.cpp.o
+[64/133] Compiling C++ object tests/round3.p/.._src_city_session.cpp.o
+[65/133] Compiling C++ object tests/round4.p/.._src_assets.cpp.o
+[66/133] Compiling C++ object tests/round4.p/round4.cpp.o
+[67/133] Compiling C++ object tests/round4.p/.._src_messages.cpp.o
+[68/133] Compiling C++ object tests/round3.p/.._src_sound_player.cpp.o
+[69/133] Compiling C++ object tests/round4.p/.._src_tools.cpp.o
+[70/133] Compiling C++ object tests/round4.p/.._src_city_session.cpp.o
+[71/133] Compiling C++ object tests/round5.p/.._src_assets.cpp.o
+[72/133] Compiling C++ object tests/round5.p/round5.cpp.o
+[73/133] Compiling C++ object tests/round5.p/.._src_messages.cpp.o
+[74/133] Compiling C++ object tests/round4.p/.._src_sound_player.cpp.o
+[75/133] Compiling C++ object tests/round5.p/.._src_tools.cpp.o
+[76/133] Compiling C++ object tests/round5.p/.._src_city_session.cpp.o
+[77/133] Compiling C++ object tests/round6.p/round6.cpp.o
+[78/133] Compiling C++ object tests/round6.p/.._src_assets.cpp.o
+[79/133] Compiling C++ object tests/round6.p/.._src_messages.cpp.o
+[80/133] Compiling C++ object tests/round6.p/.._src_tools.cpp.o
+[81/133] Compiling C++ object tests/round5.p/.._src_sound_player.cpp.o
+[82/133] Compiling C++ object tests/round6.p/.._src_city_session.cpp.o
+[83/133] Compiling C++ object tests/production_binary.p/production_binary.cpp.o
+[84/133] Compiling C++ object tests/round7.p/round7.cpp.o
+[85/133] Compiling C++ object tests/argv_open.p/argv_open.cpp.o
+[86/133] Compiling C++ object tests/round6.p/.._src_sound_player.cpp.o
+[87/133] Compiling C++ object tests/argv_open.p/.._src_messages.cpp.o
+[88/133] Compiling C++ object tests/argv_open.p/.._src_assets.cpp.o
+[89/133] Compiling C++ object tests/argv_open.p/.._src_tools.cpp.o
+[90/133] Compiling C++ object tests/round8.p/round8.cpp.o
+[91/133] Compiling C++ object tests/argv_open.p/.._src_city_session.cpp.o
+[92/133] Compiling C++ object tests/round8.p/.._src_assets.cpp.o
+[93/133] Compiling C++ object tests/round8.p/.._src_messages.cpp.o
+[94/133] Compiling C++ object tests/round8.p/.._src_tools.cpp.o
+[95/133] Compiling C++ object tests/argv_open.p/.._src_sound_player.cpp.o
+[96/133] Compiling C++ object tests/round8.p/.._src_city_session.cpp.o
+[97/133] Compiling C++ object tests/round9.p/round9.cpp.o
+[98/133] Compiling C++ object tests/round10.p/round10.cpp.o
+[99/133] Compiling C++ object tests/round8.p/.._src_sound_player.cpp.o
+[100/133] Compiling C++ object tests/round11.p/round11.cpp.o
+[101/133] Compiling C++ object tests/round14.p/round14.cpp.o
+[102/133] Compiling C++ object tests/round13.p/round13.cpp.o
+[103/133] Compiling C++ object tests/round15.p/.._src_messages.cpp.o
+[104/133] Compiling C++ object tests/round15.p/.._src_assets.cpp.o
+[105/133] Compiling C++ object tests/round15.p/round15.cpp.o
+[106/133] Compiling C++ object tests/round15.p/.._src_tools.cpp.o
+[107/133] Compiling C++ object tests/menu_model.p/menu_model.cpp.o
+[108/133] Compiling C++ object tests/round15.p/.._src_city_session.cpp.o
+[109/133] Compiling C++ object tests/hotspots.p/hotspots.cpp.o
+[110/133] Compiling C++ object tests/dialog_copy.p/dialog_copy.cpp.o
+[111/133] Linking target tests/engine_smoke
+[112/133] Linking target tests/engine_fixes
+[113/133] Linking target src/lunduke-city-2
+[114/133] Linking target tests/features
+[115/133] Linking target tests/round3
+[116/133] Linking target tests/regressions
+[117/133] Linking target tests/round4
+[118/133] Linking target tests/round6
+[119/133] Linking target tests/round5
+[120/133] Linking target tests/round7
+[121/133] Compiling C++ object tests/round15.p/.._src_sound_player.cpp.o
+[122/133] Linking target tests/production_binary
+[123/133] Linking target tests/round9
+[124/133] Linking target tests/argv_open
+[125/133] Linking target tests/round10
+[126/133] Linking target tests/round8
+[127/133] Linking target tests/round11
+[128/133] Linking target tests/round13
+[129/133] Linking target tests/round14
+[130/133] Linking target tests/menu_model
+[131/133] Linking target tests/dialog_copy
+[132/133] Linking target tests/hotspots
+[133/133] Linking target tests/round15

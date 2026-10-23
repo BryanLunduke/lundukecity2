@@ -1,0 +1,31 @@
+ninja: Entering directory `/workspace/city2-win/build-win'
+ninja: no work to do.
+ 1/20 engine_fixes      OK               0.61s
+ 2/20 features          OK               0.26s
+ 3/20 round4            OK               0.27s
+ 4/20 round5            OK               0.28s
+ 5/20 round6            OK               0.24s
+ 6/20 round7            OK               0.02s
+ 7/20 production_binary OK               0.75s
+ 8/20 round8            OK               0.28s
+ 9/20 round9            OK               0.05s
+10/20 round10           OK               0.04s
+11/20 round11           SKIP             0.02s   exit status 77
+12/20 round13           OK               0.19s
+13/20 round14           OK               0.03s
+14/20 menu_model        OK               0.03s
+15/20 dialog_copy       OK               0.02s
+16/20 hotspots          OK               0.02s
+17/20 engine_smoke      OK               3.80s
+18/20 ui_input          OK               4.03s
+19/20 sdl_smoke         OK               3.23s
+20/20 metainfo          OK               0.01s
+
+Ok:                 19  
+Expected Fail:      0   
+Fail:               0   
+Unexpected Pass:    0   
+Skipped:            1   
+Timeout:            0   
+
+Full log written to /workspace/city2-win/build-win/meson-logs/testlog.txt

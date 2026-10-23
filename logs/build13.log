@@ -1,0 +1,12 @@
+ninja: Entering directory `build-win'
+[1/4] Compiling C++ object tests/round5.exe.p/round5.cpp.obj
+[2/4] Compiling C++ object tests/round4.exe.p/round4.cpp.obj
+../tests/round4.cpp: In function ‘int main()’:
+../tests/round4.cpp:255:54: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  255 |         std::fprintf(stderr, "projected %ld actual %ld\n", projected, broke.funds());
+      |                                                    ~~^                ~~~~~~~~~~~~~
+      |                                                      |                           |
+      |                                                      long int                    int64_t {aka long long int}
+      |                                                    %lld
+[3/4] Linking target tests/round5.exe
+[4/4] Linking target tests/round4.exe

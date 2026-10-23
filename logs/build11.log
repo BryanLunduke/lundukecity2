@@ -1,0 +1,16 @@
+ninja: Entering directory `build-win'
+[1/15] Compiling C++ object tests/round7.exe.p/round7.cpp.obj
+[2/15] Compiling C++ object tests/round8.exe.p/round8.cpp.obj
+[3/15] Compiling C++ object src/lunduke-city-2.exe.p/shell.cpp.obj
+[4/15] Compiling C++ object src/lunduke-city-2.exe.p/shell_actions.cpp.obj
+[5/15] Compiling C++ object tests/round9.exe.p/round9.cpp.obj
+[6/15] Linking target src/lunduke-city-2.exe
+[7/15] Linking target tests/round7.exe
+[8/15] Linking target tests/round8.exe
+[9/15] Linking target tests/round9.exe
+[10/15] Compiling C++ object tests/round10.exe.p/round10.cpp.obj
+[11/15] Linking target tests/round10.exe
+[12/15] Compiling C++ object tests/round13.exe.p/round13.cpp.obj
+[13/15] Linking target tests/round13.exe
+[14/15] Compiling C++ object tests/round14.exe.p/round14.cpp.obj
+[15/15] Linking target tests/round14.exe

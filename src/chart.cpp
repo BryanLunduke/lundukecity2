@@ -2,6 +2,7 @@
 // Copyright (C) 2026 The Lunduke City authors
 // See COPYING and NOTICE.
 
+#include <cstdint>
 #include "chart.hpp"
 
 #include "city_session.hpp"
@@ -37,12 +38,12 @@ void apply_dash(cairo_t *cr, double on, double off)
     cairo_set_dash(cr, pattern, 2, 0.0);
 }
 
-long population_at(const CitySession &session, CitySession::HistoryScale scale, int index)
+std::int64_t population_at(const CitySession &session, CitySession::HistoryScale scale, int index)
 {
     const int residential = session.history_value(CitySession::HistorySeries::Residential, scale, index);
     const int commercial = session.history_value(CitySession::HistorySeries::Commercial, scale, index);
     const int industrial = session.history_value(CitySession::HistorySeries::Industrial, scale, index);
-    return static_cast<long>(residential + commercial + industrial) * kHistoryPeoplePerSample;
+    return static_cast<std::int64_t>(residential + commercial + industrial) * kHistoryPeoplePerSample;
 }
 
 void fill_series(SeriesSpec out[kGraphSeriesCount])
@@ -115,7 +116,7 @@ std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale)
     fill_series(specs);
     const auto scale = long_scale ? CitySession::HistoryScale::Long : CitySession::HistoryScale::Short;
     std::vector<ChartLegend> out;
-    const long census = session != nullptr ? session->evaluation().population : 0;
+    const std::int64_t census = session != nullptr ? session->evaluation().population : 0;
     for (int i = 0; i < kGraphSeriesCount; ++i) {
         ChartLegend row;
         row.r = specs[i].r;
@@ -126,7 +127,7 @@ std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale)
         if (session == nullptr) {
             row.caption = specs[i].name;
         } else {
-            long newest = static_cast<long>(std::lround(sample_series(*session, specs[i], scale, 0)));
+            std::int64_t newest = static_cast<std::int64_t>(std::lround(sample_series(*session, specs[i], scale, 0)));
             if (specs[i].population) {
                 newest = census;
             }

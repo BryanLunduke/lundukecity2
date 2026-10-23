@@ -15,6 +15,7 @@
 #include <iostream>
 #include <string>
 #include <unistd.h>
+#include "win_compat.hpp"
 
 namespace {
 

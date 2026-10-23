@@ -1,0 +1,3 @@
+ninja: Entering directory `build-win'
+[1/2] Compiling C++ object tests/round4.exe.p/round4.cpp.obj
+[2/2] Linking target tests/round4.exe

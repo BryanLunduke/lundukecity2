@@ -1,0 +1,29 @@
+ninja: Entering directory `build-win'
+[1/6] Compiling C++ object tests/round6.exe.p/round6.cpp.obj
+[2/6] Linking target tests/round6.exe
+[3/6] Compiling C++ object tests/round5.exe.p/round5.cpp.obj
+../tests/round5.cpp: In function ‘int main()’:
+../tests/round5.cpp:152:34: warning: format ‘%lld’ expects argument of type ‘long long int’, but argument 3 has type ‘long int’ [-Wformat=]
+  152 |             std::fprintf(stderr, "classic funds %" PRId64 "\n", classic_funds);
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ~~~~~~~~~~~~~
+      |                                                                 |
+      |                                                                 long int
+../tests/round5.cpp:194:34: warning: format ‘%lld’ expects argument of type ‘long long int’, but argument 3 has type ‘long int’ [-Wformat=]
+  194 |             std::fprintf(stderr, "classic %" PRId64 " loaded %lld\n", classic_funds, (long long)loaded.totalFunds);
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ~~~~~~~~~~~~~
+      |                                                                       |
+      |                                                                       long int
+../tests/round5.cpp:205:34: warning: format ‘%lld’ expects argument of type ‘long long int’, but argument 3 has type ‘long int’ [-Wformat=]
+  205 |             std::fprintf(stderr, "classic debt %" PRId64 " loaded %lld\n", classic_debt, (long long)debt.totalFunds);
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ~~~~~~~~~~~~
+      |                                                                            |
+      |                                                                            long int
+[4/6] Compiling C++ object tests/round4.exe.p/round4.cpp.obj
+../tests/round4.cpp: In function ‘int main()’:
+../tests/round4.cpp:255:30: warning: format ‘%lld’ expects argument of type ‘long long int’, but argument 3 has type ‘long int’ [-Wformat=]
+  255 |         std::fprintf(stderr, "projected %" PRId64 " actual %" PRId64 "\n", projected, broke.funds());
+      |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ~~~~~~~~~
+      |                                                                            |
+      |                                                                            long int
+[5/6] Linking target tests/round5.exe
+[6/6] Linking target tests/round4.exe

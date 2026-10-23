@@ -1,0 +1,7 @@
+ninja: Entering directory `build-linux'
+[1/6] Compiling C++ object tests/round6.p/round6.cpp.o
+[2/6] Linking target tests/round6
+[3/6] Compiling C++ object tests/round5.p/round5.cpp.o
+[4/6] Compiling C++ object tests/round4.p/round4.cpp.o
+[5/6] Linking target tests/round5
+[6/6] Linking target tests/round4

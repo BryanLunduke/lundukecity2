@@ -1,0 +1,114 @@
+ninja: Entering directory `build-win'
+[1/8] Compiling C++ object src/lunduke-city-2.exe.p/shell_uitest.cpp.obj
+FAILED: src/lunduke-city-2.exe.p/shell_uitest.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Isrc/lunduke-city-2.exe.p -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -I/workspace/city2-win/sysroot/mingw64/include/cairo -I/workspace/city2-win/sysroot/mingw64/include/libpng16 -I/workspace/city2-win/sysroot/mingw64/include/freetype2 -I/workspace/city2-win/sysroot/mingw64/include/harfbuzz -I/workspace/city2-win/sysroot/mingw64/include/glib-2.0 -I/workspace/city2-win/sysroot/mingw64/lib/glib-2.0/include -I/workspace/city2-win/sysroot/mingw64/include/pixman-1 -I/workspace/city2-win/sysroot/mingw64/include/pango-1.0 -I/workspace/city2-win/sysroot/mingw64/include/fribidi -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ src/lunduke-city-2.exe.p/shell_uitest.cpp.obj -MF src/lunduke-city-2.exe.p/shell_uitest.cpp.obj.d -o src/lunduke-city-2.exe.p/shell_uitest.cpp.obj -c ../src/shell_uitest.cpp
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_uitest.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:109:32: error: no matching function for call to ‘stat::stat(const char*, stat*)’
+  109 |     if (::stat(out.c_str(), &st) != 0) {
+      |                                ^
+In file included from /usr/share/mingw-w64/include/wchar.h:413,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cwchar:44,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/postypes.h:40,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/char_traits.h:42,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/string:42,
+                 from ../src/chart.hpp:9,
+                 from ../src/shell_state.hpp:7:
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘stat::stat()’
+   40 |   struct stat {
+      |          ^~~~
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 0 arguments, 2 provided
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘constexpr stat::stat(const stat&)’
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 1 argument, 2 provided
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘constexpr stat::stat(stat&&)’
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 1 argument, 2 provided
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:388:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  388 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[2/8] Compiling C++ object src/lunduke-city-2.exe.p/shell_actions.cpp.obj
+FAILED: src/lunduke-city-2.exe.p/shell_actions.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Isrc/lunduke-city-2.exe.p -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -I/workspace/city2-win/sysroot/mingw64/include/cairo -I/workspace/city2-win/sysroot/mingw64/include/libpng16 -I/workspace/city2-win/sysroot/mingw64/include/freetype2 -I/workspace/city2-win/sysroot/mingw64/include/harfbuzz -I/workspace/city2-win/sysroot/mingw64/include/glib-2.0 -I/workspace/city2-win/sysroot/mingw64/lib/glib-2.0/include -I/workspace/city2-win/sysroot/mingw64/include/pixman-1 -I/workspace/city2-win/sysroot/mingw64/include/pango-1.0 -I/workspace/city2-win/sysroot/mingw64/include/fribidi -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ src/lunduke-city-2.exe.p/shell_actions.cpp.obj -MF src/lunduke-city-2.exe.p/shell_actions.cpp.obj.d -o src/lunduke-city-2.exe.p/shell_actions.cpp.obj -c ../src/shell_actions.cpp
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_actions.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:109:32: error: no matching function for call to ‘stat::stat(const char*, stat*)’
+  109 |     if (::stat(out.c_str(), &st) != 0) {
+      |                                ^
+In file included from /usr/share/mingw-w64/include/wchar.h:413,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cwchar:44,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/postypes.h:40,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/char_traits.h:42,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/string:42,
+                 from ../src/chart.hpp:9,
+                 from ../src/shell_state.hpp:7:
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘stat::stat()’
+   40 |   struct stat {
+      |          ^~~~
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 0 arguments, 2 provided
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘constexpr stat::stat(const stat&)’
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 1 argument, 2 provided
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘constexpr stat::stat(stat&&)’
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 1 argument, 2 provided
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:388:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  388 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[3/8] Compiling C++ object src/lunduke-city-2.exe.p/shell.cpp.obj
+FAILED: src/lunduke-city-2.exe.p/shell.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Isrc/lunduke-city-2.exe.p -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -I/workspace/city2-win/sysroot/mingw64/include/cairo -I/workspace/city2-win/sysroot/mingw64/include/libpng16 -I/workspace/city2-win/sysroot/mingw64/include/freetype2 -I/workspace/city2-win/sysroot/mingw64/include/harfbuzz -I/workspace/city2-win/sysroot/mingw64/include/glib-2.0 -I/workspace/city2-win/sysroot/mingw64/lib/glib-2.0/include -I/workspace/city2-win/sysroot/mingw64/include/pixman-1 -I/workspace/city2-win/sysroot/mingw64/include/pango-1.0 -I/workspace/city2-win/sysroot/mingw64/include/fribidi -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ src/lunduke-city-2.exe.p/shell.cpp.obj -MF src/lunduke-city-2.exe.p/shell.cpp.obj.d -o src/lunduke-city-2.exe.p/shell.cpp.obj -c ../src/shell.cpp
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:109:32: error: no matching function for call to ‘stat::stat(const char*, stat*)’
+  109 |     if (::stat(out.c_str(), &st) != 0) {
+      |                                ^
+In file included from /usr/share/mingw-w64/include/wchar.h:413,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cwchar:44,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/postypes.h:40,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/char_traits.h:42,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/string:42,
+                 from ../src/chart.hpp:9,
+                 from ../src/shell_state.hpp:7:
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘stat::stat()’
+   40 |   struct stat {
+      |          ^~~~
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 0 arguments, 2 provided
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘constexpr stat::stat(const stat&)’
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 1 argument, 2 provided
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘constexpr stat::stat(stat&&)’
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 1 argument, 2 provided
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:388:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  388 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[4/8] Compiling C++ object src/lunduke-city-2.exe.p/shell_draw.cpp.obj
+FAILED: src/lunduke-city-2.exe.p/shell_draw.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Isrc/lunduke-city-2.exe.p -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -I/workspace/city2-win/sysroot/mingw64/include/cairo -I/workspace/city2-win/sysroot/mingw64/include/libpng16 -I/workspace/city2-win/sysroot/mingw64/include/freetype2 -I/workspace/city2-win/sysroot/mingw64/include/harfbuzz -I/workspace/city2-win/sysroot/mingw64/include/glib-2.0 -I/workspace/city2-win/sysroot/mingw64/lib/glib-2.0/include -I/workspace/city2-win/sysroot/mingw64/include/pixman-1 -I/workspace/city2-win/sysroot/mingw64/include/pango-1.0 -I/workspace/city2-win/sysroot/mingw64/include/fribidi -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ src/lunduke-city-2.exe.p/shell_draw.cpp.obj -MF src/lunduke-city-2.exe.p/shell_draw.cpp.obj.d -o src/lunduke-city-2.exe.p/shell_draw.cpp.obj -c ../src/shell_draw.cpp
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_draw.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::dir(bool)’:
+../src/city_recovery.hpp:109:32: error: no matching function for call to ‘stat::stat(const char*, stat*)’
+  109 |     if (::stat(out.c_str(), &st) != 0) {
+      |                                ^
+In file included from /usr/share/mingw-w64/include/wchar.h:413,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/cwchar:44,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/postypes.h:40,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/char_traits.h:42,
+                 from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/string:42,
+                 from ../src/chart.hpp:9,
+                 from ../src/shell_state.hpp:7:
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘stat::stat()’
+   40 |   struct stat {
+      |          ^~~~
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 0 arguments, 2 provided
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘constexpr stat::stat(const stat&)’
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 1 argument, 2 provided
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note: candidate: ‘constexpr stat::stat(stat&&)’
+/usr/share/mingw-w64/include/_mingw_stat64.h:40:10: note:   candidate expects 1 argument, 2 provided
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:388:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  388 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+ninja: build stopped: subcommand failed.

@@ -1,0 +1,4 @@
+
+(process:32): Pango-CRITICAL **: 20:50:46.839: pango_font_description_get_family: assertion 'desc != NULL' failed
+
+(process:32): Pango-CRITICAL **: 20:50:46.839: pango_font_description_get_family: assertion 'desc != NULL' failed

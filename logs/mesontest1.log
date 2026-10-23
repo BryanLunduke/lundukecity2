@@ -1,0 +1,60 @@
+ninja: Entering directory `/workspace/city2-win/build-win'
+ninja: no work to do.
+ 1/20 engine_fixes      OK               1.65s
+ 2/20 engine_smoke      OK               1.69s
+ 3/20 features          OK               0.92s
+ 4/20 round5            FAIL             0.20s   exit status 6
+>>> UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1 MESON_EXE_WRAPPER=/workspace/city2-win/wine-wrap.sh MESON_TEST_ITERATION=1 ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1 PATH=/usr/x86_64-w64-mingw32/lib:/workspace/city2-win/sysroot/bin:/usr/lib/gcc/x86_64-w64-mingw32/14-posix:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/lib:/usr/x86_64-w64-mingw32/bin:/usr/lib/gcc/x86_64-w64-mingw32:/workspace/city2-win/sysroot/mingw64/bin:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/bin:/home/box/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games WINEPATH='Z:/usr/x86_64-w64-mingw32/lib;Z:/workspace/city2-win/sysroot/bin;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/lib;Z:/usr/x86_64-w64-mingw32/bin;Z:/usr/lib/gcc/x86_64-w64-mingw32;Z:/workspace/city2-win/sysroot/mingw64/bin;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/bin;' MALLOC_PERTURB_=79 MSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1 /workspace/city2-win/wine-wrap.sh /workspace/city2-win/build-win/tests/round5.exe
+――――――――――――――――――――――――――――――――――――― ✀  ―――――――――――――――――――――――――――――――――――――
+stderr:
+classic funds -1294967296
+an old-format reader would load a surplus as debt
+――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+
+ 5/20 round6            OK               0.22s
+ 6/20 round7            OK               0.02s
+ 7/20 production_binary FAIL             0.65s   exit status 1
+>>> UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1 MESON_EXE_WRAPPER=/workspace/city2-win/wine-wrap.sh MESON_TEST_ITERATION=1 ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1 MALLOC_PERTURB_=224 PATH=/usr/x86_64-w64-mingw32/lib:/workspace/city2-win/sysroot/bin:/usr/lib/gcc/x86_64-w64-mingw32/14-posix:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/lib:/usr/x86_64-w64-mingw32/bin:/usr/lib/gcc/x86_64-w64-mingw32:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/bin:/home/box/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games WINEPATH='Z:/usr/x86_64-w64-mingw32/lib;Z:/workspace/city2-win/sysroot/bin;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/lib;Z:/usr/x86_64-w64-mingw32/bin;Z:/usr/lib/gcc/x86_64-w64-mingw32;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/bin;' MSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1 /workspace/city2-win/wine-wrap.sh /workspace/city2-win/build-win/tests/production_binary.exe /workspace/city2-win/build-win/src/lunduke-city-2.exe
+――――――――――――――――――――――――――――――――――――― ✀  ―――――――――――――――――――――――――――――――――――――
+stderr:
+the city binary is not a little-endian ELF64
+――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+
+ 8/20 round8            OK               0.27s
+ 9/20 round9            OK               0.05s
+10/20 round10           OK               0.05s
+11/20 round11           SKIP             0.02s   exit status 77
+12/20 round13           OK               0.17s
+13/20 round14           FAIL             0.03s   exit status 3
+>>> UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1 MESON_EXE_WRAPPER=/workspace/city2-win/wine-wrap.sh MESON_TEST_ITERATION=1 ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1 PATH=/usr/x86_64-w64-mingw32/lib:/workspace/city2-win/sysroot/bin:/usr/lib/gcc/x86_64-w64-mingw32/14-posix:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/lib:/usr/x86_64-w64-mingw32/bin:/usr/lib/gcc/x86_64-w64-mingw32:/workspace/city2-win/sysroot/mingw64/bin:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/bin:/home/box/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games MALLOC_PERTURB_=63 WINEPATH='Z:/usr/x86_64-w64-mingw32/lib;Z:/workspace/city2-win/sysroot/bin;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/lib;Z:/usr/x86_64-w64-mingw32/bin;Z:/usr/lib/gcc/x86_64-w64-mingw32;Z:/workspace/city2-win/sysroot/mingw64/bin;Z:/usr/lib/gcc/x86_64-w64-mingw32/14-posix/../../../../x86_64-w64-mingw32/bin;' MSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1 /workspace/city2-win/wine-wrap.sh /workspace/city2-win/build-win/tests/round14.exe
+――――――――――――――――――――――――――――――――――――― ✀  ―――――――――――――――――――――――――――――――――――――
+stderr:
+round14: new file did not respect the umask
+――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+
+14/20 menu_model        OK               0.02s
+15/20 dialog_copy       OK               0.02s
+16/20 hotspots          OK               0.02s
+17/20 round4            OK               3.31s
+18/20 ui_input          OK               6.97s
+19/20 sdl_smoke         OK               3.20s
+20/20 metainfo          OK               0.02s
+
+Summary of Failures:
+
+ 4/20 round5            FAIL             0.20s   exit status 6
+ 7/20 production_binary FAIL             0.65s   exit status 1
+13/20 round14           FAIL             0.03s   exit status 3
+
+Ok:                 16  
+Expected Fail:      0   
+Fail:               3   
+Unexpected Pass:    0   
+Skipped:            1   
+Timeout:            0   
+
+Full log written to /workspace/city2-win/build-win/meson-logs/testlog.txt
+
+real	0m15.430s
+user	0m3.768s
+sys	0m2.691s

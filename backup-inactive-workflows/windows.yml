@@ -1,0 +1,59 @@
+# Cross-build the Windows x86_64 zip on Linux, run the test suite under Wine,
+# then start the packaged exe on a real Windows runner.
+name: windows
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cross:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host packages
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64 \
+            meson ninja-build pkg-config python3 gnupg zstd zip \
+            wine64 xvfb xauth
+      - name: Cache MSYS2 packages
+        uses: actions/cache@v4
+        with:
+          path: build-windows/msys2/pkgs
+          key: msys2-mingw64-${{ hashFiles('packaging/windows/mingw64-sysroot.py') }}-${{ github.run_id }}
+          restore-keys: msys2-mingw64-${{ hashFiles('packaging/windows/mingw64-sysroot.py') }}-
+      - name: Build, test under Wine, package
+        run: JOBS=4 sh packaging/windows/build-windows.sh build-windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lunduke-city-2-windows-x86_64
+          path: build-windows/dist/lunduke-city-2-windows-x86_64.zip
+          if-no-files-found: error
+
+  windows-smoke:
+    needs: cross
+    runs-on: windows-2022
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lunduke-city-2-windows-x86_64
+      - name: Headless smoke and UI test on Windows
+        shell: pwsh
+        run: |
+          Expand-Archive lunduke-city-2-windows-x86_64.zip -DestinationPath .
+          $exe = "lunduke-city-2\bin\lunduke-city-2.exe"
+          foreach ($mode in @("LUNDUKE_CITY2_SMOKE", "LUNDUKE_CITY2_UI_TEST")) {
+            $env:SDL_VIDEODRIVER = "dummy"; $env:SDL_AUDIODRIVER = "dummy"
+            Set-Item "env:$mode" "1"
+            $p = Start-Process -FilePath $exe -PassThru -Wait -NoNewWindow
+            Remove-Item "env:$mode"
+            if ($p.ExitCode -ne 0) { throw "$mode exited with $($p.ExitCode)" }
+          }

@@ -1,0 +1,306 @@
+ninja: Entering directory `build-win'
+[1/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_budget.cpp.obj
+[2/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_allocate.cpp.obj
+[3/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_animate.cpp.obj
+[4/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_connect.cpp.obj
+[5/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_disasters.cpp.obj
+[6/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.obj
+[7/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_generate.cpp.obj
+[8/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.obj
+[9/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_initialize.cpp.obj
+[10/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.obj
+[11/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_main.cpp.obj
+[12/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_map.cpp.obj
+[13/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_message.cpp.obj
+[14/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_micropolis.cpp.obj
+[15/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_position.cpp.obj
+[16/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_power.cpp.obj
+[17/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.obj
+[18/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_resource.cpp.obj
+[19/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.obj
+[20/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.obj
+[21/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_sprite.cpp.obj
+[22/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_stubs.cpp.obj
+[23/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.obj
+[24/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.obj
+[25/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_update.cpp.obj
+[26/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_utilities.cpp.obj
+[27/78] Compiling C++ object src/lunduke-city-2.exe.p/chart.cpp.obj
+[28/78] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.obj
+[29/78] Linking static target third_party/micropolis/libmicropolis.a
+[30/78] Compiling C++ object src/lunduke-city-2.exe.p/overlay_map.cpp.obj
+[31/78] Compiling C++ object src/lunduke-city-2.exe.p/map_view.cpp.obj
+[32/78] Compiling C++ object src/lunduke-city-2.exe.p/city_session.cpp.obj
+[33/78] Compiling C++ object src/lunduke-city-2.exe.p/shell.cpp.obj
+[34/78] Compiling C++ object src/lunduke-city-2.exe.p/shell_actions.cpp.obj
+[35/78] Compiling C++ object src/lunduke-city-2.exe.p/shell_draw.cpp.obj
+[36/78] Compiling C++ object src/lunduke-city-2.exe.p/shell_uitest.cpp.obj
+[37/78] Compiling C++ object src/lunduke-city-2.exe.p/side_widgets.cpp.obj
+[38/78] Compiling C++ object src/lunduke-city-2.exe.p/tool_palette.cpp.obj
+[39/78] Compiling C++ object src/lunduke-city-2.exe.p/tools.cpp.obj
+[40/78] Compiling C++ object tests/engine_smoke.exe.p/engine_smoke.cpp.obj
+[41/78] Compiling C++ object tests/engine_fixes.exe.p/engine_fixes.cpp.obj
+[42/78] Compiling C++ object tests/features.exe.p/features.cpp.obj
+[43/78] Compiling C++ object tests/features.exe.p/.._src_tools.cpp.obj
+[44/78] Compiling C++ object tests/round4.exe.p/round4.cpp.obj
+../tests/round4.cpp: In function ‘int main()’:
+../tests/round4.cpp:79:44: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 3 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+   79 |         std::fprintf(stderr, "hard funds %ld level %d slot %d disasters %d\n", paused.funds(), paused.difficulty(),
+      |                                          ~~^                                   ~~~~~~~~~~~~~~
+      |                                            |                                               |
+      |                                            long int                                        int64_t {aka long long int}
+      |                                          %lld
+../tests/round4.cpp:88:57: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+   88 |         std::fprintf(stderr, "reloaded level %d funds %ld speed %d diff '%s'\n", loaded_hard.difficulty(),
+      |                                                       ~~^
+      |                                                         |
+      |                                                         long int
+      |                                                       %lld
+   89 |                      loaded_hard.funds(), loaded_hard.speed(), loaded_hard.evaluation().difficulty.c_str());
+      |                      ~~~~~~~~~~~~~~~~~~~                 
+      |                                       |
+      |                                       int64_t {aka long long int}
+../tests/round4.cpp:97:61: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 5 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+   97 |         std::fprintf(stderr, "easy slot %d level %d funds %ld\n", file_slot(path, 15), loaded_hard.difficulty(),
+      |                                                           ~~^
+      |                                                             |
+      |                                                             long int
+      |                                                           %lld
+   98 |                      loaded_hard.funds());
+      |                      ~~~~~~~~~~~~~~~~~~~                     
+      |                                       |
+      |                                       int64_t {aka long long int}
+../tests/round4.cpp:112:54: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  112 |         std::fprintf(stderr, "medium slot %d funds %ld\n", file_slot(path, 15), medium.funds());
+      |                                                    ~~^                          ~~~~~~~~~~~~~~
+      |                                                      |                                      |
+      |                                                      long int                               int64_t {aka long long int}
+      |                                                    %lld
+../tests/round4.cpp:233:77: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 7 has type ‘long long int’ [-Wformat=]
+  233 |         std::fprintf(stderr, "road '%s' fire '%s' police '%s' pct %d flow %ld current %ld\n",
+      |                                                                           ~~^
+      |                                                                             |
+      |                                                                             long int
+      |                                                                           %lld
+  234 |                      open_book.road_note.c_str(), open_book.fire_note.c_str(), open_book.police_note.c_str(),
+  235 |                      open_book.road_percent, open_book.cash_flow, open_book.funds);
+      |                                              ~~~~~~~~~~~~~~~~~~~             
+      |                                                        |
+      |                                                        long long int
+../tests/round4.cpp:233:89: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 8 has type ‘long long int’ [-Wformat=]
+  233 |         std::fprintf(stderr, "road '%s' fire '%s' police '%s' pct %d flow %ld current %ld\n",
+      |                                                                                       ~~^
+      |                                                                                         |
+      |                                                                                         long int
+      |                                                                                       %lld
+  234 |                      open_book.road_note.c_str(), open_book.fire_note.c_str(), open_book.police_note.c_str(),
+  235 |                      open_book.road_percent, open_book.cash_flow, open_book.funds);
+      |                                                                   ~~~~~~~~~~~~~~~        
+      |                                                                             |
+      |                                                                             long long int
+../tests/round4.cpp:248:51: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘long long int’ [-Wformat=]
+  248 |         std::fprintf(stderr, "dragged '%s' flow %ld\n", dragged.road_note.c_str(), dragged.cash_flow);
+      |                                                 ~~^                                ~~~~~~~~~~~~~~~~~
+      |                                                   |                                        |
+      |                                                   long int                                 long long int
+      |                                                 %lld
+../tests/round4.cpp:254:54: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  254 |         std::fprintf(stderr, "projected %ld actual %ld\n", projected, broke.funds());
+      |                                                    ~~^                ~~~~~~~~~~~~~
+      |                                                      |                           |
+      |                                                      long int                    int64_t {aka long long int}
+      |                                                    %lld
+../tests/round4.cpp:265:55: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  265 |         std::fprintf(stderr, "menu tax %d collected %ld\n", menu_tax.tax(), menu_tax.budget().taxes);
+      |                                                     ~~^                     ~~~~~~~~~~~~~~~~~~~~~~~
+      |                                                       |                                       |
+      |                                                       long int                                int64_t {aka long long int}
+      |                                                     %lld
+../tests/round4.cpp:291:48: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 3 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  291 |         std::fprintf(stderr, "dry rail funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+      |                                              ~~^              ~~~~~~~~~~~~~~~~
+      |                                                |                            |
+      |                                                long int                     int64_t {aka long long int}
+      |                                              %lld
+../tests/round4.cpp:297:46: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 3 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  297 |         std::fprintf(stderr, "h rail funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+      |                                            ~~^              ~~~~~~~~~~~~~~~~
+      |                                              |                            |
+      |                                              long int                     int64_t {aka long long int}
+      |                                            %lld
+../tests/round4.cpp:302:46: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 3 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  302 |         std::fprintf(stderr, "v rail funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+      |                                            ~~^              ~~~~~~~~~~~~~~~~
+      |                                              |                            |
+      |                                              long int                     int64_t {aka long long int}
+      |                                            %lld
+../tests/round4.cpp:311:48: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 3 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  311 |         std::fprintf(stderr, "dry wire funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+      |                                              ~~^              ~~~~~~~~~~~~~~~~
+      |                                                |                            |
+      |                                                long int                     int64_t {aka long long int}
+      |                                              %lld
+../tests/round4.cpp:316:46: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 3 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  316 |         std::fprintf(stderr, "h wire funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+      |                                            ~~^              ~~~~~~~~~~~~~~~~
+      |                                              |                            |
+      |                                              long int                     int64_t {aka long long int}
+      |                                            %lld
+../tests/round4.cpp:321:46: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 3 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  321 |         std::fprintf(stderr, "v wire funds %ld msg '%s'\n", crossing.funds(), crossing.message().c_str());
+      |                                            ~~^              ~~~~~~~~~~~~~~~~
+      |                                              |                            |
+      |                                              long int                     int64_t {aka long long int}
+      |                                            %lld
+../tests/round4.cpp:336:64: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 5 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  336 |         std::fprintf(stderr, "miss rail '%s' wire '%s' funds %ld\n", rail_miss.c_str(), crossing.message().c_str(),
+      |                                                              ~~^
+      |                                                                |
+      |                                                                long int
+      |                                                              %lld
+  337 |                      crossing.funds());
+      |                      ~~~~~~~~~~~~~~~~                           
+      |                                    |
+      |                                    int64_t {aka long long int}
+[45/78] Compiling C++ object tests/round4.exe.p/.._src_tools.cpp.obj
+[46/78] Compiling C++ object tests/features.exe.p/.._src_city_session.cpp.obj
+[47/78] Compiling C++ object tests/round4.exe.p/.._src_city_session.cpp.obj
+[48/78] Compiling C++ object tests/round6.exe.p/round6.cpp.obj
+../tests/round6.cpp: In function ‘int main()’:
+../tests/round6.cpp:105:64: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 5 has type ‘long long int’ [-Wformat=]
+  105 |             std::fprintf(stderr, "known %d estimates %d road %ld tax %ld\n", book.taxes_known ? 1 : 0,
+      |                                                              ~~^
+      |                                                                |
+      |                                                                long int
+      |                                                              %lld
+  106 |                          book.estimates ? 1 : 0, book.road_need, book.taxes);
+      |                                                  ~~~~~~~~~~~~~~ 
+      |                                                       |
+      |                                                       long long int
+../tests/round6.cpp:105:72: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 6 has type ‘long long int’ [-Wformat=]
+  105 |             std::fprintf(stderr, "known %d estimates %d road %ld tax %ld\n", book.taxes_known ? 1 : 0,
+      |                                                                      ~~^
+      |                                                                        |
+      |                                                                        long int
+      |                                                                      %lld
+  106 |                          book.estimates ? 1 : 0, book.road_need, book.taxes);
+      |                                                                  ~~~~~~~~~~
+      |                                                                       |
+      |                                                                       long long int
+../tests/round6.cpp:118:61: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 6 has type ‘long long int’ [-Wformat=]
+  118 |             std::fprintf(stderr, "%s known %d est %d road %ld police %ld fire %ld tax %ld\n", def.name,
+      |                                                           ~~^
+      |                                                             |
+      |                                                             long int
+      |                                                           %lld
+  119 |                          book.taxes_known ? 1 : 0, book.estimates ? 1 : 0, book.road_need, book.police_need,
+      |                                                                            ~~~~~~~~~~~~~~
+      |                                                                                 |
+      |                                                                                 long long int
+../tests/round6.cpp:118:72: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 7 has type ‘long long int’ [-Wformat=]
+  118 |             std::fprintf(stderr, "%s known %d est %d road %ld police %ld fire %ld tax %ld\n", def.name,
+      |                                                                      ~~^
+      |                                                                        |
+      |                                                                        long int
+      |                                                                      %lld
+  119 |                          book.taxes_known ? 1 : 0, book.estimates ? 1 : 0, book.road_need, book.police_need,
+      |                                                                                            ~~~~~~~~~~~~~~~~
+      |                                                                                                 |
+      |                                                                                                 long long int
+../tests/round6.cpp:118:81: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 8 has type ‘long long int’ [-Wformat=]
+  118 |             std::fprintf(stderr, "%s known %d est %d road %ld police %ld fire %ld tax %ld\n", def.name,
+      |                                                                               ~~^
+      |                                                                                 |
+      |                                                                                 long int
+      |                                                                               %lld
+  119 |                          book.taxes_known ? 1 : 0, book.estimates ? 1 : 0, book.road_need, book.police_need,
+  120 |                          book.fire_need, book.taxes);
+      |                          ~~~~~~~~~~~~~~                                          
+      |                               |
+      |                               long long int
+../tests/round6.cpp:118:89: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 9 has type ‘long long int’ [-Wformat=]
+  118 |             std::fprintf(stderr, "%s known %d est %d road %ld police %ld fire %ld tax %ld\n", def.name,
+      |                                                                                       ~~^
+      |                                                                                         |
+      |                                                                                         long int
+      |                                                                                       %lld
+  119 |                          book.taxes_known ? 1 : 0, book.estimates ? 1 : 0, book.road_need, book.police_need,
+  120 |                          book.fire_need, book.taxes);
+      |                                          ~~~~~~~~~~                                      
+      |                                               |
+      |                                               long long int
+[49/78] Compiling C++ object tests/round5.exe.p/.._src_tools.cpp.obj
+[50/78] Compiling C++ object tests/round5.exe.p/round5.cpp.obj
+../tests/round5.cpp: In function ‘int main()’:
+../tests/round5.cpp:173:46: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 3 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  173 |             std::fprintf(stderr, "book tax %ld known %d road %ld pop %ld funds %ld\n", session.budget().taxes,
+      |                                            ~~^                                         ~~~~~~~~~~~~~~~~~~~~~~
+      |                                              |                                                          |
+      |                                              long int                                                   int64_t {aka long long int}
+      |                                            %lld
+../tests/round5.cpp:173:64: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 5 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  173 |             std::fprintf(stderr, "book tax %ld known %d road %ld pop %ld funds %ld\n", session.budget().taxes,
+      |                                                              ~~^
+      |                                                                |
+      |                                                                long int
+      |                                                              %lld
+  174 |                          session.budget().taxes_known ? 1 : 0, session.budget().road_need,
+      |                                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                                                                                 |
+      |                                                                                 int64_t {aka long long int}
+../tests/round5.cpp:173:72: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 6 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  173 |             std::fprintf(stderr, "book tax %ld known %d road %ld pop %ld funds %ld\n", session.budget().taxes,
+      |                                                                      ~~^
+      |                                                                        |
+      |                                                                        long int
+      |                                                                      %lld
+  174 |                          session.budget().taxes_known ? 1 : 0, session.budget().road_need,
+  175 |                          session.evaluation().population, session.funds());
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                
+      |                                               |
+      |                                               int64_t {aka long long int}
+../tests/round5.cpp:173:82: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 7 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  173 |             std::fprintf(stderr, "book tax %ld known %d road %ld pop %ld funds %ld\n", session.budget().taxes,
+      |                                                                                ~~^
+      |                                                                                  |
+      |                                                                                  long int
+      |                                                                                %lld
+  174 |                          session.budget().taxes_known ? 1 : 0, session.budget().road_need,
+  175 |                          session.evaluation().population, session.funds());
+      |                                                           ~~~~~~~~~~~~~~~         
+      |                                                                        |
+      |                                                                        int64_t {aka long long int}
+../tests/round5.cpp:304:50: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘int64_t’ {aka ‘long long int’} [-Wformat=]
+  304 |                 std::fprintf(stderr, "%s funds %ld\n", def.name, session.funds());
+      |                                                ~~^               ~~~~~~~~~~~~~~~
+      |                                                  |                            |
+      |                                                  long int                     int64_t {aka long long int}
+      |                                                %lld
+[51/78] Compiling C++ object tests/round5.exe.p/.._src_city_session.cpp.obj
+[52/78] Compiling C++ object tests/production_binary.exe.p/production_binary.cpp.obj
+[53/78] Compiling C++ object tests/round6.exe.p/.._src_city_session.cpp.obj
+[54/78] Compiling C++ object tests/round6.exe.p/.._src_tools.cpp.obj
+[55/78] Compiling C++ object tests/round8.exe.p/round8.cpp.obj
+[56/78] Compiling C++ object tests/round8.exe.p/.._src_tools.cpp.obj
+[57/78] Compiling C++ object tests/round8.exe.p/.._src_city_session.cpp.obj
+[58/78] Compiling C++ object tests/round9.exe.p/round9.cpp.obj
+[59/78] Compiling C++ object tests/round10.exe.p/round10.cpp.obj
+[60/78] Compiling C++ object tests/round11.exe.p/round11.cpp.obj
+[61/78] Linking target src/lunduke-city-2.exe
+[62/78] Linking target tests/engine_smoke.exe
+[63/78] Linking target tests/engine_fixes.exe
+[64/78] Compiling C++ object tests/round14.exe.p/round14.cpp.obj
+[65/78] Linking target tests/features.exe
+[66/78] Linking target tests/round4.exe
+[67/78] Compiling C++ object tests/round13.exe.p/round13.cpp.obj
+[68/78] Linking target tests/round5.exe
+[69/78] Linking target tests/round6.exe
+[70/78] Linking target tests/production_binary.exe
+[71/78] Compiling C++ object tests/dialog_copy.exe.p/dialog_copy.cpp.obj
+[72/78] Linking target tests/round9.exe
+[73/78] Linking target tests/round10.exe
+[74/78] Linking target tests/round11.exe
+[75/78] Linking target tests/dialog_copy.exe
+[76/78] Linking target tests/round8.exe
+[77/78] Linking target tests/round13.exe
+[78/78] Linking target tests/round14.exe

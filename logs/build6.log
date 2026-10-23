@@ -1,0 +1,3 @@
+ninja: Entering directory `build-win'
+[1/2] Compiling C++ object src/lunduke-city-2.exe.p/main.cpp.obj
+[2/2] Linking target src/lunduke-city-2.exe

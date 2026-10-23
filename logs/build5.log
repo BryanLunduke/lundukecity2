@@ -1,0 +1,8 @@
+ninja: Entering directory `build-win'
+[1/7] Compiling Windows resource src/.._data_windows_lunduke-city-2.rc
+[2/7] Compiling C++ object src/lunduke-city-2.exe.p/main.cpp.obj
+[3/7] Compiling C++ object src/lunduke-city-2.exe.p/shell_uitest.cpp.obj
+[4/7] Compiling C++ object src/lunduke-city-2.exe.p/shell.cpp.obj
+[5/7] Compiling C++ object src/lunduke-city-2.exe.p/shell_draw.cpp.obj
+[6/7] Compiling C++ object src/lunduke-city-2.exe.p/shell_actions.cpp.obj
+[7/7] Linking target src/lunduke-city-2.exe

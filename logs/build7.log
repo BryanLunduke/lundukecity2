@@ -1,0 +1,313 @@
+ninja: Entering directory `build-win'
+[1/51] Compiling C++ object tests/engine_fixes.exe.p/engine_fixes.cpp.obj
+FAILED: tests/engine_fixes.exe.p/engine_fixes.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/engine_fixes.exe.p -Itests -I../tests -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -MD -MQ tests/engine_fixes.exe.p/engine_fixes.cpp.obj -MF tests/engine_fixes.exe.p/engine_fixes.cpp.obj.d -o tests/engine_fixes.exe.p/engine_fixes.cpp.obj -c ../tests/engine_fixes.cpp
+../tests/engine_fixes.cpp:106:46: error: missing binary operator before token "("
+  106 | #if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+      |                                              ^
+../tests/engine_fixes.cpp:118:46: error: missing binary operator before token "("
+  118 | #if defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
+      |                                              ^
+[2/51] Compiling C++ object tests/engine_smoke.exe.p/engine_smoke.cpp.obj
+[3/51] Compiling C++ object tests/features.exe.p/features.cpp.obj
+[4/51] Compiling C++ object tests/features.exe.p/.._src_city_session.cpp.obj
+[5/51] Compiling C++ object tests/features.exe.p/.._src_tools.cpp.obj
+[6/51] Compiling C++ object tests/round3.exe.p/round3.cpp.obj
+FAILED: tests/round3.exe.p/round3.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round3.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round3.exe.p/round3.cpp.obj -MF tests/round3.exe.p/round3.cpp.obj.d -o tests/round3.exe.p/round3.cpp.obj -c ../tests/round3.cpp
+../tests/round3.cpp:20:10: fatal error: sys/resource.h: No such file or directory
+   20 | #include <sys/resource.h>
+      |          ^~~~~~~~~~~~~~~~
+compilation terminated.
+[7/51] Compiling C++ object tests/regressions.exe.p/regressions.cpp.obj
+FAILED: tests/regressions.exe.p/regressions.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/regressions.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/regressions.exe.p/regressions.cpp.obj -MF tests/regressions.exe.p/regressions.cpp.obj.d -o tests/regressions.exe.p/regressions.cpp.obj -c ../tests/regressions.cpp
+../tests/regressions.cpp:46:11: error: expected unqualified-id before ‘float’
+   46 | bool near(float value, float expected)
+      |           ^~~~~
+../tests/regressions.cpp:46:11: error: expected ‘)’ before ‘float’
+   46 | bool near(float value, float expected)
+      |          ~^~~~~
+      |           )
+../tests/regressions.cpp: In function ‘int test_save_round_trip()’:
+../tests/regressions.cpp:134:22: warning: left operand of comma operator has no effect [-Wunused-value]
+  134 |     if (!near(loaded.roadPercent, 0.4f) || !near(loaded.policePercent, 0.4f) ||
+      |               ~~~~~~~^~~~~~~~~~~
+../tests/regressions.cpp:134:57: warning: left operand of comma operator has no effect [-Wunused-value]
+  134 |     if (!near(loaded.roadPercent, 0.4f) || !near(loaded.policePercent, 0.4f) ||
+      |                                                  ~~~~~~~^~~~~~~~~~~~~
+../tests/regressions.cpp:135:22: warning: left operand of comma operator has no effect [-Wunused-value]
+  135 |         !near(loaded.firePercent, 0.4f)) {
+      |               ~~~~~~~^~~~~~~~~~~
+../tests/regressions.cpp: In function ‘int test_hostile_review()’:
+../tests/regressions.cpp:584:10: error: too many arguments to function ‘int mkdir(const char*)’
+  584 |     mkdir(atomic_dir.c_str(), 0755);
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/share/mingw-w64/include/sys/stat.h:14,
+                 from ../third_party/micropolis/MicropolisEngine/src/micropolis.h:79,
+                 from ../tests/regressions.cpp:14:
+/usr/share/mingw-w64/include/io.h:282:15: note: declared here
+  282 |   int __cdecl mkdir (const char *) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/regressions.cpp:611:13: error: ‘symlink’ was not declared in this scope; did you mean ‘std::filesystem::file_type::symlink’?
+  611 |         if (symlink(atomic.c_str(), link.c_str()) != 0 || !kept.saveFile(link.c_str()) ||
+      |             ^~~~~~~
+      |             std::filesystem::file_type::symlink
+In file included from /usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/filesystem:51,
+                 from ../src/save_path.hpp:10,
+                 from ../tests/regressions.cpp:11:
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/fs_fwd.h:79:61: note: ‘std::filesystem::file_type::symlink’ declared here
+   79 |       none = 0, not_found = -1, regular = 1, directory = 2, symlink = 3,
+      |                                                             ^~~~~~~
+../tests/regressions.cpp:612:13: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+  612 |             lstat(link.c_str(), &lst) != 0 || !S_ISLNK(lst.st_mode) || read_bytes(atomic).size() != previous.size()) {
+      |             ^~~~~
+      |             wstat
+../tests/regressions.cpp:612:48: error: ‘S_ISLNK’ was not declared in this scope; did you mean ‘S_ISBLK’?
+  612 |             lstat(link.c_str(), &lst) != 0 || !S_ISLNK(lst.st_mode) || read_bytes(atomic).size() != previous.size()) {
+      |                                                ^~~~~~~
+      |                                                S_ISBLK
+../tests/regressions.cpp:730:10: error: too many arguments to function ‘int mkdir(const char*)’
+  730 |     mkdir(sound_dir.c_str(), 0755);
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/share/mingw-w64/include/io.h:282:15: note: declared here
+  282 |   int __cdecl mkdir (const char *) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/regressions.cpp:745:5: error: ‘symlink’ was not declared in this scope; did you mean ‘std::filesystem::file_type::symlink’?
+  745 |     symlink(small_wav.c_str(), linked.c_str());
+      |     ^~~~~~~
+      |     std::filesystem::file_type::symlink
+/usr/lib/gcc/x86_64-w64-mingw32/14-posix/include/c++/bits/fs_fwd.h:79:61: note: ‘std::filesystem::file_type::symlink’ declared here
+   79 |       none = 0, not_found = -1, regular = 1, directory = 2, symlink = 3,
+      |                                                             ^~~~~~~
+[8/51] Compiling C++ object tests/regressions.exe.p/.._src_tools.cpp.obj
+[9/51] Compiling C++ object tests/regressions.exe.p/.._src_city_session.cpp.obj
+[10/51] Compiling C++ object tests/round3.exe.p/.._src_tools.cpp.obj
+[11/51] Compiling C++ object tests/round3.exe.p/.._src_city_session.cpp.obj
+[12/51] Compiling C++ object tests/round4.exe.p/round4.cpp.obj
+[13/51] Compiling C++ object tests/round4.exe.p/.._src_tools.cpp.obj
+[14/51] Compiling C++ object tests/round4.exe.p/.._src_city_session.cpp.obj
+[15/51] Compiling C++ object tests/round5.exe.p/round5.cpp.obj
+../tests/round5.cpp: In function ‘int main()’:
+../tests/round5.cpp:158:70: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  158 |         if (!loaded.loadCity(wide_path.c_str()) || loaded.totalFunds != 3000000000LL || loaded.resPop != 32800 ||
+      |                                                    ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+../tests/round5.cpp:171:66: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  171 |             session.budget().fire_need != 400 || session.funds() != 3000000000L ||
+      |                                                  ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+../tests/round5.cpp:192:31: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  192 |             loaded.totalFunds != 2147483648LL) {
+      |             ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+../tests/round5.cpp:196:23: warning: overflow in conversion from ‘long long int’ to ‘Quad’ {aka ‘long int’} changes value from ‘-3000000000’ to ‘1294967296’ [-Woverflow]
+  196 |         rich.setFunds(-3000000000LL);
+      |                       ^~~~~~~~~~~~~
+../tests/round5.cpp:203:29: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+  203 |             debt.totalFunds != -3000000000LL) {
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+[16/51] Compiling C++ object tests/round5.exe.p/.._src_city_session.cpp.obj
+[17/51] Compiling C++ object tests/round5.exe.p/.._src_tools.cpp.obj
+[18/51] Compiling C++ object tests/argv_open.exe.p/argv_open.cpp.obj
+FAILED: tests/argv_open.exe.p/argv_open.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/argv_open.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -MD -MQ tests/argv_open.exe.p/argv_open.cpp.obj -MF tests/argv_open.exe.p/argv_open.cpp.obj.d -o tests/argv_open.exe.p/argv_open.cpp.obj -c ../tests/argv_open.cpp
+../tests/argv_open.cpp:11:10: fatal error: sys/wait.h: No such file or directory
+   11 | #include <sys/wait.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+[19/51] Compiling C++ object tests/round7.exe.p/round7.cpp.obj
+FAILED: tests/round7.exe.p/round7.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round7.exe.p -Itests -I../tests -Isrc -I../src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g '-DLUNDUKE_CITY_SOURCE_DIR="/workspace/city2-win"' -MD -MQ tests/round7.exe.p/round7.cpp.obj -MF tests/round7.exe.p/round7.cpp.obj.d -o tests/round7.exe.p/round7.cpp.obj -c ../tests/round7.cpp
+../tests/round7.cpp: In function ‘int main()’:
+../tests/round7.cpp:250:18: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+  250 |     char *home = mkdtemp(home_template);
+      |                  ^~~~~~~
+      |                  mktemp
+../tests/round7.cpp:254:5: error: ‘setenv’ was not declared in this scope; did you mean ‘getenv’?
+  254 |     setenv("HOME", home, 1);
+      |     ^~~~~~
+      |     getenv
+[20/51] Compiling C++ object tests/round6.exe.p/.._src_city_session.cpp.obj
+[21/51] Compiling C++ object tests/round6.exe.p/.._src_tools.cpp.obj
+[22/51] Compiling C++ object tests/argv_open.exe.p/.._src_tools.cpp.obj
+[23/51] Compiling C++ object tests/argv_open.exe.p/.._src_city_session.cpp.obj
+[24/51] Compiling C++ object tests/round8.exe.p/round8.cpp.obj
+FAILED: tests/round8.exe.p/round8.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round8.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round8.exe.p/round8.cpp.obj -MF tests/round8.exe.p/round8.cpp.obj.d -o tests/round8.exe.p/round8.cpp.obj -c ../tests/round8.cpp
+../tests/round8.cpp: In function ‘int main()’:
+../tests/round8.cpp:55:17: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   55 |     char *dir = mkdtemp(dir_template);
+      |                 ^~~~~~~
+      |                 mktemp
+[25/51] Compiling C++ object tests/round8.exe.p/.._src_city_session.cpp.obj
+[26/51] Compiling C++ object tests/round8.exe.p/.._src_tools.cpp.obj
+[27/51] Compiling C++ object tests/round9.exe.p/round9.cpp.obj
+FAILED: tests/round9.exe.p/round9.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round9.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round9.exe.p/round9.cpp.obj -MF tests/round9.exe.p/round9.cpp.obj.d -o tests/round9.exe.p/round9.cpp.obj -c ../tests/round9.cpp
+../tests/round9.cpp: In function ‘int main()’:
+../tests/round9.cpp:40:17: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   40 |     char *dir = mkdtemp(dir_template);
+      |                 ^~~~~~~
+      |                 mktemp
+../tests/round9.cpp:80:24: warning: comparison is always false due to limited range of data type [-Wtype-limits]
+   80 |     if (sim.totalFunds > 1000000000000LL || sim.totalFunds < -1000000000000LL) {
+      |         ~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+../tests/round9.cpp:80:60: warning: comparison is always false due to limited range of data type [-Wtype-limits]
+   80 |     if (sim.totalFunds > 1000000000000LL || sim.totalFunds < -1000000000000LL) {
+      |                                             ~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+[28/51] Compiling C++ object tests/round10.exe.p/round10.cpp.obj
+FAILED: tests/round10.exe.p/round10.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round10.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round10.exe.p/round10.cpp.obj -MF tests/round10.exe.p/round10.cpp.obj.d -o tests/round10.exe.p/round10.cpp.obj -c ../tests/round10.cpp
+../tests/round10.cpp: In function ‘int main()’:
+../tests/round10.cpp:61:17: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   61 |     char *dir = mkdtemp(dir_template);
+      |                 ^~~~~~~
+      |                 mktemp
+[29/51] Compiling C++ object tests/round11.exe.p/round11.cpp.obj
+[30/51] Compiling C++ object tests/round13.exe.p/round13.cpp.obj
+FAILED: tests/round13.exe.p/round13.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round13.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' -MD -MQ tests/round13.exe.p/round13.cpp.obj -MF tests/round13.exe.p/round13.cpp.obj.d -o tests/round13.exe.p/round13.cpp.obj -c ../tests/round13.cpp
+../tests/round13.cpp: In function ‘int main()’:
+../tests/round13.cpp:66:17: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   66 |     char *dir = mkdtemp(dir_template);
+      |                 ^~~~~~~
+      |                 mktemp
+[31/51] Compiling C++ object tests/round14.exe.p/round14.cpp.obj
+FAILED: tests/round14.exe.p/round14.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round14.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread -MD -MQ tests/round14.exe.p/round14.cpp.obj -MF tests/round14.exe.p/round14.cpp.obj.d -o tests/round14.exe.p/round14.cpp.obj -c ../tests/round14.cpp
+../tests/round14.cpp: In function ‘int main()’:
+../tests/round14.cpp:54:10: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   54 |     if (!mkdtemp(tmpl)) return fail(1, "mkdtemp");
+      |          ^~~~~~~
+      |          mktemp
+[32/51] Linking target tests/engine_smoke.exe
+[33/51] Compiling C++ object tests/round15.exe.p/round15.cpp.obj
+FAILED: tests/round15.exe.p/round15.cpp.obj 
+x86_64-w64-mingw32-g++-posix -Itests/round15.exe.p -Itests -I../tests -Isrc -I../src -I../third_party/micropolis/MicropolisEngine/src -I/workspace/city2-win/sysroot/mingw64/include -fdiagnostics-color=always -D_GLIBCXX_ASSERTIONS=1 -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -Wextra -std=c++17 -O0 -g -pthread '-DLUNDUKE_CITY_ASSET_DIR="/workspace/city2-win/third_party/micropolis-assets"' '-DLUNDUKE_CITY_PACKAGE_VERSION="2.0.0"' -DLUNDUKE_CITY_TEST_HOOKS -MD -MQ tests/round15.exe.p/round15.cpp.obj -MF tests/round15.exe.p/round15.cpp.obj.d -o tests/round15.exe.p/round15.cpp.obj -c ../tests/round15.cpp
+../tests/round15.cpp: In function ‘bool {anonymous}::is_link(const std::string&)’:
+../tests/round15.cpp:49:12: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+   49 |     return lstat(p.c_str(), &st) == 0 && S_ISLNK(st.st_mode);
+      |            ^~~~~
+      |            wstat
+../tests/round15.cpp:49:42: error: ‘S_ISLNK’ was not declared in this scope; did you mean ‘S_ISBLK’?
+   49 |     return lstat(p.c_str(), &st) == 0 && S_ISLNK(st.st_mode);
+      |                                          ^~~~~~~
+      |                                          S_ISBLK
+../tests/round15.cpp: In function ‘bool {anonymous}::exists(const std::string&)’:
+../tests/round15.cpp:54:12: error: ‘lstat’ was not declared in this scope; did you mean ‘wstat’?
+   54 |     return lstat(p.c_str(), &st) == 0;
+      |            ^~~~~
+      |            wstat
+../tests/round15.cpp: In function ‘void {anonymous}::make_old(const std::string&, long int)’:
+../tests/round15.cpp:63:5: error: ‘utimes’ was not declared in this scope; did you mean ‘timeb’?
+   63 |     utimes(p.c_str(), tv);
+      |     ^~~~~~
+      |     timeb
+../tests/round15.cpp: In function ‘int main()’:
+../tests/round15.cpp:70:10: error: ‘mkdtemp’ was not declared in this scope; did you mean ‘mktemp’?
+   70 |     if (!mkdtemp(tmpl)) {
+      |          ^~~~~~~
+      |          mktemp
+../tests/round15.cpp:74:5: error: ‘setenv’ was not declared in this scope; did you mean ‘getenv’?
+   74 |     setenv("HOME", root.c_str(), 1);
+      |     ^~~~~~
+      |     getenv
+../tests/round15.cpp:79:10: error: too many arguments to function ‘int mkdir(const char*)’
+   79 |     mkdir(real_dir.c_str(), 0755);
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../src/city_recovery.hpp:34,
+                 from ../tests/round15.cpp:16:
+/usr/share/mingw-w64/include/direct.h:65:15: note: declared here
+   65 |   int __cdecl mkdir(const char *_Path) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/round15.cpp:80:10: error: too many arguments to function ‘int mkdir(const char*)’
+   80 |     mkdir(link_dir.c_str(), 0755);
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/share/mingw-w64/include/direct.h:65:15: note: declared here
+   65 |   int __cdecl mkdir(const char *_Path) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/round15.cpp:93:9: error: ‘symlink’ was not declared in this scope; did you mean ‘link’?
+   93 |         symlink(real.c_str(), link.c_str());
+      |         ^~~~~~~
+      |         link
+../tests/round15.cpp:105:17: error: ‘DIR’ was not declared in this scope; did you mean ‘DIRT’?
+  105 |             if (DIR *dp = opendir(d.c_str())) {
+      |                 ^~~
+      |                 DIRT
+../tests/round15.cpp:105:22: error: ‘dp’ was not declared in this scope; did you mean ‘d’?
+  105 |             if (DIR *dp = opendir(d.c_str())) {
+      |                      ^~
+      |                      d
+../tests/round15.cpp:105:27: error: ‘opendir’ was not declared in this scope; did you mean ‘open’?
+  105 |             if (DIR *dp = opendir(d.c_str())) {
+      |                           ^~~~~~~
+      |                           open
+../tests/round15.cpp:106:24: error: ‘dirent’ was not declared in this scope
+  106 |                 while (dirent *e = readdir(dp)) {
+      |                        ^~~~~~
+../tests/round15.cpp:106:32: error: ‘e’ was not declared in this scope
+  106 |                 while (dirent *e = readdir(dp)) {
+      |                                ^
+../tests/round15.cpp:106:36: error: ‘readdir’ was not declared in this scope; did you mean ‘real_dir’?
+  106 |                 while (dirent *e = readdir(dp)) {
+      |                                    ^~~~~~~
+      |                                    real_dir
+../tests/round15.cpp:109:17: error: ‘closedir’ was not declared in this scope; did you mean ‘close’?
+  109 |                 closedir(dp);
+      |                 ^~~~~~~~
+      |                 close
+../tests/round15.cpp:127:9: error: ‘gid_t’ was not declared in this scope; did you mean ‘pid_t’?
+  127 |         gid_t groups[64];
+      |         ^~~~~
+      |         pid_t
+../tests/round15.cpp:128:37: error: ‘groups’ was not declared in this scope
+  128 |         const int n = getgroups(64, groups);
+      |                                     ^~~~~~
+../tests/round15.cpp:128:23: error: ‘getgroups’ was not declared in this scope
+  128 |         const int n = getgroups(64, groups);
+      |                       ^~~~~~~~~
+../tests/round15.cpp:129:14: error: expected ‘;’ before ‘other’
+  129 |         gid_t other = (gid_t)-1;
+      |              ^~~~~~
+      |              ;
+../tests/round15.cpp:131:30: error: ‘getegid’ was not declared in this scope; did you mean ‘getpid’?
+  131 |             if (groups[i] != getegid()) {
+      |                              ^~~~~~~
+      |                              getpid
+../tests/round15.cpp:132:17: error: ‘other’ was not declared in this scope
+  132 |                 other = groups[i];
+      |                 ^~~~~
+../tests/round15.cpp:136:13: error: ‘other’ was not declared in this scope
+  136 |         if (other == (gid_t)-1) {
+      |             ^~~~~
+../tests/round15.cpp:141:42: error: ‘uid_t’ was not declared in this scope; did you mean ‘pid_t’?
+  141 |             check(chown(shared.c_str(), (uid_t)-1, other) == 0, "give it a shared group");
+      |                                          ^~~~~
+      |                                          pid_t
+../tests/round15.cpp:141:19: error: ‘chown’ was not declared in this scope
+  141 |             check(chown(shared.c_str(), (uid_t)-1, other) == 0, "give it a shared group");
+      |                   ^~~~~
+../tests/round15.cpp:153:14: error: too many arguments to function ‘int mkdir(const char*)’
+  153 |         mkdir(d.c_str(), 0755);
+      |         ~~~~~^~~~~~~~~~~~~~~~~
+/usr/share/mingw-w64/include/direct.h:65:15: note: declared here
+   65 |   int __cdecl mkdir(const char *_Path) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/round15.cpp:163:9: error: ‘symlink’ was not declared in this scope
+  163 |         symlink(user_file.c_str(), link_tmp.c_str());
+      |         ^~~~~~~
+../tests/round15.cpp:261:14: error: too many arguments to function ‘int mkdir(const char*)’
+  261 |         mkdir(evil_state.c_str(), 0700);
+      |         ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/share/mingw-w64/include/direct.h:65:15: note: declared here
+   65 |   int __cdecl mkdir(const char *_Path) __MINGW_ATTRIB_DEPRECATED_MSVC2005;
+      |               ^~~~~
+../tests/round15.cpp:262:9: error: ‘symlink’ was not declared in this scope
+  262 |         symlink(real_dir.c_str(), (evil_state + "/lunduke-city-2").c_str());
+      |         ^~~~~~~
+[34/51] Linking target tests/features.exe
+[35/51] Linking target tests/round4.exe
+[36/51] Linking target tests/round5.exe
+[37/51] Linking target tests/round6.exe
+[38/51] Linking target tests/round11.exe
+[39/51] Compiling C++ object tests/round15.exe.p/.._src_tools.cpp.obj
+[40/51] Compiling C++ object tests/round15.exe.p/.._src_city_session.cpp.obj
+ninja: build stopped: cannot make progress due to previous errors.

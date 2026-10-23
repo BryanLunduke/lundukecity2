@@ -1,0 +1,33 @@
+ninja: Entering directory `build-win'
+[1/8] Compiling C++ object src/lunduke-city-2.exe.p/shell_uitest.cpp.obj
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_uitest.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:389:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  389 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[2/8] Compiling C++ object src/lunduke-city-2.exe.p/shell.cpp.obj
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:389:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  389 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[3/8] Compiling C++ object src/lunduke-city-2.exe.p/shell_draw.cpp.obj
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_draw.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:389:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  389 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[4/8] Compiling C++ object src/lunduke-city-2.exe.p/shell_actions.cpp.obj
+In file included from ../src/shell_state.hpp:9,
+                 from ../src/shell_actions.cpp:5:
+../src/city_recovery.hpp: In function ‘std::string city_recovery::describe(const Entry&)’:
+../src/city_recovery.hpp:389:54: warning: unknown conversion type character ‘e’ in format [-Wformat=]
+  389 |             if (std::strftime(buf, sizeof(buf), "%a %e %b %H:%M", &tmv) > 0) {
+      |                                                      ^
+[5/8] Compiling C++ object src/lunduke-city-2.exe.p/tool_palette.cpp.obj
+[6/8] Compiling C++ object src/lunduke-city-2.exe.p/side_widgets.cpp.obj
+[7/8] Compiling C++ object src/lunduke-city-2.exe.p/tools.cpp.obj
+[8/8] Linking target src/lunduke-city-2.exe

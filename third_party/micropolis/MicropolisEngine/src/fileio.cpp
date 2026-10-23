@@ -76,8 +76,43 @@
 #include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <vector>
+#ifdef _WIN32
+#include <io.h>
+#include <random>
+#else
+#include <unistd.h>
+#endif
+
+#ifdef _WIN32
+// Windows: city paths are UTF-8 (SDL hands them over that way). Convert
+// for the wide-character file APIs so non-ASCII folders work without
+// depending on the process code page.
+namespace {
+std::wstring mp_widen(const std::string &utf8)
+{
+    if (utf8.empty()) {
+        return std::wstring();
+    }
+    const int n = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), NULL, 0);
+    std::wstring out((size_t)(n > 0 ? n : 0), L'\0');
+    if (n > 0) {
+        MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), &out[0], n);
+    }
+    return out;
+}
+
+int mp_stat(const std::string &path, struct _stat64 *st)
+{
+    return _wstat64(mp_widen(path).c_str(), st);
+}
+
+int mp_unlink(const std::string &path)
+{
+    return _wunlink(mp_widen(path).c_str());
+}
+} // namespace
+#endif
 
 
 ////////////////////////////////////////////////////////////////////////
@@ -928,6 +963,44 @@ static bool is_save_temp_name(const std::string &name, const std::string &base)
 
 int Micropolis::removeStaleSaveTemps(const std::string &dir, const std::string &base, long minAgeSeconds)
 {
+#ifdef _WIN32
+    // No owner check on Windows: the folder's ACL already limits who can
+    // create files there. Only plain files with the temp pattern go.
+    const std::string open_dir = dir.empty() ? std::string(".\\") : dir;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(mp_widen(open_dir + "*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    int removed = 0;
+    const time_t now = time(NULL);
+    do {
+        if ((fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0) {
+            continue;
+        }
+        const int n = WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, NULL, 0, NULL, NULL);
+        std::string name((size_t)(n > 1 ? n - 1 : 0), '\0');
+        if (n > 1) {
+            WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, &name[0], n, NULL, NULL);
+        }
+        if (!is_save_temp_name(name, base)) {
+            continue;
+        }
+        struct _stat64 st;
+        const std::string full = open_dir + name;
+        if (mp_stat(full, &st) != 0 || (st.st_mode & _S_IFMT) != _S_IFREG) {
+            continue;
+        }
+        if (now - st.st_mtime < minAgeSeconds) {
+            continue;
+        }
+        if (mp_unlink(full) == 0) {
+            ++removed;
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return removed;
+#else
     const std::string open_dir = dir.empty() ? std::string(".") : dir;
     const int dfd = open(open_dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dfd < 0) {
@@ -959,6 +1032,7 @@ int Micropolis::removeStaleSaveTemps(const std::string &dir, const std::string &
     }
     closedir(d);
     return removed;
+#endif
 }
 
 bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
@@ -974,6 +1048,49 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
     if (requestedFilename == NULL || requestedFilename[0] == '\0') {
         return fail(EINVAL, "No file name");
     }
+
+#ifdef _WIN32
+    // Windows: no symlink following, owner or mode bits. Write a unique
+    // temp file next to the target, flush it, and swap it in with
+    // MoveFileEx(REPLACE_EXISTING | WRITE_THROUGH).
+    const std::string fname(requestedFilename);
+    struct _stat64 existing;
+    if (mp_stat(fname, &existing) == 0) {
+        if ((existing.st_mode & _S_IFMT) == _S_IFDIR) {
+            return fail(EISDIR, nullptr);
+        }
+        if ((existing.st_mode & _S_IFMT) != _S_IFREG) {
+            return fail(0, "Not a regular file");
+        }
+    } else if (errno != ENOENT) {
+        return fail(errno, nullptr);
+    }
+    const std::string::size_type slash = fname.find_last_of("/\\");
+    const std::string dir = (slash == std::string::npos) ? std::string() : fname.substr(0, slash + 1);
+    const std::string base = (slash == std::string::npos) ? fname : fname.substr(slash + 1);
+    removeStaleSaveTemps(dir, base, 24L * 60L * 60L);
+    static const char kAlnum[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    std::random_device rd;
+    std::string tmp;
+    int fd = -1;
+    for (int attempt = 0; attempt < 100 && fd < 0; ++attempt) {
+        std::string suffix;
+        for (int i = 0; i < 6; ++i) {
+            suffix.push_back(kAlnum[rd() % (sizeof(kAlnum) - 1)]);
+        }
+        tmp = dir + "." + base + ".save-" + suffix;
+        fd = _wopen(mp_widen(tmp).c_str(), _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY | _O_NOINHERIT,
+                    _S_IREAD | _S_IWRITE);
+        if (fd < 0 && errno != EEXIST) {
+            return fail(errno, nullptr);
+        }
+    }
+    if (fd < 0) {
+        return fail(EEXIST, nullptr);
+    }
+#define unlink(p) mp_unlink(p)
+#define fsync(f) _commit(f)
+#else
 
     // C-2 (round 15): a city kept behind a symlink (~/Cities/main.cty ->
     // a synced or NAS file) is saved to the link's real file. The atomic
@@ -1059,6 +1176,7 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
         unlink(tmp.c_str());
         return fail(err != 0 ? err : EIO, nullptr);
     }
+#endif // _WIN32
     FILE *f = fdopen(fd, "wb");
     if (f == NULL) {
         const int err = errno;
@@ -1150,7 +1268,14 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
         unlink(tmp.c_str());
         return fail(ioerr != 0 ? ioerr : EIO, nullptr);
     }
+#ifdef _WIN32
+    if (!MoveFileExW(mp_widen(tmp).c_str(), mp_widen(fname).c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        const DWORD werr = GetLastError();
+        errno = (werr == ERROR_ACCESS_DENIED || werr == ERROR_SHARING_VIOLATION) ? EACCES : EIO;
+#else
     if (rename(tmp.c_str(), filename) != 0) {
+#endif
         const int err = errno;
         std::memcpy(miscHist, misc_backup, sizeof(misc_backup));
         unlink(tmp.c_str());
@@ -1170,6 +1295,10 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
     saveErrorDetail.clear();
     return true;
 }
+#ifdef _WIN32
+#undef unlink
+#undef fsync
+#endif
 
 
 /**
