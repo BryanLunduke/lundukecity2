@@ -45,7 +45,7 @@ CHANGED = PARK_TILES + FOUNTAIN_TILES + HOUSE_TILES + MANOR_TURRET + MANOR_FENCE
 
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
 # 8px overview, in tile order. The big-park sprite has its own hash.
-ATLAS_SHA = "c2acef1811cad00ddbc7a5f5a7b30c365209f3ac48f31bf377b71faed0d27c83"
+ATLAS_SHA = "75f359190c552ac50fa36193a35c8f1ff5b2b7a78755151a841e8607dac0d188"
 PARK_SHA = "3f0e20d7313a54d8268a938d9c25efc6532611ff7c89c6877e575f442412cc42"
 
 GRASS = (0, 113, 0)
@@ -750,44 +750,33 @@ def _stamp_pattern(put, x0: int, y0: int, rows: tuple[str, ...], ink: dict[str, 
 
 
 def _paint_haunted(src: Image.Image) -> Image.Image:
-    """A tall Victorian house in the hospital's oblique.
+    """One Victorian house in the hospital's oblique.
 
-    Measured on the SVGA sheet (48px assembled blocks). Roofs are
-    axis-aligned rectangles. Wall height runs up-and-right: the shift is
-    (+h, -h), one pixel each, which is 45 degrees. Long faces stay
-    vertical (west) and horizontal (south). Light is from the upper left.
-
-    One narrow tower carries a mansard: steep charcoal slate around a flat
-    cap, an iron railing on that cap, and one weathervane. Steep gables
-    step down on the left, the right, and the front right. The cast shadow
-    is only the hospital's southeast wedge on the front wing (index 216,
-    widths 1, 3, 5, 7 as the corner steps). Roof eaves and the porch do
-    not cast.
+    The footprint is a single hall. The tower and the porch overlap that
+    hall, so the outline is one silhouette. Roofs are rectangles shifted
+    up and to the right by the wall height, one pixel each, which is 45
+    degrees. The west wall and the northwest skirt are light lavender.
+    The south wall is a deeper lavender. The southeast skirt is the dark
+    face. The cast shadow is only the hospital's southeast wedge.
     """
     out = _lot_fill(src)
     px = out.load()
     sp = src.load()
     painted: set[tuple[int, int]] = set()
-    # Muted lavender walls. Lit west face against a dark southeast.
     lav_lit = (113, 81, 113)
-    lav = (65, 44, 65)
-    lav_deep = (48, 32, 65)
-    lav_shade = (32, 0, 65)
-    # Charcoal slate. The lit plane stays clearly lighter than the shade.
-    ridge = (113, 113, 113)
-    lit = (97, 97, 97)
-    lit_dim = (81, 81, 81)
-    shade = (44, 44, 44)
-    shade_deep = (32, 32, 32)
-    cap = (69, 69, 69)
-    cap_dim = (56, 56, 56)
-    # Dark teal yard. A one-pixel rim of the original lot stays, so the
-    # tile still meets its neighbours.
+    lav_west = (97, 81, 113)
+    lav_south = (113, 81, 97)
+    lav_shade = (48, 32, 65)
+    # Same grey steps as the hospital roof, kept a shade darker so it stays slate.
+    ridge_c = (182, 182, 182)
+    lit = (146, 146, 146)
+    lit_dim = (130, 130, 130)
+    shade = (81, 81, 81)
+    shade_deep = (69, 69, 69)
+    cap = (113, 113, 113)
+    cap_dim = (97, 97, 97)
     yard = ((0, 65, 48), (0, 65, 32), (0, 65, 65), (32, 65, 48))
     yard_set = frozenset(yard)
-    for y in range(1, 47):
-        for x in range(1, 47):
-            px[x, y] = yard[(x * 3 + y * 5) % 4]
 
     def put(x: int, y: int, colour: tuple[int, int, int]) -> None:
         if not (0 <= x < 48 and 0 <= y < 48):
@@ -803,10 +792,9 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
                 if y > y1 - height:
-                    put(x, y, lav_shade if x > x1 - height else lav_deep)
+                    put(x, y, lav_shade if x > x1 - height else lav_south)
                 elif x < x0 + height:
-                    put(x, y, lav_lit if x == x0 else lav)
-        # 45-degree skirts, the same slope as the church and the hospital.
+                    put(x, y, lav_lit if x <= x0 + 1 else lav_west)
         for y in range(y0 - height + 1, y0):
             left = x0 + (y0 - y)
             for x in range(left, x0 + height):
@@ -817,32 +805,27 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
                 put(x, y, lav_shade)
         rx0, ry0 = x0 + height, y0 - height
         rx1, ry1 = x1 + height, y1 - height
-        if kind == "gable":
-            # Narrow lit plane so the gable reads steep and pointed.
-            ridge_x = rx0 + max(1, (rx1 - rx0) // 5)
-            for y in range(ry0, ry1 + 1):
-                for x in range(rx0, rx1 + 1):
-                    if x == ridge_x:
-                        put(x, y, ridge)
-                    elif x < ridge_x:
-                        put(x, y, lit if (x + y) % 2 == 0 else lit_dim)
-                    else:
-                        put(x, y, shade_deep if (x + y) % 2 == 0 else shade)
-        elif kind == "mansard":
-            inset = 2
-            for y in range(ry0, ry1 + 1):
-                for x in range(rx0, rx1 + 1):
-                    inner = rx0 + inset <= x <= rx1 - inset and ry0 + inset <= y <= ry1 - inset
-                    if inner:
-                        put(x, y, cap if (x + y) % 2 == 0 else cap_dim)
-                    elif x - rx0 <= (rx1 - rx0) // 3 or y - ry0 <= 1:
-                        put(x, y, lit if (x + y) % 2 == 0 else lit_dim)
-                    else:
-                        put(x, y, shade_deep if (x + y) % 2 == 0 else shade)
-        else:
-            for y in range(ry0, ry1 + 1):
-                for x in range(rx0, rx1 + 1):
-                    put(x, y, STEP if y < ry1 else STEP_DARK)
+
+        def roof_at(x: int, y: int) -> tuple[int, int, int]:
+            if kind == "mansard":
+                inset = 2
+                inner = rx0 + inset <= x <= rx1 - inset and ry0 + inset <= y <= ry1 - inset
+                if inner:
+                    return cap if (x + y) % 2 == 0 else cap_dim
+                if x - rx0 <= (rx1 - rx0) // 2:
+                    return lit if (x + y) % 2 == 0 else lit_dim
+                return shade_deep if (x + y) % 2 == 0 else shade
+            # Gable split near the middle, so both the lit plane and the shade read.
+            ridge_x = rx0 + max(2, (rx1 - rx0) // 2)
+            if x == ridge_x:
+                return ridge_c
+            if x < ridge_x:
+                return lit if (x + y) % 2 == 0 else lit_dim
+            return shade_deep if (x + y) % 2 == 0 else shade
+
+        for y in range(ry0, ry1 + 1):
+            for x in range(rx0, rx1 + 1):
+                put(x, y, roof_at(x, y))
         for y in range(ry0, ry1 + 1):
             put(rx0, y, BLACK)
         for x in range(rx0, rx1 + 1):
@@ -850,7 +833,6 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
         return rx0, ry0, rx1, ry1
 
     def lancet(x: int, y: int, glow: tuple[int, int, int]) -> None:
-        """Pointed arch, 3 wide and 5 tall, on a wall or a roof slope."""
         put(x + 1, y, BLACK)
         for yy in range(y + 1, y + 4):
             put(x, yy, BLACK)
@@ -859,59 +841,36 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
         for xx in range(x, x + 3):
             put(xx, y + 4, BLACK)
 
-    def spikes(points: tuple[tuple[int, int], ...]) -> None:
-        for x, y in points:
-            put(x, y, SPIKE_MID)
-            put(x, y + 1, IRON)
-
-    # Wings first, tower last, so the tower stays the tall centre.
-    # Each wing is narrower than the tower and steps down from it.
-    left = extrude(6, 22, 15, 34, 5, "gable")
-    right = extrude(28, 24, 37, 34, 4, "gable")
-    front = extrude(28, 34, 38, 43, 4, "gable")
-    tower = extrude(17, 12, 25, 24, 6, "mansard")
-    # Small gabled porch over the door. It does not cast.
-    extrude(8, 33, 15, 38, 3, "gable")
-    # Bare tree on the open lawn, left of the tower.
+    # One hall. Side gables are the left and right of this same roof.
+    extrude(6, 18, 36, 42, 6, "gable")
+    # Tower overlaps the hall and rises above its roof.
+    tx0, ty0, tx1, ty1 = extrude(17, 12, 27, 24, 8, "mansard")
+    # Porch overlaps the south wall. The door is painted afterwards.
+    extrude(14, 40, 23, 44, 2, "gable")
+    lancet(7, 20, WIN_YELLOW)
+    lancet(7, 26, WIN_ORANGE)
+    lancet(7, 32, WIN_HOT)
+    lancet(8, 37, WIN_YELLOW)
+    lancet(26, 37, WIN_ORANGE)
+    lancet(31, 37, WIN_HOT)
+    lancet(19, 13, WIN_YELLOW)
+    lancet(28, 8, WIN_ORANGE)
+    lancet(31, 9, WIN_YELLOW)
     _stamp_pattern(
         put,
-        6,
-        8,
-        (
-            "  #  ",
-            " # # ",
-            "# # #",
-            "  #  ",
-            "  #  ",
-            "  #  ",
-        ),
-        {"#": (65, 32, 0), " ": None},
-    )
-    # Tower dormers, then windows on the vertical and horizontal faces.
-    lancet(24, 11, WIN_ORANGE)
-    lancet(27, 12, WIN_YELLOW)
-    lancet(18, 13, WIN_HOT)
-    lancet(19, 19, WIN_ORANGE)
-    lancet(22, 19, WIN_YELLOW)
-    lancet(7, 23, WIN_HOT)
-    lancet(6, 30, WIN_ORANGE)
-    lancet(29, 25, WIN_YELLOW)
-    lancet(30, 39, WIN_ORANGE)
-    _stamp_pattern(
-        put,
-        9,
-        30,
+        15,
+        37,
         (
             " #d# ",
             "#d#d#",
-            "#dkd#",
+            "#d#d#",
             "#####",
         ),
-        {"#": DOOR_DARK, "d": WIN_ORANGE, "k": WIN_YELLOW, " ": None},
+        {"#": (65, 0, 0), "d": (113, 0, 0), " ": None},
     )
-    for post in (9, 14):
-        for y in range(36, 39):
-            put(post, y, COLUMN_LIT if post == 9 else COLUMN)
+    for post in (14, 21):
+        for y in range(41, 45):
+            put(post, y, COLUMN_LIT if post == 14 else COLUMN)
             put(post + 1, y, COLUMN)
     edge = []
     for x, y in list(painted):
@@ -921,73 +880,52 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
                 break
     for x, y in edge:
         put(x, y, BLACK)
-    # Ironwork after the outline, so the pale metal stays pale.
-    tx0, ty0, tx1, ty1 = tower
-    # Railing on the tower's north edge, standing above the roof.
-    cap_x0, cap_y0 = tx0 + 2, ty0 + 2
-    cap_x1 = tx1 - 2
-    vane_x = (cap_x0 + cap_x1) // 2
-    for x in range(cap_x0, cap_x1 + 1, 2):
+    # Railing and weathervane on the tower's north edge, after the outline.
+    vane_x = (tx0 + tx1) // 2
+    for x in range(tx0 + 1, tx1, 2):
         if abs(x - vane_x) <= 1:
             continue
-        spikes(((x, ty0 - 1),))
-    # One weathervane. The tip stays off the rim (y >= 3).
-    put(vane_x, ty0 - 2, SPIKE)
-    put(vane_x, ty0 - 1, IRON)
+        put(x, ty0 - 1, SPIKE_MID)
+        put(x, ty0, IRON)
+    put(vane_x, ty0 - 1, SPIKE)
     put(vane_x - 1, ty0 - 1, SPIKE_MID)
     put(vane_x + 1, ty0 - 1, SPIKE_MID)
-    for bounds in (left, right, front):
-        rx0, ry0, rx1, ry1 = bounds
-        ridge_x = rx0 + max(1, (rx1 - rx0) // 5)
-        # A short point above the gable, then a few teeth along the ridge.
-        put(ridge_x, ry0 - 2, SPIKE)
-        put(ridge_x, ry0 - 1, SPIKE_MID)
-        put(ridge_x + 1, ry0 - 1, IRON)
-        for y in range(ry0 + 2, min(ry0 + 7, ry1), 2):
-            spikes(((ridge_x, y),))
-    # Pale path, steps, a short picket, and a pumpkin. Ground dressing,
-    # drawn after the outline so they are not part of the wall.
-    for y, x0p, x1p, colour in (
-        (39, 10, 13, (170, 170, 170)),
-        (40, 10, 13, (146, 146, 146)),
-    ):
-        for x in range(x0p, x1p + 1):
+    put(vane_x, ty0, IRON)
+    # Teal only where the house is not. A one-pixel rim keeps the tile seam.
+    for y in range(1, 47):
+        for x in range(1, 47):
+            if (x, y) in painted:
+                continue
+            px[x, y] = yard[(x * 3 + y * 5) % 4]
+    for y in range(45, 48):
+        for x in (17, 18, 19):
             if (x, y) not in painted:
-                px[x, y] = colour
-    for y in range(41, 47):
-        for x in (11, 12):
-            if (x, y) not in painted and y < 47:
-                px[x, y] = (170, 170, 170) if x == 11 else (146, 146, 146)
-    for x in (4, 6, 8):
-        if (x, 42) not in painted:
-            px[x, 41] = (227, 227, 227)
-            px[x, 42] = (203, 203, 203)
-    # Jack-o'-lantern beside the path.
-    for x, y, colour in (
-        (21, 41, WIN_ORANGE),
-        (22, 41, WIN_ORANGE),
-        (21, 42, WIN_ORANGE),
-        (22, 42, BLACK),
-        (21, 43, WIN_ORANGE),
-        (22, 43, WIN_ORANGE),
-    ):
-        if (x, y) not in painted:
-            px[x, y] = colour
-    # Hospital wedge on the front wing's southeast corner only.
-    # Widths 1, 3, 5, 7 as the wall steps down-left. Nothing on the eaves.
-    fx1, fy1, height = 38, 43, 4
-    for index, y in enumerate(range(fy1 - height + 1, fy1 + 1)):
+                px[x, y] = (170, 170, 170) if x == 18 else (146, 146, 146)
+    # The pass-7 wedge: four rows, widths 1, 3, 5, 7. Not the eave, not the porch.
+    fx1, fy1, height = 36, 42, 6
+    y_top = fy1 - height + 1
+    for index, y in enumerate(range(y_top, y_top + 4)):
         east = fx1 + (fy1 - y)
-        reach = 1 + 2 * index
-        for step in range(reach):
+        for step in range(1 + 2 * index):
             sx, sy = east + 1 + step, y
-            if sx <= 0 or sy <= 0 or sx >= 47 or sy >= 47:
+            if not (0 < sx < 47 and 0 < sy < 47):
                 continue
             if (sx, sy) in painted:
                 continue
             if px[sx, sy] not in yard_set and px[sx, sy] not in GROUND:
                 continue
             px[sx, sy] = HEDGE
+    # The house, railing, and vane are one piece. A gap would be a second building.
+    seen: set[tuple[int, int]] = set()
+    stack = [next(iter(painted))]
+    while stack:
+        cx, cy = stack.pop()
+        if (cx, cy) in seen or (cx, cy) not in painted:
+            continue
+        seen.add((cx, cy))
+        stack.extend(((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)))
+    if seen != painted:
+        raise SystemExit(f"haunted house is {len(painted) - len(seen)} pixels short of one building")
     return out
 
 
