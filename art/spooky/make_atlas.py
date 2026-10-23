@@ -45,8 +45,8 @@ CHANGED = PARK_TILES + FOUNTAIN_TILES + HOUSE_TILES + MANOR_TURRET + MANOR_FENCE
 
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
 # 8px overview, in tile order. The big-park sprite has its own hash.
-ATLAS_SHA = "1eeb3ffe0dde4a2f370bc069f9e8c3e8e54f86fe165d9aaaea2bfa8a2f7bb3d0"
-PARK_SHA = "5fe18177e21d65a05f29f3041453585c08b887661297abe272ad833157917279"
+ATLAS_SHA = "3695e5eb7175816cb7a41d45279989d96596f8f6a5d3cac9fc644b3a0c516b42"
+PARK_SHA = "bfcd7ce976127caf92d8d35695f694b2c349e59ec34b6cbc455e268770804ec5"
 
 GRASS = (0, 113, 0)
 LAWN = (0, 170, 0)
@@ -324,8 +324,8 @@ def _blit_rows(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...], ink:
                 px[x, y] = colour
 
 
-# Light slab, dark outline, darker RIP. `e` is the step end, lighter than
-# the grey field so the base reads wider than the slab. `k` is a crack.
+# Light slab and dark outline. `e` is the step end, lighter than the grey
+# field so the base reads wider than the slab. `k` is a crack.
 _STONE_INK = {
     " ": None,
     "o": INK,
@@ -340,7 +340,7 @@ _STONE_INK = {
     "k": INK,
     "c": BLACK,
 }
-# Park slabs use a pure-black outline. The crypt's foot keeps _STONE_INK.
+# Park slabs use a pure-black outline.
 _SLAB_INK = dict(_STONE_INK)
 _SLAB_INK["o"] = BLACK
 
@@ -353,10 +353,10 @@ def _rect_rows(rows: tuple[str, ...], name: str) -> tuple[str, ...]:
 
 
 def _stone_rows(crack: bool) -> tuple[str, ...]:
-    """One upright slab. The arch is empty; RIP sits low, in plain strokes.
+    """One blank upright slab. The face is empty; the base is wider.
 
-    The base row is the full width. The arch above it is inset, so the step
-    reads wider than the stone. The letters have no closed counter.
+    RIP marks do not survive at this size, so the arch stays a plain light
+    slab. The base row is the full width and the arch above it is inset.
     """
     rows = _rect_rows(
         (
@@ -366,11 +366,7 @@ def _stone_rows(crack: bool) -> tuple[str, ...]:
             " ofmmmmmfo ",
             " ofmmmmmfo ",
             " ofmmmmmfo ",
-            " o##m#m##o ",
-            " o##m#m##o ",
-            " o#.m#m#.o ",
-            " o#.m#m..o ",
-            " ofmmmmmfo ",
+            "  ooooooo  ",
             "eddddddddde",
         ),
         "slab",
@@ -411,12 +407,12 @@ def _shadow_sprite(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...], 
 
 def _paint_parks(atlas: Image.Image) -> None:
     """One slab per park. Offsets differ by a pixel; tile 43 has the crack."""
-    # (x, y, crack). The sprite is 11x12, so these all sit inside the rim.
+    # (x, y, crack). The sprite is 11x8, so these all sit inside the rim.
     plans = {
-        40: (2, 2, False),
-        41: (1, 2, False),
-        42: (3, 3, False),
-        43: (2, 1, True),
+        40: (2, 4, False),
+        41: (1, 4, False),
+        42: (3, 5, False),
+        43: (2, 3, True),
     }
     borders = []
     for index, (sx, sy, crack) in plans.items():
@@ -457,21 +453,26 @@ def _crypt_rows(glow: tuple[int, int, int]) -> tuple[tuple[str, ...], dict[str, 
 
     The left roof slope is lit. The right slope, the right buttress, and the
     right wall are in shade. Only the candle pixels change between frames.
+    The sprite fills the tile and leaves a one-pixel grey-dirt margin.
     """
     rows = (
-        "   ss   ",
-        "  ssss  ",
-        "   rr   ",
-        "  rLSr  ",
-        " rLLSSr ",
-        "rLLLSSSr",
-        "oBWWWWDo",
-        "oB#dd#Do",
-        "oB#gg#Do",
-        "TTTTTTTT",
+        "      ss      ",
+        "     ssss     ",
+        "      rr      ",
+        "     rLSr     ",
+        "    rLLSSr    ",
+        "   rLLLSSSr   ",
+        "  rLLLLSSSSr  ",
+        " rLLLLLSSSSSr ",
+        "oBWWWWWWWWWWDo",
+        "oBW##dddd##WDo",
+        "oBW#ddggdd#WDo",
+        "oBW##dddd##WDo",
+        "oBWWWWWWWWWWDo",
+        "TTTTTTTTTTTTTT",
     )
-    if any(len(row) != 8 for row in rows):
-        raise SystemExit("crypt rows are not 8 wide")
+    if any(len(row) != 14 for row in rows):
+        raise SystemExit("crypt rows are not 14 wide")
     ink = {
         " ": None,
         "s": SPIKE,
@@ -491,34 +492,22 @@ def _crypt_rows(glow: tuple[int, int, int]) -> tuple[tuple[str, ...], dict[str, 
 
 
 def _paint_fountains(atlas: Image.Image) -> None:
-    hedge = HEDGE
-    base = _crop(atlas, 840)
+    """One mausoleum on grey dirt. No hedge rim, no corner markers."""
     glows = (WIN_ORANGE, WIN_YELLOW, WIN_HOT, WIN_DIM)
-    # 3x4, so they sit in the three free pixels beside the crypt and stop
-    # above the hedge on the bottom row.
-    foot = _rect_rows((" o ", "o#o", "ooo", "ddd"), "crypt foot")
-    mark = _rect_rows((" c ", "ccc", " c ", "ddd"), "crypt cross")
     frames = []
     for glow in glows:
         tile = _grey_tile()
-        px = tile.load()
-        src = base.load()
-        for y in range(TILE):
-            for x in range(TILE):
-                if src[x, y] == hedge:
-                    px[x, y] = hedge
         rows, ink = _crypt_rows(glow)
-        # Interior only: the hedge rim stays put on every frame.
-        _stamp_sprite(tile, 4, 1, rows, ink)
-        # A slab and a cross at the foot, on grey dirt, off the hedge rim.
-        _stamp_sprite(tile, 1, 11, foot, _STONE_INK)
-        _stamp_sprite(tile, 12, 11, mark, _STONE_INK)
-        _shadow_sprite(tile, 4, 1, rows, ink, TILE - 1)
-        _shadow_sprite(tile, 1, 11, foot, _STONE_INK, TILE - 1)
-        _shadow_sprite(tile, 12, 11, mark, _STONE_INK, TILE - 1)
+        # Inset by one pixel so the shared rim stays grey dirt.
+        _stamp_sprite(tile, 1, 1, rows, ink)
+        _shadow_sprite(tile, 1, 1, rows, ink, TILE - 1)
         frames.append(tile)
     if len({_rim(frame) for frame in frames}) != 1:
         raise SystemExit("crypt frames do not share a rim")
+    if any(colour == HEDGE for colour in _rim(frames[0])):
+        raise SystemExit("crypt rim is green")
+    if any(colour not in GREY_SET for colour in _rim(frames[0])):
+        raise SystemExit("crypt rim is not grey dirt")
     if len({frame.tobytes() for frame in frames}) < 2:
         raise SystemExit("crypt frames do not flicker")
     for offset, frame in enumerate(frames):
@@ -743,16 +732,27 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
     horizontal (south), which is where the windows sit. Light is from the
     upper left: left roof planes and the west wall are the light side, the
     right plane and the southeast corner are the dark side.
+
+    The cast shadow matches the hospital. Its mass is VGA index 216,
+    (32, 65, 32). It falls southeast. A vertical east face gets one pixel.
+    On the 45-degree southeast corner the wall steps down-left and the
+    shadow's outer edge steps down-right, so the width runs 1, 3, 5, 7, 9
+    (hospital rows y25-y29, outer edge through (41,25)-(45,29)). South of a
+    flat bottom the church, in the same green, runs about one skirt deep
+    (typically 5px, at most 7). The mansion uses that colour, that angle,
+    and a 6px south run, the same skirt as the hall.
     """
     out = _lot_fill(src)
     px = out.load()
     sp = src.load()
     painted: set[tuple[int, int]] = set()
-    ridge = (130, 130, 130)
-    lit = (97, 97, 97)
-    lit_dim = (81, 81, 81)
-    shade = (56, 56, 56)
-    shade_deep = (44, 44, 44)
+    ornament: set[tuple[int, int]] = set()
+    # Weathered slate. Darker than the pass-4 roof, still on the VGA palette.
+    ridge = (81, 81, 81)
+    lit = (69, 69, 69)
+    lit_dim = (56, 56, 56)
+    shade = (44, 44, 44)
+    shade_deep = (32, 32, 32)
 
     def put(x: int, y: int, colour: tuple[int, int, int]) -> None:
         if not (0 <= x < 48 and 0 <= y < 48):
@@ -768,9 +768,14 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
         for y in range(y0, y1 + 1):
             for x in range(x0, x1 + 1):
                 if y > y1 - height:
-                    put(x, y, WALL_SHADE if x > x1 - height else PURPLE_DEEP)
+                    # South face. The southeast end is the dark side.
+                    if x > x1 - height or (x + y) % 5 == 0:
+                        put(x, y, WALL)
+                    else:
+                        put(x, y, PURPLE_DEEP)
                 elif x < x0 + height:
-                    put(x, y, PURPLE_FACE)
+                    # West face. Only the lit edge stays the lighter purple.
+                    put(x, y, PURPLE_FACE if x == x0 else PURPLE_DEEP)
         # The two rectangles leave a gap at each corner. Fill it so the
         # silhouette steps one pixel left per row, the same 45-degree skirt
         # as the church (6px) and the hospital's southeast edge.
@@ -785,7 +790,9 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
         rx0, ry0 = x0 + height, y0 - height
         rx1, ry1 = x1 + height, y1 - height
         if kind == "gable":
-            ridge_x = rx0 + max(2, (rx1 - rx0) * 2 // 5)
+            # Narrower lit plane: the ridge sits a third of the way across,
+            # so the gable reads steeper than a centred one.
+            ridge_x = rx0 + max(2, (rx1 - rx0) // 3)
             for y in range(ry0, ry1 + 1):
                 for x in range(rx0, rx1 + 1):
                     if x == ridge_x:
@@ -817,50 +824,53 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
             put(x, ry1, BLACK)
         return rx0, ry0, rx1, ry1
 
-    def finial(x: int, y: int) -> None:
-        """Three pixels on the same up-right diagonal the walls use."""
-        for step in range(3):
-            put(x + step, y - step, SPIKE if step == 2 else SPIKE_MID)
-            put(x + step + 1, y - step, STONE_DARK)
+    def finial(x: int, y: int, steps: int = 4) -> None:
+        """Iron spike on the same up-right diagonal the walls use."""
+        for step in range(steps):
+            colour = SPIKE_MID if step == steps - 1 else IRON
+            put(x + step, y - step, colour)
+            put(x + step + 1, y - step, WALL)
+            ornament.add((x + step, y - step))
+            ornament.add((x + step + 1, y - step))
 
-    def window(x: int, y: int, glow: tuple[int, int, int], wide: int = 2, high: int = 2) -> None:
-        for yy in range(y, y + high + 2):
-            for xx in range(x, x + wide + 2):
-                put(xx, yy, BLACK)
-        for yy in range(y + 1, y + high + 1):
-            for xx in range(x + 1, x + wide + 1):
-                put(xx, yy, glow)
+    def lancet(x: int, y: int, glow: tuple[int, int, int]) -> None:
+        """Pointed arch, 3 wide and 5 tall, on a vertical or horizontal face."""
+        put(x + 1, y, BLACK)
+        for yy in range(y + 1, y + 4):
+            put(x, yy, BLACK)
+            put(x + 1, yy, glow)
+            put(x + 2, yy, BLACK)
+        for xx in range(x, x + 3):
+            put(xx, y + 4, BLACK)
 
-    # Back tower first, then the hall, then the two front towers.
-    extrude(20, 12, 30, 22, 6, "pyramid")
-    extrude(9, 18, 35, 40, 6, "gable")
-    extrude(5, 30, 15, 40, 6, "pyramid")
-    extrude(26, 30, 36, 40, 6, "pyramid")
+    # Centre spire first (taller, narrower), then the hall, then the towers.
+    # The spire's roof starts high enough that an iron finial still fits
+    # under the tile rim (y >= 3) on the same up-right diagonal.
+    extrude(20, 12, 27, 19, 8, "pyramid")
+    hx0, hy0, hx1, hy1 = extrude(9, 18, 35, 40, 6, "gable")
+    extrude(4, 30, 14, 40, 6, "pyramid")
+    extrude(25, 30, 35, 40, 6, "pyramid")
     extrude(17, 41, 25, 43, 2, "porch")
-    finial(37, 5)
-    finial(22, 23)
-    finial(43, 23)
-    # West faces (vertical) and the south face (horizontal). Same places
-    # the hospital and the church put their windows.
-    window(10, 19, WIN_YELLOW)
-    window(6, 31, WIN_ORANGE)
-    window(7, 36, WIN_YELLOW, 2, 1)
-    window(27, 31, WIN_YELLOW)
-    window(28, 36, WIN_ORANGE, 2, 1)
-    window(32, 36, WIN_YELLOW, 2, 1)
-    window(16, 36, WIN_ORANGE, 1, 1)
-    window(23, 36, WIN_ORANGE, 1, 1)
+    # West faces (vertical) and the south face (horizontal).
+    lancet(10, 18, WIN_YELLOW)
+    lancet(5, 30, WIN_ORANGE)
+    lancet(6, 35, WIN_YELLOW)
+    lancet(26, 30, WIN_YELLOW)
+    lancet(27, 35, WIN_ORANGE)
+    lancet(31, 35, WIN_YELLOW)
+    lancet(15, 34, WIN_ORANGE)
+    lancet(23, 34, WIN_HOT)
     _stamp_pattern(
         put,
         18,
         35,
         (
-            "#####",
+            " #d# ",
             "#d#d#",
             "#dkd#",
             "#####",
         ),
-        {"#": DOOR_DARK, "d": DOOR_RED, "k": KNOB},
+        {"#": DOOR_DARK, "d": DOOR_RED, "k": KNOB, " ": None},
     )
     for post in (19, 24):
         for y in range(39, 44):
@@ -874,10 +884,63 @@ def _paint_haunted(src: Image.Image) -> Image.Image:
                 break
     for x, y in edge:
         put(x, y, BLACK)
+    # Cresting and finials after the outline, so the pale tips stay pale.
+    ridge_x = hx0 + max(2, (hx1 - hx0) // 3)
+    for y in range(hy0 + 2, hy1, 3):
+        put(ridge_x - 1, y - 1, SPIKE_MID)
+        put(ridge_x + 1, y, WALL)
+        ornament.add((ridge_x - 1, y - 1))
+        ornament.add((ridge_x + 1, y))
+    finial(35, 5, 3)
+    finial(21, 23)
+    finial(42, 23, 3)
     for y in range(48):
         for x in range(48):
             if (x, y) not in painted and sp[x, y] in GROUND:
                 px[x, y] = sp[x, y]
+
+    # Hospital cast shadow. Index 216 only, after the outline and the lawn
+    # restore, so the black eave stays black and the lawn is still there to
+    # receive it. Ornaments are too thin to throw a streak.
+    shadow: set[tuple[int, int]] = set()
+
+    def skirt_run(x: int, y: int) -> int:
+        """Rows down a 45-degree southeast edge. Zero is a vertical east face."""
+        run = 0
+        cx, cy = x, y
+        while run < 24:
+            up = (cx + 1, cy - 1)
+            # Ornaments are not the wall. A finial must not stretch the wedge.
+            if up in painted and up not in ornament and (cx + 2, cy - 1) not in painted:
+                run += 1
+                cx += 1
+                cy -= 1
+                continue
+            break
+        return run
+
+    for x, y in painted:
+        if (x, y) in ornament:
+            continue
+        if (x + 1, y) not in painted:
+            reach = 1 + 2 * skirt_run(x, y)
+            for step in range(reach):
+                shadow.add((x + 1 + step, y))
+        # A one-pixel step of the skirt is not the south wall. The hospital's
+        # south shadow is a run under a flat bottom.
+        south_left = (x - 1, y) in painted and (x - 1, y + 1) not in painted
+        south_right = (x + 1, y) in painted and (x + 1, y + 1) not in painted
+        if (x, y + 1) not in painted and (south_left or south_right):
+            for step in range(1, 7):
+                shadow.add((x, y + step))
+    for x, y in shadow:
+        if x <= 0 or y <= 0 or x >= 47 or y >= 47:
+            continue
+        if (x, y) in painted:
+            continue
+        if px[x, y] not in GROUND:
+            continue
+        px[x, y] = HEDGE
     return out
 
 
@@ -949,7 +1012,7 @@ def _tree_mask(src: Image.Image) -> list[list[bool]]:
 
 
 def _paint_big_park(classic: Image.Image) -> Image.Image:
-    """Grey cemetery lawn, dusk trees, a stone path, and RIP slabs."""
+    """Grey cemetery lawn, dusk trees, a stone path, and blank slabs."""
     image = _paint_special_base(classic)
     src = classic.convert("RGBA")
     trees = _tree_mask(src)
