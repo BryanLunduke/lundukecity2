@@ -1,0 +1,308 @@
+fetch https://repo.msys2.org/mingw/mingw64/mingw64.db
+fetch https://repo.msys2.org/mingw/mingw64/mingw64.db.sig
+fetch https://raw.githubusercontent.com/msys2/MSYS2-keyring/master/msys2.gpg
+fetch https://raw.githubusercontent.com/msys2/MSYS2-keyring/master/msys2-trusted
+fetch https://raw.githubusercontent.com/msys2/MSYS2-keyring/master/msys2-revoked
+mingw64.db signed by 5F944B027F7FE2091985AA2EFA11531AA0AA7F57 (trusted via MSYS2 master keys)
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-brotli-1.2.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-brotli-1.2.0-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst
+ok mingw-w64-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-cairo-1.18.6-2-any.pkg.tar.zst
+ok mingw-w64-x86_64-cairo-1.18.6-2-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-cc-libs-16.2.0-6-any.pkg.tar.zst
+ok mingw-w64-x86_64-cc-libs-16.2.0-6-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-expat-2.9.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-expat-2.9.0-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-fontconfig-2.18.3-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-fontconfig-2.18.3-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-freetype-2.15.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-freetype-2.15.0-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-fribidi-1.0.17-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-fribidi-1.0.17-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-glib2-2.90.1-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-glib2-2.90.1-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-harfbuzz-14.6.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-harfbuzz-14.6.0-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libffi-3.8.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libffi-3.8.0-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libgcc-16.2.0-6-any.pkg.tar.zst
+ok mingw-w64-x86_64-libgcc-16.2.0-6-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libiconv-1.19-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libiconv-1.19-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libpng-1.6.59-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libpng-1.6.59-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libstdc++-16.2.0-6-any.pkg.tar.zst
+ok mingw-w64-x86_64-libstdc++-16.2.0-6-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libthai-0.1.30-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-libthai-0.1.30-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libwinpthread-14.0.0.r495.g63ebe6cdb-2-any.pkg.tar.zst
+ok mingw-w64-x86_64-libwinpthread-14.0.0.r495.g63ebe6cdb-2-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-lzo2-2.10-3-any.pkg.tar.zst
+ok mingw-w64-x86_64-lzo2-2.10-3-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-pango-1.58.2-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-pango-1.58.2-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-pcre2-10.49-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-pcre2-10.49-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-pixman-0.46.4-3-any.pkg.tar.zst
+ok mingw-w64-x86_64-pixman-0.46.4-3-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-python-packaging-26.3-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-python-packaging-26.3-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-sdl3-3.4.18-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-sdl3-3.4.18-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-ttf-dejavu-2.37-4-any.pkg.tar.zst
+ok mingw-w64-x86_64-ttf-dejavu-2.37-4-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-tzdata-2026e-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-tzdata-2026e-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-vulkan-loader-1~1.4.363.0-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-vulkan-loader-1~1.4.363.0-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-wineditline-2.208-1-any.pkg.tar.zst
+ok mingw-w64-x86_64-wineditline-2.208-1-any.pkg.tar.zst
+fetch https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-zlib-1.3.2-2-any.pkg.tar.zst
+ok mingw-w64-x86_64-zlib-1.3.2-2-any.pkg.tar.zst
+31 packages verified and unpacked into /workspace/city2-pr12/repo/build-windows/sysroot/mingw64
+The Meson build system
+Version: 1.7.0
+Source dir: /workspace/city2-pr12/repo
+Build dir: /workspace/city2-pr12/repo/build-windows/build
+Build type: cross build
+Project name: lunduke-city-2
+Project version: 2.0.0
+C++ compiler for the host machine: x86_64-w64-mingw32-g++-posix (gcc 14.0.0 "x86_64-w64-mingw32-g++-posix (GCC) 14-posix")
+C++ linker for the host machine: x86_64-w64-mingw32-g++-posix ld.bfd 2.44
+C++ compiler for the build machine: c++ (gcc 14.2.0 "c++ (Debian 14.2.0-19) 14.2.0")
+C++ linker for the build machine: c++ ld.bfd 2.44
+Build machine cpu family: x86_64
+Build machine cpu: x86_64
+Host machine cpu family: x86_64
+Host machine cpu: x86_64
+Target machine cpu family: x86_64
+Target machine cpu: x86_64
+Found pkg-config: YES (/usr/bin/pkg-config) 1.8.1
+Run-time dependency sdl3 found: YES 3.4.18
+Run-time dependency cairo found: YES 1.18.6
+Run-time dependency pangocairo found: YES 1.58.2
+Run-time dependency threads found: YES
+Windows resource compiler: GNU windres (GNU Binutils) 2.44
+Run-time dependency fontconfig found: YES 2.18.3
+Program python3 found: YES (/usr/bin/python3)
+Program appstreamcli found: YES (/usr/bin/appstreamcli)
+Build targets in project: 26
+
+lunduke-city-2 2.0.0
+
+  User defined options
+    Cross files: /workspace/city2-pr12/repo/cross/mingw-w64-x86_64.txt
+                 /workspace/city2-pr12/repo/build-windows/sysroot.ini
+    buildtype  : release
+
+Found ninja-1.12.1 at /usr/bin/ninja
+ninja: Entering directory `/workspace/city2-pr12/repo/build-windows/build'
+[1/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_animate.cpp.obj
+[2/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_allocate.cpp.obj
+[3/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_budget.cpp.obj
+[4/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_connect.cpp.obj
+[5/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_disasters.cpp.obj
+[6/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.obj
+[7/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_generate.cpp.obj
+[8/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.obj
+[9/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.obj
+[10/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_initialize.cpp.obj
+[11/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_main.cpp.obj
+[12/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_map.cpp.obj
+[13/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_message.cpp.obj
+[14/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_micropolis.cpp.obj
+[15/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_position.cpp.obj
+[16/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_power.cpp.obj
+[17/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.obj
+[18/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_resource.cpp.obj
+[19/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.obj
+[20/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.obj
+[21/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_sprite.cpp.obj
+[22/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_stubs.cpp.obj
+[23/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.obj
+[24/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.obj
+[25/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_update.cpp.obj
+[26/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_utilities.cpp.obj
+[27/153] Compiling Windows resource src/.._data_windows_lunduke-city-2.rc
+[28/153] Compiling C++ object src/lunduke-city-2.exe.p/main.cpp.obj
+[29/153] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.obj
+[30/153] Linking static target third_party/micropolis/libmicropolis.a
+[31/153] Compiling C++ object src/lunduke-city-2.exe.p/assets.cpp.obj
+[32/153] Compiling C++ object src/lunduke-city-2.exe.p/chart.cpp.obj
+[33/153] Compiling C++ object src/lunduke-city-2.exe.p/city_glance.cpp.obj
+[34/153] Compiling C++ object src/lunduke-city-2.exe.p/map_view.cpp.obj
+[35/153] Compiling C++ object src/lunduke-city-2.exe.p/messages.cpp.obj
+[36/153] Compiling C++ object src/lunduke-city-2.exe.p/city_session.cpp.obj
+[37/153] Compiling C++ object src/lunduke-city-2.exe.p/overlay_map.cpp.obj
+[38/153] Compiling C++ object src/lunduke-city-2.exe.p/special_buildings.cpp.obj
+[39/153] Compiling C++ object src/lunduke-city-2.exe.p/shell.cpp.obj
+[40/153] Compiling C++ object src/lunduke-city-2.exe.p/shell_actions.cpp.obj
+[41/153] Compiling C++ object src/lunduke-city-2.exe.p/shell_uitest.cpp.obj
+[42/153] Compiling C++ object src/lunduke-city-2.exe.p/shell_draw.cpp.obj
+[43/153] Compiling C++ object src/lunduke-city-2.exe.p/scenario_preview.cpp.obj
+[44/153] Compiling C++ object src/lunduke-city-2.exe.p/side_widgets.cpp.obj
+[45/153] Compiling C++ object src/lunduke-city-2.exe.p/sprite_art.cpp.obj
+[46/153] Compiling C++ object src/lunduke-city-2.exe.p/tile_atlas.cpp.obj
+[47/153] Compiling C++ object src/lunduke-city-2.exe.p/tool_palette.cpp.obj
+[48/153] Compiling C++ object src/lunduke-city-2.exe.p/sound_player.cpp.obj
+[49/153] Compiling C++ object src/lunduke-city-2.exe.p/tools.cpp.obj
+[50/153] Compiling C++ object tests/engine_smoke.exe.p/engine_smoke.cpp.obj
+[51/153] Compiling C++ object tests/engine_fixes.exe.p/engine_fixes.cpp.obj
+[52/153] Compiling C++ object tests/features.exe.p/features.cpp.obj
+[53/153] Compiling C++ object tests/features.exe.p/.._src_assets.cpp.obj
+[54/153] Compiling C++ object tests/features.exe.p/.._src_special_buildings.cpp.obj
+[55/153] Compiling C++ object tests/features.exe.p/.._src_messages.cpp.obj
+[56/153] Compiling C++ object tests/features.exe.p/.._src_city_session.cpp.obj
+[57/153] Compiling C++ object tests/features.exe.p/.._src_tools.cpp.obj
+[58/153] Compiling C++ object tests/features.exe.p/.._src_sound_player.cpp.obj
+[59/153] Compiling C++ object tests/round4.exe.p/.._src_assets.cpp.obj
+[60/153] Compiling C++ object tests/round4.exe.p/round4.cpp.obj
+[61/153] Compiling C++ object tests/round4.exe.p/.._src_special_buildings.cpp.obj
+[62/153] Compiling C++ object tests/round4.exe.p/.._src_messages.cpp.obj
+[63/153] Compiling C++ object tests/round4.exe.p/.._src_city_session.cpp.obj
+[64/153] Compiling C++ object tests/round4.exe.p/.._src_sound_player.cpp.obj
+[65/153] Compiling C++ object tests/round4.exe.p/.._src_tools.cpp.obj
+[66/153] Compiling C++ object tests/round5.exe.p/round5.cpp.obj
+[67/153] Compiling C++ object tests/round5.exe.p/.._src_assets.cpp.obj
+[68/153] Compiling C++ object tests/round5.exe.p/.._src_special_buildings.cpp.obj
+[69/153] Compiling C++ object tests/round5.exe.p/.._src_messages.cpp.obj
+[70/153] Compiling C++ object tests/round5.exe.p/.._src_city_session.cpp.obj
+[71/153] Compiling C++ object tests/round5.exe.p/.._src_sound_player.cpp.obj
+[72/153] Compiling C++ object tests/round6.exe.p/round6.cpp.obj
+[73/153] Compiling C++ object tests/round5.exe.p/.._src_tools.cpp.obj
+[74/153] Compiling C++ object tests/round6.exe.p/.._src_assets.cpp.obj
+[75/153] Compiling C++ object tests/round6.exe.p/.._src_special_buildings.cpp.obj
+[76/153] Compiling C++ object tests/round6.exe.p/.._src_messages.cpp.obj
+[77/153] Compiling C++ object tests/round6.exe.p/.._src_city_session.cpp.obj
+[78/153] Compiling C++ object tests/round6.exe.p/.._src_tools.cpp.obj
+[79/153] Compiling C++ object tests/round6.exe.p/.._src_sound_player.cpp.obj
+[80/153] Compiling C++ object tests/round7.exe.p/round7.cpp.obj
+[81/153] Compiling C++ object tests/production_binary.exe.p/production_binary.cpp.obj
+[82/153] Compiling C++ object tests/round8.exe.p/.._src_assets.cpp.obj
+[83/153] Compiling C++ object tests/round8.exe.p/round8.cpp.obj
+[84/153] Compiling C++ object tests/round8.exe.p/.._src_special_buildings.cpp.obj
+[85/153] Compiling C++ object tests/round8.exe.p/.._src_messages.cpp.obj
+[86/153] Compiling C++ object tests/round8.exe.p/.._src_city_session.cpp.obj
+[87/153] Compiling C++ object tests/round8.exe.p/.._src_sound_player.cpp.obj
+[88/153] Compiling C++ object tests/round8.exe.p/.._src_tools.cpp.obj
+[89/153] Compiling C++ object tests/round9.exe.p/round9.cpp.obj
+[90/153] Compiling C++ object tests/round10.exe.p/round10.cpp.obj
+[91/153] Compiling C++ object tests/round11.exe.p/round11.cpp.obj
+[92/153] Compiling C++ object tests/round13.exe.p/round13.cpp.obj
+[93/153] Compiling C++ object tests/menu_model.exe.p/menu_model.cpp.obj
+[94/153] Compiling C++ object tests/round14.exe.p/round14.cpp.obj
+[95/153] Compiling C++ object tests/svga_look.exe.p/svga_look.cpp.obj
+[96/153] Compiling C++ object tests/svga_look.exe.p/.._src_tile_atlas.cpp.obj
+[97/153] Compiling C++ object tests/svga_look.exe.p/.._src_assets.cpp.obj
+[98/153] Compiling C++ object tests/hotspots.exe.p/hotspots.cpp.obj
+[99/153] Compiling C++ object tests/tool_icons.exe.p/tool_icons.cpp.obj
+[100/153] Compiling C++ object tests/dialog_copy.exe.p/dialog_copy.cpp.obj
+[101/153] Compiling C++ object tests/tool_icons.exe.p/.._src_assets.cpp.obj
+[102/153] Compiling C++ object tests/special_buildings.exe.p/special_buildings.cpp.obj
+[103/153] Compiling C++ object tests/special_buildings.exe.p/.._src_assets.cpp.obj
+[104/153] Compiling C++ object tests/special_buildings.exe.p/.._src_special_buildings.cpp.obj
+[105/153] Compiling C++ object tests/special_buildings.exe.p/.._src_messages.cpp.obj
+[106/153] Compiling C++ object tests/special_buildings.exe.p/.._src_city_session.cpp.obj
+[107/153] Compiling C++ object tests/special_buildings.exe.p/.._src_tools.cpp.obj
+[108/153] Compiling C++ object tests/special_buildings.exe.p/.._src_sound_player.cpp.obj
+[109/153] Compiling C++ object tests/scenario_preview.exe.p/scenario_preview.cpp.obj
+[110/153] Compiling C++ object tests/scenario_preview.exe.p/.._src_tile_atlas.cpp.obj
+[111/153] Compiling C++ object tests/scenario_preview.exe.p/.._src_scenario_preview.cpp.obj
+[112/153] Compiling C++ object tests/scenario_preview.exe.p/.._src_assets.cpp.obj
+[113/153] Compiling C++ object tests/scenario_preview.exe.p/.._src_special_buildings.cpp.obj
+[114/153] Compiling C++ object tests/scenario_preview.exe.p/.._src_messages.cpp.obj
+[115/153] Compiling C++ object tests/scenario_preview.exe.p/.._src_city_session.cpp.obj
+[116/153] Compiling C++ object tests/scenario_preview.exe.p/.._src_tools.cpp.obj
+[117/153] Compiling C++ object tests/scenario_preview.exe.p/.._src_sound_player.cpp.obj
+[118/153] Compiling C++ object tests/review.exe.p/.._src_assets.cpp.obj
+[119/153] Compiling C++ object tests/review.exe.p/review.cpp.obj
+[120/153] Compiling C++ object tests/round16.exe.p/round16.cpp.obj
+[121/153] Compiling C++ object tests/round16.exe.p/.._src_assets.cpp.obj
+[122/153] Compiling C++ object tests/round16.exe.p/.._src_city_glance.cpp.obj
+[123/153] Compiling C++ object tests/round16.exe.p/.._src_messages.cpp.obj
+[124/153] Compiling C++ object tests/round16.exe.p/.._src_overlay_map.cpp.obj
+[125/153] Compiling C++ object tests/round16.exe.p/.._src_city_session.cpp.obj
+[126/153] Compiling C++ object tests/round16.exe.p/.._src_special_buildings.cpp.obj
+[127/153] Compiling C++ object tests/round16.exe.p/.._src_sound_player.cpp.obj
+[128/153] Compiling C++ object tests/round16.exe.p/.._src_sprite_art.cpp.obj
+[129/153] Linking target src/lunduke-city-2.exe
+[130/153] Linking target tests/engine_smoke.exe
+[131/153] Linking target tests/engine_fixes.exe
+[132/153] Linking target tests/features.exe
+[133/153] Linking target tests/round4.exe
+[134/153] Linking target tests/round5.exe
+[135/153] Linking target tests/round6.exe
+[136/153] Linking target tests/round7.exe
+[137/153] Linking target tests/production_binary.exe
+[138/153] Linking target tests/round8.exe
+[139/153] Linking target tests/round9.exe
+[140/153] Linking target tests/round10.exe
+[141/153] Linking target tests/round11.exe
+[142/153] Linking target tests/round13.exe
+[143/153] Linking target tests/round14.exe
+[144/153] Linking target tests/menu_model.exe
+[145/153] Linking target tests/svga_look.exe
+[146/153] Linking target tests/dialog_copy.exe
+[147/153] Linking target tests/hotspots.exe
+[148/153] Linking target tests/tool_icons.exe
+[149/153] Linking target tests/special_buildings.exe
+[150/153] Linking target tests/scenario_preview.exe
+[151/153] Linking target tests/review.exe
+[152/153] Compiling C++ object tests/round16.exe.p/.._src_tools.cpp.obj
+[153/153] Linking target tests/round16.exe
+ninja: Entering directory `/workspace/city2-pr12/repo/build-windows/build'
+ninja: no work to do.
+ 1/27 engine_fixes      OK               1.61s
+ 2/27 engine_smoke      OK               1.64s
+ 3/27 features          OK               0.83s
+ 4/27 round5            OK               0.21s
+ 5/27 round6            OK               0.18s
+ 6/27 round7            OK               0.02s
+ 7/27 production_binary OK               0.04s
+ 8/27 round8            OK               0.22s
+ 9/27 round9            OK               0.03s
+10/27 round10           OK               0.03s
+11/27 round11           SKIP             0.02s   exit status 77
+12/27 round13           OK               0.09s
+13/27 round14           OK               0.02s
+14/27 menu_model        OK               0.02s
+15/27 svga_look         OK               0.24s
+16/27 round4            OK               2.98s
+17/27 dialog_copy       OK               1.72s
+18/27 hotspots          OK               1.82s
+19/27 tool_icons        OK               3.70s
+20/27 special_buildings OK               2.93s
+21/27 scenario_preview  OK               2.11s
+22/27 review            OK               1.70s
+23/27 round16           OK               1.81s
+24/27 svga_atlas        FAIL            17.28s   exit status 1
+>>> MESON_TEST_ITERATION=1 UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1 MSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1 LUNDUKE_CITY_ASSETS=/workspace/city2-pr12/repo/third_party/micropolis-assets ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1 MALLOC_PERTURB_=38 /usr/bin/python3 /workspace/city2-pr12/repo/art/svga/make_atlas.py
+――――――――――――――――――――――――――――――――――――― ✀  ―――――――――――――――――――――――――――――――――――――
+stderr:
+missing Warcraft reference: /workspace/city2-pr12/repo/svga-refs/warcraft.png
+――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+
+25/27 ui_input          OK               8.16s
+26/27 sdl_smoke         OK               3.35s
+27/27 metainfo          OK               0.01s
+
+Summary of Failures:
+
+24/27 svga_atlas        FAIL            17.28s   exit status 1
+
+Ok:                 25  
+Expected Fail:      0   
+Fail:               1   
+Unexpected Pass:    0   
+Skipped:            1   
+Timeout:            0   
+
+Full log written to /workspace/city2-pr12/repo/build-windows/build/meson-logs/testlog.txt
+EXIT=1
