@@ -1,0 +1,45 @@
+ninja: Entering directory `/workspace/city2-pr13/repo/build-asan'
+ninja: no work to do.
+ 1/33 engine_fixes      OK               0.04s
+ 2/33 engine_smoke      OK               0.05s
+ 3/33 features          OK               0.32s
+ 4/33 regressions       OK               0.52s
+ 5/33 round3            OK               0.26s
+ 6/33 round4            OK               0.33s
+ 7/33 round5            OK               0.42s
+ 8/33 round6            OK               0.17s
+ 9/33 round7            OK               0.02s
+10/33 production_binary OK               9.78s
+11/33 argv_open         OK               1.94s
+12/33 round9            OK               0.12s
+13/33 round10           OK               0.08s
+14/33 round11           SKIP             0.01s   exit status 77
+15/33 round8            OK               0.36s
+16/33 round14           OK               0.04s
+17/33 round15           OK               0.15s
+18/33 menu_model        OK               0.01s
+19/33 round13           OK               0.36s
+20/33 svga_look         OK               0.60s
+21/33 spooky_atlas      OK               0.91s
+22/33 dialog_copy       OK               0.01s
+23/33 hotspots          OK               0.01s
+24/33 tool_icons        OK               0.21s
+25/33 special_buildings OK               0.22s
+26/33 scenario_preview  OK               0.34s
+27/33 review            OK               0.01s
+28/33 round16           OK               0.16s
+29/33 svga_atlas        OK              14.94s
+30/33 review_ui         OK               1.06s
+31/33 ui_input          OK               1.65s
+32/33 sdl_smoke         OK               0.71s
+33/33 metainfo          OK               0.01s
+
+Ok:                 32  
+Expected Fail:      0   
+Fail:               0   
+Unexpected Pass:    0   
+Skipped:            1   
+Timeout:            0   
+
+Full log written to /workspace/city2-pr13/repo/build-asan/meson-logs/testlog.txt
+T=0
