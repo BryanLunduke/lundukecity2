@@ -1,0 +1,169 @@
+ninja: Entering directory `/w/repo/build-sniper'
+[1/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_animate.cpp.o
+[2/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_allocate.cpp.o
+[3/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_budget.cpp.o
+[4/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_disasters.cpp.o
+[5/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_connect.cpp.o
+[6/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_evaluate.cpp.o
+[7/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_graph.cpp.o
+[8/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_generate.cpp.o
+[9/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_initialize.cpp.o
+[10/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_main.cpp.o
+[11/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_fileio.cpp.o
+[12/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_map.cpp.o
+[13/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_message.cpp.o
+[14/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_position.cpp.o
+[15/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_micropolis.cpp.o
+[16/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_power.cpp.o
+[17/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_random.cpp.o
+[18/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_resource.cpp.o
+[19/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_scan.cpp.o
+[20/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_sprite.cpp.o
+[21/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_simulate.cpp.o
+[22/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_stubs.cpp.o
+[23/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_traffic.cpp.o
+[24/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_update.cpp.o
+[25/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_tool.cpp.o
+[26/168] Compiling C++ object src/lunduke-city-2.p/main.cpp.o
+[27/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_utilities.cpp.o
+[28/168] Compiling C++ object third_party/micropolis/libmicropolis.a.p/MicropolisEngine_src_zone.cpp.o
+[29/168] Linking static target third_party/micropolis/libmicropolis.a
+[30/168] Compiling C++ object src/lunduke-city-2.p/assets.cpp.o
+[31/168] Compiling C++ object src/lunduke-city-2.p/chart.cpp.o
+[32/168] Compiling C++ object src/lunduke-city-2.p/messages.cpp.o
+[33/168] Compiling C++ object src/lunduke-city-2.p/map_view.cpp.o
+[34/168] Compiling C++ object src/lunduke-city-2.p/overlay_map.cpp.o
+[35/168] Compiling C++ object src/lunduke-city-2.p/special_buildings.cpp.o
+[36/168] Compiling C++ object src/lunduke-city-2.p/city_session.cpp.o
+[37/168] Compiling C++ object src/lunduke-city-2.p/shell.cpp.o
+[38/168] Compiling C++ object src/lunduke-city-2.p/shell_actions.cpp.o
+[39/168] Compiling C++ object src/lunduke-city-2.p/scenario_preview.cpp.o
+[40/168] Compiling C++ object src/lunduke-city-2.p/side_widgets.cpp.o
+[41/168] Compiling C++ object src/lunduke-city-2.p/shell_uitest.cpp.o
+[42/168] Compiling C++ object src/lunduke-city-2.p/shell_draw.cpp.o
+[43/168] Compiling C++ object src/lunduke-city-2.p/sprite_art.cpp.o
+[44/168] Compiling C++ object src/lunduke-city-2.p/tile_atlas.cpp.o
+[45/168] Compiling C++ object src/lunduke-city-2.p/tool_palette.cpp.o
+[46/168] Compiling C++ object src/lunduke-city-2.p/tools.cpp.o
+[47/168] Compiling C++ object src/lunduke-city-2.p/sound_player.cpp.o
+[48/168] Compiling C++ object tests/engine_smoke.p/engine_smoke.cpp.o
+[49/168] Linking target tests/engine_smoke
+[50/168] Linking target src/lunduke-city-2
+[51/168] Compiling C++ object tests/engine_fixes.p/engine_fixes.cpp.o
+[52/168] Linking target tests/engine_fixes
+[53/168] Compiling C++ object tests/features.p/.._src_assets.cpp.o
+[54/168] Compiling C++ object tests/features.p/features.cpp.o
+[55/168] Compiling C++ object tests/features.p/.._src_messages.cpp.o
+[56/168] Compiling C++ object tests/features.p/.._src_special_buildings.cpp.o
+[57/168] Compiling C++ object tests/features.p/.._src_tools.cpp.o
+[58/168] Compiling C++ object tests/features.p/.._src_city_session.cpp.o
+[59/168] Compiling C++ object tests/regressions.p/.._src_assets.cpp.o
+[60/168] Compiling C++ object tests/features.p/.._src_sound_player.cpp.o
+[61/168] Linking target tests/features
+[62/168] Compiling C++ object tests/regressions.p/regressions.cpp.o
+[63/168] Compiling C++ object tests/regressions.p/.._src_special_buildings.cpp.o
+[64/168] Compiling C++ object tests/regressions.p/.._src_messages.cpp.o
+[65/168] Compiling C++ object tests/regressions.p/.._src_tools.cpp.o
+[66/168] Compiling C++ object tests/regressions.p/.._src_city_session.cpp.o
+[67/168] Compiling C++ object tests/round3.p/round3.cpp.o
+[68/168] Compiling C++ object tests/regressions.p/.._src_sound_player.cpp.o
+[69/168] Linking target tests/regressions
+[70/168] Compiling C++ object tests/round3.p/.._src_assets.cpp.o
+[71/168] Compiling C++ object tests/round3.p/.._src_messages.cpp.o
+[72/168] Compiling C++ object tests/round3.p/.._src_special_buildings.cpp.o
+[73/168] Compiling C++ object tests/round3.p/.._src_tools.cpp.o
+[74/168] Compiling C++ object tests/round3.p/.._src_city_session.cpp.o
+[75/168] Compiling C++ object tests/round3.p/.._src_sound_player.cpp.o
+[76/168] Linking target tests/round3
+[77/168] Compiling C++ object tests/round4.p/.._src_assets.cpp.o
+[78/168] Compiling C++ object tests/round4.p/round4.cpp.o
+[79/168] Compiling C++ object tests/round4.p/.._src_messages.cpp.o
+[80/168] Compiling C++ object tests/round4.p/.._src_special_buildings.cpp.o
+[81/168] Compiling C++ object tests/round4.p/.._src_tools.cpp.o
+[82/168] Compiling C++ object tests/round4.p/.._src_city_session.cpp.o
+[83/168] Compiling C++ object tests/round4.p/.._src_sound_player.cpp.o
+[84/168] Compiling C++ object tests/round5.p/round5.cpp.o
+[85/168] Linking target tests/round4
+[86/168] Compiling C++ object tests/round5.p/.._src_assets.cpp.o
+[87/168] Compiling C++ object tests/round5.p/.._src_special_buildings.cpp.o
+[88/168] Compiling C++ object tests/round5.p/.._src_messages.cpp.o
+[89/168] Compiling C++ object tests/round5.p/.._src_tools.cpp.o
+[90/168] Compiling C++ object tests/round6.p/round6.cpp.o
+[91/168] Compiling C++ object tests/round5.p/.._src_city_session.cpp.o
+[92/168] Compiling C++ object tests/round5.p/.._src_sound_player.cpp.o
+[93/168] Compiling C++ object tests/round6.p/.._src_assets.cpp.o
+[94/168] Linking target tests/round5
+[95/168] Compiling C++ object tests/round6.p/.._src_messages.cpp.o
+[96/168] Compiling C++ object tests/round6.p/.._src_special_buildings.cpp.o
+[97/168] Compiling C++ object tests/round6.p/.._src_tools.cpp.o
+[98/168] Compiling C++ object tests/round6.p/.._src_city_session.cpp.o
+[99/168] Compiling C++ object tests/round6.p/.._src_sound_player.cpp.o
+[100/168] Compiling C++ object tests/round7.p/round7.cpp.o
+[101/168] Linking target tests/round6
+[102/168] Linking target tests/round7
+[103/168] Compiling C++ object tests/production_binary.p/production_binary.cpp.o
+[104/168] Linking target tests/production_binary
+[105/168] Compiling C++ object tests/argv_open.p/.._src_assets.cpp.o
+[106/168] Compiling C++ object tests/argv_open.p/argv_open.cpp.o
+[107/168] Compiling C++ object tests/argv_open.p/.._src_messages.cpp.o
+[108/168] Compiling C++ object tests/argv_open.p/.._src_special_buildings.cpp.o
+[109/168] Compiling C++ object tests/argv_open.p/.._src_tools.cpp.o
+[110/168] Compiling C++ object tests/argv_open.p/.._src_city_session.cpp.o
+[111/168] Compiling C++ object tests/round8.p/round8.cpp.o
+[112/168] Compiling C++ object tests/argv_open.p/.._src_sound_player.cpp.o
+[113/168] Compiling C++ object tests/round8.p/.._src_assets.cpp.o
+[114/168] Linking target tests/argv_open
+[115/168] Compiling C++ object tests/round8.p/.._src_messages.cpp.o
+[116/168] Compiling C++ object tests/round8.p/.._src_special_buildings.cpp.o
+[117/168] Compiling C++ object tests/round8.p/.._src_tools.cpp.o
+[118/168] Compiling C++ object tests/round9.p/round9.cpp.o
+[119/168] Linking target tests/round9
+[120/168] Compiling C++ object tests/round8.p/.._src_city_session.cpp.o
+[121/168] Compiling C++ object tests/round8.p/.._src_sound_player.cpp.o
+[122/168] Linking target tests/round8
+[123/168] Compiling C++ object tests/round10.p/round10.cpp.o
+[124/168] Compiling C++ object tests/round11.p/round11.cpp.o
+[125/168] Linking target tests/round10
+[126/168] Linking target tests/round11
+[127/168] Compiling C++ object tests/round14.p/round14.cpp.o
+[128/168] Linking target tests/round14
+[129/168] Compiling C++ object tests/round13.p/round13.cpp.o
+[130/168] Linking target tests/round13
+[131/168] Compiling C++ object tests/round15.p/.._src_assets.cpp.o
+[132/168] Compiling C++ object tests/round15.p/round15.cpp.o
+[133/168] Compiling C++ object tests/round15.p/.._src_special_buildings.cpp.o
+[134/168] Compiling C++ object tests/round15.p/.._src_messages.cpp.o
+[135/168] Compiling C++ object tests/round15.p/.._src_tools.cpp.o
+[136/168] Compiling C++ object tests/menu_model.p/menu_model.cpp.o
+[137/168] Linking target tests/menu_model
+[138/168] Compiling C++ object tests/round15.p/.._src_city_session.cpp.o
+[139/168] Compiling C++ object tests/round15.p/.._src_sound_player.cpp.o
+[140/168] Compiling C++ object tests/hotspots.p/hotspots.cpp.o
+[141/168] Linking target tests/round15
+[142/168] Linking target tests/hotspots
+[143/168] Compiling C++ object tests/dialog_copy.p/dialog_copy.cpp.o
+[144/168] Linking target tests/dialog_copy
+[145/168] Compiling C++ object tests/tool_icons.p/tool_icons.cpp.o
+[146/168] Compiling C++ object tests/tool_icons.p/.._src_assets.cpp.o
+[147/168] Linking target tests/tool_icons
+[148/168] Compiling C++ object tests/special_buildings.p/special_buildings.cpp.o
+[149/168] Compiling C++ object tests/special_buildings.p/.._src_assets.cpp.o
+[150/168] Compiling C++ object tests/special_buildings.p/.._src_messages.cpp.o
+[151/168] Compiling C++ object tests/special_buildings.p/.._src_special_buildings.cpp.o
+[152/168] Compiling C++ object tests/special_buildings.p/.._src_tools.cpp.o
+[153/168] Compiling C++ object tests/special_buildings.p/.._src_city_session.cpp.o
+[154/168] Compiling C++ object tests/scenario_preview.p/scenario_preview.cpp.o
+[155/168] Compiling C++ object tests/special_buildings.p/.._src_sound_player.cpp.o
+[156/168] Compiling C++ object tests/scenario_preview.p/.._src_scenario_preview.cpp.o
+[157/168] Compiling C++ object tests/scenario_preview.p/.._src_tile_atlas.cpp.o
+[158/168] Linking target tests/special_buildings
+[159/168] Compiling C++ object tests/scenario_preview.p/.._src_assets.cpp.o
+[160/168] Compiling C++ object tests/scenario_preview.p/.._src_special_buildings.cpp.o
+[161/168] Compiling C++ object tests/scenario_preview.p/.._src_messages.cpp.o
+[162/168] Compiling C++ object tests/scenario_preview.p/.._src_tools.cpp.o
+[163/168] Compiling C++ object tests/scenario_preview.p/.._src_city_session.cpp.o
+[164/168] Compiling C++ object tests/scenario_preview.p/.._src_sound_player.cpp.o
+[165/168] Linking target tests/scenario_preview
+[166/168] Compiling C++ object tests/review.p/.._src_assets.cpp.o
+[167/168] Compiling C++ object tests/review.p/review.cpp.o
+[168/168] Linking target tests/review

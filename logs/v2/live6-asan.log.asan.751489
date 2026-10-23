@@ -1,0 +1,30 @@
+
+=================================================================
+==751489==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 2064 byte(s) in 1 object(s) allocated from:
+    #0 0x7f1a73ef3b58 in realloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:85
+    #1 0x7f1a7220d04b in _dbus_string_lengthen (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x3604b) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #2 0x7f1a72210e77 in _dbus_read (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x39e77) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #3 0x7f1a72214b20  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x3db20) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #4 0x7f1a72207a1c  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x30a1c) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #5 0x7f1a722078b6  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x308b6) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #6 0x7f1a721ef1c4  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x181c4) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #7 0x7f1a721eaa00  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x13a00) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #8 0x7f1a73bb8915  (/lib/x86_64-linux-gnu/libSDL3.so.0+0x1b8915) (BuildId: 206df046329b2a4dd1b9503423a897a659f33195)
+    #9 0x7f1a73a479a3  (/lib/x86_64-linux-gnu/libSDL3.so.0+0x479a3) (BuildId: 206df046329b2a4dd1b9503423a897a659f33195)
+    #10 0x564897e0994e in Shell::init_video() ../src/shell.cpp:530
+    #11 0x564897dfea5c in Shell::run(int, char**) ../src/shell.cpp:222
+    #12 0x564897dfddfd in run_shell(int, char**) ../src/shell.cpp:192
+    #13 0x564897d93758 in main ../src/main.cpp:24
+    #14 0x7f1a72c35ca7 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #15 0x7f1a72c35d64 in __libc_start_main_impl ../csu/libc-start.c:360
+    #16 0x564897d93670 in _start (/workspace/city2-pr9/repo/build-asan/src/lunduke-city-2+0x624670) (BuildId: 6d6731cc2abc5dadbfa28c4f5503bf46f59d26ca)
+
+-----------------------------------------------------
+Suppressions used:
+  count      bytes template
+      5        357 libfontconfig
+-----------------------------------------------------
+
+SUMMARY: AddressSanitizer: 2064 byte(s) leaked in 1 allocation(s).

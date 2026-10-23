@@ -1,0 +1,24 @@
+
+=================================================================
+==751337==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 2064 byte(s) in 1 object(s) allocated from:
+    #0 0x7f20014f3b58 in realloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:85
+    #1 0x7f20000f904b in _dbus_string_lengthen (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x3604b) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #2 0x7f20000fce77 in _dbus_read (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x39e77) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #3 0x7f2000100b20  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x3db20) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #4 0x7f20000f3a1c  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x30a1c) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #5 0x7f20000f38b6  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x308b6) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #6 0x7f20000db1c4  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x181c4) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #7 0x7f20000d6a00  (/lib/x86_64-linux-gnu/libdbus-1.so.3+0x13a00) (BuildId: 2c0f7740ddadac7cff5c4dfe304fbf95c7d5935c)
+    #8 0x7f20011b8915  (/lib/x86_64-linux-gnu/libSDL3.so.0+0x1b8915) (BuildId: 206df046329b2a4dd1b9503423a897a659f33195)
+    #9 0x7f20010479a3  (/lib/x86_64-linux-gnu/libSDL3.so.0+0x479a3) (BuildId: 206df046329b2a4dd1b9503423a897a659f33195)
+    #10 0x55eb3d968282 in ensure_audio ../src/sound_player.cpp:30
+    #11 0x55eb3d96ce05 in open_device ../src/sound_player.cpp:242
+    #12 0x55eb3d96e0e6 in SoundPlayer::probe() ../src/sound_player.cpp:508
+    #13 0x55eb3d90636b in main ../tests/features.cpp:121
+    #14 0x7f2000235ca7 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #15 0x7f2000235d64 in __libc_start_main_impl ../csu/libc-start.c:360
+    #16 0x55eb3d904b40 in _start (/workspace/city2-pr9/repo/build-asan/tests/features+0x2cbb40) (BuildId: 2d6067dbf96d570236245fada3f4d92f42c1c75a)
+
+SUMMARY: AddressSanitizer: 2064 byte(s) leaked in 1 allocation(s).

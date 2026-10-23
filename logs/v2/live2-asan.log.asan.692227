@@ -1,0 +1,36 @@
+
+=================================================================
+==692227==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 1728 byte(s) in 4 object(s) allocated from:
+    #0 0x7f72670f4610 in calloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:77
+    #1 0x7f7267746dfb  (/lib/x86_64-linux-gnu/libcairo.so.2+0x40dfb) (BuildId: 9ff8ff83e0fef7008427fea597695a247e4faa9d)
+
+Indirect leak of 147456 byte(s) in 4 object(s) allocated from:
+    #0 0x7f72670f4c57 in malloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:69
+    #1 0x7f72677aaef5  (/lib/x86_64-linux-gnu/libcairo.so.2+0xa4ef5) (BuildId: 9ff8ff83e0fef7008427fea597695a247e4faa9d)
+
+Indirect leak of 3566 byte(s) in 4 object(s) allocated from:
+    #0 0x7f72670f4610 in calloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:77
+    #1 0x7f7267750bf1  (/lib/x86_64-linux-gnu/libcairo.so.2+0x4abf1) (BuildId: 9ff8ff83e0fef7008427fea597695a247e4faa9d)
+
+Indirect leak of 1056 byte(s) in 4 object(s) allocated from:
+    #0 0x7f72670f4c57 in malloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:69
+    #1 0x7f7265a333ce  (/lib/x86_64-linux-gnu/libpixman-1.so.0+0x513ce) (BuildId: 7ecd4a86a7e26bfbe1680a337a2cff9467691f45)
+
+Indirect leak of 160 byte(s) in 4 object(s) allocated from:
+    #0 0x7f72670f4610 in calloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:77
+    #1 0x7f72677847b0 in cairo_surface_set_mime_data (/lib/x86_64-linux-gnu/libcairo.so.2+0x7e7b0) (BuildId: 9ff8ff83e0fef7008427fea597695a247e4faa9d)
+
+Indirect leak of 96 byte(s) in 4 object(s) allocated from:
+    #0 0x7f72670f3b58 in realloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:85
+    #1 0x7f7267723367  (/lib/x86_64-linux-gnu/libcairo.so.2+0x1d367) (BuildId: 9ff8ff83e0fef7008427fea597695a247e4faa9d)
+
+-----------------------------------------------------
+Suppressions used:
+  count      bytes template
+      5        357 libfontconfig
+    481     108124 libGLX_mesa
+-----------------------------------------------------
+
+SUMMARY: AddressSanitizer: 154062 byte(s) leaked in 24 allocation(s).

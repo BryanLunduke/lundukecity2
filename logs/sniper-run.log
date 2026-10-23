@@ -1,0 +1,22 @@
+VERSION_ID="3"
+BUILD_ID="3.0.20260928.262393"
+3.4.16
+1.16.0
+1.46.2
+ninja-exit=0
+warnings=0
+11/27 argv_open         SKIP             0.01s   exit status 77
+13/27 round11           SKIP             0.00s   exit status 77
+Ok:                 25  
+Fail:               0   
+Skipped:            2   
+Timeout:            0   
+install-exit=0
+micropolis-assets
+special-tiles
+tool-icons
+20
+big-park.png
+library.png
+zoo.png
+shim-ok

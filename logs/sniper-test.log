@@ -1,0 +1,36 @@
+ 1/27 engine_smoke      OK               0.01s
+ 2/27 engine_fixes      OK               0.01s
+ 3/27 round3            OK               0.03s
+ 4/27 regressions       OK               0.04s
+ 5/27 round4            OK               0.03s
+ 6/27 round5            OK               0.03s
+ 7/27 round7            OK               0.00s
+ 8/27 features          OK               0.09s
+ 9/27 production_binary OK               0.01s
+10/27 round6            OK               0.03s
+11/27 argv_open         SKIP             0.01s   exit status 77
+12/27 round9            OK               0.01s
+13/27 round11           SKIP             0.00s   exit status 77
+14/27 round10           OK               0.02s
+15/27 round14           OK               0.00s
+16/27 round15           OK               0.02s
+17/27 menu_model        OK               0.00s
+18/27 dialog_copy       OK               0.00s
+19/27 hotspots          OK               0.00s
+20/27 round8            OK               0.06s
+21/27 round13           OK               0.05s
+22/27 special_buildings OK               0.02s
+23/27 review            OK               0.00s
+24/27 tool_icons        OK               0.03s
+25/27 scenario_preview  OK               0.02s
+26/27 ui_input          OK               1.04s
+27/27 sdl_smoke         OK               0.18s
+
+Ok:                 25  
+Expected Fail:      0   
+Fail:               0   
+Unexpected Pass:    0   
+Skipped:            2   
+Timeout:            0   
+
+Full log written to /w/repo/build-sniper/meson-logs/testlog.txt

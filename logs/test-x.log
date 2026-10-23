@@ -1,0 +1,40 @@
+ninja: Entering directory `/workspace/city2-pr8/repo/build-x'
+ninja: no work to do.
+ 1/29 engine_smoke      OK               0.01s
+ 2/29 engine_fixes      OK               0.01s
+ 3/29 regressions       OK               0.13s
+ 4/29 features          OK               0.14s
+ 5/29 round4            OK               0.09s
+ 6/29 round3            OK               0.10s
+ 7/29 round6            OK               0.07s
+ 8/29 round7            OK               0.01s
+ 9/29 round5            OK               0.13s
+10/29 production_binary OK               0.39s
+11/29 argv_open         OK               1.05s
+12/29 round9            OK               0.04s
+13/29 round10           OK               0.03s
+14/29 round11           SKIP             0.00s   exit status 77
+15/29 round8            OK               0.15s
+16/29 round14           OK               0.01s
+17/29 round13           OK               0.13s
+18/29 menu_model        OK               0.00s
+19/29 dialog_copy       OK               0.00s
+20/29 round15           OK               0.05s
+21/29 hotspots          OK               0.01s
+22/29 tool_icons        OK               0.03s
+23/29 special_buildings OK               0.05s
+24/29 review            OK               0.00s
+25/29 scenario_preview  OK               0.04s
+26/29 review_ui         OK               0.30s
+27/29 ui_input          OK               1.09s
+28/29 sdl_smoke         OK               0.25s
+29/29 metainfo          OK               0.03s
+
+Ok:                 28  
+Expected Fail:      0   
+Fail:               0   
+Unexpected Pass:    0   
+Skipped:            1   
+Timeout:            0   
+
+Full log written to /workspace/city2-pr8/repo/build-x/meson-logs/testlog.txt
