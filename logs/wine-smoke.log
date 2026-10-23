@@ -1,0 +1,2 @@
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+SMOKE=0
