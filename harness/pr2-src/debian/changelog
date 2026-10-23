@@ -1,0 +1,409 @@
+lunduke-city-2 (2.0.0) unstable; urgency=medium
+
+  * SDL3 port of Lunduke City. Installs beside the original as
+    lunduke-city-2, with its own config directory and desktop id.
+    Default window is 1280x800. Menus and dialogs are drawn in the
+    window. Gamepad, touch, and the original .cty saves are supported.
+
+ -- Phil <phil@brushpad.local>  Tue, 20 Oct 2026 18:00:00 +0000
+
+lunduke-city (0.9.5-2) unstable; urgency=medium
+
+  * Pre-1.0 fix C-1: a city opened from outside (command line, file
+    manager, a second launch) while a City dialog is open (Save City As,
+    Load City, New City, the scenario list, the unsaved-city question and
+    the other modal dialogs) is held and opened after the dialog closes,
+    instead of replacing the city under the dialog. Save City As also
+    refuses to write if a different city was loaded while its dialog was
+    open, so it can never save another city over the file it proposed.
+  * Pre-1.0 fix C-2: only the running City holds the application. A second
+    launch (menu entry again, or double-clicking a .cty) now forwards its
+    open to the running City and exits, instead of staying behind as a
+    hidden process that ignored SIGTERM.
+
+ -- Phil <phil@brushpad.local>  Mon, 19 Oct 2026 03:19:45 +0000
+
+lunduke-city (0.9.5-1) unstable; urgency=medium
+
+  * Version 0.9.5 for the LCOS 0.9.5 track.
+  * Round 15 C-1: autosave and crash recovery. Unsaved work is autosaved
+    once a minute to $XDG_STATE_HOME/lunduke-city/recovery-*.cty (0700
+    folder, engine atomic save, a waiting tax year is not collected), and
+    SIGTERM/SIGHUP (logout, shutdown) write it before City exits without a
+    prompt. The next start asks "Recover unsaved city?": Recover restores
+    it as unsaved work that saves to its original file; Not Now or Escape
+    keeps it; Discard asks to confirm and Cancel returns to the question.
+    Saving, or answering the unsaved-city question, removes the autosave.
+  * Round 15 C-2: saving a city kept behind a symbolic link writes the real
+    file (atomic replace in its own folder) and keeps the link; a dangling
+    link is refused with a hint to use Save City As.
+  * Round 15 C-3: saving over an existing file keeps its owner and group
+    where allowed (best-effort fchown, like Paint); leftover
+    ".<name>.save-XXXXXX" files from a crashed save that are a day old are
+    removed at the next save of that name.
+  * Round 15 C-4: ship AppStream metadata
+    (com.lunduke.LundukeCity.metainfo.xml), validated by a test.
+  * Round 15 P-4 (City part): System > Open Recent lists cities City opened
+    or saved, and they are added to the desktop's recent files.
+
+ -- Phil <phil@brushpad.local>  Sat, 17 Oct 2026 02:10:54 +0000
+
+lunduke-city (0.9.4-8) unstable; urgency=medium
+
+  * Fix round 14 review findings: saving keeps the city file's existing
+    permissions, and a new file gets 0666 minus the umask (C-1); the
+    temporary save file has a unique mkstemp name, so a file named
+    "<city>.tmp" is never touched (C-2). A start-up centring timer is now
+    tied to the window's lifetime (ASan stack-use-after-scope in UI tests).
+
+ -- Phil <phil@brushpad.local>  Thu, 15 Oct 2026 04:03:25 +0000
+
+lunduke-city (0.9.4-7) unstable; urgency=medium
+
+  * Fix round 13 review findings: a city file whose contents are not
+    plausible (unknown tile values, more building centres than fit,
+    funds or date out of range) is refused with the reason and the open
+    city is left untouched (C-1); the main and Budget windows are moved
+    back inside the screen work area so they fit 768-pixel screens (C-2).
+
+ -- Phil <phil@brushpad.local>  Thu, 15 Oct 2026 03:08:02 +0000
+
+lunduke-city (0.9.4-6) unstable; urgency=medium
+
+  * Fix round 12 review findings: the whole map is redrawn once the tile
+    images are ready and when the map is first shown, and a paused city
+    still picks up map changes, so it no longer stays plain dirt (C-1); the
+    Budget window scrolls inside the screen work area with OK/Cancel always
+    visible at 1366x768 and 1280x720 (C-2); a failed load says why (not
+    found, folder, empty, too short, permission) (C-3); About moved to a new
+    Help menu (C-4); a new empty city shows "not rated yet" and no poll or
+    complaints (C-5); Ctrl+Shift+S opens Save As (C-6).
+
+ -- Phil <phil@brushpad.local>  Wed, 14 Oct 2026 01:43:39 +0000
+
+lunduke-city (0.9.4-5) unstable; urgency=medium
+
+  * Fix round 11 review findings: a full disk is reported as "No space left
+    on device" (C-1); the main window has no fixed 800x700 minimum and its
+    default size fits the monitor work area, so it fits 1280x720 and
+    GDK_SCALE=2 (C-2).
+
+ -- Phil <phil@brushpad.local>  Wed, 14 Oct 2026 18:30:00 +0000
+
+lunduke-city (0.9.4-4) unstable; urgency=medium
+
+  * Fix round 10 review findings.
+
+ -- Phil <phil@brushpad.local>  Wed, 14 Oct 2026 16:51:15 +0000
+
+lunduke-city (0.9.4-3) unstable; urgency=medium
+
+  * Fix round 9 review findings.
+
+ -- Phil <phil@brushpad.local>  Wed, 14 Oct 2026 05:23:59 +0000
+
+lunduke-city (0.9.4-2) unstable; urgency=medium
+
+  * Fix round 8 review findings.
+
+ -- Phil <phil@brushpad.local>  Wed, 14 Oct 2026 04:02:14 +0000
+
+lunduke-city (0.9.4-1) unstable; urgency=medium
+
+  * Version bump for LCOS 0.9.4. No functional changes.
+
+ -- Phil <phil@brushpad.local>  Tue, 13 Oct 2026 15:31:28 +0000
+
+lunduke-city (0.9.3-1) unstable; urgency=medium
+
+  * Version bump for LCOS 0.9.3. No functional changes.
+
+ -- Phil <phil@brushpad.local>  Sun, 11 Oct 2026 13:14:06 +0000
+
+lunduke-city (0.9.2-1) unstable; urgency=medium
+
+  * Version bump for LCOS 0.9.2. No functional changes.
+
+ -- Phil <phil@brushpad.local>  Sat, 10 Oct 2026 00:33:51 +0000
+
+lunduke-city (0.9.1-1) unstable; urgency=medium
+
+  * Version bump for LCOS 0.9.1 (testing and bug-fix release). No functional changes.
+
+ -- Phil <phil@brushpad.local>  Fri, 09 Oct 2026 16:00:00 +0000
+
+lunduke-city (0.9-10) unstable; urgency=medium
+
+  * A saved city opens from the command line and from a file manager.
+    A missing or unreadable file shows an error dialog and stays open.
+    The desktop file accepts a city file, and .cty has a shared MIME type.
+  * Graph lines use separate hues, and each series has its own dash.
+    Cash flow is magenta and pollution is brown, so they are not a second
+    green and a second gold.
+  * The Graphs header and the Population legend both show the census.
+  * Screenshot and demo hooks are compiled out of the release build.
+  * The welcome line says the clock is paused only while it is paused.
+  * Save City proposes the city name, or the current file name, and
+    opens the last folder used.
+
+ -- Phil <phil@brushpad.local>  Fri, 09 Oct 2026 01:30:00 +0000
+
+lunduke-city (0.9-9) unstable; urgency=medium
+
+  * The Graphs window names every series beside its color swatch.
+    Residential, Commercial, Industrial, cash flow, crime, pollution,
+    and population stay on the window in the theme font, so the labels
+    are readable at the default size and do not cover the plot.
+
+ -- Phil <phil@brushpad.local>  Thu, 08 Oct 2026 23:58:00 +0000
+
+lunduke-city (0.9-8) unstable; urgency=medium
+
+  * The tornado sprite-step regression check is deterministic, and so is
+    the fountain test in features. A clock reseed in generateSomeCity()
+    used to blow the tornado away or re-arm it. The check now seeds the
+    RNG and turns disasters off. The fountain roll is primed through
+    test hook op 21.
+
+ -- Phil <phil@brushpad.local>  Thu, 08 Oct 2026 23:50:00 +0000
+
+lunduke-city (0.9-7) unstable; urgency=medium
+
+  * A city with no January receipt shows estimated taxes and department
+    costs from the same formulas the budget uses, labelled as estimates.
+    It no longer says there is no tax receipt, and it no longer prices
+    every department at $0. A save that already has a receipt is unchanged.
+  * Each scenario shows its classic goal and deadline in the list, when
+    it starts, and while it runs, including the years still left. The
+    win or loss dialog says whether that goal was met.
+  * Closing the scenario announcement, or cancelling the scenario list,
+    leaves the city paused. Keep playing is what starts the clock.
+  * A department already cut to 0% keeps its explanation when the slider
+    reports 0 again. Those sentences wrap, so the budget window stays
+    near its usual width.
+  * The first screen starts paused. Tools keep their name-and-cost
+    tooltips. A dismissible welcome line explains how to start, and the
+    dismissal is stored under ~/.config.
+  * Clicking a power, water, or problem map centers the city view.
+
+ -- Phil <phil@brushpad.local>  Thu, 08 Oct 2026 23:10:00 +0000
+
+lunduke-city (0.9-6) unstable; urgency=medium
+
+  * A census past 32,767 people, and a treasury past $2,147,483,647,
+    survive save and load. The classic fields are saturated, so an
+    older reader does not turn that surplus into debt. Older city
+    files, including the eight scenarios, still load.
+  * The budget sentence that cuts a department counts this year's
+    taxes together with the cash on hand. A slider that stays on the
+    same percent keeps that sentence.
+  * Last January's taxes and the road, police, and fire bills are
+    stored in the city file. A file that does not have them says so.
+  * After a scenario, Keep playing continues at the previous speed and
+    the announcement says so. Stay paused leaves the clock stopped.
+  * A power line with nowhere to land no longer says it is a bridge.
+  * The package build starts a display when it needs one. The review
+    probes are not in the installed program.
+
+ -- Phil <phil@brushpad.local>  Thu, 08 Oct 2026 21:00:00 +0000
+
+lunduke-city (0.9-5) unstable; urgency=medium
+
+  * A new city's difficulty is the difficulty stored in the city file.
+    Saving writes the live level, including a city that is still paused.
+  * After a scenario win or loss, Keep playing resumes the speed from
+    before the announcement. The next scenario starts at that speed.
+  * A tax year that the treasury cannot cover says the funding was cut.
+    While a year is waiting, the budget window offers Reset and Collect
+    Taxes. Reset restores the opening rates and leaves the year unpaid.
+    Collect Taxes, and the title-bar close, post the year on screen.
+    A budget opened from the menu still has Cancel and OK.
+  * Outside a tax year, the tax slider is labeled as next year's rate
+    and the dollar line is last January's receipt.
+  * Rail across water costs $100 and a power line across water costs $25.
+    The tool hint and the message bar both say so.
+  * Loading a city and starting a scenario show on the message bar.
+
+ -- LCOS <lcos@lunduke.com>  Thu, 08 Oct 2026 18:30:00 +0000
+
+lunduke-city (0.9-4) unstable; urgency=medium
+
+  * A failed save no longer collects an open tax year, and Quit stays in
+    the city when Save fails. The error dialog includes the path and the
+    operating-system reason.
+  * Enable disasters is stored in the city file and restored on load,
+    including the Options check. A paused city loads paused.
+  * Tax, funding, and saved options count as unsaved changes.
+  * The budget window shows this year's tax, the balance Close will post,
+    and the funding a broke city can actually pay. Closing a menu budget
+    applies those percents to road, police, and fire maintenance.
+  * A tool that cannot build says why and does not mark the city unsaved.
+    A bridge says it costs $50. The cash-flow graph uses the real dollars.
+  * A repeated notice returns to the message bar. Scenario win and loss
+    pause the city and open a dialog. The side panel scrolls, and the
+    window will not shrink small enough to clip the tools. Menu letters
+    no longer collide. A name that is only spaces is rejected.
+
+ -- LCOS <lcos@lunduke.com>  Thu, 08 Oct 2026 12:00:00 +0000
+
+lunduke-city (0.9-3) unstable; urgency=medium
+
+  * Graphs and Evaluation use the last finished census, so phase 0 no
+    longer flashes a population of zero. Evaluation preview restores
+    every field it writes and does not advance the simulator RNG.
+  * The tax-year budget pauses the city. Saving collects that year.
+    New City resets road, police, and fire funding to 100%. Closing
+    the budget cannot spend the city negative, and Cancel restores
+    the rates from when the window opened.
+  * Generator-default islands honor rivers, lakes, and trees. "No
+    trees" plants nothing.
+  * Quit, closing the window, New City, Load, and Play Scenario ask
+    Save, Discard, or Cancel when the city has unsaved changes.
+  * Save confirms the path after the .cty suffix, writes a temporary
+    file, and replaces the destination with rename. Symlinks are not
+    followed. A failed scenario load keeps the current city. A seed
+    that is not a whole number stays on the land page.
+  * Cash flow and total population no longer wrap in 16 bits. Loaded
+    city names drop controls and bidi marks. Sound files are size
+    capped, and the mixer queue is bounded. Zoom starts below the
+    maximum, Slow and Medium slow sprites, and Space pauses the map.
+
+ -- LCOS <lcos@lunduke.com>  Wed, 07 Oct 2026 19:10:00 +0000
+
+lunduke-city (0.9-2) unstable; urgency=medium
+
+  * Residential demand keeps the residential ratio. Industrial demand is
+    clamped to its own maximum.
+  * Disaster messages play their sounds. Options → Auto-goto is on for a
+    new city and follows the flag stored in a save.
+  * The city map keeps its image and redraws tiles that changed, including
+    the unpowered-zone blink. The tool outline is separate. Paused cities
+    do not animate tiles. The minimap keeps one color buffer, a 6:5 shape,
+    and redraws only the viewport when the view scrolls.
+  * Tool drags grab the pointer and scroll at the edge of the view.
+  * Loading a city clears a previous error and reports "Loaded a saved
+    city."
+  * Evaluation refreshes opinion and problems on a month of game time.
+    Graph legends show residential, commercial, and industrial as people,
+    and crime and pollution as levels.
+  * Power, crime, and pollution maps keep a retained image. Density maps
+    draw 60 by 50 cells. Sounds are decoded once and mixed on one stream.
+  * Closing the query dialog restores the tool hint. The earthquake
+    outline stays on the shaken tiles. Modal dialogs pause the simulation
+    and show a waiting budget when they return.
+
+ -- LCOS <lcos@lunduke.com>  Wed, 07 Oct 2026 06:30:00 +0000
+
+lunduke-city (0.9-1) unstable; urgency=medium
+
+  * LCOS 0.9 track identity bump (0.8-2 → 0.9 / Debian 0.9-1). Features
+    and UI unchanged. Retains 0.8-2 behavior (query wording, save and
+    load, budget window, disaster view, zoom, evaluation, and sprite
+    cleanup).
+
+ -- LCOS <lcos@lunduke.com>  Sat, 03 Oct 2026 21:10:20 +0000
+
+lunduke-city (0.8-2) unstable; urgency=medium
+
+  * Query describes population, land value, crime, pollution, and growth
+    on each field's own scale.
+  * Loading a city keeps the saved road, police, and fire funding, and
+    the service effects match those percents.
+  * The city name, including spaces, is stored in the save and survives
+    Save, Save As, Load, and Rename City. Older saves still load.
+  * Crime and pollution graphs and the smoothed census ramps survive
+    save and load. City time still round-trips.
+  * A failed save no longer leaves the live city byte-swapped.
+  * Budget "Current funds" matches cash on hand. "Previous funds" is
+    the balance before this year's budget.
+  * With auto budget off, the budget window can change this year's
+    road, police, and fire rates before they are paid.
+  * Fires, crashes, the monster, tornadoes, and earthquakes move the
+    view to the event when auto-goto is on. Earthquakes shake the map.
+  * Zoom keeps the neighborhood in the center of the view.
+  * Opening Evaluation mid-year no longer consumes last year's migration
+    or the yearly score change.
+  * New City and scenarios release deactivated sprites.
+
+ -- LCOS <lcos@lunduke.com>  Sat, 03 Oct 2026 15:40:00 +0000
+
+lunduke-city (0.8-1) unstable; urgency=medium
+
+  * LCOS 0.8 track identity bump (0.7-4 → 0.8 / Debian 0.8-1). Features
+    and UI unchanged. Retains 0.7-4 behavior (New City seed entry, Ctrl
+    zoom when the map has focus, Query zone report dialog) plus earlier
+    0.7-track tile animation, wizard, graphs, evaluation, and About.
+
+ -- LCOS <lcos@lunduke.com>  Mon, 28 Sep 2026 21:34:04 -0500
+
+lunduke-city (0.7-4) unstable; urgency=medium
+
+  * LCOS 0.7-4 on the 0.7 track. New City seed is an entry field that
+    reads a typed value on Next (blank or auto uses the clock). Ctrl+=
+    and Ctrl+- zoom when the map has focus. Query opens a zone report
+    and keeps the text on the message bar.
+  * Keeps the 0.7-3 tile animation and engine fixes, the 0.7-2 New City
+    wizard, graphs, evaluation, rename, and About dialog, and the
+    0.3 / 0.7-1 map, sprites, budget, sound, overlays, placement
+    preview, Play Scenario, and icon.
+
+ -- LCOS <lcos@lunduke.com>  Mon, 28 Sep 2026 23:30:00 +0000
+
+lunduke-city (0.7-3) unstable; urgency=medium
+
+  * LCOS 0.7-3 on the 0.7 track. Each session tick animates map tiles
+    after the simulation step, so traffic, fountains, and smokestacks
+    move. The vendored engine is a modified version of the upstream
+    sources: voteProblems() no longer reads past the problem table, and
+    destroy() frees sprites as well as map arrays. NOTICE records the
+    modification (GPL section 7 and the additional terms).
+  * Keeps the 0.7-2 New City wizard, graphs, evaluation, rename, and
+    About dialog, and the 0.3 / 0.7-1 map, sprites, budget, sound,
+    overlays, Ctrl-+ zoom, placement preview, Play Scenario, and icon.
+
+ -- LCOS <lcos@lunduke.com>  Mon, 28 Sep 2026 22:20:00 +0000
+
+lunduke-city (0.7-2) unstable; urgency=medium
+
+  * LCOS 0.7-2 on the 0.7 track. New City is a three-step wizard
+    (name, difficulty / terrain / seed, generate) wired to the engine
+    game level and terrain generator. Windows → Graphs charts the
+    engine history. Windows → Evaluation is a full score, opinion, and
+    problems window. System → Rename City updates the engine name and
+    the window title. About is a proper dialog (version 0.7-2, GPL and
+    NOTICE, no Electronic Arts affiliation).
+  * Keeps the 0.3 / 0.7-1 map, sprites, budget, sound, overlays,
+    Ctrl-+ zoom, placement preview, Play Scenario, and icon.
+
+ -- LCOS <lcos@lunduke.com>  Mon, 28 Sep 2026 21:40:00 +0000
+
+lunduke-city (0.7-1) unstable; urgency=medium
+
+  * LCOS 0.7 release-track identity bump (0.7-1). Same application as
+    0.3-1: Ctrl-+ zoom without Shift, placement footprint preview,
+    System → Play Scenario…, and the roadmap icon (SVG, hicolor, and
+    window set_icon). No feature changes.
+
+ -- LCOS <lcos@lunduke.com>  Mon, 28 Sep 2026 02:30:00 +0000
+
+lunduke-city (0.3-1) unstable; urgency=medium
+
+  * Lunduke City 0.3: Ctrl-+ zooms in without Shift, placement preview
+    outlines, and System → Play Scenario… for the eight engine scenarios.
+  * Vendored scenario cities (res/snro.*) from the same Micropolis commit
+    as the engine.
+  * App icon is the roadmap blueprint (data/lunduke-city.svg plus
+    hicolor PNGs at 16, 32, 48, 64, 128, and 256). Window uses
+    set_default_icon_name and set_icon_name("lunduke-city").
+
+ -- LCOS <lcos@lunduke.com>  Mon, 28 Sep 2026 01:10:00 +0000
+
+lunduke-city (0.2-1) unstable; urgency=medium
+
+  * Initial Debian packaging of Lunduke City 0.2 for LCOS.
+  * gtkmm 3 shell: tiles, sprites, budget, map overlays, PulseAudio sounds.
+  * Ships NOTICE (GPL-3+ and EA additional terms) and COPYING under
+    /usr/share/doc/lunduke-city/.
+  * Vendored Micropolis engine + assets under /usr/share/lunduke-city/.
+
+ -- Phil <phil@brushpad.local>  Sun, 27 Sep 2026 18:34:00 -0500

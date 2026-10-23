@@ -1,0 +1,16 @@
+Source: lunduke-city-2
+Section: games
+Priority: optional
+Maintainer: LCOS <lcos@lunduke.com>
+Build-Depends: xvfb, xauth, meson, ninja-build, pkg-config, g++, libsdl3-dev, libcairo2-dev, libpango1.0-dev
+Homepage: https://lunduke.com
+Standards-Version: 4.6.2
+
+Package: lunduke-city-2
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, desktop-file-utils, gtk-update-icon-cache, shared-mime-info
+Description: Lunduke City 2, an SDL3 city-builder for LCOS
+ Windowed city-building game for the Lunduke Computer Operating System,
+ Steam Deck, and Windows. Hard fork of Lunduke City. Installs beside it.
+ Classic menu / funds / tool-palette / map layout, SDL audio, gamepad and
+ touch. GPL-3.0-or-later with Electronic Arts additional terms; see NOTICE.

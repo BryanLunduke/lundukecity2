@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 The Lunduke City authors
+// See COPYING and NOTICE.
+
+#include "assets.hpp"
+
+#include "platform.hpp"
+
+#include <cstdlib>
+#include <fstream>
+#include <vector>
+
+#ifndef _WIN32
+#include <unistd.h>
+#else
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+namespace {
+
+bool is_asset_root(const std::string &path)
+{
+    const std::string marker = path + "/images/micropolisEngine/tiles.png";
+    std::ifstream in(marker, std::ios::binary);
+    if (in.good()) {
+        return true;
+    }
+#ifdef _WIN32
+    const std::string win = path + "\\images\\micropolisEngine\\tiles.png";
+    std::ifstream alt(win, std::ios::binary);
+    return alt.good();
+#else
+    return false;
+#endif
+}
+
+std::string exe_dir()
+{
+#ifdef _WIN32
+    char buf[4096];
+    const DWORD n = GetModuleFileNameA(nullptr, buf, sizeof(buf));
+    if (n == 0 || n >= sizeof(buf)) {
+        return {};
+    }
+    std::string path(buf, buf + n);
+    const auto slash = path.find_last_of("\\/");
+    if (slash == std::string::npos) {
+        return {};
+    }
+    return path.substr(0, slash);
+#else
+    char buf[4096];
+    const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0) {
+        return {};
+    }
+    buf[n] = '\0';
+    std::string path(buf);
+    const auto slash = path.find_last_of('/');
+    if (slash == std::string::npos) {
+        return {};
+    }
+    return path.substr(0, slash);
+#endif
+}
+
+} // namespace
+
+std::string asset_root()
+{
+    static const std::string cached = [] {
+        std::vector<std::string> candidates;
+        // Developer override for the asset tree when the binary is not
+        // installed next to share/lunduke-city-2. This is not a test hook.
+        if (const char *env = std::getenv("LUNDUKE_CITY_ASSETS")) {
+            if (env[0] != '\0') {
+                candidates.emplace_back(env);
+            }
+        }
+#ifdef LUNDUKE_CITY_ASSET_DIR
+        candidates.emplace_back(LUNDUKE_CITY_ASSET_DIR);
+#endif
+        const std::string exe = exe_dir();
+        if (!exe.empty()) {
+            candidates.push_back(exe + "/../share/lunduke-city-2/micropolis-assets");
+            candidates.push_back(exe + "/../../third_party/micropolis-assets");
+#ifdef _WIN32
+            candidates.push_back(exe + "\\..\\share\\lunduke-city-2\\micropolis-assets");
+#endif
+        }
+        candidates.emplace_back("third_party/micropolis-assets");
+        for (const auto &candidate : candidates) {
+            if (is_asset_root(candidate)) {
+                return candidate;
+            }
+        }
+        return std::string();
+    }();
+    return cached;
+}
+
+std::string asset_file(const std::string &relative)
+{
+    const std::string root = asset_root();
+    if (root.empty()) {
+        return {};
+    }
+    const std::string path = root + "/" + relative;
+    std::ifstream in(path, std::ios::binary);
+    if (in.good()) {
+        return path;
+    }
+#ifdef _WIN32
+    std::string win = relative;
+    for (char &ch : win) {
+        if (ch == '/') {
+            ch = '\\';
+        }
+    }
+    const std::string alt = root + "\\" + win;
+    std::ifstream alt_in(alt, std::ios::binary);
+    if (alt_in.good()) {
+        return alt;
+    }
+#endif
+    return {};
+}

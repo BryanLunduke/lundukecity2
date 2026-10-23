@@ -1,0 +1,68 @@
+state
+shot /workspace/city2-verify/shots/20-pad-start.png
+btn rightshoulder 1
+btn rightshoulder 0
+state
+axis leftx 26000
+axis lefty 12000
+wait 30
+axis leftx 0
+axis lefty 0
+wait 3
+state
+shot /workspace/city2-verify/shots/21-pad-cursor-moved.png
+btn start 1
+btn start 0
+btn dpright 1
+btn dpright 0
+btn dpdown 1
+btn dpdown 0
+state
+shot /workspace/city2-verify/shots/22-pad-menu-open.png
+btn b 1
+btn b 0
+state
+btn start 1
+btn start 0
+btn dpright 1
+btn dpright 0
+btn dpright 1
+btn dpright 0
+btn dpright 1
+btn dpright 0
+state
+btn a 1
+btn a 0
+state
+shot /workspace/city2-verify/shots/23-pad-budget.png
+btn dpdown 1
+btn dpdown 0
+state
+btn dpright 1
+btn dpright 0
+state
+btn dpright 1
+btn dpright 0
+state
+shot /workspace/city2-verify/shots/24-pad-budget-after-right.png
+btn b 1
+btn b 0
+state
+# select road (tool index?) and press A on map
+btn leftshoulder 1
+btn leftshoulder 0
+state
+btn a 1
+btn a 0
+wait 3
+state
+# hold A and drag with stick
+btn a 1
+axis leftx 30000
+wait 20
+axis leftx 0
+btn a 0
+wait 3
+state
+shot /workspace/city2-verify/shots/25-pad-after-build.png
+quit

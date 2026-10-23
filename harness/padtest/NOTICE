@@ -1,0 +1,119 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Lunduke City
+Source: https://github.com/BryanLunduke/LundukeCity
+
+Lunduke City is a city-building game. Its simulation engine is the
+Micropolis engine (GPL-3.0-or-later) with the additional terms below.
+The gtkmm user interface is original to Lunduke City and is also
+GPL-3.0-or-later. The complete GNU GPL version 3 is in the file COPYING.
+
+This tree does not include the upstream Tcl/Tk interface, Python/SWIG
+bindings, DejaVu fonts, or scenario files. Map tiles, sprites, the
+hexa tile resources, and sounds are vendored separately (see below).
+The additional terms apply to the engine sources, to those assets, and
+to the combined program.
+
+In this copyright file the last matching Files paragraph wins, so the
+specific vendored paths are listed after the general paragraph.
+
+Files: *
+Copyright: 2026, The Lunduke City authors
+License: GPL-3+
+
+Files: third_party/micropolis/MicropolisEngine/*
+Copyright: 1989-2007, Electronic Arts Inc.
+           2007, Don Hopkins <dhopkins@DonHopkins.com>
+License: GPL-3+
+Comment:
+ Vendored from https://github.com/SimHacker/micropolis
+ commit c98f6b08519887b450d9be198bfca5237aab6d0c
+ path MicropolisCore/src/MicropolisEngine/src
+ (upstream commit date 2026-02-10), then modified by Lunduke City.
+ This is a modified version of that engine and is not the original
+ program (GNU GPL version 3, section 7, and the additional terms
+ below). The Lunduke City changes are:
+ voteProblems() wraps the problem index with >= PROBNUM, so a yearly
+ evaluation does not read past problemTable or write problemOrder[0];
+ destroy() frees sprites on the active list and the free list as well
+ as the map arrays;
+ setValves() clamps the industrial ratio into indRatio (the residential
+ ratio computed above it is left alone);
+ sendMessage() calls doMakeSound() before the front-end callback so
+ disaster messages play their sounds.
+ Tcl/Tk is not part of this import.
+ See third_party/micropolis/README.md.
+
+Files: third_party/micropolis-assets/images/*
+       third_party/micropolis-assets/res/*
+Copyright: 1989-2007, Electronic Arts Inc.
+           2007, Don Hopkins <dhopkins@DonHopkins.com>
+License: GPL-3+
+Comment:
+ Vendored unmodified from https://github.com/SimHacker/micropolis
+ commit c98f6b08519887b450d9be198bfca5237aab6d0c
+ paths MicropolisCore/src/images/micropolisEngine/tiles.png,
+ MicropolisCore/src/images/micropolisEngine/obj*.png,
+ MicropolisCore/src/res/hexa.*, and
+ MicropolisCore/src/res/sounds/*.wav.
+ tiles.png is the classic 16-pixel map atlas. The obj images are the
+ sprite frames for trains, ships, aircraft, tornadoes, the monster,
+ and the other mobile entities. The hexa files are the original tile
+ resources. The wav files are the sound effects.
+ These bytes are not modified. See third_party/micropolis-assets/README.md.
+
+License: GPL-3+
+ This package is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ The complete text is in the file COPYING.
+ .
+ .
+ ADDITIONAL TERMS per GNU GPL Section 7
+ .
+ No trademark or publicity rights are granted.  This license does NOT
+ give you any right, title or interest in the trademark SimCity or any
+ other Electronic Arts trademark.  You may not distribute any
+ modification of this program using the trademark SimCity or claim any
+ affliation or association with Electronic Arts Inc. or its employees.
+ .
+ Any propagation or conveyance of this program must include this
+ copyright notice and these terms.
+ .
+ If you convey this program (or any modifications of it) and assume
+ contractual liability for the program to recipients of it, you agree
+ to indemnify Electronic Arts for any liability that those contractual
+ assumptions impose on Electronic Arts.
+ .
+ You may not misrepresent the origins of this program; modified
+ versions of the program must be marked as such and not identified as
+ the original program.
+ .
+ This disclaimer supplements the one included in the General Public
+ License.  TO THE FULLEST EXTENT PERMISSIBLE UNDER APPLICABLE LAW, THIS
+ PROGRAM IS PROVIDED TO YOU "AS IS," WITH ALL FAULTS, WITHOUT WARRANTY
+ OF ANY KIND, AND YOUR USE IS AT YOUR SOLE RISK.  THE ENTIRE RISK OF
+ SATISFACTORY QUALITY AND PERFORMANCE RESIDES WITH YOU.  ELECTRONIC ARTS
+ DISCLAIMS ANY AND ALL EXPRESS, IMPLIED OR STATUTORY WARRANTIES,
+ INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY, SATISFACTORY QUALITY,
+ FITNESS FOR A PARTICULAR PURPOSE, NONINFRINGEMENT OF THIRD PARTY
+ RIGHTS, AND WARRANTIES (IF ANY) ARISING FROM A COURSE OF DEALING,
+ USAGE, OR TRADE PRACTICE.  ELECTRONIC ARTS DOES NOT WARRANT AGAINST
+ INTERFERENCE WITH YOUR ENJOYMENT OF THE PROGRAM; THAT THE PROGRAM WILL
+ MEET YOUR REQUIREMENTS; THAT OPERATION OF THE PROGRAM WILL BE
+ UNINTERRUPTED OR ERROR-FREE, OR THAT THE PROGRAM WILL BE COMPATIBLE
+ WITH THIRD PARTY SOFTWARE OR THAT ANY ERRORS IN THE PROGRAM WILL BE
+ CORRECTED.  NO ORAL OR WRITTEN ADVICE PROVIDED BY ELECTRONIC ARTS OR
+ ANY AUTHORIZED REPRESENTATIVE SHALL CREATE A WARRANTY.  SOME
+ JURISDICTIONS DO NOT ALLOW THE EXCLUSION OF OR LIMITATIONS ON IMPLIED
+ WARRANTIES OR THE LIMITATIONS ON THE APPLICABLE STATUTORY RIGHTS OF A
+ CONSUMER, SO SOME OR ALL OF THE ABOVE EXCLUSIONS AND LIMITATIONS MAY
+ NOT APPLY TO YOU.

@@ -1,0 +1,97 @@
+#!/bin/sh
+# Build lunduke-city-2_2.0.0_amd64.deb into packaging/debs/ (repo-local).
+# Does NOT seed lcos-live-07 (Phil seeds by hand into packages.chroot).
+# meson install ships Icon=lunduke-city-2 into hicolor (SVG plus 16/32/48/64/128/256).
+set -eu
+
+# GUI tests fail when DISPLAY is unset. Give the build its own server
+# instead of depending on whoever launched the script. xvfb and xauth are
+# build tools only; the binary package does not depend on them.
+if [ -z "${DISPLAY:-}" ]; then
+    exec xvfb-run -a "$0" "$@"
+fi
+
+ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+VERSION="2.0.0"
+PKGNAME="lunduke-city-2_${VERSION}_amd64"
+BUILD="$ROOT/build-deb"
+DEST="$ROOT/packaging/src/lunduke-city-2"
+DEB_DIR="$ROOT/packaging/debs"
+
+cd "$ROOT"
+
+rm -rf "$BUILD"
+meson setup "$BUILD" --prefix=/usr --buildtype=release -Dstrip=true
+meson compile -C "$BUILD"
+meson test -C "$BUILD"
+
+rm -rf "$DEST"
+meson install -C "$BUILD" --destdir "$DEST"
+
+# Ensure GPL+EA NOTICE and COPYING ship in the package (meson install_data
+# should place them; reinforce copy if missing).
+mkdir -p "$DEST/usr/share/doc/lunduke-city-2"
+cp -a "$ROOT/NOTICE" "$DEST/usr/share/doc/lunduke-city-2/NOTICE"
+cp -a "$ROOT/COPYING" "$DEST/usr/share/doc/lunduke-city-2/COPYING"
+
+mkdir -p "$DEST/debian"
+cp "$ROOT/debian/control" "$DEST/debian/control"
+
+SHLIBS="$(
+  cd "$DEST"
+  dpkg-shlibdeps --ignore-missing-info -O \
+    -e usr/bin/lunduke-city
+)"
+SHLIBS_DEPS="${SHLIBS#shlibs:Depends=}"
+
+SIZE="$(du -sk "$DEST/usr" | awk '{print $1}')"
+
+mkdir -p "$DEST/DEBIAN"
+cat > "$DEST/DEBIAN/control" << CTRL
+Package: lunduke-city-2
+Version: ${VERSION}
+Section: games
+Priority: optional
+Architecture: amd64
+Installed-Size: ${SIZE}
+Maintainer: LCOS <lcos@lunduke.com>
+Homepage: https://lunduke.com
+Depends: ${SHLIBS_DEPS}, desktop-file-utils, gtk-update-icon-cache, shared-mime-info
+Description: Lunduke City 2, an SDL3 city-builder for LCOS
+ Windowed city-building game for the Lunduke Computer Operating System.
+ SDL3 menus and dialogs, gamepad and touch, beside the original Lunduke City.
+ GPL-3.0-or-later with Electronic Arts additional terms; see NOTICE.
+CTRL
+
+cat > "$DEST/DEBIAN/postinst" << 'POST'
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
+  fi
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
+  fi
+  # application/x-lunduke-city is installed under /usr/share/mime/packages.
+  # shared-mime-info's dpkg trigger runs update-mime-database. Do not call
+  # it here. DEBIAN/triggers activates that interest explicitly, which is
+  # what dh_installmime records for a MIME package.
+fi
+exit 0
+POST
+chmod 0755 "$DEST/DEBIAN/postinst"
+
+cp "$ROOT/debian/lunduke-city-2.triggers" "$DEST/DEBIAN/triggers"
+
+(
+  cd "$DEST"
+  find usr -type f -print0 | sort -z | xargs -0 md5sum > DEBIAN/md5sums
+)
+
+rm -rf "$DEST/debian"
+
+mkdir -p "$DEB_DIR"
+fakeroot dpkg-deb --root-owner-group --build "$DEST" "$DEB_DIR/${PKGNAME}.deb"
+
+echo "built $DEB_DIR/${PKGNAME}.deb"

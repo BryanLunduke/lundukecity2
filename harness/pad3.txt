@@ -1,0 +1,20 @@
+btn leftshoulder 1
+btn leftshoulder 0
+btn leftshoulder 1
+btn leftshoulder 0
+cursor 540 590
+state
+btn a 1
+btn a 0
+wait 3
+state
+cursor 540 650
+axis leftx 26000
+btn a 1
+wait 20
+axis leftx 0
+btn a 0
+wait 3
+state
+shot /workspace/city2-verify/shots/26-pad-road-tap-and-hold-drag.png
+quit

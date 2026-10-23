@@ -1,0 +1,72 @@
+btn leftshoulder 1
+btn leftshoulder 0
+btn leftshoulder 1
+btn leftshoulder 0
+cursor 540 590
+state
+btn a 1
+btn a 0
+wait 3
+state
+cursor 540 650
+btn a 1
+wait 2
+axis leftx 26000
+wait 20
+axis leftx 0
+wait 2
+btn a 0
+wait 3
+state
+shot /workspace/city2-verify/shots-pr2/20-pad-held-A-drag-road.png
+btn start 1
+btn start 0
+btn dpright 1
+btn dpright 0
+btn dpright 1
+btn dpright 0
+btn dpright 1
+btn dpright 0
+btn a 1
+btn a 0
+wait 3
+state
+btn dpdown 1
+btn dpdown 0
+state
+btn dpright 1
+btn dpright 0
+state
+btn dpright 1
+btn dpright 0
+state
+btn dpleft 1
+btn dpleft 0
+state
+btn dpdown 1
+btn dpdown 0
+state
+btn dpright 1
+btn dpright 0
+state
+shot /workspace/city2-verify/shots-pr2/21-pad-budget-sliders.png
+btn b 1
+btn b 0
+wait 3
+state
+btn start 1
+btn start 0
+btn a 1
+btn a 0
+wait 3
+state
+shot /workspace/city2-verify/shots-pr2/22-pad-newcity-osk.png
+btn dpdown 1
+btn dpdown 0
+btn dpdown 1
+btn dpdown 0
+btn dpright 1
+btn dpright 0
+state
+shot /workspace/city2-verify/shots-pr2/23-pad-osk-focus.png
+quit

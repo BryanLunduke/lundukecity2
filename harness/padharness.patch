@@ -1,0 +1,75 @@
+--- /tmp/c2-master-shell.cpp	2026-10-20 20:12:27.796572737 -0500
++++ harness/padtest/src/shell.cpp	2026-10-20 19:26:08.657287747 -0500
+@@ -1,3 +1,5 @@
++#include <sstream>
++#include <fstream>
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ // Copyright (C) 2026 The Lunduke City authors
+ // See COPYING and NOTICE.
+@@ -544,6 +546,66 @@
+         if (smoke_ && frame_ == 2) {
+             arm_smoke_pad();
+         }
++
++        // ---- local verification harness (not for upstream) ----
++        {
++            static std::vector<std::string> script;
++            static bool loaded = false;
++            static std::size_t pos = 0;
++            static SDL_Joystick *vj = nullptr;
++            static int wait_until = 0;
++            const char *path = std::getenv("LUNDUKE_CITY2_PADSCRIPT");
++            if (path != nullptr && !loaded) {
++                loaded = true;
++                std::ifstream in(path);
++                std::string line;
++                while (std::getline(in, line)) {
++                    if (!line.empty() && line[0] != '#') script.push_back(line);
++                }
++                SDL_VirtualJoystickDesc desc;
++                SDL_INIT_INTERFACE(&desc);
++                desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
++                desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
++                desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
++                desc.button_mask = 0x7FFFu;
++                desc.axis_mask = 0x3Fu;
++                desc.name = "Harness Pad";
++                const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
++                vj = SDL_OpenJoystick(id);
++                std::cerr << "harness: pad id " << id << " vj " << (vj != nullptr) << "\n";
++                wait_until = frame_ + 10;
++            }
++            while (path != nullptr && pos < script.size() && frame_ >= wait_until) {
++                std::istringstream ls(script[pos++]);
++                std::string cmd, arg;
++                int v = 0;
++                ls >> cmd >> arg >> v;
++                auto dump = [&](const std::string &what) {
++                    std::cerr << "harness: " << what << " frame=" << frame_ << " tool=" << tool_index_ << " dialog=" << static_cast<int>(dialog_)
++                              << " menu=" << menu_.open_menu << " cursorItem=" << menu_.cursor << " focus=" << focus_id_ << " tax=" << tax_
++                              << " road=" << road_ << " cur=" << cursor_x_ << "," << cursor_y_ << " scroll=" << scroll_x_ << "," << scroll_y_
++                              << " funds=" << session_.funds_text() << " speed=" << speed_ << " padnav=" << gamepad_nav_ << " pad=" << (pad_ != nullptr) << "\n";
++                };
++                if (cmd == "wait") { wait_until = frame_ + std::stoi(arg); break; }
++                if (cmd == "shot") { shot_path_ = arg; render(); shot_path_.clear(); continue; }
++                if (cmd == "quit") { quitting_ = true; break; }
++                if (cmd == "state") { dump("state"); continue; }
++                if (cmd == "cursor") { cursor_x_ = std::stof(arg); cursor_y_ = static_cast<float>(v); continue; }
++                if (cmd == "btn") {
++                    const SDL_GamepadButton b = SDL_GetGamepadButtonFromString(arg.c_str());
++                    SDL_SetJoystickVirtualButton(vj, b, v != 0);
++                    SDL_UpdateJoysticks();
++                    wait_until = frame_ + 2;
++                    break;
++                }
++                if (cmd == "axis") {
++                    const SDL_GamepadAxis a = SDL_GetGamepadAxisFromString(arg.c_str());
++                    SDL_SetJoystickVirtualAxis(vj, a, static_cast<Sint16>(v));
++                    SDL_UpdateJoysticks();
++                    continue;
++                }
++            }
++        }
+         if (smoke_ && frame_ > 8 && smoke_phase_ == 0) {
+             smoke_phase_ = 1;
+             session_.set_speed(0);

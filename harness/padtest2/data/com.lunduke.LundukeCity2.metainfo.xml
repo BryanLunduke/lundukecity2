@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.lunduke.LundukeCity2</id>
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Lunduke City 2</name>
+  <summary>Build and manage a city</summary>
+  <description>
+    <p>
+      Lunduke City 2 is a windowed city-building game for LCOS, Steam Deck,
+      and Windows. It is a hard fork of Lunduke City and keeps the same saved
+      city files. Zone land, lay roads and power, set the budget, and watch
+      the city grow.
+    </p>
+    <p>
+      Cities are saved as .cty files. Unsaved work is autosaved and offered
+      back after a crash or logout. The original Lunduke City can be installed
+      beside this one.
+    </p>
+  </description>
+  <url type="homepage">https://lunduke.com</url>
+  <launchable type="desktop-id">lunduke-city-2.desktop</launchable>
+  <provides>
+    <binary>lunduke-city-2</binary>
+    <mediatype>application/x-lunduke-city-2</mediatype>
+  </provides>
+  <developer id="com.lunduke">
+    <name>The Lunduke Journal</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Game</category>
+    <category>Simulation</category>
+  </categories>
+  <releases>
+    <release version="2.0.0" date="2026-10-20">
+      <description>
+        <p>SDL3 port. Installs beside Lunduke City, with a 1280x800 window, gamepad and touch input, and the same .cty saves.</p>
+      </description>
+    </release>
+  </releases>
+</component>

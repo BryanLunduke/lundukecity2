@@ -1,0 +1,27 @@
+btn leftshoulder 1
+btn leftshoulder 0
+btn leftshoulder 1
+btn leftshoulder 0
+state
+btn a 1
+btn a 0
+wait 3
+state
+axis leftx 26000
+btn a 1
+wait 15
+axis leftx 0
+btn a 0
+wait 3
+state
+shot /workspace/city2-verify/shots/26-pad-road-tap-and-hold-drag.png
+# budget cancel check
+btn start 1
+btn start 0
+btn dpleft 1
+btn dpleft 0
+state
+btn a 1
+btn a 0
+state
+quit
