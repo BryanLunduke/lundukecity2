@@ -85,6 +85,13 @@ inline bool save_name_has_stem(const std::string &name)
     return !stem.empty() && stem != "." && stem != "..";
 }
 
+// A leading dot writes a hidden file the Load list will not show.
+inline bool save_name_starts_with_dot(const std::string &name)
+{
+    const std::string stem = save_name_stem(name);
+    return !stem.empty() && stem[0] == '.';
+}
+
 // The path that will actually be opened. Append .cty before the chooser
 // confirms a name that does not already have the suffix.
 inline std::string with_cty_suffix(const std::string &path)

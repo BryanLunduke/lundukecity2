@@ -8,6 +8,8 @@
 // The clock lives in a sidecar next to the city file (name.cty.json) so
 // loading a save can put the same scenario back.
 
+#include <cerrno>
+#include <climits>
 #include <cstdlib>
 #include <string>
 
@@ -39,6 +41,48 @@ inline std::string scenario_sidecar_text(const ScenarioClock &clock)
     return out;
 }
 
+// atoi is undefined on overflow. A damaged sidecar must not be trusted.
+inline bool sidecar_parse_int(const char *text, int &out)
+{
+    if (text == nullptr) {
+        return false;
+    }
+    errno = 0;
+    char *end = nullptr;
+    const long value = std::strtol(text, &end, 10);
+    if (end == text || errno == ERANGE || value > INT_MAX || value < INT_MIN) {
+        return false;
+    }
+    out = static_cast<int>(value);
+    return true;
+}
+
+// score_type is a scenario id. Anything else is ignored.
+inline int accepted_sidecar_score_type(int type, int scenario)
+{
+    const bool type_ok = type >= 1 && type <= 8;
+    const bool scenario_ok = scenario >= 1 && scenario <= 8;
+    if (type_ok) {
+        return type;
+    }
+    if (scenario_ok) {
+        return scenario;
+    }
+    return 0;
+}
+
+// scoreWait is a short. Values outside 0..32767 used to wrap.
+inline int clamp_sidecar_score_wait(int value)
+{
+    if (value < 0) {
+        return 0;
+    }
+    if (value > 32767) {
+        return 32767;
+    }
+    return value;
+}
+
 inline int sidecar_json_int(const std::string &text, const char *key, bool &ok)
 {
     const std::string token = std::string("\"") + key + "\"";
@@ -59,11 +103,17 @@ inline int sidecar_json_int(const std::string &text, const char *key, bool &ok)
     while (i < text.size() && (text[i] == ' ' || text[i] == '\t')) {
         ++i;
     }
-    ok = i < text.size() && (text[i] == '-' || (text[i] >= '0' && text[i] <= '9'));
-    if (!ok) {
+    if (i >= text.size() || (text[i] != '-' && (text[i] < '0' || text[i] > '9'))) {
+        ok = false;
         return 0;
     }
-    return std::atoi(text.c_str() + i);
+    int value = 0;
+    if (!sidecar_parse_int(text.c_str() + i, value)) {
+        ok = false;
+        return 0;
+    }
+    ok = true;
+    return value;
 }
 
 inline bool scenario_sidecar_parse(const std::string &text, ScenarioClock &clock)
@@ -102,7 +152,10 @@ inline bool scenario_sidecar_parse(const std::string &text, ScenarioClock &clock
             const auto eq = line.find('=');
             if (eq != std::string::npos && eq > 0) {
                 const std::string key = line.substr(0, eq);
-                const int value = std::atoi(line.substr(eq + 1).c_str());
+                int value = 0;
+                if (!sidecar_parse_int(line.c_str() + eq + 1, value)) {
+                    value = 0;
+                }
                 if (key == "scenario") {
                     parsed.scenario = value;
                     any = true;

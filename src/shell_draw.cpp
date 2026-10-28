@@ -4,8 +4,11 @@
 
 #include "shell_state.hpp"
 
+#include "assets.hpp"
 #include "city_glance.hpp"
+#include "city_seed.hpp"
 #include "controls_page.hpp"
+#include "vga_palette.hpp"
 #include "dialog_copy.hpp"
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
@@ -21,6 +24,7 @@
 #include "special_buildings.hpp"
 #include "tool_keys.hpp"
 #include "tools.hpp"
+#include "version.hpp"
 
 #include "micropolis.h"
 
@@ -137,14 +141,30 @@ void Shell::layout()
         demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
         return mini_h >= mini_ok && demand_h >= demand_ok;
     };
-    int columns = 2;
+    int columns = 3;
     int mini_h = 0;
     int demand_y = 0;
     int demand_h = 0;
-    if (!measure(2, true, mini_h, demand_y, demand_h)) {
-        columns = 3;
-        if (!measure(3, true, mini_h, demand_y, demand_h)) {
-            measure(3, false, mini_h, demand_y, demand_h);
+    // Three columns once the window is tall enough. Two columns made the
+    // toolbar tall and the minimap a postage stamp as the window grew.
+    if (!measure(3, true, mini_h, demand_y, demand_h)) {
+        columns = 2;
+        if (!measure(2, true, mini_h, demand_y, demand_h)) {
+            columns = 3;
+            if (!measure(3, false, mini_h, demand_y, demand_h)) {
+                columns = 2;
+                measure(2, false, mini_h, demand_y, demand_h);
+            }
+        }
+    }
+    if (mini_h > 0) {
+        const int side = ToolPalette::width_for(cell_, columns);
+        const int spare = status_top - (demand_y + demand_h);
+        const int cap = std::max(side, dp(160)) * 2;
+        if (spare > 0 && mini_h < cap) {
+            const int grow = std::min(spare, cap - mini_h);
+            mini_h += grow;
+            demand_y += grow;
         }
     }
     palette_.set_columns(columns);
@@ -177,8 +197,12 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
     // not light up with the dialog's focus.
     const bool suppressed = dialog_ != Dialog::None && !is_modal_control(id);
     const bool hot = !suppressed && (hover_id_ == id || focus_id_ == id);
+    const bool pressed = hot && pointer_down_ && hover_id_ == id;
     cairo_pattern_t *pattern = cairo_pattern_create_linear(x, y, x, y + h);
-    if (primary) {
+    if (pressed) {
+        cairo_pattern_add_color_stop_rgb(pattern, 0, theme::kButtonLoR, theme::kButtonLoG, theme::kButtonLoB);
+        cairo_pattern_add_color_stop_rgb(pattern, 1, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+    } else if (primary) {
         cairo_pattern_add_color_stop_rgb(pattern, 0, theme::chrome_select_hi_r(), theme::chrome_select_hi_g(), theme::chrome_select_hi_b());
         cairo_pattern_add_color_stop_rgb(pattern, 1, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     } else if (hot) {
@@ -895,12 +919,9 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, body_font(), field_b_, seed_x + dp(8), seed_y + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(seed_w - dp(16)));
             paint_caret(seed_x + dp(8), seed_y + dp(6), dp(18), field_b_, focus_id_ == kFieldSeed);
-            int preview_seed = 1;
-            if (!field_b_.empty() && field_b_ != "auto") {
-                preview_seed = std::atoi(field_b_.c_str());
-            }
-            const int preview_key = preview_seed ^ (new_island_ << 8) ^ (new_rivers_ << 12) ^ (new_lakes_ << 16) ^
-                                    (new_trees_ << 20);
+            const int preview_seed = preview_seed_from_field(field_b_);
+            const int preview_key = static_cast<int>(terrain_preview_key(preview_seed, new_island_, new_rivers_, new_lakes_,
+                                                                         new_trees_));
             if (terrain_key_ != preview_key) {
                 terrain_key_ = preview_key;
                 std::vector<unsigned short> tiles;
@@ -1141,11 +1162,7 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::About) {
         const double width = message_width(win_w_, margin, dp(480), dp(640));
         const double icon = dp(72);
-        const std::string body = std::string(kProductName) + " " + kPackageVersion +
-                                 "\nA city-building game for LCOS, Steam Deck, and Windows. "
-                                 "Hard fork of Lunduke City.\n"
-                                 "Independent work. Not affiliated with Electronic Arts.\n"
-                                 "GPL-3.0-or-later. See NOTICE and COPYING.";
+        const std::string body = about_text();
         const double text_w = std::max(1.0, width - 2 * margin - icon - dp(16));
         const double body_h = line_height(body_font(), body, text_w);
         const double content_h = std::max(static_cast<double>(icon), body_h);
@@ -1154,13 +1171,69 @@ void Shell::draw_dialog(cairo_t *cr)
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "About Lunduke City 2");
         const double icon_x = panel.x + margin;
         const double icon_y = panel.y + dp(48);
-        fill(cr, icon_x, icon_y + dp(36), icon, dp(28), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
-        fill(cr, icon_x + dp(8), icon_y + dp(16), dp(18), dp(48), 0.93, 0.93, 0.90);
-        fill(cr, icon_x + dp(30), icon_y + dp(4), dp(14), dp(60), 0.55, 0.62, 0.70);
-        fill(cr, icon_x + dp(48), icon_y + dp(22), dp(16), dp(42), 0.75, 0.55, 0.28);
+        static cairo_surface_t *icon_surface = nullptr;
+        static bool icon_tried = false;
+        if (!icon_tried) {
+            icon_tried = true;
+            const std::string icon_path = ui_data_file("icons/hicolor/64x64/apps/lunduke-city.png");
+            if (!icon_path.empty()) {
+                cairo_surface_t *raw = cairo_image_surface_create_from_png(icon_path.c_str());
+                if (cairo_surface_status(raw) == CAIRO_STATUS_SUCCESS &&
+                    cairo_image_surface_get_format(raw) == CAIRO_FORMAT_ARGB32) {
+                    const int iw = cairo_image_surface_get_width(raw);
+                    const int ih = cairo_image_surface_get_height(raw);
+                    icon_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, iw, ih);
+                    const int src_stride = cairo_image_surface_get_stride(raw);
+                    const int dst_stride = cairo_image_surface_get_stride(icon_surface);
+                    const unsigned char *src = cairo_image_surface_get_data(raw);
+                    unsigned char *dst = cairo_image_surface_get_data(icon_surface);
+                    for (int y = 0; y < ih; ++y) {
+                        for (int x = 0; x < iw; ++x) {
+                            const unsigned char *p = src + y * src_stride + x * 4;
+                            auto *out = reinterpret_cast<std::uint32_t *>(dst + y * dst_stride + x * 4);
+                            if (p[3] < 16) {
+                                *out = 0;
+                                continue;
+                            }
+                            *out = snap_vga_rgb(p[2], p[1], p[0]);
+                        }
+                    }
+                    cairo_surface_mark_dirty(icon_surface);
+                }
+                cairo_surface_destroy(raw);
+            }
+        }
+        if (icon_surface != nullptr) {
+            const double iw = cairo_image_surface_get_width(icon_surface);
+            const double scale = iw > 1.0 ? icon / iw : 1.0;
+            cairo_save(cr);
+            cairo_translate(cr, icon_x, icon_y);
+            cairo_scale(cr, scale, scale);
+            cairo_set_source_surface(cr, icon_surface, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+            cairo_paint(cr);
+            cairo_restore(cr);
+        } else {
+            fill(cr, icon_x, icon_y + dp(36), icon, dp(28), theme::chrome_select_r(), theme::chrome_select_g(),
+                 theme::chrome_select_b());
+            fill(cr, icon_x + dp(8), icon_y + dp(16), dp(18), dp(48), 0.93, 0.93, 0.90);
+            fill(cr, icon_x + dp(30), icon_y + dp(4), dp(14), dp(60), 0.55, 0.62, 0.70);
+            fill(cr, icon_x + dp(48), icon_y + dp(22), dp(16), dp(42), 0.75, 0.55, 0.28);
+        }
         const double body_w = std::max(1.0, panel.w - 2 * margin - icon - dp(16));
         place_line(body_font(), body, icon_x + icon + dp(12), panel.y + dp(48), body_w, theme::kTextR, theme::kTextG,
                    theme::kTextB);
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kClose}});
+        return;
+    }
+    if (dialog_ == Dialog::HowToPlay) {
+        const std::string body = how_to_play_text();
+        const double width = message_width(win_w_, margin, dp(460), dp(640));
+        const double body_h = text_block_height(body, width - 2 * margin);
+        const double height = dp(40) + margin + body_h + dp(16) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "How to play");
+        label(cr, body_font(), body, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kClose}});
         return;
     }
@@ -1909,8 +1982,9 @@ void Shell::draw_special_menu(cairo_t *cr)
     // Clicks outside the list close it. Rows are pushed after this catcher.
     push_hot(0, menu_h_, win_w_, std::max(0, win_h_ - menu_h_), 0);
     const int slot = special_tool_index();
-    const int col = slot % 2;
-    const int row = slot / 2;
+    const int columns = std::max(2, palette_.columns());
+    const int col = slot % columns;
+    const int row = slot / columns;
     const double anchor_x = side_x_ + 4 + (col + 1) * cell_ + 6;
     const double anchor_y = pal_y_ + 4 + row * cell_;
     int name_h = 1;
@@ -2305,7 +2379,7 @@ std::string Shell::dialog_title_hint() const
     // nothing to confirm. Enter dismisses them.
     const bool closes = dialog_ == Dialog::Graphs || dialog_ == Dialog::Evaluation || dialog_ == Dialog::Query ||
                         dialog_ == Dialog::About || dialog_ == Dialog::Info || dialog_ == Dialog::LoadError ||
-                        dialog_ == Dialog::SaveError || dialog_ == Dialog::Controls;
+                        dialog_ == Dialog::SaveError || dialog_ == Dialog::Controls || dialog_ == Dialog::HowToPlay;
     if (closes) {
         return pad ? a + " closes" : "Enter closes";
     }

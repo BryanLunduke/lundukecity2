@@ -950,22 +950,21 @@ static inline T absoluteValue(const T val)
 #define LENGTH_OF(array) (sizeof(array) / sizeof((array)[0]))
 
 /**
- * Give a fatal error and exit.
+ * Report a state the simulator did not expect.
+ * The shipped game logs the site and continues. Quitting here used to
+ * discard the city with no recovery save.
  */
 #define NOT_REACHED() not_reached(__LINE__, __FILE__)
 
 
 /**
- * Give a fatal error and exit the program.
- * @param line  Source line number of the fatal error.
+ * Log an unexpected state and return to the caller.
+ * @param line  Source line number.
  * @param fname Filename of the source file.
- * @return Does not return to the caller.
- * @todo Generalize error handling/exiting of the simulator.
  */
 static inline void not_reached(int line, const char *fname)
 {
     fprintf(stderr, "Code unexpectedly executed at line %d, at file %s\n", line, fname);
-    exit(1);
 }
 
 
@@ -1940,11 +1939,18 @@ public:
     /** True while loadFile() reads a saved city (scenarios set their own funds and date). */
     bool loadingSavedCity = false;
 
+    // Set by CitySession so loadFileDir parses bytes it already read.
+    const unsigned char *preloadBytes = nullptr;
+    std::size_t preloadSize = 0;
+
     bool loadScenario(Scenario s);
 
     void didLoadScenario();
 
     bool loadCity(const char *filename);
+
+    // Same as loadCity, using bytes the caller already read. Does not read the path.
+    bool loadCityFromMemory(const char *filename, const unsigned char *bytes, std::size_t size);
 
     void didLoadCity();
 

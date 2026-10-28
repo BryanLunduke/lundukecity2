@@ -18,6 +18,13 @@ inline constexpr std::size_t kMaxQueuedSounds = 8;
 // Keep this much audio queued on a voice stream. More than that makes a
 // new sound wait behind audio that was already pushed.
 inline constexpr int kAudioLatencyMs = 50;
+// A bulldoze storm used to open a stream per click. Eight voices is enough
+// to stack a siren with a tool, and a repeat of the same clip inside this
+// window is dropped.
+inline constexpr int kMaxVoices = 8;
+inline constexpr int kSoundCooldownMs = 80;
+// Mute, or a quiet city, should not hold the playback device open.
+inline constexpr int kAudioIdleCloseMs = 3000;
 
 inline int audio_queue_limit_bytes(int rate, int channels, int bytes_per_sample, int latency_ms)
 {

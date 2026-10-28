@@ -22,8 +22,8 @@ int fail(const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 50) {
-        return fail("expected 50 actionable menu rows");
+    if (menu_table::actionable_count() != 51) {
+        return fail("expected 51 actionable menu rows");
     }
     if (mnemonic_of("Rename Cit_y…") != 'y') {
         return fail("Rename should use Y");

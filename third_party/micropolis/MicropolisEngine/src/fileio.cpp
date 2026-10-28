@@ -279,13 +279,22 @@ static bool write_city_name(FILE *f, const std::string &name)
     return true;
 }
 
-static bool read_entire_file(FILE *f, std::vector<unsigned char> &data)
+// A real city is about 27 KB. 4 MB leaves room for a damaged trailer and
+// still refuses a truncated disk image or a multi-gigabyte file.
+static const long kMaxCityFileBytes = 4L * 1024L * 1024L;
+
+static bool read_entire_file(FILE *f, std::vector<unsigned char> &data, bool &too_large)
 {
+    too_large = false;
     if (fseek(f, 0L, SEEK_END) != 0) {
         return false;
     }
     const long size = ftell(f);
     if (size < 0 || fseek(f, 0L, SEEK_SET) != 0) {
+        return false;
+    }
+    if (size > kMaxCityFileBytes) {
+        too_large = true;
         return false;
     }
     data.resize(static_cast<std::size_t>(size));
@@ -607,38 +616,65 @@ static void note_save_error(Micropolis *sim, int err, const char *fallback)
  * @param dir      If not \c NULL, name of the directory containing the file.
  * @return Load was succesfull.
  */
+bool Micropolis::loadCityFromMemory(const char *filename, const unsigned char *bytes, std::size_t size)
+{
+    preloadBytes = bytes;
+    preloadSize = size;
+    return loadCity(filename);
+}
+
 bool Micropolis::loadFileDir(const char *filename, const char *dir)
 {
-    char *path = NULL;
-    FILE *f;
-
-    // If needed, construct a path to the file.
-    if (dir != NULL) {
-        path = (char *)malloc(strlen(dir) + 1 + strlen(filename) + 1);
-        sprintf(path, "%s/%s", dir, filename);
-        filename = path;
-    }
-
-    // Open the file.
-    f = fopen(filename, "rb");
-
-    // Before checking whether open() succeeded, first drop the path.
-    if (path != NULL) {
-        free(path);
-    }
-
-    // open() failed; report failure. The live city is left untouched.
-    if (f == NULL) {
-        return false;
-    }
-
-    // Read the whole file before writing into the live history or map.
-    // A short or failed read used to leave a half-loaded city in place.
     std::vector<unsigned char> data;
-    const bool got = read_entire_file(f, data);
-    fclose(f);
+    if (preloadBytes != nullptr) {
+        const unsigned char *bytes = preloadBytes;
+        const std::size_t size = preloadSize;
+        preloadBytes = nullptr;
+        preloadSize = 0;
+        if (size > static_cast<std::size_t>(kMaxCityFileBytes)) {
+            loadErrorDetail = "This file is too large to be a city save.";
+            return false;
+        }
+        data.assign(bytes, bytes + size);
+    } else {
+        char *path = NULL;
+        FILE *f;
+
+        // If needed, construct a path to the file.
+        if (dir != NULL) {
+            path = (char *)malloc(strlen(dir) + 1 + strlen(filename) + 1);
+            sprintf(path, "%s/%s", dir, filename);
+            filename = path;
+        }
+
+        // Open the file.
+        f = fopen(filename, "rb");
+
+        // Before checking whether open() succeeded, first drop the path.
+        if (path != NULL) {
+            free(path);
+        }
+
+        // open() failed; report failure. The live city is left untouched.
+        if (f == NULL) {
+            return false;
+        }
+
+        // Read the whole file before writing into the live history or map.
+        // A short or failed read used to leave a half-loaded city in place.
+        bool too_large = false;
+        const bool got = read_entire_file(f, data, too_large);
+        fclose(f);
+        if (too_large) {
+            loadErrorDetail = "This file is too large to be a city save.";
+            return false;
+        }
+        if (!got) {
+            return false;
+        }
+    }
     loadErrorDetail.clear();
-    if (!got || data.size() < 27120) {
+    if (data.size() < 27120) {
         return false;
     }
 

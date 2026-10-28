@@ -5,6 +5,9 @@
 #pragma once
 
 #include <cctype>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <string>
 
 // New City seed field. Blank or "auto" takes a seed from the clock.
@@ -85,4 +88,33 @@ inline bool take_city_seed(const std::string &raw, int &seed, bool &seed_was_set
         seed_was_set = true;
     }
     return true;
+}
+
+// Preview key for the New City land page. The knobs use -1 for "random".
+// Shifting that signed value is undefined. The seed field used to go through
+// atoi, which is undefined above INT_MAX.
+inline int preview_seed_from_field(const std::string &field)
+{
+    if (field.empty() || city_seed_equals_auto(field)) {
+        return 1;
+    }
+    errno = 0;
+    char *end = nullptr;
+    const long long value = std::strtoll(field.c_str(), &end, 10);
+    if (end == field.c_str()) {
+        return 1;
+    }
+    if (errno == ERANGE || value > static_cast<long long>(INT_MAX)) {
+        return INT_MAX;
+    }
+    if (value < static_cast<long long>(INT_MIN)) {
+        return INT_MIN;
+    }
+    return static_cast<int>(value);
+}
+
+inline unsigned terrain_preview_key(int seed, int island, int rivers, int lakes, int trees)
+{
+    const auto bits = [](int value) { return static_cast<unsigned>(value); };
+    return bits(seed) ^ (bits(island) << 8) ^ (bits(rivers) << 12) ^ (bits(lakes) << 16) ^ (bits(trees) << 20);
 }

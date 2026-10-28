@@ -4,9 +4,11 @@
 
 #include "city_glance.hpp"
 
+#include "city_tail.hpp"
 #include "micropolis.h"
 
 #include <fstream>
+#include <sys/stat.h>
 #include <vector>
 
 namespace {
@@ -159,11 +161,23 @@ std::int64_t population_on_map(const unsigned char *map)
 CityGlance city_glance(const std::string &path)
 {
     CityGlance glance;
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0) {
+        return glance;
+    }
+    if (st.st_size > static_cast<off_t>(kMaxCityBytes)) {
+        glance.summary = "Too large to be a city file";
+        return glance;
+    }
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         return glance;
     }
-    std::vector<unsigned char> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::vector<unsigned char> data(static_cast<std::size_t>(st.st_size));
+    if (!data.empty() && !in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(data.size()))) {
+        glance.summary = "Not a valid city";
+        return glance;
+    }
     constexpr int kMisc = 2880;
     constexpr int kMap = 3120;
     constexpr int kClassic = 27120;
@@ -244,9 +258,14 @@ CityGlance city_glance(const std::string &path)
     const std::int64_t on_map = population_on_map(data.data() + kMap);
     glance.population = on_map > 0 ? on_map : stored;
     const std::int64_t time = be_long(data.data() + kMisc + 16);
-    const int cycles = time > 0 ? static_cast<int>(time) : 0;
-    glance.year = 1900 + cycles / 48;
-    glance.month = (cycles % 48) / 4;
+    // The engine clamps a loaded city to Jan 9999. The list used to show the raw word.
+    constexpr std::int64_t kMaxTime = static_cast<std::int64_t>(9999 - 1900) * 48;
+    std::int64_t cycles = time > 0 ? time : 0;
+    if (cycles > kMaxTime) {
+        cycles = kMaxTime;
+    }
+    glance.year = 1900 + static_cast<int>(cycles / 48);
+    glance.month = static_cast<int>((cycles % 48) / 4);
     if (glance.month < 0 || glance.month > 11) {
         glance.month = 0;
     }

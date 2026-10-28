@@ -90,6 +90,9 @@ bool Shell::attach_test_pad()
     }
     if (pad_ == nullptr) {
         pad_ = SDL_OpenGamepad(id);
+        if (pad_ != nullptr) {
+            pads_.push_back(pad_);
+        }
     }
     if (pad_ == nullptr) {
         ran_ok_ = false;
@@ -124,36 +127,71 @@ void Shell::release_pad_drag()
 
 void Shell::forget_gamepad(SDL_JoystickID id)
 {
-    if (pad_ == nullptr || id == 0 || SDL_GetGamepadID(pad_) != id) {
+    if (id == 0) {
         return;
     }
-    if (virtual_joy_ != nullptr && SDL_GetGamepadJoystick(pad_) == virtual_joy_) {
-        virtual_joy_ = nullptr;
+    SDL_Gamepad *closing = nullptr;
+    for (auto it = pads_.begin(); it != pads_.end(); ++it) {
+        if (*it != nullptr && SDL_GetGamepadID(*it) == id) {
+            closing = *it;
+            pads_.erase(it);
+            break;
+        }
     }
-    SDL_CloseGamepad(pad_);
-    pad_ = nullptr;
-    stick_x_ = 0;
-    stick_y_ = 0;
-    pan_x_ = 0;
-    pan_y_ = 0;
-    trig_l_ = 0;
-    trig_r_ = 0;
-    zoom_l_latched_ = false;
-    zoom_r_latched_ = false;
-    release_pad_drag();
-    int count = 0;
-    SDL_JoystickID *ids = SDL_GetGamepads(&count);
-    if (ids != nullptr) {
-        for (int i = 0; i < count; ++i) {
-            if (ids[i] == id) {
-                continue;
-            }
-            pad_ = SDL_OpenGamepad(ids[i]);
-            if (pad_ != nullptr) {
+    if (closing == nullptr && pad_ != nullptr && SDL_GetGamepadID(pad_) == id) {
+        closing = pad_;
+    }
+    const bool was_active = pad_ != nullptr && SDL_GetGamepadID(pad_) == id;
+    if (closing == nullptr && !was_active) {
+        return;
+    }
+    if (closing != nullptr) {
+        if (virtual_joy_ != nullptr && SDL_GetGamepadJoystick(closing) == virtual_joy_) {
+            virtual_joy_ = nullptr;
+        }
+        SDL_CloseGamepad(closing);
+    }
+    if (was_active) {
+        if (pad_ == closing) {
+            pad_ = nullptr;
+        }
+        stick_x_ = 0;
+        stick_y_ = 0;
+        pan_x_ = 0;
+        pan_y_ = 0;
+        trig_l_ = 0;
+        trig_r_ = 0;
+        zoom_l_latched_ = false;
+        zoom_r_latched_ = false;
+        release_pad_drag();
+    }
+    if (pad_ == closing) {
+        pad_ = nullptr;
+    }
+    if (pad_ == nullptr) {
+        for (SDL_Gamepad *have : pads_) {
+            if (have != nullptr) {
+                pad_ = have;
                 break;
             }
         }
-        SDL_free(ids);
+    }
+    if (pad_ == nullptr) {
+        int count = 0;
+        SDL_JoystickID *ids = SDL_GetGamepads(&count);
+        if (ids != nullptr) {
+            for (int i = 0; i < count; ++i) {
+                if (ids[i] == id) {
+                    continue;
+                }
+                pad_ = SDL_OpenGamepad(ids[i]);
+                if (pad_ != nullptr) {
+                    pads_.push_back(pad_);
+                    break;
+                }
+            }
+            SDL_free(ids);
+        }
     }
     if (pad_ != nullptr) {
         return;
@@ -1195,8 +1233,9 @@ void Shell::drive_ui_test()
     case 27: {
         const int slot = special_tool_index();
         const int cell = palette_.cell();
-        const double x = side_x_ + 4 + (slot % 2) * cell + cell / 2.0;
-        const double y = pal_y_ + 4 + (slot / 2) * cell + cell / 2.0;
+        const int columns = std::max(2, palette_.columns());
+        const double x = side_x_ + 4 + (slot % columns) * cell + cell / 2.0;
+        const double y = pal_y_ + 4 + (slot / columns) * cell + cell / 2.0;
         click_at(x, y);
         if (tool_index_ != slot || !special_open_) {
             fail("the special buildings button did not open the list");

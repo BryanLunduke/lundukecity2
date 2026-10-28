@@ -773,6 +773,17 @@ void Shell::run_review_checks()
         fail("loading a city replaced the global speed or disasters preference");
         return;
     }
+    pref_auto_budget_ = 1;
+    pref_auto_bulldoze_ = 1;
+    pref_auto_goto_ = 1;
+    session_.set_auto_budget(false);
+    session_.set_auto_bulldoze(false);
+    session_.set_auto_goto(false);
+    restore_play_preferences();
+    if (!session_.auto_budget() || !session_.auto_bulldoze() || !session_.auto_goto() || pref_auto_budget_ != 1) {
+        fail("loading a city replaced the global auto budget, bulldoze, or goto preference");
+        return;
+    }
     session_.set_speed(0);
 
 #ifndef _WIN32

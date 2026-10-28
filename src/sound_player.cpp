@@ -344,19 +344,13 @@ struct SoundPlayer::Mixer {
         spec.format = SDL_AUDIO_S16LE;
         spec.channels = 1;
         spec.freq = kMixRate;
-        const SDL_AudioDeviceID device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
-        if (device == 0) {
-            return;
-        }
-        if (!SDL_ResumeAudioDevice(device)) {
-            SDL_CloseAudioDevice(device);
-            return;
-        }
+        SDL_AudioDeviceID device = 0;
         struct Playing {
             Voice voice;
             SDL_AudioStream *stream = nullptr;
         };
         std::vector<Playing> playing;
+        std::unordered_map<std::string, std::chrono::steady_clock::time_point> last_start;
         const int limit = audio_queue_limit_bytes(kMixRate, 1, static_cast<int>(sizeof(std::int16_t)), kAudioLatencyMs);
         auto drop_playing = [&]() {
             for (Playing &item : playing) {
@@ -368,13 +362,39 @@ struct SoundPlayer::Mixer {
             }
             playing.clear();
         };
+        auto close_device = [&]() {
+            drop_playing();
+            if (device != 0) {
+                SDL_CloseAudioDevice(device);
+                device = 0;
+            }
+        };
+        auto ensure_device = [&]() {
+            if (device != 0) {
+                return true;
+            }
+            device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
+            if (device == 0) {
+                return false;
+            }
+            if (!SDL_ResumeAudioDevice(device)) {
+                SDL_CloseAudioDevice(device);
+                device = 0;
+                return false;
+            }
+            return true;
+        };
+        std::chrono::steady_clock::time_point quiet_since = std::chrono::steady_clock::now();
         while (!stop.load()) {
             std::vector<std::string> todo;
             bool quiet = false;
             {
                 std::unique_lock<std::mutex> lock(mu);
                 if (playing.empty() && pending.empty()) {
-                    if (muted) {
+                    if (device != 0) {
+                        cv.wait_for(lock, std::chrono::milliseconds(kAudioIdleCloseMs),
+                                    [&] { return stop.load() || !pending.empty() || muted; });
+                    } else if (muted) {
                         cv.wait(lock, [&] { return stop.load() || !muted; });
                     } else {
                         cv.wait(lock, [&] { return stop.load() || !pending.empty() || muted; });
@@ -392,16 +412,38 @@ struct SoundPlayer::Mixer {
             }
             if (quiet) {
                 drop_playing();
+                const auto now = std::chrono::steady_clock::now();
+                if (now - quiet_since >= std::chrono::milliseconds(kAudioIdleCloseMs)) {
+                    close_device();
+                }
+                continue;
+            }
+            if (!ensure_device()) {
                 continue;
             }
             for (const auto &path : todo) {
                 if (stop.load()) {
                     break;
                 }
+                const auto now = std::chrono::steady_clock::now();
+                const auto prior = last_start.find(path);
+                if (prior != last_start.end() &&
+                    now - prior->second < std::chrono::milliseconds(kSoundCooldownMs)) {
+                    continue;
+                }
                 auto clip = clip_for(path);
                 if (!clip) {
                     continue;
                 }
+                while (static_cast<int>(playing.size()) >= kMaxVoices) {
+                    Playing &oldest = playing.front();
+                    if (oldest.stream != nullptr) {
+                        SDL_UnbindAudioStream(oldest.stream);
+                        SDL_DestroyAudioStream(oldest.stream);
+                    }
+                    playing.erase(playing.begin());
+                }
+                last_start[path] = now;
                 SDL_AudioStream *stream = SDL_CreateAudioStream(&spec, &spec);
                 if (stream == nullptr || !SDL_BindAudioStream(device, stream)) {
                     if (stream != nullptr) {
@@ -452,9 +494,16 @@ struct SoundPlayer::Mixer {
                     cv.wait_for(lock, std::chrono::milliseconds(10), [&] { return stop.load() || !pending.empty() || muted; });
                 }
             }
+            if (playing.empty()) {
+                const auto now = std::chrono::steady_clock::now();
+                if (now - quiet_since >= std::chrono::milliseconds(kAudioIdleCloseMs)) {
+                    close_device();
+                }
+            } else {
+                quiet_since = std::chrono::steady_clock::now();
+            }
         }
-        drop_playing();
-        SDL_CloseAudioDevice(device);
+        close_device();
     }
 };
 

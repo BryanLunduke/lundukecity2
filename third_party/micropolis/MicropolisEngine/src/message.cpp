@@ -356,7 +356,9 @@ void Micropolis::doScenarioScore(Scenario type)
 
     default:
         NOT_REACHED();
-        break;
+        scoreType = SC_NONE;
+        scoreWait = 0;
+        return;
 
     }
 
