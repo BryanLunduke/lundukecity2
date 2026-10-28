@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Lunduke City authors
 # See COPYING and NOTICE.
 
-"""Spooky look. A clone of the SVGA atlas with graveyards and haunted houses.
+"""Spooky look. A clone of the SVGA atlas with a graveyard, a crypt, and the Spooky houses.
 
 The committed sheet is checked in place and is not rewritten. Pass --out to
 write the report under another directory (the test does this). Pass --emit
@@ -45,8 +45,8 @@ CHANGED = PARK_TILES + FOUNTAIN_TILES + HOUSE_TILES + MANOR_TURRET + MANOR_FENCE
 
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
 # 8px overview, in tile order. The big-park sprite has its own hash.
-ATLAS_SHA = "cc5975e29711780c0ddf285dfadc68b772364d52052ba60cb4dd079cad14e3ab"
-PARK_SHA = "0e39417505ad2a3cc696353ca60d294498c8557af3b5842a37b2ae2898f2f319"
+ATLAS_SHA = "f14f2e8c69a05f1347b1fd1c6a6fa08ace9355a04b045452d1fccecfcd2c05c0"
+PARK_SHA = "3f0e20d7313a54d8268a938d9c25efc6532611ff7c89c6877e575f442412cc42"
 
 GRASS = (0, 113, 0)
 LAWN = (0, 170, 0)
@@ -71,6 +71,46 @@ PURPLE = (32, 0, 65)
 PURPLE_LIT = (48, 0, 65)
 SPIKE = (227, 227, 227)
 SPIKE_MID = (182, 182, 182)
+# Dull grey field. Same roles as dirt B: a base, a lighter neighbour speck
+# that never touches its own kind, and a rarer lighter accent.
+GREY_BASE = (69, 69, 69)
+GREY_NEAR = (81, 81, 81)
+GREY_ACCENT = (97, 97, 97)
+GREY_SET = frozenset({GREY_BASE, GREY_NEAR, GREY_ACCENT})
+TUFT = (0, 65, 0)
+TUFT_LIT = (16, 65, 0)
+FACE = (203, 203, 203)
+FACE_LIT = (227, 227, 227)
+FACE_MID = (182, 182, 182)
+FACE_SHADE = (162, 162, 162)
+BASE_STEP = (130, 130, 130)
+WIN_YELLOW = (255, 255, 85)
+WIN_HOT = (255, 255, 125)
+WIN_ORANGE = (255, 125, 0)
+WIN_DIM = (113, 113, 0)
+STEP = (130, 130, 130)
+COLUMN_LIT = (162, 162, 162)
+# 16x16 wrap of the dirt-B stipple. Near specks do not touch, even across
+# the tile edge, and accents stay at least one pixel apart. Park tiles share
+# it, so a cemetery of them has no seam.
+GREY_MASK = (
+    "......B....B....",
+    ".B.B.....B...CB.",
+    "....CB.B....B...",
+    "B.........B...B.",
+    "..B..B.B....B...",
+    "B........B....BC",
+    "..B.C.B.C..B....",
+    "C............B..",
+    "..B.B.B..B.B....",
+    "B...........C...",
+    "..B.C...B......B",
+    "B.....B...B..B..",
+    "..B.....B......B",
+    "B....B.....B.B..",
+    "...B...C.......C",
+    ".........B..B...",
+)
 
 # Lot colours left alone when a residential block is darkened, so the
 # SVGA dirt, hedge, and lawn still meet the neighbouring tiles.
@@ -129,23 +169,6 @@ STONE_RAMP = (
     (113, 113, 113),
 )
 
-# Fountain pixels replaced by the mausoleum. The lawn and the hedge stay.
-FOUNTAIN_BODY = frozenset(
-    {
-        (162, 162, 162),
-        (130, 130, 130),
-        (113, 113, 113),
-        (146, 146, 146),
-        (255, 255, 255),
-        (203, 203, 203),
-        (0, 32, 65),
-        (0, 48, 65),
-        (182, 182, 182),
-        STONE_DARK,
-        STONE_EDGE,
-    }
-)
-
 # Big Park, classic sprite to the SVGA VGA entries. Same map as paint_special.
 SPECIAL_VGA = {
     (40, 132, 48): (0, 113, 0),
@@ -175,25 +198,6 @@ SPECIAL_VGA = {
     (214, 210, 200): (203, 203, 203),
     (228, 228, 232): (227, 227, 227),
 }
-
-# Small enough to sit in the gaps of the SVGA park stipple.
-CROSSES = {
-    "cross": (" g ", "ggg", " g ", " d "),
-    "round": (" s ", "sSs", "s.s", " d "),
-    "slab": ("SSS", "S#S", "SSS", " d "),
-    "lean": (" sS", "s# ", "dd "),
-}
-STONE_INK = {
-    " ": None,
-    ".": STONE_DARK,
-    "g": STONE,
-    "G": SPIKE_MID,
-    "s": STONE_MID,
-    "S": STONE,
-    "#": ROOF,
-    "d": STONE_EDGE,
-}
-
 
 def _palette() -> tuple[list[tuple[int, int, int]], set[tuple[int, int, int]]]:
     order: list[tuple[int, int, int]] = []
@@ -279,104 +283,253 @@ def _stamp(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...] | list[st
     return painted
 
 
-def _can_place(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...], occupied: set[tuple[int, int]]) -> bool:
+def _grey_at(x: int, y: int) -> tuple[int, int, int]:
+    mark = GREY_MASK[y % 16][x % 16]
+    if mark == "C":
+        return GREY_ACCENT
+    if mark == "B":
+        return GREY_NEAR
+    return GREY_BASE
+
+
+def _grey_tile() -> Image.Image:
+    tile = Image.new("RGB", (TILE, TILE))
+    px = tile.load()
+    for y in range(TILE):
+        for x in range(TILE):
+            px[x, y] = _grey_at(x, y)
+    return tile
+
+
+def _blit_rows(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...], ink: dict[str, tuple[int, int, int] | None]) -> None:
     px = image.load()
-    ink = 0
     for dy, row in enumerate(rows):
         for dx, char in enumerate(row):
-            if STONE_INK.get(char) is None:
+            colour = ink.get(char)
+            if colour is None:
                 continue
             x, y = x0 + dx, y0 + dy
-            if not (0 <= x < image.size[0] and 0 <= y < image.size[1]):
-                return False
-            if px[x, y] != GRASS or (x, y) in occupied:
-                return False
-            ink += 1
-    return ink >= 4
+            if 0 <= x < image.size[0] and 0 <= y < image.size[1]:
+                px[x, y] = colour
 
 
-def _place_stone(image: Image.Image, kind: str, x: int, y: int, occupied: set[tuple[int, int]]) -> bool:
-    rows = CROSSES[kind]
-    spots = [(x, y)]
-    for radius in range(1, 8):
-        for dy in range(-radius, radius + 1):
-            for dx in range(-radius, radius + 1):
-                spots.append((x + dx, y + dy))
-    for sx, sy in spots:
-        if _can_place(image, sx, sy, rows, occupied):
-            _stamp(image, sx, sy, rows, STONE_INK, {GRASS})
-            for dy, row in enumerate(rows):
-                for dx, char in enumerate(row):
-                    if STONE_INK.get(char) is not None:
-                        occupied.add((sx + dx, sy + dy))
-            return True
-    return False
+# Light slab and dark outline. `e` is the step end, lighter than the grey
+# field so the base reads wider than the slab. `k` is a crack.
+_STONE_INK = {
+    " ": None,
+    "o": INK,
+    "h": FACE_LIT,
+    "f": FACE,
+    "m": FACE_MID,
+    "s": FACE_SHADE,
+    "#": BLACK,
+    ".": FACE,
+    "d": BASE_STEP,
+    "e": (113, 113, 113),
+    "k": INK,
+    "c": BLACK,
+    # Engraved into the face. Darker than the slab, lighter than the outline.
+    # Neither colour is in GREY_SET: the drop shadow paints any grey-dirt
+    # pixel, and it used to wipe the cross back out.
+    "+": (130, 130, 130),
+    "-": (113, 113, 113),
+}
+# Park slabs use a pure-black outline.
+_SLAB_INK = dict(_STONE_INK)
+_SLAB_INK["o"] = BLACK
+
+
+def _rect_rows(rows: tuple[str, ...], name: str) -> tuple[str, ...]:
+    width = len(rows[0])
+    if any(len(row) != width for row in rows):
+        raise SystemExit(f"{name} rows are not rectangular")
+    return rows
+
+
+def _stone_rows(kind: str, crack: bool = False) -> tuple[str, ...]:
+    """One upright slab. The base is wider than the arch.
+
+    Three faces, all the same silhouette: a blank arch, a small engraved
+    cross, or two short engraved strokes. None of them is a letter.
+    """
+    faces = {
+        "plain": (
+            " ofmmmmmfo ",
+            " ofmmmmmfo ",
+            " ofmmmmmfo ",
+        ),
+        "cross": (
+            " ofmm+mmfo ",
+            " ofm+++mfo ",
+            " ofmm+mmfo ",
+        ),
+        "lines": (
+            " of---mmfo ",
+            " ofmmmmmfo ",
+            " ofmm---fo ",
+        ),
+    }
+    if kind not in faces:
+        raise SystemExit(f"unknown tombstone {kind}")
+    top, mid, low = faces[kind]
+    rows = _rect_rows(
+        (
+            "    ooo    ",
+            "   ohhho   ",
+            "  ofmmmfo  ",
+            top,
+            mid,
+            low,
+            "  ooooooo  ",
+            "eddddddddde",
+        ),
+        kind,
+    )
+    if not crack:
+        return rows
+    cracked = [list(row) for row in rows]
+    for x, y in ((7, 2), (7, 3), (8, 3)):
+        if cracked[y][x] in "fms":
+            cracked[y][x] = "k"
+    return tuple("".join(row) for row in cracked)
+
+
+def _stamp_sprite(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...], ink: dict[str, tuple[int, int, int] | None]) -> None:
+    _blit_rows(image, x0, y0, rows, ink)
+
+
+def _shadow_sprite(image: Image.Image, x0: int, y0: int, rows: tuple[str, ...], ink: dict, limit: int | None) -> None:
+    """One-pixel drop shadow, down and right, only on the grey field."""
+    px = image.load()
+    width, height = image.size
+    for dy, row in enumerate(rows):
+        for dx, char in enumerate(row):
+            if ink.get(char) is None:
+                continue
+            sx, sy = x0 + dx + 1, y0 + dy + 1
+            if not (0 <= sx < width and 0 <= sy < height):
+                continue
+            if limit is not None and not (1 <= sx < limit and 1 <= sy < limit):
+                continue
+            colour = px[sx, sy]
+            rgb = colour[:3] if len(colour) == 4 else colour
+            if rgb not in GREY_SET:
+                continue
+            shaded = (32, 32, 32)
+            px[sx, sy] = (*shaded, 255) if len(colour) == 4 else shaded
 
 
 def _paint_parks(atlas: Image.Image) -> None:
-    # Two or three stones on open deep-green grass. Shrubs and the dirt
-    # contact pixels stay, so the tile still meets its neighbours.
+    """One slab per park. The four tiles are the three faces, plus a crack."""
+    # (kind, x, y, crack). The sprite is 11x8, so these all sit inside the rim.
     plans = {
-        40: (("round", 1, 1), ("cross", 9, 8), ("slab", 3, 11)),
-        41: (("slab", 2, 1), ("cross", 9, 7), ("lean", 4, 11)),
-        42: (("cross", 1, 2), ("round", 9, 8), ("slab", 4, 11)),
-        43: (("lean", 1, 2), ("round", 8, 7), ("cross", 3, 11)),
+        40: ("plain", 2, 4, False),
+        41: ("cross", 1, 4, False),
+        42: ("lines", 3, 5, False),
+        43: ("plain", 2, 3, True),
     }
-    for index, stones in plans.items():
-        tile = _crop(atlas, index)
-        occupied: set[tuple[int, int]] = set()
-        placed = 0
-        for kind, x, y in stones:
-            if _place_stone(tile, kind, x, y, occupied):
-                placed += 1
-        if placed < 2:
-            raise SystemExit(f"park {index} only placed {placed} tombstones")
+    borders = []
+    sprites = []
+    for index, (kind, sx, sy, crack) in plans.items():
+        tile = _grey_tile()
+        rows = _stone_rows(kind, crack)
+        sprites.append(rows)
+        if sx <= 0 or sy <= 0 or sx + len(rows[0]) >= TILE or sy + len(rows) >= TILE:
+            raise SystemExit(f"park {index} touches the rim")
+        px = tile.load()
+        for dy, row in enumerate(rows):
+            for dx, char in enumerate(row):
+                if _SLAB_INK.get(char) is None:
+                    continue
+                if px[sx + dx, sy + dy] not in GREY_SET:
+                    raise SystemExit(f"park {index} overlaps another stone")
+        _stamp_sprite(tile, sx, sy, rows, _SLAB_INK)
+        _shadow_sprite(tile, sx, sy, rows, _SLAB_INK, TILE - 1)
+        borders.append(_rim(tile))
         _paste(atlas, index, tile)
+    if len(set(borders)) != 1:
+        raise SystemExit("park tiles do not share a rim")
+    if len(set(sprites)) < 3:
+        raise SystemExit("park tiles do not show three tombstones")
 
 
-def _mausoleum(frame: Image.Image, candle: tuple[int, int, tuple[int, int, int]]) -> Image.Image:
-    out = frame.copy()
-    px = out.load()
-    for y in range(TILE):
-        for x in range(TILE):
-            if px[x, y] in FOUNTAIN_BODY:
-                px[x, y] = LAWN
-    # Pitched stone tomb where the basin was, plus a flanking headstone.
-    tomb = (
-        "  gGg  ",
-        " gGGGg ",
-        "gGGwGGg",
-        "GGGwGGG",
-        "GGGdGGG",
-        "GGGdGGG",
-        "GGGGGGG",
-        " ddddd ",
+def _rim(tile: Image.Image) -> tuple:
+    px = tile.load()
+    width, height = tile.size
+    bits = []
+    for x in range(width):
+        bits.append(px[x, 0])
+        bits.append(px[x, height - 1])
+    for y in range(1, height - 1):
+        bits.append(px[0, y])
+        bits.append(px[width - 1, y])
+    return tuple(bits)
+
+
+def _crypt_rows(glow: tuple[int, int, int]) -> tuple[tuple[str, ...], dict[str, tuple[int, int, int] | None]]:
+    """Crypt in the same 3/4 as the houses: roof from above, door on the front.
+
+    The left roof slope is lit. The right slope, the right buttress, and the
+    right wall are in shade. Only the candle pixels change between frames.
+    The sprite fills the tile and leaves a one-pixel grey-dirt margin.
+    """
+    rows = (
+        "      ss      ",
+        "     ssss     ",
+        "      rr      ",
+        "     rLSr     ",
+        "    rLLSSr    ",
+        "   rLLLSSSr   ",
+        "  rLLLLSSSSr  ",
+        " rLLLLLSSSSSr ",
+        "oBWWWWWWWWWWDo",
+        "oBW##dddd##WDo",
+        "oBW#ddggdd#WDo",
+        "oBW##dddd##WDo",
+        "oBWWWWWWWWWWDo",
+        "TTTTTTTTTTTTTT",
     )
+    if any(len(row) != 14 for row in rows):
+        raise SystemExit("crypt rows are not 14 wide")
     ink = {
         " ": None,
-        "g": ROOF_LIT,
-        "G": (162, 162, 162),
-        "w": (113, 113, 113),
-        "d": BLACK,
+        "s": SPIKE,
+        "r": INK,
+        "L": (130, 130, 130),
+        "S": (56, 56, 56),
+        "o": INK,
+        "W": (113, 113, 113),
+        "B": COLUMN_LIT,
+        "D": (81, 81, 81),
+        "#": BLACK,
+        "d": (32, 32, 32),
+        "g": glow,
+        "T": STEP,
     }
-    _stamp(out, 4, 3, tomb, ink)
-    _stamp(out, 1, 7, ("sS", "dd"), {"s": STONE_MID, "S": STONE, "d": STONE_EDGE}, {LAWN, GRASS})
-    cx, cy, colour = candle
-    if px[cx, cy] != HEDGE:
-        px[cx, cy] = colour
-    return out
+    return rows, ink
 
 
 def _paint_fountains(atlas: Image.Image) -> None:
-    base = _crop(atlas, 840)
-    candles = (
-        (7, 6, GLOW),
-        (8, 6, GLOW_HOT),
-        (7, 7, (255, 255, 0)),
-        (8, 5, (255, 125, 0)),
-    )
-    for offset, candle in enumerate(candles):
-        _paste(atlas, 840 + offset, _mausoleum(base, candle))
+    """One mausoleum on grey dirt. No hedge rim, no corner markers."""
+    glows = (WIN_ORANGE, WIN_YELLOW, WIN_HOT, WIN_DIM)
+    frames = []
+    for glow in glows:
+        tile = _grey_tile()
+        rows, ink = _crypt_rows(glow)
+        # Inset by one pixel so the shared rim stays grey dirt.
+        _stamp_sprite(tile, 1, 1, rows, ink)
+        _shadow_sprite(tile, 1, 1, rows, ink, TILE - 1)
+        frames.append(tile)
+    if len({_rim(frame) for frame in frames}) != 1:
+        raise SystemExit("crypt frames do not share a rim")
+    if any(colour == HEDGE for colour in _rim(frames[0])):
+        raise SystemExit("crypt rim is green")
+    if any(colour not in GREY_SET for colour in _rim(frames[0])):
+        raise SystemExit("crypt rim is not grey dirt")
+    if len({frame.tobytes() for frame in frames}) < 2:
+        raise SystemExit("crypt frames do not flicker")
+    for offset, frame in enumerate(frames):
+        _paste(atlas, 840 + offset, frame)
 
 
 def _bounds(image: Image.Image) -> tuple[int, int, int, int] | None:
@@ -552,6 +705,31 @@ def _darken_block(image: Image.Image) -> Image.Image:
     return out
 
 
+def _draw_fence(image: Image.Image, original: Image.Image) -> None:
+    px = image.load()
+    src = original.load()
+    width, height = image.size
+    for x in range(1, width - 1):
+        bottom = None
+        for y in range(height - 1, -1, -1):
+            if src[x, y] not in GROUND:
+                bottom = y
+                break
+        if bottom is None or bottom < 4:
+            continue
+        if x % 3 == 1:
+            tip = bottom - 4
+            if tip >= 0:
+                px[x, tip] = SPIKE
+            px[x, bottom - 3] = SPIKE_MID
+            px[x, bottom - 2] = (113, 113, 113)
+            px[x, bottom - 1] = STONE_EDGE
+            px[x, bottom] = INK
+        else:
+            px[x, bottom - 1] = STONE_DARK
+            px[x, bottom] = WALL
+
+
 def _building_bounds(original: Image.Image) -> tuple[int, int, int, int] | None:
     px = original.load()
     xs: list[int] = []
@@ -601,31 +779,6 @@ def _draw_turret(image: Image.Image, bounds: tuple[int, int, int, int]) -> None:
         px[cx, peak] = SPIKE
 
 
-def _draw_fence(image: Image.Image, original: Image.Image) -> None:
-    px = image.load()
-    src = original.load()
-    width, height = image.size
-    for x in range(1, width - 1):
-        bottom = None
-        for y in range(height - 1, -1, -1):
-            if src[x, y] not in GROUND:
-                bottom = y
-                break
-        if bottom is None or bottom < 4:
-            continue
-        if x % 3 == 1:
-            tip = bottom - 4
-            if tip >= 0:
-                px[x, tip] = SPIKE
-            px[x, bottom - 3] = SPIKE_MID
-            px[x, bottom - 2] = (113, 113, 113)
-            px[x, bottom - 1] = STONE_EDGE
-            px[x, bottom] = INK
-        else:
-            px[x, bottom - 1] = STONE_DARK
-            px[x, bottom] = WALL
-
-
 def _paint_manors(atlas: Image.Image) -> None:
     turret_src = _assemble(atlas, 297)
     turret = _darken_block(turret_src)
@@ -659,60 +812,91 @@ def _paint_special_base(image: Image.Image) -> Image.Image:
     return out
 
 
+_TREE_SRC = {(92, 184, 68), (18, 78, 28), (168, 208, 72)}
+_PATH_SRC = {
+    (84, 48, 22): (56, 56, 56),
+    (132, 78, 36): (97, 97, 97),
+    (206, 170, 96): (113, 113, 113),
+}
+_DUSK = {
+    (0, 170, 0): (0, 113, 0),
+    (56, 113, 0): (32, 65, 0),
+    (0, 65, 0): (0, 65, 0),
+}
+
+
+def _tree_mask(src: Image.Image) -> list[list[bool]]:
+    px = src.load()
+    width, height = src.size
+    seen = [[False] * width for _ in range(height)]
+    mask = [[False] * width for _ in range(height)]
+    for y in range(height):
+        for x in range(width):
+            if seen[y][x] or px[x, y][:3] not in _TREE_SRC:
+                continue
+            stack = [(x, y)]
+            blob: list[tuple[int, int]] = []
+            seen[y][x] = True
+            while stack:
+                cx, cy = stack.pop()
+                blob.append((cx, cy))
+                for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < width and 0 <= ny < height and not seen[ny][nx] and px[nx, ny][:3] in _TREE_SRC:
+                        seen[ny][nx] = True
+                        stack.append((nx, ny))
+            if len(blob) >= 6:
+                for cx, cy in blob:
+                    mask[cy][cx] = True
+    return mask
+
+
 def _paint_big_park(classic: Image.Image) -> Image.Image:
-    """SVGA Big Park, with the pond and the flower beds turned into graves."""
+    """Grey cemetery lawn, dusk trees, a stone path, and the three slabs."""
     image = _paint_special_base(classic)
+    src = classic.convert("RGBA")
+    trees = _tree_mask(src)
+    sp = src.load()
     px = image.load()
-    pond = {(0, 85, 113), (125, 223, 255), (255, 255, 255)}
-    flowers = {(255, 255, 85), (255, 255, 125), (113, 81, 81), (113, 56, 56)}
     for y in range(image.size[1]):
         for x in range(image.size[0]):
-            rgb = px[x, y][:3]
-            if rgb in pond:
-                px[x, y] = (*(INK if (x + y) % 3 == 0 else (44, 44, 44)), 255)
-            elif rgb in flowers:
-                px[x, y] = (*STONE_MID, 255)
-    # Tombstones on the deep lawn. The trees, path, and hedge greens stay.
+            if sp[x, y][3] == 0:
+                px[x, y] = (0, 0, 0, 0)
+                continue
+            if trees[y][x]:
+                rgb = _DUSK.get(px[x, y][:3], px[x, y][:3])
+                px[x, y] = (*rgb, 255)
+            elif sp[x, y][:3] in _PATH_SRC:
+                px[x, y] = (*_PATH_SRC[sp[x, y][:3]], 255)
+            else:
+                px[x, y] = (*_grey_at(x, y), 255)
+    # A few dead tufts on open grey, off the path and the trees.
+    for tx, ty in ((4, 44), (15, 43), (22, 15), (8, 16)):
+        if px[tx, ty][:3] in GREY_SET:
+            px[tx, ty] = (*(TUFT if (tx + ty) % 2 == 0 else TUFT_LIT), 255)
+            if ty + 1 < 48 and px[tx, ty + 1][:3] in GREY_SET:
+                px[tx, ty + 1] = (*TUFT_LIT, 255)
     rgb = image.convert("RGB")
-    occupied: set[tuple[int, int]] = set()
-    # A larger stone reads on the 48px lawn. The 16px parks keep the small set.
-    big = {
-        "round": ("  s  ", " sSs ", " s.s ", " sSs ", " ddd "),
-        "cross": ("  g  ", " ggg ", "ggggg", "  g  ", "  d  "),
-        "slab": (" SSS ", " S#S ", " S#S ", " SSS ", " ddd "),
-    }
-    stones = (
-        ("round", 6, 20),
-        ("cross", 28, 6),
-        ("slab", 34, 32),
-        ("round", 2, 34),
-        ("slab", 20, 36),
-        ("cross", 38, 20),
-    )
-    for kind, x, y in stones:
-        rows = big[kind]
-        placed = False
-        for radius in range(0, 10):
-            for dy in range(-radius, radius + 1):
-                for dx in range(-radius, radius + 1):
-                    if radius not in (0, abs(dx), abs(dy)):
-                        continue
-                    if _can_place(rgb, x + dx, y + dy, rows, occupied):
-                        _stamp(rgb, x + dx, y + dy, rows, STONE_INK, {GRASS})
-                        for py, row in enumerate(rows):
-                            for px_i, char in enumerate(row):
-                                if STONE_INK.get(char) is not None:
-                                    occupied.add((x + dx + px_i, y + dy + py))
-                        placed = True
-                        break
-                if placed:
-                    break
-            if placed:
-                break
+    # The same slab as the park tiles, set apart in the open meadow.
+    for kind, crack, ox, oy in (
+        ("plain", False, 24, 23),
+        ("cross", False, 37, 23),
+        ("lines", False, 22, 36),
+        ("plain", True, 35, 36),
+    ):
+        rows = _stone_rows(kind, crack)
+        op = rgb.load()
+        for dy, row in enumerate(rows):
+            for dx, char in enumerate(row):
+                if _SLAB_INK.get(char) is None:
+                    continue
+                x, y = ox + dx, oy + dy
+                if trees[y][x] or op[x, y] not in GREY_SET:
+                    raise SystemExit(f"tombstone at {(ox, oy)} hits {(x, y)}")
+        _stamp_sprite(rgb, ox, oy, rows, _SLAB_INK)
+        _shadow_sprite(rgb, ox, oy, rows, _SLAB_INK, None)
     painted = rgb.convert("RGBA")
-    # _place_stone works in RGB. Copy alpha back to opaque.
-    alpha = image.getchannel("A")
-    painted.putalpha(alpha)
+    painted.putalpha(image.getchannel("A"))
     return painted
 
 
