@@ -128,8 +128,9 @@ inline std::string proposed_city_filename(const std::string &city_name, const st
     return cleaned;
 }
 
-// city_config_dir() lives in platform.hpp (~/.config/lunduke-city-2, or
-// %APPDATA%\lunduke-city-2). XDG_CONFIG_HOME is ignored on purpose.
+// city_config_dir() lives in platform.hpp. On POSIX an absolute
+// XDG_CONFIG_HOME is honored; otherwise ~/.config/lunduke-city-2.
+// Windows uses %APPDATA%\lunduke-city-2.
 
 // Last folder used by Save or Load. Empty when none has been stored, or when
 // the stored path is not an absolute directory.

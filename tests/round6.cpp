@@ -27,8 +27,8 @@ int main()
     // Finding 2: the eight classic goals, and the years still left.
     static const char *kGoals[] = {
         "Turn this city into a Metropolis (more than 100,000 people) within 30 years.",
-        "Reach Metropolis (more than 100,000 people) within 5 years.",
-        "Reach Metropolis (more than 100,000 people) within 5 years.",
+        "Keep the city a Metropolis (over 100,000) until 1911 despite the quake.",
+        "Keep the city a Metropolis (over 100,000) until 1949 despite the fire.",
         "Bring average traffic below 80 within 10 years.",
         "Raise the city score above 500 within 5 years.",
         "Bring average crime below 60 within 10 years.",

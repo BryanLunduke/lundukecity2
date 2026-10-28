@@ -216,9 +216,31 @@ inline Placement clamp_saved_window(int x, int y, int w, int h, int ax, int ay, 
     return place;
 }
 
-// The choice written to settings.txt. 0 is Classic, 1 is SVGA, 2 is Spooky.
+// The choice written to settings.txt. Classic is 0, SVGA is 1, Spooky is 2.
 // Drawing can still be Classic when the chosen sheet is missing. That
 // fallback is not a new choice.
+enum class Look {
+    Classic = 0,
+    Svga = 1,
+    Spooky = 2,
+};
+
+inline Look look_from_setting(int look)
+{
+    if (look == static_cast<int>(Look::Svga)) {
+        return Look::Svga;
+    }
+    if (look == static_cast<int>(Look::Spooky)) {
+        return Look::Spooky;
+    }
+    return Look::Classic;
+}
+
+inline int look_to_setting(Look look)
+{
+    return static_cast<int>(look);
+}
+
 struct LookPreference {
     int look = 0;
 

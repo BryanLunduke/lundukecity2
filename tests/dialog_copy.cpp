@@ -122,7 +122,7 @@ int main()
     expect(collected.tax_title == "Tax rate", collected.tax_title);
     expect_has(collected.closing_note, "collected when the window closes");
     expect_has(collected.road, "cut to 40%");
-    expect_has(collected.cash_flow, "Cash flow:");
+    expect_has(collected.cash_flow, "Collected cash flow:");
 
     expect(save_changes_question(SavePromptKind::Quit, "Harbor") ==
                "Save changes to \"Harbor\" before quitting?",

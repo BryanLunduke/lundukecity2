@@ -49,6 +49,14 @@ bool MapView::tick(int elapsed_ms)
     return last_sync_blits_ > 0;
 }
 
+int MapView::blink_remaining_ms() const
+{
+    if (!active_) {
+        return 500;
+    }
+    return std::max(1, 500 - blink_ms_);
+}
+
 void MapView::invalidate_all()
 {
     if (!cached_raw_.empty()) {
@@ -422,6 +430,10 @@ bool MapView::press(double x, double y)
         return false;
     }
     dragging_ = true;
+    drag_moved_ = false;
+    press_local_x_ = x;
+    press_local_y_ = y;
+    edge_holding_ = false;
     last_x_ = tx;
     last_y_ = ty;
     set_hover_tile(tx, ty);
@@ -434,12 +446,23 @@ bool MapView::press(double x, double y)
 void MapView::release()
 {
     dragging_ = false;
+    drag_moved_ = false;
+    edge_holding_ = false;
 }
 
 void MapView::motion(double x, double y, bool button_down)
 {
     if (dragging_ && !button_down) {
         dragging_ = false;
+        drag_moved_ = false;
+        edge_holding_ = false;
+    }
+    if (dragging_) {
+        const double dx = x - press_local_x_;
+        const double dy = y - press_local_y_;
+        if (dx * dx + dy * dy > 16.0) {
+            drag_moved_ = true;
+        }
     }
     follow_local_pointer(x, y, dragging_ && button_down);
 }
@@ -451,24 +474,66 @@ void MapView::leave()
     }
 }
 
-bool MapView::edge_scroll(double view_x, double view_y, int view_w, int view_h, double &dx, double &dy) const
+bool MapView::edge_scroll(double view_x, double view_y, int view_w, int view_h, int elapsed_ms, double &dx, double &dy)
 {
     dx = 0;
     dy = 0;
-    if (!dragging_ || view_w < 1 || view_h < 1) {
+    if (!dragging_ || !drag_moved_ || view_w < 1 || view_h < 1) {
+        edge_holding_ = false;
         return false;
     }
     const int margin = 28;
-    const double step = std::max(tile_size_, 8);
+    int sx = 0;
+    int sy = 0;
     if (view_x < margin) {
-        dx = -step;
+        sx = -1;
     } else if (view_x > view_w - margin) {
-        dx = step;
+        sx = 1;
     }
     if (view_y < margin) {
-        dy = -step;
+        sy = -1;
     } else if (view_y > view_h - margin) {
-        dy = step;
+        sy = 1;
+    }
+    if (sx == 0 && sy == 0) {
+        edge_holding_ = false;
+        return false;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (!edge_holding_) {
+        edge_holding_ = true;
+        edge_hold_start_ = now;
+        return false;
+    }
+    if (now - edge_hold_start_ < std::chrono::milliseconds(300)) {
+        return false;
+    }
+    double seconds = elapsed_ms / 1000.0;
+    if (seconds < 0.001) {
+        seconds = 0.001;
+    }
+    if (seconds > 0.1) {
+        seconds = 0.1;
+    }
+    auto depth = [](double into) {
+        if (into < 0.0) {
+            into = 0.0;
+        }
+        if (into > 1.0) {
+            into = 1.0;
+        }
+        return into;
+    };
+    const double tile = static_cast<double>(std::max(tile_size_, 8));
+    // About 12 tiles a second at the inner edge of the margin, faster as
+    // the pointer sits deeper in it.
+    if (sx != 0) {
+        const double into = sx < 0 ? (margin - view_x) / margin : (view_x - (view_w - margin)) / margin;
+        dx = sx * tile * (12.0 * (0.45 + 1.3 * depth(into))) * seconds;
+    }
+    if (sy != 0) {
+        const double into = sy < 0 ? (margin - view_y) / margin : (view_y - (view_h - margin)) / margin;
+        dy = sy * tile * (12.0 * (0.45 + 1.3 * depth(into))) * seconds;
     }
     return dx != 0.0 || dy != 0.0;
 }

@@ -31,7 +31,10 @@ inline constexpr GraphSeriesStyle kGraphSeries[kGraphSeriesCount] = {
     {"Industrial", 216, 122, 0, 255, 178, 40, 7.0, 4.0},
     {"Cash flow", 156, 48, 168, 232, 128, 224, 4.0, 3.0},
     {"Crime", 198, 36, 52, 255, 96, 104, 5.0, 2.0},
-    {"Pollution", 112, 84, 60, 160, 148, 124, 2.0, 4.0},
+    // The light brown stays the one that clears the palette distance test.
+    // The dash is longer than the old 2-on-4-off spec so a flat pollution
+    // history reads as a line instead of a dotted black midline.
+    {"Pollution", 112, 84, 60, 160, 148, 124, 8.0, 3.0},
 };
 
 inline double graph_channel(int value)

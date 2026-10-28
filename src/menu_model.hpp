@@ -20,7 +20,8 @@ enum class AccelKey {
     D1, D2, D3,
     Equal, Plus, Minus, KpAdd, KpSub,
     F10, Up, Down, Left, Right, Return, Escape, Space,
-    Letter
+    Letter,
+    B, G, E
 };
 
 enum class AccelMod {
@@ -118,7 +119,7 @@ inline constexpr MenuEntry kOptions[] = {
     {"Enable _disasters", nullptr, ItemKind::Check, Action::DisastersEnabled, AccelKey::None, 0, 0},
     {"Auto-_goto", nullptr, ItemKind::Check, Action::AutoGoto, AccelKey::None, 0, 0},
     {"_Mute sound", nullptr, ItemKind::Check, Action::Mute, AccelKey::None, 0, 0},
-    {"Fu_llscreen", nullptr, ItemKind::Check, Action::Fullscreen, AccelKey::None, 0, 0},
+    {"Fu_llscreen", "F11", ItemKind::Check, Action::Fullscreen, AccelKey::None, 0, 0},
     {"_Settings…", nullptr, ItemKind::Normal, Action::Settings, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Pause", "Ctrl+P", ItemKind::Radio, Action::SetPause, AccelKey::None, 0, 1},
@@ -144,9 +145,9 @@ inline constexpr MenuEntry kDisasters[] = {
 };
 
 inline constexpr MenuEntry kWindows[] = {
-    {"_Budget", nullptr, ItemKind::Normal, Action::Budget, AccelKey::None, 0, 0},
-    {"_Graphs", nullptr, ItemKind::Normal, Action::Graphs, AccelKey::None, 0, 0},
-    {"_Evaluation", nullptr, ItemKind::Normal, Action::Evaluation, AccelKey::None, 0, 0},
+    {"_Budget", "Ctrl+B", ItemKind::Normal, Action::Budget, AccelKey::B, static_cast<int>(AccelMod::Ctrl), 0},
+    {"_Graphs", "Ctrl+G", ItemKind::Normal, Action::Graphs, AccelKey::G, static_cast<int>(AccelMod::Ctrl), 0},
+    {"_Evaluation", "Ctrl+E", ItemKind::Normal, Action::Evaluation, AccelKey::E, static_cast<int>(AccelMod::Ctrl), 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Power", nullptr, ItemKind::Check, Action::Power, AccelKey::None, 0, 0},
     {"All _zones", nullptr, ItemKind::Check, Action::Zones, AccelKey::None, 0, 0},

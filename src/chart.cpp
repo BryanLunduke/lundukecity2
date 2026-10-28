@@ -133,7 +133,21 @@ std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale)
                 newest = census;
             }
             const bool exact = !specs[i].cash || session->cash_flow_history_exact(scale, 0);
-            row.caption = graph_legend_caption(specs[i].name, specs[i].legend, newest, exact);
+            const char *name = specs[i].name;
+            std::string cash_name;
+            if (specs[i].cash) {
+                // A fresh short-scale sample of zero is the budget estimate,
+                // not a month that has been collected. See plot_cash_flow.
+                if (!long_scale && session->cash_flow_history(scale, 0) == 0) {
+                    cash_name = "Cash flow, estimate";
+                } else if (long_scale) {
+                    cash_name = "Cash flow, last year";
+                } else {
+                    cash_name = "Cash flow, last month";
+                }
+                name = cash_name.c_str();
+            }
+            row.caption = graph_legend_caption(name, specs[i].legend, newest, exact);
         }
         out.push_back(row);
     }
@@ -159,14 +173,24 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
     const double plot_w = std::max(1, width - left - right);
     const double plot_h = std::max(1, height - top - bottom);
     const double plot_bottom = top + plot_h;
-    cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
     cairo_set_line_width(cr, 1);
     for (int i = 0; i <= 4; ++i) {
         const double y = top + plot_h * (i / 4.0);
+        if (i == 2) {
+            // The middle of each series' own scale. Dashed so it is not
+            // another history line. The legend names it.
+            const double dash[2] = {4.0, 3.0};
+            cairo_set_dash(cr, dash, 2, 0.0);
+            cairo_set_source_rgba(cr, 0.15, 0.15, 0.15, 0.55);
+        } else {
+            cairo_set_dash(cr, nullptr, 0, 0.0);
+            cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
+        }
         cairo_move_to(cr, left, y);
         cairo_line_to(cr, left + plot_w, y);
+        cairo_stroke(cr);
     }
-    cairo_stroke(cr);
+    cairo_set_dash(cr, nullptr, 0, 0.0);
     cairo_move_to(cr, left, top);
     cairo_line_to(cr, left, plot_bottom);
     cairo_line_to(cr, left + plot_w, plot_bottom);
@@ -261,13 +285,17 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
                 stamp(axis_text(min_v), plot_bottom);
             } else {
                 stamp("high", top + 10);
+                stamp("mid", top + plot_h * 0.5 + 4.0);
                 stamp("low", plot_bottom);
             }
         }
+        const bool pollution = item.history == CitySession::HistorySeries::Pollution;
         cairo_set_source_rgb(cr, item.r, item.g, item.b);
-        cairo_set_line_width(cr, item.population ? 2.6 : 2.0);
+        cairo_set_line_width(cr, item.population ? 2.6 : pollution ? 2.8 : 2.0);
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
         apply_dash(cr, item.dash_on, item.dash_off);
+        int kept = 0;
+        double only_y = top + plot_h / 2.0;
         bool drawing = false;
         for (int i = 0; i < n; ++i) {
             const int index = (n - 1) - i;
@@ -279,12 +307,21 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
             const double x = left + (n == 1 ? 0 : (plot_w * i) / (n - 1));
             const double y = flat ? (top + plot_h / 2.0)
                                   : (plot_bottom - ((value - min_v) / (max_v - min_v)) * plot_h);
+            only_y = y;
+            ++kept;
             if (!drawing) {
                 cairo_move_to(cr, x, y);
                 drawing = true;
             } else {
                 cairo_line_to(cr, x, y);
             }
+        }
+        // One sample (a fresh city, or a history that is all zeros except
+        // the newest reading) is a dot. Draw it as a line so Pollution is
+        // visible when the city has not varied yet.
+        if (kept == 1) {
+            cairo_move_to(cr, left, only_y);
+            cairo_line_to(cr, left + plot_w, only_y);
         }
         cairo_stroke(cr);
         if (hover_index >= 0 && !history_point_skipped(samples, n, hover_index)) {

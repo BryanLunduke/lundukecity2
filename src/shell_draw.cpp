@@ -106,25 +106,59 @@ void Shell::layout()
     status_h_ = dp(36);
     message_h_ = dp(44);
     const int body = win_h_ - menu_h_ - status_h_ - message_h_;
-    cell_ = ui_scale::toolbar_cell(ui_scale_, body);
-    palette_.set_cell(cell_);
-    side_w_ = ToolPalette::width_for(cell_);
+    cell_ = ui_scale::toolbar_cell(ui_scale_, std::max(1, body));
     side_x_ = dp(6);
     pal_y_ = menu_h_ + dp(6);
-    mini_y_ = pal_y_ + ToolPalette::height_for(cell_) + dp(8);
     const int status_top = win_h_ - status_h_ - message_h_;
-    int mini_h = std::max(dp(64), side_w_ * 5 / 6);
-    int demand_y = mini_y_ + mini_h + dp(8);
-    const int demand_floor = dp(72);
-    if (demand_y + demand_floor > status_top) {
-        const int overflow = demand_y + demand_floor - status_top;
-        mini_h = std::max(dp(36), mini_h - overflow);
-        demand_y = mini_y_ + mini_h + dp(8);
+    const int gap = dp(8);
+    const int mini_ok = dp(64);
+    const int demand_ok = dp(64);
+    // Two columns until the minimap or the demand meters would be squeezed.
+    // Three columns shorten the toolbar. The minimap is dropped only when
+    // even that cannot keep the meters readable. 960x600 stays usable.
+    auto measure = [&](int columns, bool want_mini, int &mini_h, int &demand_y, int &demand_h) {
+        const int side = ToolPalette::width_for(cell_, columns);
+        const int pal_h = ToolPalette::height_for(cell_, columns);
+        const int mini_y = pal_y_ + pal_h + gap;
+        if (!want_mini) {
+            mini_h = 0;
+            demand_y = mini_y;
+            demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
+            return demand_h >= demand_ok;
+        }
+        mini_h = std::max(dp(64), side * 5 / 6);
+        demand_y = mini_y + mini_h + gap;
+        const int demand_floor = dp(72);
+        if (demand_y + demand_floor > status_top) {
+            const int overflow = demand_y + demand_floor - status_top;
+            mini_h = std::max(dp(36), mini_h - overflow);
+            demand_y = mini_y + mini_h + gap;
+        }
+        demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
+        return mini_h >= mini_ok && demand_h >= demand_ok;
+    };
+    int columns = 2;
+    int mini_h = 0;
+    int demand_y = 0;
+    int demand_h = 0;
+    if (!measure(2, true, mini_h, demand_y, demand_h)) {
+        columns = 3;
+        if (!measure(3, true, mini_h, demand_y, demand_h)) {
+            measure(3, false, mini_h, demand_y, demand_h);
+        }
+    }
+    palette_.set_columns(columns);
+    palette_.set_cell(cell_);
+    side_w_ = ToolPalette::width_for(cell_, columns);
+    mini_y_ = pal_y_ + ToolPalette::height_for(cell_, columns) + gap;
+    if (mini_h <= 0) {
+        mini_y_ = pal_y_ + ToolPalette::height_for(cell_, columns);
+        demand_y = mini_y_ + gap;
+        demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
     }
     mini_h_ = mini_h;
     demand_y_ = demand_y;
-    const int demand_room = std::max(0, status_top - demand_y_);
-    demand_h_ = std::min(dp(kMaxDemandPx), demand_room);
+    demand_h_ = demand_h;
     view_x_ = side_x_ + side_w_ + dp(8);
     view_y_ = menu_h_;
     view_w_ = std::max(dp(32), win_w_ - view_x_ - dp(8));
@@ -190,7 +224,10 @@ void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, con
     fill(cr, x, y, w, kTitleBand, theme::kSelectR, theme::kSelectG, theme::kSelectB);
     const TextMetrics title_metrics = measure_text(cr, title_font(), title, static_cast<int>(w - 24));
     const double title_y = y + std::max(2.0, (kTitleBand - title_metrics.height) / 2.0);
-    const std::string hint = dialog_title_hint();
+    // Pad players read the hint in the title. Mouse players read it in the
+    // status bar, so it is not repeated in both places.
+    const bool title_hint = gamepad_nav_ || deck_ || touch_used_;
+    const std::string hint = title_hint ? dialog_title_hint() : std::string();
     const TextMetrics hint_metrics = hint.empty() ? TextMetrics{} : measure_text(cr, ui_font(), hint, -1);
     const int title_wrap = static_cast<int>(std::max(40.0, w - 24 - (hint.empty() ? 0 : hint_metrics.width + 16)));
     paint_text(cr, title_font(), title, x + 12, title_y, 1, 1, 1, title_wrap);
@@ -270,28 +307,90 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         const TextMetrics metrics = measure_text(cr, menu_font(), strip_mnemonic(menu_table::column_title(c)), -1);
         drop_x += metrics.width + 24;
     }
-    const double row_h = dp(32);
-    const double drop_w = dp(320);
-    double drop_h = 8;
+    // 36px rows read well at 1280. A short window (1011x601) cannot hold
+    // the Options column at that pitch, so the rows shrink until the menu
+    // fits, and only then scroll. The keyboard cursor is always on screen.
+    int n_item = 0;
+    int n_sep = 0;
     for (int i = 0; i < count; ++i) {
-        drop_h += items[i].kind == ItemKind::Separator ? 8 : row_h;
+        if (items[i].kind == ItemKind::Separator) {
+            ++n_sep;
+        } else {
+            ++n_item;
+        }
     }
+    const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - 6));
+    double row_h = dp(36);
+    const double chrome = 10.0 + n_sep * 8.0;
+    if (n_item > 0 && chrome + n_item * row_h > avail) {
+        row_h = std::floor((avail - chrome) / n_item);
+        const double floor_h = std::max(22.0, static_cast<double>(dp(22)));
+        if (row_h < floor_h) {
+            row_h = floor_h;
+        }
+    }
+    const double drop_w = dp(320);
+    double content_h = chrome;
+    double item_top[64];
+    double cursor_y_rel = 5;
+    const int shown = count > 64 ? 64 : count;
+    {
+        double rel = 5;
+        for (int i = 0; i < shown; ++i) {
+            item_top[i] = rel;
+            const double h = items[i].kind == ItemKind::Separator ? 8.0 : row_h;
+            if (i == menu_.cursor) {
+                cursor_y_rel = rel;
+            }
+            rel += h;
+        }
+        content_h = rel;
+    }
+    const double view_h = std::min(content_h, avail);
+    double scroll = 0;
+    if (content_h > view_h + 0.5 && menu_.cursor >= 0 && menu_.cursor < shown) {
+        const double row = items[menu_.cursor].kind == ItemKind::Separator ? 8.0 : row_h;
+        if (cursor_y_rel + row > scroll + view_h - 4) {
+            scroll = cursor_y_rel + row - (view_h - 4);
+        }
+        if (cursor_y_rel < scroll + 4) {
+            scroll = cursor_y_rel - 4;
+        }
+        if (scroll < 0) {
+            scroll = 0;
+        }
+        const double max_scroll = std::max(0.0, content_h - view_h);
+        if (scroll > max_scroll) {
+            scroll = max_scroll;
+        }
+    }
+    const double drop_h = view_h;
     if (drop_x + drop_w > win_w_ - 4) {
         drop_x = std::max(4.0, win_w_ - drop_w - 4);
     }
+    // A short offset, not a blur. The same shadow is used in every look.
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
+    cairo_rectangle(cr, drop_x + 3, menu_h_ + 4, drop_w, drop_h);
+    cairo_fill(cr);
     fill(cr, drop_x, menu_h_, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
     stroke_rect(cr, drop_x, menu_h_, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-    double y = menu_h_ + 4;
-    double recent_row_y = y;
+    cairo_save(cr);
+    cairo_rectangle(cr, drop_x, menu_h_, drop_w, drop_h);
+    cairo_clip(cr);
+    double recent_row_y = menu_h_ + 5;
     bool have_recent_row = false;
-    for (int i = 0; i < count; ++i) {
+    for (int i = 0; i < shown; ++i) {
         const MenuEntry &item = items[i];
+        const double y = menu_h_ + item_top[i] - scroll;
+        const double h = item.kind == ItemKind::Separator ? 8.0 : row_h;
+        if (y + h < menu_h_ || y > menu_h_ + drop_h) {
+            continue;
+        }
         if (item.kind == ItemKind::Separator) {
             cairo_set_source_rgb(cr, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
             cairo_move_to(cr, drop_x + 4, y + 4);
             cairo_line_to(cr, drop_x + drop_w - 4, y + 4);
             cairo_stroke(cr);
-            y += 8;
             continue;
         }
         const int id = kMenuItem + column * 40 + i;
@@ -394,8 +493,8 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             paint_text(cr, menu_font(), item.accel_text, drop_x + drop_w - accel.width - 12, y + 7, theme::kAccelR,
                        theme::kAccelG, theme::kAccelB, -1);
         }
-        y += row_h;
     }
+    cairo_restore(cr);
     if (!menu_.recent_open) {
         return;
     }
@@ -413,6 +512,9 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     }
     const DialogRect sub = place_submenu(drop_x, drop_w, have_recent_row ? recent_row_y : menu_h_ + 4, row_h, rows,
                                          label_w + dp(28), win_w_, win_h_, dp(180));
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
+    cairo_rectangle(cr, sub.x + 3, sub.y + 3, sub.w, sub.h);
+    cairo_fill(cr);
     fill(cr, sub.x, sub.y, sub.w, sub.h, 1, 1, 1);
     stroke_rect(cr, sub.x, sub.y, sub.w, sub.h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
     const int text_w = static_cast<int>(std::max(40.0, sub.w - dp(20)));
@@ -442,8 +544,11 @@ void Shell::draw_dialog(cairo_t *cr)
     }
     const double margin = dp(16);
     text_spans_.clear();
+    // Dialogs stay above the status and message bars. Centering them in the
+    // full window let a tall Load City panel cover "Funds" and the city name.
+    const double band_h = std::max(1.0, static_cast<double>(win_h_ - status_h_ - message_h_));
     const double large_w = std::min(static_cast<double>(dp(860)), std::max(1.0, win_w_ - 2.0 * margin));
-    const double large_h = std::min(static_cast<double>(dp(640)), std::max(1.0, win_h_ - 2.0 * margin));
+    const double large_h = std::min(static_cast<double>(dp(640)), std::max(1.0, band_h - 2.0 * margin));
     auto buttons_at = [&](double px, double pw, double by, const std::vector<std::pair<const char *, int>> &buttons,
                           int left_count = 0, int primary_id = -1) {
         const double gap = dp(8);
@@ -526,20 +631,16 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Welcome) {
         const std::string heading = "Welcome to Lunduke City 2";
         const std::string blurb = "Start a new city, load one you saved, or take on a scenario.";
-        const bool pad_hint = gamepad_nav_ || deck_ || touch_used_;
-        const std::string hint = pad_hint ? std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " Select    " +
-                                                glyph(SDL_GAMEPAD_BUTTON_EAST) + " Back"
-                                          : "Enter confirms    Esc closes";
         const double width = message_width(win_w_, margin, dp(440), dp(520));
         const double column = std::max(1.0, width - 2.0 * margin);
         const double heading_h = line_height(title_font(), heading, column);
         const double blurb_h = text_block_height(blurb, column);
-        const double hint_h = line_height(ui_font(), hint, column);
         const double bh = dp(44);
         const double gap = dp(10);
-        const double height = dp(40) + margin + heading_h + dp(8) + blurb_h + dp(16) + bh * 4.0 + gap * 3.0 + dp(12) +
-                              hint_h + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        // The key hint lives in the title bar (pad) or the status bar (mouse),
+        // not again under the buttons.
+        const double height = dp(40) + margin + heading_h + dp(8) + blurb_h + dp(16) + bh * 4.0 + gap * 3.0 + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Welcome");
         double text_y = panel.y + dp(40) + dp(12);
         text_y += place_line(title_font(), heading, panel.x + margin, text_y, panel.w - 2 * margin, theme::kTextR,
@@ -556,31 +657,20 @@ void Shell::draw_dialog(cairo_t *cr)
         button(cr, panel.x + margin, by, bw, bh, "Select a _Scenario", kWelcomeScenario, focus_id_ == kWelcomeScenario);
         by += bh + gap;
         button(cr, panel.x + margin, by, bw, bh, "_Quit", kWelcomeQuit, focus_id_ == kWelcomeQuit);
-        const TextMetrics hint_metrics = measure_text(cr, ui_font(), hint, -1);
-        const double hint_x = panel.x + (panel.w - hint_metrics.width) / 2.0;
-        paint_text(cr, ui_font(), hint, hint_x, by + bh + dp(10), theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
         return;
     }
     if (dialog_ == Dialog::QuitConfirm) {
         const std::string question = "Quit Lunduke City 2?";
-        const bool pad_hint = gamepad_nav_ || deck_ || touch_used_;
-        const std::string hint = pad_hint ? std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " Select    " +
-                                                glyph(SDL_GAMEPAD_BUTTON_EAST) + " Back"
-                                          : "Enter confirms    Esc closes";
         const double width = message_width(win_w_, margin, dp(420), dp(520));
         const double column = std::max(1.0, width - 2.0 * margin);
         const double body_h = text_block_height(question, column);
-        const double hint_h = line_height(ui_font(), hint, column);
-        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + dp(8) + hint_h + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Quit");
         place_line(body_font(), question, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
                    theme::kTextG, theme::kTextB);
-        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - hint_h - dp(8) - dp(36),
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
                    {{"_Cancel", kCancel}, {"_Quit", kOk}}, 0, focus_id_);
-        const TextMetrics hint_metrics = measure_text(cr, ui_font(), hint, -1);
-        paint_text(cr, ui_font(), hint, panel.x + (panel.w - hint_metrics.width) / 2.0,
-                   panel.y + panel.h - margin - hint_h, theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
         return;
     }
     if (dialog_ == Dialog::Unsaved) {
@@ -616,7 +706,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const std::string shown = natural > column ? balance_save_question(question) : question;
         const double body_h = text_block_height(shown, column);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Save changes?");
         place_line(body_font(), shown, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
                    theme::kTextG, theme::kTextB);
@@ -656,7 +746,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double width = message_width(win_w_, margin, dp(420), dp(520));
         const double body_h = text_block_height(std::string(question) + "\n" + detail, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, title);
         label(cr, body_font(), std::string(question) + "\n" + detail, panel.x + margin, panel.y + dp(48),
               static_cast<int>(panel.w - 2 * margin));
@@ -672,6 +762,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double land_intro_h = new_page_ == 1 ? text_block_height(land_intro, want_w - 2 * margin) : 0;
         if (new_page_ == 1) {
             want_h += std::max(0.0, land_intro_h - static_cast<double>(dp(22)));
+            want_h += dp(28);
         }
         if (osk) {
             // Ten keys across need about 48px each, so the page grows past the
@@ -682,7 +773,7 @@ void Shell::draw_dialog(cairo_t *cr)
         if (!dialog_error_.empty()) {
             want_h += dp(22);
         }
-        const DialogRect panel = place_dialog(win_w_, win_h_, want_w, want_h, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -797,10 +888,16 @@ void Shell::draw_dialog(cairo_t *cr)
                 }
             }
             const double preview_y = seed_y + dp(40);
-            if (terrain_preview_ != nullptr) {
+            const double buttons_y = y + dh - margin - dp(36);
+            const double summary_y = buttons_y - dp(6) - dp(20);
+            // The map preview is 120x100. A clamped dialog (1011x601) used to
+            // draw it through the Generate line. Scale it into the gap.
+            const double preview_room = std::max(0.0, summary_y - dp(8) - preview_y);
+            const double preview_scale = preview_room >= 100.0 ? 1.0 : preview_room / 100.0;
+            if (terrain_preview_ != nullptr && preview_scale >= 0.35) {
                 cairo_save(cr);
                 cairo_translate(cr, x + margin, preview_y);
-                cairo_scale(cr, 1, 1);
+                cairo_scale(cr, preview_scale, preview_scale);
                 cairo_set_source_surface(cr, terrain_preview_, 0, 0);
                 cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
                 cairo_paint(cr);
@@ -811,8 +908,12 @@ void Shell::draw_dialog(cairo_t *cr)
                 paint_text(cr, ui_font(), dialog_error_, x + margin, seed_y + dp(36), 0.6, 0.1, 0.1,
                            static_cast<int>(dw - 2 * margin));
             }
-            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Next", kNext}});
+            const std::string summary = "Generate \"" + field_a_ + "\". This replaces the city on the map.";
+            paint_text(cr, ui_font(), summary, x + margin, summary_y, theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(dw - 2 * margin));
+            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Generate", kGenerate}});
         } else {
+            // A saved page index from an older session. Generate is on page 2 now.
             const std::string summary = "Generate \"" + field_a_ + "\".\nThis replaces the city on the map.";
             label(cr, body_font(), summary, x + margin, y + dp(52), static_cast<int>(dw - 2 * margin));
             buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Generate", kGenerate}});
@@ -824,7 +925,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double row_h = dp(76);
         const double header = dp(70);
         const double footer = margin + dp(36) + dp(12);
-        const double max_list = std::max(row_h, static_cast<double>(win_h_) - 2.0 * margin - header - footer);
+        const double max_list = std::max(row_h, band_h - 2.0 * margin - header - footer);
         int want_rows = static_cast<int>(max_list / row_h);
         if (want_rows < 1) {
             want_rows = 1;
@@ -834,7 +935,7 @@ void Shell::draw_dialog(cairo_t *cr)
         }
         const double want_h = header + footer + want_rows * row_h;
         const double want_w = std::min(static_cast<double>(dp(680)), std::max(1.0, win_w_ - 2.0 * margin));
-        const DialogRect panel = place_dialog(win_w_, win_h_, want_w, want_h, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -942,7 +1043,7 @@ void Shell::draw_dialog(cairo_t *cr)
         if (!dialog_error_.empty()) {
             want_h += dp(22);
         }
-        const DialogRect panel = place_dialog(win_w_, win_h_, want_w, want_h, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -984,7 +1085,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double body_h = line_height(body_font(), body, text_w);
         const double content_h = std::max(static_cast<double>(icon), body_h);
         const double height = dp(40) + margin + content_h + dp(16) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "About Lunduke City 2");
         const double icon_x = panel.x + margin;
         const double icon_y = panel.y + dp(48);
@@ -1010,7 +1111,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double width = message_width(win_w_, margin, dp(420), dp(600));
         const double body_h = text_block_height(body, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, deleting ? "Delete this unsaved city?" : "Recover unsaved city?");
         label(cr, body_font(), body, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
         if (!deleting) {
@@ -1029,14 +1130,14 @@ void Shell::draw_dialog(cairo_t *cr)
             const double width = message_width(win_w_, margin, dp(420), dp(560));
             const double body_h = text_block_height(wait, width - 2 * margin);
             const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
-            const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+            const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
             frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "System file dialog");
             label(cr, body_font(), wait, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
             buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
                        {{"_Cancel", kCancel}, {"Browse in the window", kSystemFiles}});
             return;
         }
-        const DialogRect panel = place_dialog(win_w_, win_h_, large_w, large_h, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, large_w, large_h, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -1126,16 +1227,19 @@ void Shell::draw_dialog(cairo_t *cr)
         const double track_h = visible * static_cast<double>(row_px);
         list_track_y_ = track_y;
         list_track_h_ = std::max(1.0, track_h);
-        fill(cr, track_x, track_y, 12, track_h, 0.86, 0.86, 0.86);
-        double thumb_y = track_y;
-        double thumb_h = track_h;
-        list_thumb(list_scroll_, count, visible, track_y, track_h, thumb_y, thumb_h);
-        fill(cr, track_x, thumb_y, 12, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
-        stroke_rect(cr, track_x, track_y, 12, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
-        push_hot(track_x - 4, track_y, 20, track_h, kListScroll);
+        if (count > visible) {
+            fill(cr, track_x, track_y, 12, track_h, 0.86, 0.86, 0.86);
+            double thumb_y = track_y;
+            double thumb_h = track_h;
+            list_thumb(list_scroll_, count, visible, track_y, track_h, thumb_y, thumb_h);
+            fill(cr, track_x, thumb_y, 12, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+            stroke_rect(cr, track_x, track_y, 12, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG,
+                        theme::kButtonEdgeB);
+            push_hot(track_x - 4, track_y, 20, track_h, kListScroll);
+        }
         if (files_.empty()) {
-            paint_text(cr, body_font(), "No .cty files in this folder.", x + 20, list_top + 6, theme::kAccelR,
-                       theme::kAccelG, theme::kAccelB, static_cast<int>(dw - 56));
+            paint_text(cr, body_font(), "No saved cities yet.", x + 20, list_top + 8, theme::kAccelR, theme::kAccelG,
+                       theme::kAccelB, static_cast<int>(dw - 56));
         }
         if (files_save_) {
             fill(cr, x + 16, y + dh - 100, dw - 32, 34, 1, 1, 1);
@@ -1159,7 +1263,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double width = message_width(win_w_, margin, dp(420), dp(560));
         const double body_h = text_block_height(info_body_, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, info_title_.c_str());
         label(cr, body_font(), info_body_, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_OK", kOk}});
@@ -1172,7 +1276,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double width = message_width(win_w_, margin, dp(420), dp(520));
         const double body_h = text_block_height(question, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Replace file?");
         label(cr, body_font(), question, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_Replace", kSave}});
@@ -1182,7 +1286,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double width = message_width(win_w_, margin, dp(420), dp(560));
         const double body_h = text_block_height(info_body_, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, info_title_.c_str());
         label(cr, body_font(), info_body_, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
@@ -1192,7 +1296,7 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Settings) {
         const double pitch = dp(64);
         const double height = dp(40) + margin + pitch * 2 + dp(88) + dp(48) + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, dp(680), height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, dp(680), height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -1263,10 +1367,10 @@ void Shell::draw_dialog(cairo_t *cr)
         const double footer_h = dp(22);
         const double buttons_h = dp(36);
         const double chrome = dp(40) + margin + footer_h + dp(8) + buttons_h + margin;
-        const double max_h = std::max(chrome + dp(48), static_cast<double>(win_h_) - 2.0 * margin);
+        const double max_h = std::max(chrome + dp(48), band_h - 2.0 * margin);
         const double view_h = std::max(static_cast<double>(dp(48)), std::min(content_h, max_h - chrome));
         const double height = chrome + view_h;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Controls");
         const double body_top = panel.y + dp(48);
         controls_scroll_max_ = std::max(0, static_cast<int>(std::ceil(content_h - view_h)));
@@ -1307,7 +1411,8 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Budget) {
         const auto book = session_.budget();
         const BudgetCopy copy = budget_copy(book, budget_is_tax_);
-        const double gap = static_cast<double>(dp(6));
+        double gap = static_cast<double>(dp(6));
+        double tail = static_cast<double>(dp(8));
         const double col_gap = static_cast<double>(dp(16));
         auto unwrapped = [&](const std::string &text) {
             return measure_text(cr, ui_font(), text, -1).width;
@@ -1334,7 +1439,7 @@ void Shell::draw_dialog(cairo_t *cr)
             if (!detail.empty()) {
                 h += line_height(ui_font(), detail, inner) + gap;
             }
-            h += static_cast<double>(dp(8) + dp(16) + dp(8));
+            h += tail + static_cast<double>(dp(16)) + tail;
             return h;
         };
         const double blocks = block_h(copy.tax_title, copy.tax_value, "") +
@@ -1342,11 +1447,23 @@ void Shell::draw_dialog(cairo_t *cr)
                               block_h("Police fund", std::to_string(police_) + "%", copy.police) +
                               block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
         const double height = dp(40) + margin + row1 + gap + row2 + gap + note_h + blocks + dp(8) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         const double dh = panel.h;
+        // A short window clamps the panel. Tighten the rhythm so the fire
+        // slider stays above Cancel and OK.
+        if (dh + 1 < height) {
+            const double overflow = height - dh;
+            const double tail_save = std::max(0.0, (tail - 1.0) * 8.0);
+            if (overflow <= tail_save) {
+                tail = std::max(1.0, tail - overflow / 8.0);
+            } else {
+                tail = 1;
+                gap = std::max(2.0, gap - (overflow - tail_save) / 12.0);
+            }
+        }
         frame_panel(cr, x, y, dw, dh, "Budget");
         const double live_inner = dw - 2.0 * margin;
         const double live_col = std::max(1.0, (live_inner - col_gap) / 2.0);
@@ -1381,7 +1498,7 @@ void Shell::draw_dialog(cairo_t *cr)
                                                    theme::kAccelG, theme::kAccelB);
                 cursor += detail_h + gap;
             }
-            cursor += dp(8);
+            cursor += tail;
             const double bar_y = cursor;
             const double sx = x + margin;
             const double sw = live_inner;
@@ -1403,7 +1520,7 @@ void Shell::draw_dialog(cairo_t *cr)
                 cairo_rectangle(cr, sx + 1, bar_y - dp(4), sw - 2, dp(24));
                 cairo_stroke(cr);
             }
-            cursor += dp(16) + dp(8);
+            cursor += dp(16) + tail;
         };
         slider(1, copy.tax_title, copy.tax_value, "", tax_, 0, 20);
         auto funded = [](int percent, std::int64_t need) {
@@ -1422,11 +1539,12 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Graphs) {
         const std::vector<ChartLegend> legend = chart_legend(&session_, graphs_long_);
         const int legend_cols = 2;
-        const int legend_rows = std::max(1, (static_cast<int>(legend.size()) + legend_cols - 1) / legend_cols);
+        const int series_rows = std::max(1, (static_cast<int>(legend.size()) + legend_cols - 1) / legend_cols);
+        const int legend_rows = series_rows + 1;
         const double legend_h = legend_rows * static_cast<double>(dp(20));
         const double width = std::min(static_cast<double>(dp(640)), std::max(1.0, win_w_ - 2.0 * margin));
         const double height = dp(86) + dp(220) + dp(8) + legend_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -1475,18 +1593,32 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, ui_font(), entry.caption, lx + dp(24), ly, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(col_w - dp(28)));
         }
+        {
+            const double note_y = legend_top + series_rows * legend_row_h;
+            const double nx = x + margin;
+            const double dash[2] = {4.0, 3.0};
+            cairo_set_source_rgba(cr, 0.15, 0.15, 0.15, 0.85);
+            cairo_set_line_width(cr, 1.5);
+            cairo_set_dash(cr, dash, 2, 0.0);
+            cairo_move_to(cr, nx, note_y + dp(8));
+            cairo_line_to(cr, nx + dp(18), note_y + dp(8));
+            cairo_stroke(cr);
+            cairo_set_dash(cr, nullptr, 0, 0.0);
+            paint_text(cr, ui_font(), "Dashed line: middle of each series", nx + dp(24), note_y, theme::kTextR,
+                       theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(24)));
+        }
         buttons_at(x, dw, button_top, {{"_Close", kClose}});
         return;
     }
     if (dialog_ == Dialog::Evaluation) {
         const EvaluationCopy copy = evaluation_copy(session_.evaluation(), session_.scenario_progress());
         const std::string heading = session_.city_name() + " — " + session_.date_text();
-        const double gap = static_cast<double>(dp(6));
+        double gap = static_cast<double>(dp(6));
         const double col_gap = margin;
         const int delta_px = measure_text(cr, body_font(), copy.score_delta, -1).width;
         const double fitted_delta = static_cast<double>(delta_px + dp(12));
         const double want = std::max(static_cast<double>(dp(760)), 2.0 * margin + col_gap + 2.0 * fitted_delta);
-        const double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
+        double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
         const double inner = width - 2.0 * margin;
         const double col_w = std::max(1.0, (inner - col_gap) / 2.0);
         const std::string score_delta =
@@ -1529,8 +1661,32 @@ void Shell::draw_dialog(cairo_t *cr)
         const double left_h = column_h(left_rows, col_w) + (bar_h > 0.0 ? bar_h + gap : 0.0) + opinion_extra;
         const double right_h = column_h(right_rows, col_w);
         const double heading_h = line_height(body_font(), heading, inner);
-        const double height = dp(40) + margin + heading_h + gap + std::max(left_h, right_h) + dp(8) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        double height = dp(40) + margin + heading_h + gap + std::max(left_h, right_h) + dp(8) + dp(36) + margin;
+        const double band_limit = band_h - 2.0 * margin;
+        // A narrow column wraps the scenario goal into the Close button.
+        // Use the full window width, then a tighter gap, before clamping.
+        if (height > band_limit && width < win_w_ - 2.0 * margin - 1) {
+            const double wide = std::max(1.0, win_w_ - 2.0 * margin);
+            const double wide_inner = wide - 2.0 * margin;
+            const double wide_col = std::max(1.0, (wide_inner - col_gap) / 2.0);
+            const double wide_left = column_h(left_rows, wide_col) + (bar_h > 0.0 ? bar_h + gap : 0.0) +
+                                     (copy.opinion_bar.empty() ? 0.0 : line_height(ui_font(), copy.opinion_bar, wide_col) + gap);
+            const double wide_right = column_h(right_rows, wide_col);
+            const double wide_head = line_height(body_font(), heading, wide_inner);
+            const double wide_h = dp(40) + margin + wide_head + gap + std::max(wide_left, wide_right) + dp(8) + dp(36) + margin;
+            if (wide_h < height) {
+                width = wide;
+                height = wide_h;
+            }
+        }
+        if (height > band_limit) {
+            gap = 2;
+            const double tight_left = column_h(left_rows, col_w) + (bar_h > 0.0 ? bar_h + gap : 0.0) +
+                                      (copy.opinion_bar.empty() ? 0.0 : line_height(ui_font(), copy.opinion_bar, col_w) + gap);
+            const double tight_right = column_h(right_rows, col_w);
+            height = dp(40) + margin + heading_h + gap + std::max(tight_left, tight_right) + dp(4) + dp(36) + margin;
+        }
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -1570,7 +1726,7 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::Messages) {
-        const DialogRect panel = place_dialog(win_w_, win_h_, large_w, std::min(large_h, static_cast<double>(dp(520))), margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, large_w, std::min(large_h, static_cast<double>(dp(520))), margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -1625,9 +1781,9 @@ void Shell::draw_dialog(cairo_t *cr)
         const double width = message_width(win_w_, margin, dp(320), dp(480));
         const double body_h = text_block_height(info_body_.empty() ? " " : info_body_, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
-        DialogRect panel = place_dialog(win_w_, win_h_, width, height, margin);
+        DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         if (query_anchored_) {
-            panel = place_near(win_w_, win_h_, panel.w, panel.h, query_anchor_x_, query_anchor_y_, margin);
+            panel = place_near(win_w_, band_h, panel.w, panel.h, query_anchor_x_, query_anchor_y_, margin);
         }
         const double query_floor = static_cast<double>(win_h_ - status_h_ - message_h_) - margin;
         if (panel.y + panel.h > query_floor) {
@@ -1724,14 +1880,14 @@ void Shell::draw(cairo_t *cr)
         cairo_translate(live.cr, side_x_, pal_y_);
         palette_.draw(live.cr);
     }
-    push_hot(side_x_, pal_y_, side_w_, ToolPalette::height_for(cell_), kPaletteId);
-    {
+    push_hot(side_x_, pal_y_, side_w_, ToolPalette::height_for(cell_, palette_.columns()), kPaletteId);
+    if (mini_h_ > 0) {
         TargetCr live(cr);
         cairo_translate(live.cr, side_x_, mini_y_);
         minimap_.sync();
         minimap_.draw(live.cr, side_w_, mini_h_);
+        push_hot(side_x_, mini_y_, side_w_, mini_h_, kMinimapId);
     }
-    push_hot(side_x_, mini_y_, side_w_, mini_h_, kMinimapId);
     {
         TargetCr live(cr);
         cairo_translate(live.cr, side_x_, demand_y_);
@@ -1785,29 +1941,29 @@ void Shell::draw(cairo_t *cr)
     const int status_y = win_h_ - status_h_ - message_h_;
     fill(cr, 0, status_y, win_w_, status_h_, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);
     const std::string hint = context_hint();
-    int hint_w = 0;
-    if (!hint.empty()) {
-        hint_w = measure_text(cr, ui_font(), hint, -1).width;
-    }
-    const int status_room = std::max(1, win_w_ - hint_w - 24);
     const std::string clock = session_.scenario_clock_text();
     const std::string meter = session_.scenario_meter();
+    // Funds, the name, the speed, the date, the clock, then the goal meter.
+    // The meter used to be dropped so a long hint could stay. The hint is
+    // what gives way, and it moves to the message line when that line is idle.
     std::string status = session_.funds_text() + "    " + session_.city_name() + "    " + speed_word(speed_);
-    auto fits = [&](const std::string &text) {
-        return measure_text(cr, ui_font(), text, -1).width <= status_room;
-    };
-    const std::string with_date = status + "    " + session_.date_text();
-    if (fits(with_date)) {
-        status = with_date;
+    const int full_room = std::max(1, win_w_ - 16);
+    auto width_of = [&](const std::string &text) { return measure_text(cr, ui_font(), text, -1).width; };
+    auto fits_in = [&](const std::string &text, int room) { return width_of(text) <= room; };
+    if (fits_in(status + "    " + session_.date_text(), full_room)) {
+        status += "    " + session_.date_text();
     }
-    if (!clock.empty() && fits(status + "    " + clock)) {
+    if (!clock.empty() && fits_in(status + "    " + clock, full_room)) {
         status += "    " + clock;
     }
-    if (!meter.empty() && fits(status + "    " + meter)) {
+    if (!meter.empty() && fits_in(status + "    " + meter, full_room)) {
         status += "    " + meter;
     }
+    int hint_w = hint.empty() ? 0 : width_of(hint);
+    const bool hint_fits = !hint.empty() && width_of(status) + 24 + hint_w <= win_w_;
+    const int status_room = hint_fits ? std::max(1, win_w_ - hint_w - 24) : full_room;
     paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, status_room);
-    if (!hint.empty()) {
+    if (hint_fits) {
         paint_text(cr, ui_font(), hint, win_w_ - hint_w - 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB,
                    -1);
     }
@@ -1829,21 +1985,20 @@ void Shell::draw(cairo_t *cr)
         const int hover = palette_.hover();
         const int special = special_tool_index();
         const bool show_keys = !deck_ && !gamepad_nav_;
-        if (hover == special || (hover < 0 && tool_index_ == special)) {
-            bar = special_status_text(special_choice_);
-            if (show_keys) {
-                bar = tool_hint_with_key(special, bar.c_str());
+        if (hover >= 0 && (hover == special || tool_by_index(hover) != nullptr)) {
+            if (hover == special) {
+                bar = special_status_text(special_choice_);
+            } else {
+                const char *tip = palette_.tooltip();
+                bar = tip != nullptr ? tip : "";
             }
+            if (show_keys) {
+                bar = tool_hint_with_key(hover, bar.c_str());
+            }
+        } else if (!hint_fits && !hint.empty()) {
+            bar = hint;
         } else {
-            const char *tip = palette_.tooltip();
-            if (tip == nullptr || tip[0] == '\0') {
-                tip = tool_by_index(tool_index_)->hint;
-            }
-            bar = tip != nullptr ? tip : "";
-            const int shown = hover >= 0 ? hover : tool_index_;
-            if (show_keys) {
-                bar = tool_hint_with_key(shown, bar.c_str());
-            }
+            bar = idle_message();
         }
     }
     fill(cr, 0, win_h_ - message_h_, win_w_, message_h_, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
@@ -1962,6 +2117,14 @@ std::string Shell::dialog_title_hint() const
     if (dialog_ == Dialog::Scenario || dialog_ == Dialog::Files) {
         return pad ? a + " opens    " + b + " closes    D-pad moves" : "Enter opens    Esc closes";
     }
+    // Graphs, Evaluation, Query, About, and the one-button notices have
+    // nothing to confirm. Enter dismisses them.
+    const bool closes = dialog_ == Dialog::Graphs || dialog_ == Dialog::Evaluation || dialog_ == Dialog::Query ||
+                        dialog_ == Dialog::About || dialog_ == Dialog::Info || dialog_ == Dialog::LoadError ||
+                        dialog_ == Dialog::SaveError || dialog_ == Dialog::Controls;
+    if (closes) {
+        return pad ? a + " closes" : "Enter closes";
+    }
     return pad ? a + " confirms    " + b + " closes" : "Enter confirms    Esc closes";
 }
 
@@ -1974,19 +2137,32 @@ std::string Shell::context_hint() const
         return pad ? a + " chooses    " + b + " closes" : "Enter chooses    Esc closes";
     }
     if (dialog_ != Dialog::None) {
+        // Pad players read this in the title bar. Mouse players read it here.
+        if (pad) {
+            return {};
+        }
         return dialog_title_hint();
     }
     if (special_open_) {
         return pad ? a + " selects    " + b + " closes" : "Enter selects    Esc closes";
     }
+    const ToolDef *tool = tool_by_index(tool_index_);
+    const char *phrase = tool_click_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY);
     if (overlay_on_) {
         return pad ? a + " builds    " + b + " closes the map    D-pad scrolls"
-                   : "Click builds    Esc closes the map";
+                   : std::string(phrase) + "    Esc closes the map";
     }
     if (pad) {
-        return a + " builds    " + b + " cancels    LB/RB tools    Start menu";
+        return std::string(phrase) + "    " + b + " cancels    LB/RB tools    Start menu";
     }
-    return "Click builds    Arrows pan    Space pauses";
+    return std::string(phrase) + "    Arrows pan    Space pauses";
+}
+
+std::string Shell::idle_message() const
+{
+    const ToolDef *tool = tool_by_index(tool_index_);
+    const char *phrase = tool_click_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY);
+    return session_.date_text() + ". " + phrase + ".";
 }
 
 void Shell::write_final_shot()
@@ -2000,6 +2176,11 @@ void Shell::write_final_shot()
 
 void Shell::render()
 {
+    if (window_suspended_ && presented_) {
+        ++skipped_redraws_;
+        blink_drew_ = false;
+        return;
+    }
     layout();
     clamp_scroll();
     if (!redraw::needed(redraw_reasons())) {

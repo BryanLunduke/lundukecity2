@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "assets.hpp"
+#include "atomic_write.hpp"
 #include "city_seed.hpp"
 #include "dialog_copy.hpp"
 #include "notice_bar.hpp"
@@ -71,6 +72,12 @@ AccelKey accel_from_key(SDL_Keycode key)
             return AccelKey::Q;
         case 'p':
             return AccelKey::P;
+        case 'b':
+            return AccelKey::B;
+        case 'g':
+            return AccelKey::G;
+        case 'e':
+            return AccelKey::E;
         default:
             return AccelKey::Letter;
         }
@@ -288,7 +295,8 @@ int Shell::run(int argc, char **argv)
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
         demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget" &&
         demo_ != "crime" && demo_ != "zones" && demo_ != "police" && demo_ != "graphs" && demo_ != "terrain" &&
-        demo_ != "controls" && demo_ != "settings" && demo_ != "won" && demo_ != "lost" && demo_ != "fire") {
+        demo_ != "controls" && demo_ != "settings" && demo_ != "won" && demo_ != "lost" &&         demo_ != "fire" &&
+        demo_ != "saveempty" && demo_ != "savefull" && demo_ != "newname") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -427,11 +435,7 @@ void Shell::save_window_settings()
     }
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    std::ofstream out(dir + "/settings.txt", std::ios::trunc);
-    if (!out) {
-        return;
-    }
-    out << ui_scale::settings_text(stored);
+    write_text_atomic(dir + "/settings.txt", ui_scale::settings_text(stored));
 }
 
 void Shell::apply_loaded_settings()
@@ -467,11 +471,7 @@ void Shell::apply_loaded_settings()
     if (stored.wheel_zoom >= 0) {
         wheel_zooms_ = stored.wheel_zoom != 0;
     }
-    int look = stored.look;
-    if (look != 1 && look != 2) {
-        look = 0;
-    }
-    set_look_preference(look);
+    set_look_preference(look_from_setting(stored.look));
     map_.invalidate_all();
     // These are the global preferences. A city file must not replace them.
     pref_speed_ = speed_;
@@ -479,21 +479,90 @@ void Shell::apply_loaded_settings()
     session_.accept_preferences();
 }
 
-void Shell::set_look_preference(int look)
+void Shell::set_look_preference(Look look)
 {
-    if (look != 1 && look != 2) {
-        look = 0;
-    }
-    look_pref_.look = look;
-    tile_atlas().set_look(look);
+    const int which = look_to_setting(look);
+    look_pref_.look = which;
+    tile_atlas().set_look(which);
     drawn_look_ = tile_atlas().look();
+}
+
+void Shell::clear_transient_message()
+{
+    if (notice_sticky_) {
+        return;
+    }
+    shown_message_.clear();
+    query_pinned_ = false;
+    hint_until_ = std::chrono::steady_clock::now();
+}
+
+void Shell::note_background_hold()
+{
+    const bool hold = window_suspended_ || (unfocused_ && pause_unfocused_);
+    if (hold) {
+        if (!background_held_ && speed_ > 0) {
+            background_speed_ = speed_;
+            background_held_ = true;
+            // Stay paused without set_speed(0), which would store Pause as
+            // the preference. The resume below goes through set_speed.
+            speed_ = 0;
+            session_.set_speed(0);
+        }
+        return;
+    }
+    if (!background_held_) {
+        return;
+    }
+    background_held_ = false;
+    const int resume = background_speed_;
+    background_speed_ = 0;
+    set_speed(resume);
+}
+
+void Shell::release_occlusion()
+{
+    if (!window_suspended_) {
+        return;
+    }
+    // Some desktops send occlusion and never an expose. Input means the
+    // window is in front of the player again.
+    window_suspended_ = false;
+    window_exposed_ = true;
+    note_background_hold();
+}
+
+void Shell::adopt_loaded_speed(int loaded)
+{
+    if (loaded < 0) {
+        loaded = 0;
+    }
+    if (loaded > 3) {
+        loaded = 3;
+    }
+    if (background_held_) {
+        // Resume should run the speed this load established, not the speed
+        // that was current when the window was covered.
+        background_speed_ = loaded;
+        speed_ = 0;
+        session_.set_speed(0);
+        return;
+    }
+    speed_ = loaded;
+    session_.set_speed(loaded);
 }
 
 void Shell::restore_play_preferences()
 {
     if (pref_speed_ >= 0) {
-        session_.set_speed(pref_speed_);
-        speed_ = session_.speed();
+        if (background_held_) {
+            background_speed_ = pref_speed_;
+            speed_ = 0;
+            session_.set_speed(0);
+        } else {
+            session_.set_speed(pref_speed_);
+            speed_ = session_.speed();
+        }
     }
     if (pref_disasters_ >= 0) {
         session_.set_disasters(pref_disasters_ != 0);
@@ -878,26 +947,37 @@ void Shell::loop()
         }
 #endif
         const bool spin = ui_test_ || smoke_ || review_ || !demo_.empty() || !shot_path_.empty();
-        const bool animate = (speed_ > 0 && !dialog_pauses()) || quake_strength_ > 0 || pad_dragging_ || pointer_down_ ||
-                             std::fabs(stick_x_) > 0.05f || std::fabs(stick_y_) > 0.05f || std::fabs(pan_x_) > 0.05f ||
-                             std::fabs(pan_y_) > 0.05f;
+        const bool moving = pad_dragging_ || pointer_down_ || std::fabs(stick_x_) > 0.05f ||
+                            std::fabs(stick_y_) > 0.05f || std::fabs(pan_x_) > 0.05f || std::fabs(pan_y_) > 0.05f;
+        const bool animate = (speed_ > 0 && !dialog_pauses()) || quake_strength_ > 0 || moving;
         SDL_Event event;
-        // A paused city waits for input. WaitEventTimeout sleeps the thread;
-        // a NULL event would drop the input, so the event is handled here.
-        if (!spin && presented_ && !animate) {
-            int timeout = 500;
-            const auto now_wait = std::chrono::steady_clock::now();
-            if (hint_until_ > now_wait) {
-                const int ms = static_cast<int>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(hint_until_ - now_wait).count());
-                timeout = std::max(1, std::min(timeout, ms));
-            }
-            if (next_autosave_ <= now_wait) {
-                timeout = 1;
-            } else {
-                const int ms = static_cast<int>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(next_autosave_ - now_wait).count());
-                timeout = std::max(1, std::min(timeout, ms));
+        // A paused city waits for input. A running city sleeps until the
+        // next sim or blink deadline (capped near 60 Hz while the pointer
+        // or the earthquake is moving) so the loop does not spin. A
+        // minimized or occluded window waits longer and skips painting.
+        if (!spin && presented_) {
+            int timeout = 16;
+            if (window_suspended_) {
+                timeout = 200;
+            } else if (!animate) {
+                timeout = 500;
+                const auto now_wait = std::chrono::steady_clock::now();
+                if (hint_until_ > now_wait) {
+                    const int ms = static_cast<int>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(hint_until_ - now_wait).count());
+                    timeout = std::max(1, std::min(timeout, ms));
+                }
+                if (next_autosave_ <= now_wait) {
+                    timeout = 1;
+                } else {
+                    const int ms = static_cast<int>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(next_autosave_ - now_wait).count());
+                    timeout = std::max(1, std::min(timeout, ms));
+                }
+            } else if (!moving && quake_strength_ <= 0) {
+                const int until_sim = std::max(1, 100 - sim_acc);
+                const int until_blink = std::max(1, map_.blink_remaining_ms());
+                timeout = std::max(1, std::min(until_sim, until_blink));
             }
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);
@@ -1023,7 +1103,7 @@ void Shell::loop()
             double dy = 0;
             const double local_x = pointer_x_ - view_x_;
             const double local_y = pointer_y_ - view_y_;
-            if (map_.edge_scroll(local_x, local_y, view_w_, view_h_, dx, dy)) {
+            if (map_.edge_scroll(local_x, local_y, view_w_, view_h_, elapsed, dx, dy)) {
                 scroll_x_ += dx;
                 scroll_y_ += dy;
                 clamp_scroll();
@@ -1093,9 +1173,14 @@ void Shell::loop()
             shown_query_serial_ = session_.query_serial();
             const std::string text = session_.message();
             if (!text.empty()) {
-                shown_message_ = text;
-                hint_until_ = std::chrono::steady_clock::now() + std::chrono::hours(1);
-                query_pinned_ = true;
+                // The query panel already shows this. Do not copy it into
+                // the message line, and do not let the notice path repeat it.
+                shown_message_serial_ = session_.message_serial();
+                if (!notice_sticky_) {
+                    shown_message_.clear();
+                    query_pinned_ = false;
+                    hint_until_ = std::chrono::steady_clock::now();
+                }
                 info_body_ = query_body(text);
                 if (dialog_ == Dialog::None || dialog_ == Dialog::Query) {
                     query_anchored_ = pointer_x_ >= view_x_ && pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ &&
@@ -1172,6 +1257,10 @@ void Shell::loop()
                 open_dialog(Dialog::Graphs);
                 graph_pointer_x_ = 280;
             } else if (demo_ == "evaluation") {
+                // San Francisco's goal is the long line that used to run into Close.
+                session_.load_scenario(CitySession::scenario_def(1).id);
+                speed_ = 0;
+                session_.set_speed(0);
                 session_.update_evaluation();
                 open_dialog(Dialog::Evaluation);
             } else if (demo_ == "query") {
@@ -1251,12 +1340,30 @@ void Shell::loop()
                 session_.disaster_flood();
                 open_dialog(Dialog::Messages);
                 gamepad_nav_ = deck_;
+            } else if (demo_ == "newname") {
+                open_dialog(Dialog::NewCity);
+                new_page_ = 0;
+                field_a_ = "Harbor";
+                focus_id_ = kFieldName;
+                gamepad_nav_ = deck_;
             } else if (demo_ == "terrain") {
                 open_dialog(Dialog::NewCity);
                 new_page_ = 1;
                 focus_id_ = kNewTerrain;
                 gamepad_nav_ = deck_;
-            } else if (demo_ == "files") {
+            } else if (demo_ == "saveempty") {
+                const auto dir = std::filesystem::temp_directory_path() / "lunduke-shot-empty";
+                std::error_code ec;
+                std::filesystem::remove_all(dir, ec);
+                std::filesystem::create_directories(dir, ec);
+                files_dir_ = dir.string();
+                files_save_ = true;
+                list_index_ = 0;
+                list_scroll_ = 0;
+                refresh_files();
+                open_dialog(Dialog::Files);
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "files" || demo_ == "savefull") {
                 const auto dir = std::filesystem::temp_directory_path() / "lunduke-shot-cities";
                 std::error_code ec;
                 std::filesystem::create_directories(dir, ec);
@@ -1266,7 +1373,7 @@ void Shell::loop()
                 speed_ = 0;
                 session_.save_city_as((dir / "Mesa.cty").string());
                 files_dir_ = dir.string();
-                files_save_ = false;
+                files_save_ = demo_ == "savefull";
                 list_index_ = 0;
                 list_scroll_ = 0;
                 refresh_files();
@@ -1313,7 +1420,7 @@ void Shell::loop()
                     } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
                         which = 1;
                     }
-                    set_look_preference(which);
+                    set_look_preference(look_from_setting(which));
                     map_.invalidate_all();
                 }
                 center_on_fraction(0.45, 0.42);
@@ -1362,31 +1469,39 @@ void Shell::handle_event(const SDL_Event &event)
     case SDL_EVENT_WINDOW_MOVED:
     case SDL_EVENT_WINDOW_MAXIMIZED:
     case SDL_EVENT_WINDOW_RESTORED:
+        window_suspended_ = false;
+        window_exposed_ = true;
+        note_background_hold();
         note_window_geometry();
         layout();
         clamp_scroll();
+        break;
+    case SDL_EVENT_WINDOW_MINIMIZED:
+    case SDL_EVENT_WINDOW_HIDDEN:
+    case SDL_EVENT_WINDOW_OCCLUDED:
+        window_suspended_ = true;
+        note_background_hold();
         break;
     case SDL_EVENT_WINDOW_EXPOSED:
     case SDL_EVENT_WINDOW_SHOWN:
     case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
         // The pixels under a newly uncovered area are not ours until we paint.
+        window_suspended_ = false;
         window_exposed_ = true;
+        note_background_hold();
         break;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         reset_touch_state();
-        if (pause_unfocused_ && speed_ > 0) {
-            unfocus_speed_ = speed_;
-            paused_for_unfocus_ = true;
-            set_speed(0);
-        }
+        unfocused_ = true;
+        note_background_hold();
         break;
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
-        if (paused_for_unfocus_) {
-            paused_for_unfocus_ = false;
-            set_speed(unfocus_speed_ > 0 ? unfocus_speed_ : 0);
-        }
+        unfocused_ = false;
+        release_occlusion();
+        note_background_hold();
         break;
     case SDL_EVENT_MOUSE_MOTION: {
+        release_occlusion();
         touch_used_ = false;
         int ww = 1;
         int wh = 1;
@@ -1435,6 +1550,7 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+        release_occlusion();
         note_keyboard_input();
         int ww = 1;
         int wh = 1;
@@ -1514,15 +1630,34 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     case SDL_EVENT_MOUSE_WHEEL: {
         note_keyboard_input();
+        int ww = 1;
+        int wh = 1;
+        int pw = 1;
+        int ph = 1;
+        SDL_GetWindowSize(window_, &ww, &wh);
+        SDL_GetWindowSizeInPixels(window_, &pw, &ph);
+        const double pixel_x = event.wheel.mouse_x * (pw / static_cast<double>(std::max(ww, 1)));
+        const double pixel_y = event.wheel.mouse_y * (ph / static_cast<double>(std::max(wh, 1)));
+        // Trackpads report fractions of a notch. A list used to jump a whole
+        // row, and a zoom used to jump a whole step, on every event.
+        wheel_acc_y_ += event.wheel.y;
+        const int notches = static_cast<int>(std::trunc(wheel_acc_y_));
+        if (notches != 0) {
+            wheel_acc_y_ -= static_cast<float>(notches);
+        }
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
         if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
-            const int rows = std::max(1, std::abs(static_cast<int>(event.wheel.y)));
-            nudge_file_list(event.wheel.y > 0 ? -rows : rows, false, true);
+            if (notches != 0) {
+                nudge_file_list(-notches, false, true);
+            }
             break;
         }
         if (dialog_ == Dialog::Controls && !ctrl) {
-            const int step = std::max(1, std::abs(static_cast<int>(event.wheel.y))) * dp(28);
-            controls_scroll_ += event.wheel.y > 0 ? -step : step;
+            if (notches == 0) {
+                break;
+            }
+            const int step = std::abs(notches) * dp(28);
+            controls_scroll_ += notches > 0 ? -step : step;
             if (controls_scroll_ < 0) {
                 controls_scroll_ = 0;
             }
@@ -1535,9 +1670,12 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (ctrl || wheel_zooms_) {
-            pointer_x_ = event.wheel.mouse_x;
-            pointer_y_ = event.wheel.mouse_y;
-            zoom_by(event.wheel.y > 0 ? 2 : -2, pointer_x_, pointer_y_);
+            if (notches == 0) {
+                break;
+            }
+            pointer_x_ = pixel_x;
+            pointer_y_ = pixel_y;
+            zoom_by(2 * notches, pointer_x_, pointer_y_);
         } else if (dialog_ == Dialog::None && !menu_.open()) {
             scroll_x_ -= event.wheel.x * 48.0;
             scroll_y_ -= event.wheel.y * 48.0;
@@ -1546,6 +1684,7 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_KEY_DOWN: {
+        release_occlusion();
         note_keyboard_input();
         const SDL_Keycode key = event.key.key;
         const int mods = mods_from_sdl(event.key.mod);
@@ -1745,7 +1884,7 @@ void Shell::handle_event(const SDL_Event &event)
         if (button == SDL_GAMEPAD_BUTTON_START) {
             if (dialog_ != Dialog::None && focus_id_ >= kOsk && focus_id_ < kOsk + 64) {
                 if (dialog_ == Dialog::NewCity) {
-                    on_dialog_button(new_page_ < 2 ? kNext : kGenerate);
+                    on_dialog_button(new_page_ == 0 ? kNext : kGenerate);
                 } else if (dialog_ == Dialog::Rename) {
                     on_dialog_button(kRename);
                 } else if (dialog_ == Dialog::Files && files_save_) {

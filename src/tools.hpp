@@ -18,6 +18,8 @@ extern const int kToolCount;
 extern const int kDefaultToolIndex;
 
 const ToolDef *tool_by_index(int index);
+// Short instruction for the selected tool, such as "Bulldozer: click to clear".
+const char *tool_click_phrase(int engine_id);
 
 // Footprint of a placeable tool, in tiles. width/height follow the engine's
 // gToolSize[] (tool.cpp). Buildings larger than one tile use the cursor as

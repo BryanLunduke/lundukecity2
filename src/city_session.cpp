@@ -6,6 +6,7 @@
 #include "city_session.hpp"
 
 #include "assets.hpp"
+#include "atomic_write.hpp"
 #include "city_tail.hpp"
 #include "messages.hpp"
 #include "scenario_sidecar.hpp"
@@ -139,10 +140,10 @@ const ScenarioEntry kScenarios[] = {
       "Turn this city into a Metropolis (more than 100,000 people) within 30 years.", 30},
      "snro.111"},
     {{SC_SAN_FRANCISCO, "San Francisco", 1906, "An earthquake strikes the city.",
-      "Reach Metropolis (more than 100,000 people) within 5 years.", 5},
+      "Keep the city a Metropolis (over 100,000) until 1911 despite the quake.", 5},
      "snro.222"},
     {{SC_HAMBURG, "Hamburg", 1944, "Fire spreads through the city.",
-      "Reach Metropolis (more than 100,000 people) within 5 years.", 5},
+      "Keep the city a Metropolis (over 100,000) until 1949 despite the fire.", 5},
      "snro.333"},
     {{SC_BERN, "Bern", 1965, "Traffic is choking the streets.",
       "Bring average traffic below 80 within 10 years.", 10},
@@ -2235,12 +2236,7 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     clock.month = static_cast<int>(sim.cityMonth);
     const long year = static_cast<long>(sim.cityYear);
     clock.year = static_cast<int>(year > 0 ? year : sim.startingYear);
-    std::ofstream out(scenario_sidecar_path(path), std::ios::trunc);
-    if (!out) {
-        return false;
-    }
-    out << scenario_sidecar_text(clock);
-    return static_cast<bool>(out);
+    return write_text_atomic(scenario_sidecar_path(path), scenario_sidecar_text(clock));
 }
 
 void CitySession::read_scenario_sidecar(const std::string &path)
