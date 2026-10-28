@@ -319,7 +319,9 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             ++n_item;
         }
     }
-    const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - 6));
+    // Stop above the status and message bars. A short window used to let a
+    // long column (Windows, once it gained the zone maps) cover "Funds".
+    const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - status_h_ - message_h_ - 6));
     double row_h = dp(36);
     const double chrome = 10.0 + n_sep * 8.0;
     if (n_item > 0 && chrome + n_item * row_h > avail) {
@@ -423,6 +425,14 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
                 on = overlay_on_ && overlay_.layer() == CitySession::MapLayer::Power;
             } else if (item.action == Action::Zones) {
                 on = overlay_on_ && overlay_.layer() == CitySession::MapLayer::Zones;
+            } else if (item.action == Action::ZoneResidential) {
+                on = overlay_on_ && overlay_.layer() == CitySession::MapLayer::Residential;
+            } else if (item.action == Action::ZoneCommercial) {
+                on = overlay_on_ && overlay_.layer() == CitySession::MapLayer::Commercial;
+            } else if (item.action == Action::ZoneIndustrial) {
+                on = overlay_on_ && overlay_.layer() == CitySession::MapLayer::Industrial;
+            } else if (item.action == Action::Transportation) {
+                on = overlay_on_ && overlay_.layer() == CitySession::MapLayer::Transportation;
             } else if (item.action == Action::Pollution) {
                 on = overlay_on_ && overlay_.layer() == CitySession::MapLayer::Pollution;
             } else if (item.action == Action::Crime) {
@@ -893,7 +903,13 @@ void Shell::draw_dialog(cairo_t *cr)
             // The map preview is 120x100. A clamped dialog (1011x601) used to
             // draw it through the Generate line. Scale it into the gap.
             const double preview_room = std::max(0.0, summary_y - dp(8) - preview_y);
-            const double preview_scale = preview_room >= 100.0 ? 1.0 : preview_room / 100.0;
+            // Grow into the gap under the preview on a tall window (1280x800).
+            // A short window still shrinks the 120x100 map so it stays above
+            // the Generate line. The New terrain button sits to the right.
+            const double beside = std::max(1.0, static_cast<double>(dp(260) - dp(8)));
+            const double max_by_width = beside / 120.0;
+            const double max_by_height = preview_room / 100.0;
+            const double preview_scale = std::min(max_by_width, max_by_height);
             if (terrain_preview_ != nullptr && preview_scale >= 0.35) {
                 cairo_save(cr);
                 cairo_translate(cr, x + margin, preview_y);
@@ -1355,7 +1371,18 @@ void Shell::draw_dialog(cairo_t *cr)
     }
     if (dialog_ == Dialog::Controls) {
         const std::string heading = controls_page_title(controls_page_, deck_);
-        const std::string intro = std::string(heading) + "\n" + controls_page_body(controls_page_, deck_);
+        ControlsPadNames pad_names;
+        pad_names.confirm = glyph(SDL_GAMEPAD_BUTTON_SOUTH);
+        pad_names.cancel = glyph(SDL_GAMEPAD_BUTTON_EAST);
+        pad_names.west = glyph(SDL_GAMEPAD_BUTTON_WEST);
+        pad_names.north = glyph(SDL_GAMEPAD_BUTTON_NORTH);
+        pad_names.left = glyph(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+        pad_names.right = glyph(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        pad_names.menu = glyph(SDL_GAMEPAD_BUTTON_START);
+        pad_names.view = glyph(SDL_GAMEPAD_BUTTON_BACK);
+        pad_names.l3 = glyph(SDL_GAMEPAD_BUTTON_LEFT_STICK);
+        pad_names.r3 = glyph(SDL_GAMEPAD_BUTTON_RIGHT_STICK);
+        const std::string intro = std::string(heading) + "\n" + controls_page_body(controls_page_, deck_, pad_names);
         const bool tools = controls_page_has_tools(controls_page_, deck_);
         const std::string col_a = tools ? controls_tool_column(0, 9) : std::string();
         const std::string col_b = tools ? controls_tool_column(9, 17) : std::string();
@@ -1948,7 +1975,8 @@ void Shell::draw(cairo_t *cr)
     // Funds, the name, the speed, the date, the clock, then the goal meter.
     // The meter used to be dropped so a long hint could stay. The hint is
     // what gives way, and it moves to the message line when that line is idle.
-    std::string status = session_.funds_text() + "    " + session_.city_name() + "    " + speed_word(speed_);
+    std::string status = session_.funds_text() + "    " + session_.city_name() + "    " +
+                         speed_word(welcome_gate_ ? 0 : speed_);
     const int full_room = std::max(1, win_w_ - 16);
     auto width_of = [&](const std::string &text) { return measure_text(cr, ui_font(), text, -1).width; };
     auto fits_in = [&](const std::string &text, int room) { return width_of(text) <= room; };
@@ -1962,7 +1990,10 @@ void Shell::draw(cairo_t *cr)
         status += "    " + meter;
     }
     int hint_w = hint.empty() ? 0 : width_of(hint);
-    const bool hint_fits = !hint.empty() && width_of(status) + 24 + hint_w <= win_w_;
+    // Pad hints stay on the message line. The status bar keeps funds, the
+    // date, and the goal, which otherwise run into the edge on a Deck.
+    const bool pad_hints_below = gamepad_nav_ || deck_;
+    const bool hint_fits = !pad_hints_below && !hint.empty() && width_of(status) + 24 + hint_w <= win_w_;
     const int status_room = hint_fits ? std::max(1, win_w_ - hint_w - 24) : full_room;
     paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, status_room);
     if (hint_fits) {
@@ -2003,7 +2034,15 @@ void Shell::draw(cairo_t *cr)
             bar = idle_message();
         }
     }
-    fill(cr, 0, win_h_ - message_h_, win_w_, message_h_, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
+    double bar_r = 0;
+    double bar_g = 0;
+    double bar_b = 0;
+    double ink_r = 0;
+    double ink_g = 0;
+    double ink_b = 0;
+    theme::banner_fill(bar_r, bar_g, bar_b);
+    theme::banner_ink(ink_r, ink_g, ink_b);
+    fill(cr, 0, win_h_ - message_h_, win_w_, message_h_, bar_r, bar_g, bar_b);
     std::string bar_line = bar;
     const int bar_limit = std::max(8, win_w_ - 16);
     if (measure_text(cr, body_font(), bar_line, -1).width > bar_limit) {
@@ -2013,8 +2052,7 @@ void Shell::draw(cairo_t *cr)
         }
         bar_line += dots;
     }
-    paint_text(cr, body_font(), bar_line, 8, win_h_ - message_h_ + 10, theme::kTextR, theme::kTextG, theme::kTextB,
-               win_w_ - 16);
+    paint_text(cr, body_font(), bar_line, 8, win_h_ - message_h_ + 10, ink_r, ink_g, ink_b, win_w_ - 16);
     const std::string goal = session_.scenario_progress();
     if (session_.scenario_id() != goal_scenario_) {
         goal_scenario_ = session_.scenario_id();
@@ -2030,9 +2068,13 @@ void Shell::draw(cairo_t *cr)
         const double gy = view_y_ + pad;
         const double gw = std::min(static_cast<double>(view_w_ - pad * 2), static_cast<double>(metrics.width + pad * 2));
         const double gh = static_cast<double>(metrics.height + pad * 2);
-        fill(cr, gx, gy, gw, gh, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
-        stroke_rect(cr, gx, gy, gw, gh, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-        paint_text(cr, ui_font(), goal, gx + pad, gy + pad, theme::kTextR, theme::kTextG, theme::kTextB, wrap);
+        double edge_r = 0;
+        double edge_g = 0;
+        double edge_b = 0;
+        theme::banner_edge(edge_r, edge_g, edge_b);
+        fill(cr, gx, gy, gw, gh, bar_r, bar_g, bar_b);
+        stroke_rect(cr, gx, gy, gw, gh, edge_r, edge_g, edge_b);
+        paint_text(cr, ui_font(), goal, gx + pad, gy + pad, ink_r, ink_g, ink_b, wrap);
     }
     if (dialog_ != Dialog::None) {
         draw_dialog(cr);
@@ -2046,9 +2088,21 @@ void Shell::draw(cairo_t *cr)
         const double lh = metrics.height + pad * 2 + dp(14);
         const double lx = view_x_ + view_w_ - lw - pad;
         const double ly = view_y_ + pad;
-        fill(cr, lx, ly, lw, lh, theme::kTooltipR, theme::kTooltipG, theme::kTooltipB);
-        stroke_rect(cr, lx, ly, lw, lh, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-        paint_text(cr, ui_font(), legend, lx + pad, ly + pad, theme::kTextR, theme::kTextG, theme::kTextB, wrap);
+        double legend_r = 0;
+        double legend_g = 0;
+        double legend_b = 0;
+        double legend_ink_r = 0;
+        double legend_ink_g = 0;
+        double legend_ink_b = 0;
+        double legend_edge_r = 0;
+        double legend_edge_g = 0;
+        double legend_edge_b = 0;
+        theme::banner_fill(legend_r, legend_g, legend_b);
+        theme::banner_ink(legend_ink_r, legend_ink_g, legend_ink_b);
+        theme::banner_edge(legend_edge_r, legend_edge_g, legend_edge_b);
+        fill(cr, lx, ly, lw, lh, legend_r, legend_g, legend_b);
+        stroke_rect(cr, lx, ly, lw, lh, legend_edge_r, legend_edge_g, legend_edge_b);
+        paint_text(cr, ui_font(), legend, lx + pad, ly + pad, legend_ink_r, legend_ink_g, legend_ink_b, wrap);
         const double ramp_y = ly + lh - dp(10);
         for (int i = 0; i < 8; ++i) {
             const double t = i / 7.0;
@@ -2096,6 +2150,7 @@ std::string Shell::dialog_title_hint() const
     const bool pad = gamepad_nav_ || deck_ || touch_used_;
     const std::string a = glyph(SDL_GAMEPAD_BUTTON_SOUTH);
     const std::string b = glyph(SDL_GAMEPAD_BUTTON_EAST);
+    const std::string menu = glyph(SDL_GAMEPAD_BUTTON_START);
     const bool osk_key = focus_id_ >= kOsk && focus_id_ < kOsk + 64;
     const bool field = focus_id_ == kFieldName || focus_id_ == kFieldSeed;
     if (osk_key) {
@@ -2103,12 +2158,12 @@ std::string Shell::dialog_title_hint() const
         const OskKey *keys = osk_keys(key_count);
         const int index = focus_id_ - kOsk;
         if (index >= 0 && index < key_count && keys[index].kind == OskKind::Auto) {
-            return pad ? a + " picks a name    " + b + " closes    Start confirms" : "Enter picks a name    Esc closes";
+            return pad ? a + " picks a name    " + b + " closes    " + menu + " confirms" : "Enter picks a name    Esc closes";
         }
-        return pad ? a + " types    " + b + " closes    Start confirms" : "Enter types    Esc closes";
+        return pad ? a + " types    " + b + " closes    " + menu + " confirms" : "Enter types    Esc closes";
     }
     if (field) {
-        return pad ? a + " types    " + b + " deletes    Start confirms" : "Type here    Enter confirms    Esc closes";
+        return pad ? a + " types    " + b + " deletes    " + menu + " confirms" : "Type here    Enter confirms    Esc closes";
     }
     if (dialog_ == Dialog::Messages && session_.notices().empty()) {
         return pad ? b + " closes" : "Esc closes";
@@ -2127,20 +2182,27 @@ std::string Shell::dialog_title_hint() const
     if (closes) {
         return pad ? a + " closes" : "Enter closes";
     }
+    if (focus_id_ == kCancel) {
+        return pad ? a + " cancels" : "Enter cancels";
+    }
     return pad ? a + " confirms    " + b + " closes" : "Enter confirms    Esc closes";
 }
 
 std::string Shell::context_hint() const
 {
-    const bool pad = gamepad_nav_ || deck_ || touch_used_;
+    const bool pad = gamepad_nav_ || deck_;
+    const bool finger = touch_used_ && !pad;
     const std::string a = glyph(SDL_GAMEPAD_BUTTON_SOUTH);
     const std::string b = glyph(SDL_GAMEPAD_BUTTON_EAST);
+    const std::string left = glyph(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    const std::string right = glyph(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    const std::string menu = glyph(SDL_GAMEPAD_BUTTON_START);
     if (menu_.open()) {
         return pad ? a + " chooses    " + b + " closes" : "Enter chooses    Esc closes";
     }
     if (dialog_ != Dialog::None) {
         // Pad players read this in the title bar. Mouse players read it here.
-        if (pad) {
+        if (pad || finger) {
             return {};
         }
         return dialog_title_hint();
@@ -2149,22 +2211,31 @@ std::string Shell::context_hint() const
         return pad ? a + " selects    " + b + " closes" : "Enter selects    Esc closes";
     }
     const ToolDef *tool = tool_by_index(tool_index_);
-    const char *phrase = tool_click_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY);
+    const int engine = tool != nullptr ? tool->engine_id : TOOL_QUERY;
     if (overlay_on_) {
         return pad ? a + " builds    " + b + " closes the map    D-pad scrolls"
-                   : std::string(phrase) + "    Esc closes the map";
+                   : std::string(tool_click_phrase(engine)) + "    Esc closes the map";
     }
     if (pad) {
-        return std::string(phrase) + "    " + b + " cancels    LB/RB tools    Start menu";
+        return tool_press_phrase(engine, a.c_str()) + "    " + b + " back    " + left + "/" + right + " tool    " +
+               menu + " menu";
     }
-    return std::string(phrase) + "    Arrows pan    Space pauses";
+    if (finger) {
+        std::string phrase = tool_click_phrase(engine);
+        const auto at = phrase.find("click to ");
+        if (at != std::string::npos) {
+            phrase.replace(at, 9, "tap to ");
+        }
+        return phrase;
+    }
+    return std::string(tool_click_phrase(engine)) + "    Arrows pan    Space pauses";
 }
 
 std::string Shell::idle_message() const
 {
-    const ToolDef *tool = tool_by_index(tool_index_);
-    const char *phrase = tool_click_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY);
-    return session_.date_text() + ". " + phrase + ".";
+    // The tool phrase lives in the status hint when that hint fits. Repeating
+    // it here made the same words appear twice on a wide window.
+    return session_.date_text();
 }
 
 void Shell::write_final_shot()

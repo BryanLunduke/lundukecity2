@@ -16,6 +16,7 @@
 #include "tile_atlas.hpp"
 #include "tools.hpp"
 #include "version.hpp"
+#include "view_math.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -148,13 +149,15 @@ void Shell::open_dialog(Dialog dialog)
     } else if (dialog == Dialog::Files && files_save_) {
         field_a_ = proposed_city_filename(session_.city_name(), session_.save_path());
         focus_id_ = kFieldName;
-        field_select_all(field_a_, field_caret_, field_anchor_);
+        select_save_name();
     } else if (dialog == Dialog::Unsaved) {
         focus_id_ = kSave;
     } else if (dialog == Dialog::Disaster || dialog == Dialog::RecoveryDelete || dialog == Dialog::Overwrite) {
         focus_id_ = kCancel;
     } else if (dialog == Dialog::Recovery) {
-        focus_id_ = kRecover;
+        // Recover is the useful default on the launch screen. Once a city
+        // is already loaded, Enter must not replace it.
+        focus_id_ = city_chosen_ ? kNotNow : kRecover;
     } else if (dialog == Dialog::Scenario) {
         focus_id_ = kListItem;
         list_index_ = scenario_index_;
@@ -247,6 +250,48 @@ void Shell::toggle_pause()
     } else {
         paused_from_ = speed_;
         set_speed(0);
+    }
+}
+
+void Shell::cycle_speed()
+{
+    if (speed_ <= 0) {
+        set_speed(1);
+        return;
+    }
+    if (speed_ >= 3) {
+        paused_from_ = speed_;
+        set_speed(0);
+        return;
+    }
+    set_speed(speed_ + 1);
+}
+
+void Shell::cancel_dialog()
+{
+    if (dialog_ == Dialog::NewCity && new_page_ > 0) {
+        on_dialog_button(kBack);
+        return;
+    }
+    on_dialog_button(kCancel);
+}
+
+void Shell::center_on_cursor()
+{
+    int tx = 0;
+    int ty = 0;
+    if (!map_tile_at(map_local_x(cursor_x_), map_local_y(cursor_y_), map_.shake_x(), map_.shake_y(), map_.tile_size(),
+                     CitySession::kWorldW, CitySession::kWorldH, tx, ty)) {
+        return;
+    }
+    center_on_fraction((tx + 0.5) / CitySession::kWorldW, (ty + 0.5) / CitySession::kWorldH);
+}
+
+void Shell::select_save_name()
+{
+    field_select_all(field_a_, field_caret_, field_anchor_);
+    if (path_has_cty_suffix(field_a_) && field_a_.size() > 4) {
+        field_caret_ = static_cast<int>(field_a_.size()) - 4;
     }
 }
 
@@ -659,11 +704,15 @@ void Shell::finish_open(const std::string &path)
         }
         info_title_ = "Could not load city";
         info_body_ = reason + "\n\n" + path;
+        if (!city_chosen_) {
+            welcome_gate_ = true;
+        }
         open_dialog(Dialog::LoadError);
         sync_title();
         return;
     }
     welcome_gate_ = false;
+    city_chosen_ = true;
     ++city_generation_;
     const int loaded_speed = session_.speed();
     restore_play_preferences();
@@ -741,7 +790,7 @@ void Shell::begin_files(bool save)
 
 void Shell::begin_load()
 {
-    if (deck_ || headless_) {
+    if (deck_ || headless_ || gamepad_nav_) {
         begin_files(false);
         return;
     }
@@ -750,7 +799,7 @@ void Shell::begin_load()
 
 void Shell::begin_save_as()
 {
-    if (deck_ || headless_) {
+    if (deck_ || headless_ || gamepad_nav_) {
         begin_files(true);
         return;
     }
@@ -761,9 +810,13 @@ void Shell::begin_system_files(bool save)
 {
     files_save_ = save;
     save_generation_ = city_generation_;
-    file_ready_ = false;
-    file_state_ = 0;
-    file_path_.clear();
+    {
+        std::lock_guard<std::mutex> lock(file_mu_);
+        file_ignore_ = false;
+        file_ready_ = false;
+        file_state_ = 0;
+        file_path_.clear();
+    }
     std::string folder = session_.save_path().empty() ? remembered_city_folder() : parent_dir(session_.save_path());
     static const SDL_DialogFileFilter filters[] = {{"City files", "cty"}, {"All files", "*"}};
     open_dialog(Dialog::FileWait);
@@ -785,7 +838,8 @@ void Shell::poll_file_dialog()
     int state = 0;
     {
         std::lock_guard<std::mutex> lock(file_mu_);
-        if (!file_ready_) {
+        if (file_ignore_ || !file_ready_) {
+            file_ready_ = false;
             return;
         }
         state = file_state_;
@@ -847,6 +901,8 @@ void Shell::proceed(AfterSave next)
             break;
         }
         own_recovery_ = recovery_.path;
+        welcome_gate_ = false;
+        city_chosen_ = true;
         ++city_generation_;
         autosave_fingerprint_ = session_.change_fingerprint();
         set_speed(0);
@@ -874,6 +930,9 @@ void Shell::request_with_save(AfterSave next)
 
 void Shell::offer_recovery()
 {
+    if (city_chosen_) {
+        return;
+    }
     const std::vector<city_recovery::Entry> entries = city_recovery::list(own_recovery_);
     if (entries.empty()) {
         return;
@@ -1034,6 +1093,18 @@ void Shell::apply_action(Action action)
         break;
     case Action::Zones:
         toggle_overlay(CitySession::MapLayer::Zones);
+        break;
+    case Action::ZoneResidential:
+        toggle_overlay(CitySession::MapLayer::Residential);
+        break;
+    case Action::ZoneCommercial:
+        toggle_overlay(CitySession::MapLayer::Commercial);
+        break;
+    case Action::ZoneIndustrial:
+        toggle_overlay(CitySession::MapLayer::Industrial);
+        break;
+    case Action::Transportation:
+        toggle_overlay(CitySession::MapLayer::Transportation);
         break;
     case Action::Pollution:
         toggle_overlay(CitySession::MapLayer::Pollution);
@@ -1270,13 +1341,14 @@ void Shell::on_dialog_button(int id)
             spec.rivers = new_rivers_;
             spec.lakes = new_lakes_;
             spec.trees = new_trees_;
-            welcome_gate_ = false;
-            close_dialog();
-            const int serial = session_.message_serial();
-            ++city_generation_;
-            reset_touch_state();
-            clear_transient_message();
-            session_.new_city(spec);
+    welcome_gate_ = false;
+    city_chosen_ = true;
+    close_dialog();
+    const int serial = session_.message_serial();
+    ++city_generation_;
+    reset_touch_state();
+    clear_transient_message();
+    session_.new_city(spec);
             if (session_.message_serial() == serial) {
                 restore_play_preferences();
             }
@@ -1300,6 +1372,7 @@ void Shell::on_dialog_button(int id)
                     open_dialog(Dialog::Info);
                 } else {
                     welcome_gate_ = false;
+                    city_chosen_ = true;
                     adopt_loaded_speed(session_.speed());
                     center_on_fraction(0.5, 0.5);
                     sync_title();
@@ -1336,7 +1409,11 @@ void Shell::on_dialog_button(int id)
             open_dialog(Dialog::RecoveryDelete);
             return;
         }
+        const bool back_to_welcome = welcome_gate_ && !city_chosen_;
         close_dialog();
+        if (back_to_welcome) {
+            open_dialog(Dialog::Welcome);
+        }
         return;
     }
     if (dialog_ == Dialog::RecoveryDelete) {
@@ -1412,7 +1489,7 @@ void Shell::on_dialog_button(int id)
             refresh_files();
         }
         field_a_ = typed;
-        field_select_all(field_a_, field_caret_, field_anchor_);
+        select_save_name();
         focus_id_ = kFieldName;
         return;
     }
@@ -1470,7 +1547,20 @@ void Shell::on_dialog_button(int id)
         close_dialog();
         return;
     }
-    if (dialog_ == Dialog::Files || dialog_ == Dialog::FileWait || dialog_ == Dialog::SaveError) {
+    if (dialog_ == Dialog::FileWait) {
+        {
+            std::lock_guard<std::mutex> lock(file_mu_);
+            file_ignore_ = true;
+            file_ready_ = false;
+        }
+        after_save_ = AfterSave::Nothing;
+        dismiss_dialog();
+        shown_message_ = "Close the system file dialog if it is still open. Its choice will be ignored.";
+        shown_message_serial_ = session_.message_serial();
+        hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+        return;
+    }
+    if (dialog_ == Dialog::Files || dialog_ == Dialog::SaveError) {
         after_save_ = AfterSave::Nothing;
     }
     dismiss_dialog();
@@ -2212,32 +2302,49 @@ void SDLCALL Shell::file_callback(void *userdata, const char *const *filelist, i
 
 const char *Shell::glyph(SDL_GamepadButton button) const
 {
-    SDL_GamepadButtonLabel label = SDL_GAMEPAD_BUTTON_LABEL_A;
-    if (pad_ != nullptr) {
-        label = SDL_GetGamepadButtonLabel(pad_, button);
-    } else if (button == SDL_GAMEPAD_BUTTON_EAST) {
-        label = SDL_GAMEPAD_BUTTON_LABEL_B;
-    } else if (button == SDL_GAMEPAD_BUTTON_WEST) {
-        label = SDL_GAMEPAD_BUTTON_LABEL_X;
-    } else if (button == SDL_GAMEPAD_BUTTON_NORTH) {
-        label = SDL_GAMEPAD_BUTTON_LABEL_Y;
+    bool playstation = false;
+    if (!deck_ && pad_ != nullptr) {
+        const SDL_GamepadType type = SDL_GetGamepadType(pad_);
+        if (type == SDL_GAMEPAD_TYPE_PS3 || type == SDL_GAMEPAD_TYPE_PS4 || type == SDL_GAMEPAD_TYPE_PS5 ||
+            SDL_GetGamepadButtonLabel(pad_, SDL_GAMEPAD_BUTTON_SOUTH) == SDL_GAMEPAD_BUTTON_LABEL_CROSS) {
+            playstation = true;
+        }
     }
-    switch (label) {
-    case SDL_GAMEPAD_BUTTON_LABEL_B:
-        return "B";
-    case SDL_GAMEPAD_BUTTON_LABEL_X:
-        return "X";
-    case SDL_GAMEPAD_BUTTON_LABEL_Y:
-        return "Y";
-    case SDL_GAMEPAD_BUTTON_LABEL_CROSS:
-        return "Cross";
-    case SDL_GAMEPAD_BUTTON_LABEL_CIRCLE:
-        return "Circle";
-    case SDL_GAMEPAD_BUTTON_LABEL_SQUARE:
-        return "Square";
-    case SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE:
-        return "Triangle";
+    const bool xbox = !deck_ && !playstation;
+    switch (button) {
+    case SDL_GAMEPAD_BUTTON_SOUTH:
+        return playstation ? "\u2715" : "A";
+    case SDL_GAMEPAD_BUTTON_EAST:
+        return playstation ? "\u25CB" : "B";
+    case SDL_GAMEPAD_BUTTON_WEST:
+        return playstation ? "\u25A1" : "X";
+    case SDL_GAMEPAD_BUTTON_NORTH:
+        return playstation ? "\u25B3" : "Y";
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
+        return xbox ? "LB" : "L1";
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
+        return xbox ? "RB" : "R1";
+    case SDL_GAMEPAD_BUTTON_START:
+        if (deck_) {
+            return "\u2630";
+        }
+        return playstation ? "Options" : "Start";
+    case SDL_GAMEPAD_BUTTON_BACK:
+        if (deck_) {
+            return "\u29C9";
+        }
+        if (playstation) {
+            if (pad_ != nullptr && SDL_GetGamepadType(pad_) == SDL_GAMEPAD_TYPE_PS5) {
+                return "Create";
+            }
+            return "Share";
+        }
+        return "Back";
+    case SDL_GAMEPAD_BUTTON_LEFT_STICK:
+        return xbox ? "LS" : "L3";
+    case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
+        return xbox ? "RS" : "R3";
     default:
-        return "A";
+        return "";
     }
 }

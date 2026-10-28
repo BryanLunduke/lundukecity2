@@ -220,6 +220,41 @@ int lunduke_city_test_message_sound()
     return 0;
 }
 
+int lunduke_city_test_tokyo_monster()
+{
+#ifndef LUNDUKE_CITY_ASSET_DIR
+    return fail(13, "Tokyo monster test has no asset directory");
+#else
+    const std::string dir = std::string(LUNDUKE_CITY_ASSET_DIR) + "/res";
+    for (int seed = 1; seed <= 8; ++seed) {
+        Micropolis sim;
+        sim.resourceDir = dir;
+        if (!sim.loadScenario(SC_TOKYO)) {
+            std::fprintf(stderr, "resource %s\n", dir.c_str());
+            return fail(13, "could not load the Tokyo scenario");
+        }
+        sim.setSpeed(3);
+        sim.setPasses(1);
+        sim.primeRandom(seed);
+        sim.makeMonster();
+        SimSprite *born = sim.getSprite(SPRITE_MONSTER);
+        if (born == nullptr || born->frame == 0) {
+            std::fprintf(stderr, "seed %d created no monster\n", seed);
+            return fail(14, "makeMonster did not leave a visible monster");
+        }
+        for (int tick = 0; tick < 100; ++tick) {
+            sim.simTick();
+            SimSprite *live = sim.getSprite(SPRITE_MONSTER);
+            if (live == nullptr || live->frame == 0) {
+                std::fprintf(stderr, "seed %d died at tick %d\n", seed, tick);
+                return fail(15, "Tokyo plus makeMonster vanished before 100 ticks");
+            }
+        }
+    }
+    return 0;
+#endif
+}
+
 int lunduke_city_test_history_starts_clear()
 {
     Micropolis sim;
@@ -249,6 +284,9 @@ int main()
         return code;
     }
     if (const int code = lunduke_city_test_history_starts_clear()) {
+        return code;
+    }
+    if (const int code = lunduke_city_test_tokyo_monster()) {
         return code;
     }
     return 0;

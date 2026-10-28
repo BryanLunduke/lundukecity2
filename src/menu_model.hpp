@@ -4,11 +4,11 @@
 
 #pragma once
 
-// Menu model for the SDL shell. 46 actionable rows: 8 System, 16 Options,
-// 6 Disasters, 14 Windows, 2 Help. Fullscreen, the zone and coverage
-// maps, and Messages are the rows past the original 37. The look trio
-// sits at the bottom of Options. Hidden zoom accelerators are extra
-// bindings, not extra rows.
+// Menu model for the SDL shell. 50 actionable rows: 8 System, 16 Options,
+// 6 Disasters, 18 Windows, 2 Help. Fullscreen, the zone and coverage
+// maps, the single-zone and transportation maps, and Messages are the
+// rows past the original 37. The look trio sits at the bottom of Options.
+// Hidden zoom accelerators are extra bindings, not extra rows.
 
 #include <cctype>
 #include <string>
@@ -47,7 +47,8 @@ enum class Action {
     Power, Water, Pollution, Crime, LandValue, Traffic,
     About, Settings, Controls,
     Fullscreen,
-    Zones, PoliceMap, FireMap, Population, Growth, Messages,
+    Zones, ZoneResidential, ZoneCommercial, ZoneIndustrial, Transportation,
+    PoliceMap, FireMap, Population, Growth, Messages,
     ClassicLook, SvgaLook, SpookyLook,
     RecentIndex
 };
@@ -151,6 +152,10 @@ inline constexpr MenuEntry kWindows[] = {
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Power", nullptr, ItemKind::Check, Action::Power, AccelKey::None, 0, 0},
     {"All _zones", nullptr, ItemKind::Check, Action::Zones, AccelKey::None, 0, 0},
+    {"Resi_dential", nullptr, ItemKind::Check, Action::ZoneResidential, AccelKey::None, 0, 0},
+    {"Commerci_al", nullptr, ItemKind::Check, Action::ZoneCommercial, AccelKey::None, 0, 0},
+    {"_Industrial", nullptr, ItemKind::Check, Action::ZoneIndustrial, AccelKey::None, 0, 0},
+    {"Transportatio_n", nullptr, ItemKind::Check, Action::Transportation, AccelKey::None, 0, 0},
     {"P_ollution", nullptr, ItemKind::Check, Action::Pollution, AccelKey::None, 0, 0},
     {"_Crime", nullptr, ItemKind::Check, Action::Crime, AccelKey::None, 0, 0},
     {"_Land value", nullptr, ItemKind::Check, Action::LandValue, AccelKey::None, 0, 0},

@@ -127,6 +127,10 @@ private:
     void begin_load();
     void begin_save_as();
     void begin_files(bool save);
+    void cancel_dialog();
+    void cycle_speed();
+    void center_on_cursor();
+    void select_save_name();
     void refresh_files();
     void begin_system_files(bool save);
     void remember_saved(const std::string &path);
@@ -425,6 +429,9 @@ private:
     std::chrono::steady_clock::time_point hint_until_{};
     std::chrono::steady_clock::time_point started_{};
     bool recovery_checked_ = false;
+    // Set once the player has picked a city this session. Recovery is not
+    // offered after that, and its default button is Not Now if it is.
+    bool city_chosen_ = false;
     // True from the launch screen until a city is actually started, loaded,
     // or a scenario begins. Cancelling those flows comes back here.
     bool welcome_gate_ = false;
@@ -482,6 +489,8 @@ private:
 
     bool text_input_on_ = false;
     bool file_ready_ = false;
+    // A cancelled system dialog must not apply a later answer.
+    bool file_ignore_ = false;
     int file_state_ = 0;
     std::string file_path_;
     std::mutex file_mu_;

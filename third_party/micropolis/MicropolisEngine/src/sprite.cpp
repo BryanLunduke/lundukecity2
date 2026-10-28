@@ -1114,8 +1114,11 @@ void Micropolis::doMonsterSprite(SimSprite *sprite)
                         sprite->destX = sprite->origX;
                         sprite->destY = sprite->origY;
 
-                    } else {
+                    } else if (sprite->count < 900) {
 
+                        // Going home ends the visit, but not during the
+                        // opening steps. A spawn next to its target used to
+                        // vanish before the player could see it.
                         sprite->frame = 0;
                         return;
 
@@ -1209,8 +1212,19 @@ void Micropolis::doMonsterSprite(SimSprite *sprite)
 
     c = getChar(sprite->x + sprite->xHot, sprite->y + sprite->yHot);
 
+    // turn is unused by the monster walk. It records that the hot spot has
+    // stood on land, so a river spawn is not drowned on the first step.
+    if (c != -1 &&
+        !((c >= RIVER && c <= WATER_HIGH) || (c >= FLOOD && c <= LASTFLOOD))) {
+        sprite->turn = 1;
+    }
+
+    // count starts at 1000 and drops once per step. The first 100 steps
+    // (count still >= 900) stay visible. After that, open river drowns a
+    // monster that has already reached land, which is the original rule.
     if (c == -1
-          || (c == RIVER && sprite->count != 0 && sprite->control == -1)) {
+          || (c == RIVER && sprite->turn != 0 && sprite->count < 900
+              && sprite->count != 0 && sprite->control == -1)) {
         sprite->frame = 0; /* kill scary monster */
     }
 
@@ -1906,11 +1920,57 @@ void Micropolis::makeShipHere(int x, int y)
 }
 
 
+namespace {
+
+bool monsterWaterTile(int tile)
+{
+    const int low = tile & LOMASK;
+    return (low >= RIVER && low <= WATER_HIGH) || (low >= FLOOD && low <= LASTFLOOD);
+}
+
+// makeMonsterAt places the sprite at (x << 4) + 48, y << 4. The hot spot
+// is 40px right and 16px down, which is five tiles east and one tile south.
+void monsterHotspotTile(int x, int y, int &hx, int &hy)
+{
+    hx = ((x << 4) + 48 + 40) >> 4;
+    hy = ((y << 4) + 16) >> 4;
+}
+
+bool monsterShoreSpawn(const Micropolis &sim, int x, int y)
+{
+    int hx = 0;
+    int hy = 0;
+    monsterHotspotTile(x, y, hx, hy);
+    // A hundred steps move about thirteen tiles. Stay that far from the
+    // edge so the opening walk cannot leave the map.
+    if (hx < 16 || hy < 16 || hx >= WORLD_W - 16 || hy >= WORLD_H - 16) {
+        return false;
+    }
+    if (!monsterWaterTile(sim.map[hx][hy])) {
+        return false;
+    }
+    static const int dx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
+    static const int dy[8] = {0, 0, 1, -1, 1, -1, 1, -1};
+    for (int i = 0; i < 8; ++i) {
+        const int nx = hx + dx[i];
+        const int ny = hy + dy[i];
+        if (Micropolis::testBounds(nx, ny) && !monsterWaterTile(sim.map[nx][ny])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 /**
  * Start a new monster sprite.
- * @todo Make monster over land, because it disappears if it's made over water.
- *       Better yet make monster not disappear for a while after it's created,
- *       over land or water. Should never disappear prematurely.
+ *
+ * The hot spot, not the tile passed to makeMonsterAt, is what the river
+ * rule inspects. Spawning on any river tile put that hot spot in open
+ * water, and the next step removed the sprite. Prefer a shore: water
+ * beside land, in from the edge. The walk also refuses to drown the
+ * monster until it has stood on land and its opening steps are over.
  */
 void Micropolis::makeMonster()
 {
@@ -1931,12 +1991,24 @@ void Micropolis::makeMonster()
         x = getRandom(WORLD_W - 20) + 10;
         y = getRandom(WORLD_H - 10) + 5;
 
-        if (map[x][y] == RIVER || map[x][y] == RIVER + BULLBIT) {
+        if (monsterShoreSpawn(*this, x, y)) {
             makeMonsterAt(x, y);
             done = 1;
             break;
         }
 
+    }
+
+    if (!done) {
+        for (y = 5; y < WORLD_H - 5 && !done; ++y) {
+            for (x = 10; x < WORLD_W - 10; ++x) {
+                if (monsterShoreSpawn(*this, x, y)) {
+                    makeMonsterAt(x, y);
+                    done = 1;
+                    break;
+                }
+            }
+        }
     }
 
     if (!done) {

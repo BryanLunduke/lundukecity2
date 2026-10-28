@@ -8,6 +8,7 @@
 #include "special_buildings.hpp"
 
 #include <cassert>
+#include <string>
 
 const ToolDef kTools[] = {
     {TOOL_BULLDOZER, "Bulldozer", 1, "Bulldozer: $1"},
@@ -80,6 +81,88 @@ const char *tool_click_phrase(int engine_id)
     default:
         return "Click to build";
     }
+}
+
+std::string tool_press_phrase(int engine_id, const char *button)
+{
+    if (button == nullptr || button[0] == '\0') {
+        return tool_click_phrase(engine_id);
+    }
+    const char *name = "Tool";
+    const char *verb = "uses";
+    switch (engine_id) {
+    case TOOL_BULLDOZER:
+        name = "Bulldozer";
+        verb = "clears";
+        break;
+    case TOOL_ROAD:
+        name = "Roads";
+        verb = "lays";
+        break;
+    case TOOL_RAILROAD:
+        name = "Rail";
+        verb = "lays";
+        break;
+    case TOOL_WIRE:
+        name = "Wire";
+        verb = "lays";
+        break;
+    case TOOL_PARK:
+        name = "Park";
+        verb = "plants";
+        break;
+    case TOOL_RESIDENTIAL:
+        name = "Residential";
+        verb = "zones";
+        break;
+    case TOOL_COMMERCIAL:
+        name = "Commercial";
+        verb = "zones";
+        break;
+    case TOOL_INDUSTRIAL:
+        name = "Industrial";
+        verb = "zones";
+        break;
+    case TOOL_POLICESTATION:
+        name = "Police";
+        verb = "builds";
+        break;
+    case TOOL_FIRESTATION:
+        name = "Fire dept";
+        verb = "builds";
+        break;
+    case TOOL_STADIUM:
+        name = "Stadium";
+        verb = "builds";
+        break;
+    case TOOL_SEAPORT:
+        name = "Seaport";
+        verb = "builds";
+        break;
+    case TOOL_COALPOWER:
+        name = "Coal power";
+        verb = "builds";
+        break;
+    case TOOL_NUCLEARPOWER:
+        name = "Nuclear power";
+        verb = "builds";
+        break;
+    case TOOL_AIRPORT:
+        name = "Airport";
+        verb = "builds";
+        break;
+    case kSpecialEngineId:
+        name = "Special";
+        verb = "places";
+        break;
+    case TOOL_QUERY:
+        name = "Query";
+        verb = "inspects";
+        break;
+    default:
+        return tool_click_phrase(engine_id);
+    }
+    return std::string(name) + ": " + button + " " + verb;
 }
 
 ToolFootprint tool_footprint(int engine_id)
