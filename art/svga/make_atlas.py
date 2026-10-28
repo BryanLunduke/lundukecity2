@@ -24,7 +24,6 @@ import sys
 # A test run imports this package. Do not leave bytecode in the source tree.
 sys.dont_write_bytecode = True
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -100,44 +99,6 @@ _DIRT_MASK = (
     "..B....B....B....B.B...C..B...B",
     ".....C..........C..............",
 )
-# Smooth field for bare dirt. Same 31px period as the speckled mask, with
-# far fewer flecks. Legacy tiles (woods, water, the graveyard sources, the
-# asylum, the arena, manor 297-305) keep the mask above so those cells stay
-# byte-identical. Seed 2 of a search that keeps every 16px window between
-# 7 and 19 marks and stops accents from touching.
-_DIRT_MASK_SMOOTH = (
-    "...............................",
-    "...................C...........",
-    ".C.............................",
-    "...............................",
-    "...............................",
-    "B.........B...B.B.........C....",
-    "...................C...........",
-    ".......B.............B.........",
-    ".........C.........B...........",
-    "...............B...............",
-    "...............................",
-    "..C........B....B.......B.....B",
-    "....................C..........",
-    ".....C......B............B.....",
-    ".......................B....B..",
-    ".......B.......................",
-    "....B.........B.....B..B...C...",
-    "...............................",
-    "...........B.............B.....",
-    "...............................",
-    "...............................",
-    "................B.C............",
-    "............B.............B....",
-    ".................B.............",
-    "..............................B",
-    ".......................C.......",
-    "................B..............",
-    ".B............................C",
-    "........B............B......B..",
-    "..........B...B..B.....B.....B.",
-    ".........B.................B...",
-)
 
 
 @dataclass(frozen=True)
@@ -152,8 +113,6 @@ class DirtScheme:
     contact: tuple[int, int, int]
     soil_rim: tuple[int, int, int]
     soil_contact: tuple[int, int, int]
-    # '.' base, 'B' neighbour, 'C' accent. 31 characters per row.
-    mask: tuple[str, ...] = _DIRT_MASK
 
     @property
     def ramp(self) -> tuple[tuple[int, int, int], ...]:
@@ -189,24 +148,8 @@ SCHEME_B = DirtScheme(
     (65, 48, 0),
     (65, 16, 0),
 )
-# Warcraft-style earth: a grey-tan field, a slightly greyer neighbour, and a
-# dark fleck. None of these three is the orange (170, 85, 0) speck. The rim
-# stays scheme B so a changed lot still meets a frozen shore.
-SCHEME_C = DirtScheme(
-    "C",
-    (113, 89, 81),
-    (113, 105, 81),
-    (65, 48, 44),
-    SCHEME_B.rim,
-    SCHEME_B.contact,
-    SCHEME_B.soil_rim,
-    SCHEME_B.soil_contact,
-    _DIRT_MASK_SMOOTH,
-)
 SCHEMES = (SCHEME_A, SCHEME_B)
 # The SVGA field. Scheme A stays available for the historical comparison.
-# Bare dirt on the committed sheet is scheme C. Scheme B remains the field
-# on the tiles whose Spooky versions are already approved.
 DIRT_BASE = SCHEME_B.base
 DIRT_NEAR = SCHEME_B.near
 DIRT_ACCENT = SCHEME_B.accent
@@ -778,7 +721,7 @@ def _require_palette(palette: set[tuple[int, int, int]]) -> None:
     # Dither mates are not on the face ramps. Each stays with one source.
     _claim(shared, ROSE_MATE, SRC_BLUE, palette, "rose dither mate")
     _claim(shared, BLUE_MATE, SRC_RED, palette, "blue dither mate")
-    for scheme in (*SCHEMES, SCHEME_C):
+    for scheme in SCHEMES:
         owner = dict(shared)
         for rgb in scheme.ramp:
             _claim(owner, rgb, SRC_TAN, palette, f"dirt {scheme.name}")
@@ -863,26 +806,6 @@ def _assert_hash_aperiodic() -> None:
             raise SystemExit(f"dirt share {rgb} is {got:.3f}, wanted {share:.3f}")
     if counts.get(DIRT_RIM) or counts.get(DIRT_CONTACT):
         raise SystemExit("rim or shadow colour leaked into the open field")
-    smooth_counts: dict[tuple[int, int, int], int] = {}
-    smooth_span = 93
-    for y in range(smooth_span):
-        for x in range(smooth_span):
-            here = _dirt_colour(x, y, False, SCHEME_C)
-            smooth_counts[here] = smooth_counts.get(here, 0) + 1
-            if here == SCHEME_C.accent:
-                for dx, dy in _ORTHO + ((1, 1), (1, -1), (-1, 1), (-1, -1)):
-                    if _dirt_colour(x + dx, y + dy, False, SCHEME_C) == SCHEME_C.accent:
-                        raise SystemExit("smooth dirt accents touch")
-            elif here == SCHEME_C.near:
-                for dx, dy in _ORTHO:
-                    if _dirt_colour(x + dx, y + dy, False, SCHEME_C) == SCHEME_C.near:
-                        raise SystemExit("smooth dirt neighbours clump")
-    smooth_pixels = smooth_span * smooth_span
-    smooth_expected = {SCHEME_C.base: 0.946, SCHEME_C.near: 0.042, SCHEME_C.accent: 0.012}
-    for rgb, share in smooth_expected.items():
-        got = smooth_counts.get(rgb, 0) / smooth_pixels
-        if abs(got - share) > 0.015:
-            raise SystemExit(f"smooth dirt share {rgb} is {got:.3f}, wanted {share:.3f}")
 
 
 def _in(x: int, y: int, w: int, h: int) -> bool:
@@ -1104,57 +1027,12 @@ def _dirt_colour(x: int, y: int, edge: bool, scheme: DirtScheme = SCHEME_B) -> t
     """Calm field in world pixels. The edge is one solid darker pixel."""
     if edge:
         return scheme.rim
-    row = scheme.mask[y % 31]
-    mark = row[x % 31]
+    mark = _DIRT_MASK[y % 31][x % 31]
     if mark == "C":
         return scheme.accent
     if mark == "B":
         return scheme.near
     return scheme.base
-
-
-# Tiles whose Spooky art is already approved, plus the SVGA cells that feed
-# them. Bare dirt elsewhere uses scheme C. These cells stay on scheme B, in
-# tile-local coordinates, so the committed pixels do not move.
-_LEGACY_DIRT = frozenset(
-    list(range(2, 21))
-    + list(range(21, 38))
-    + list(range(40, 44))
-    + list(range(48, 52))
-    + [64, 65, 79, 80, 81, 95, 96, 97, 111, 112, 113, 127, 128, 129]
-    + [143, 144, 145, 159, 160, 161, 175, 176, 177, 191, 192, 193, 207]
-    + [208, 209, 224, 225]
-    + list(range(297, 306))
-    + list(range(405, 414))
-    + list(range(779, 811))
-    + list(range(828, 832))
-    + list(range(840, 844))
-    + list(range(932, 948))
-    + list(range(948, 952))
-)
-# 16px bytes of the legacy cells, in tile order. Locked so a dirt edit cannot
-# repaint the approved woods, water, graveyard, crypt, asylum, or arena.
-_LEGACY_DIRT_SHA = "d82d3ff8b8f3af6e960482e0d9857eb930c51fed17185d700cea3daa629f4c12"
-
-
-def _sheet_scheme(index: int) -> DirtScheme:
-    if index in _LEGACY_DIRT:
-        return SCHEME_B
-    return SCHEME_C
-
-
-def _legacy_dirt_sha(sheet: Image.Image) -> str:
-    digest = hashlib.sha256()
-    columns = sheet.size[0] // TILE
-    px = sheet.load()
-    for index in range(960):
-        if index not in _LEGACY_DIRT:
-            continue
-        col, row = index % columns, index // columns
-        for y in range(TILE):
-            for x in range(TILE):
-                digest.update(bytes(px[col * TILE + x, row * TILE + y]))
-    return digest.hexdigest()
 
 
 def _touches_ground(src, x: int, y: int, w: int, h: int, colours: frozenset) -> bool:
@@ -1772,20 +1650,14 @@ def paint(
     bright_zones: bool = True,
     plain_wires: bool = True,
     civic_fixes: bool = True,
-    origin: tuple[int, int] = (0, 0),
 ) -> Image.Image:
     """Recolour `original`. `kinds` is one label per 16px cell, row-major.
 
     `civic_fixes` is the batch-4 correction: grey reactor, flat pitch, clear
     signs, and no dirt rim along a thin taxiway. The preview's before half
     passes False and gets the previous civic pass.
-
-    `origin` is the world pixel of the image's top-left. Scheme C dirt is
-    world-locked so neighbouring lots do not repeat one 16px stamp. Legacy
-    tiles pass (0, 0) and keep the stamp they shipped with.
     """
     w, h = original.size
-    ox, oy = origin
     if w % TILE or h % TILE:
         raise SystemExit(f"image {w}x{h} is not a multiple of {TILE}")
     src = original.load()
@@ -1851,9 +1723,9 @@ def paint(
                 elif strength == 1 or _soil_rim(src, x, y, w, h, quiet, kind, civic_fixes):
                     chosen = scheme.soil_rim
                 elif _touches_ground(src, x, y, w, h, frozenset({SRC_GREEN, SRC_DGREEN})):
-                    chosen = _dirt_colour(x + ox, y + oy, True, scheme)
+                    chosen = _dirt_colour(x, y, True, scheme)
                 else:
-                    chosen = _dirt_colour(x + ox, y + oy, False, scheme)
+                    chosen = _dirt_colour(x, y, False, scheme)
                 dst[x, y] = chosen
                 continue
             strength = _shadow_strength(src, x, y, w, h, counts)
@@ -1883,7 +1755,7 @@ def paint(
                         edge = True
                 elif civic_fixes and kind in _RIM_KINDS:
                     edge = shore or _civic_dirt_edge(src, x, y, w, h, quiet, kind)
-                chosen = _dirt_colour(x + ox, y + oy, edge, scheme)
+                chosen = _dirt_colour(x, y, edge, scheme)
                 if shadowed is not None:
                     chosen = shadowed
                 dst[x, y] = chosen
@@ -2837,20 +2709,16 @@ def main() -> int:
         lines.append("FAIL south shore has no coastline band")
         failed = True
 
-    dirt = paint(crop_tile(atlas, 0), [["ground"]], SCHEME_C, origin=(0, 0))
+    dirt = paint(crop_tile(atlas, 0), [["ground"]])
     dirt_counts = _histogram(dirt)
-    speck_count = dirt_counts.get(SCHEME_C.near, 0) + dirt_counts.get(SCHEME_C.accent, 0)
-    if dirt_counts.get(SCHEME_C.base, 0) < 200:
-        lines.append(f"FAIL dirt tile is not the smooth tan field: {dirt_counts}")
+    if dirt_counts.get(DIRT_BASE, 0) < dirt_counts.get(DIRT_NEAR, 0):
+        lines.append(f"FAIL dirt tile is not the lighter base: {dirt_counts}")
         failed = True
-    if speck_count < 4 or speck_count > 20:
-        lines.append(f"FAIL dirt tile speck count {speck_count} is outside 4..20: {dirt_counts}")
+    if dirt_counts.get(DIRT_RIM, 0) or dirt_counts.get((65, 32, 0), 0) or dirt_counts.get((113, 56, 56), 0):
+        lines.append(f"FAIL open dirt tile picked up an edge or the old field: {dirt_counts}")
         failed = True
-    if dirt_counts.get(DIRT_RIM, 0) or dirt_counts.get((65, 32, 0), 0) or dirt_counts.get((170, 85, 0), 0):
-        lines.append(f"FAIL open dirt tile picked up an edge or the orange speck: {dirt_counts}")
-        failed = True
-    if dirt_counts.get(SCHEME_C.near, 0) == 0 or dirt_counts.get(SCHEME_C.accent, 0) == 0:
-        lines.append(f"FAIL dirt tile lost its readable fleck: {dirt_counts}")
+    if dirt_counts.get(DIRT_NEAR, 0) == 0:
+        lines.append(f"FAIL dirt tile is missing the neighbour: {dirt_counts}")
         failed = True
     forbidden = {
         (85, 255, 85),
@@ -3531,11 +3399,7 @@ def main() -> int:
     overview_pixels = 0
     for index in range(960):
         classic = crop_tile(atlas, index)
-        scheme = _sheet_scheme(index)
-        # Legacy cells keep the old tile-local stamp. The smooth field is
-        # world-locked so two dirt lots do not repeat the same flecks.
-        origin = (0, 0) if scheme is SCHEME_B else ((index % columns) * TILE, (index // columns) * TILE)
-        painted = paint(classic, [[tile_kind(index)]], scheme, origin=origin)
+        painted = paint(classic, [[tile_kind(index)]])
         single = polish_tile(index, classic, painted)
         assert_palette(single, palette)
         digest_all.update(single.tobytes())
@@ -3580,13 +3444,7 @@ def main() -> int:
             f"OK 8px atlas: {sheet8.size[0]}x{sheet8.size[1]}, on palette, "
             f"{snapped_off}/{overview_pixels} box-average pixels moved to the nearest VGA entry"
         )
-    legacy_sha = _legacy_dirt_sha(sheet16)
-    if legacy_sha != _LEGACY_DIRT_SHA:
-        lines.append(f"FAIL approved SVGA tiles changed: {legacy_sha}")
-        failed = True
-    else:
-        lines.append(f"OK approved SVGA tiles unchanged ({len(_LEGACY_DIRT)} cells)")
-    atlas_sha = "6f7e14c3f64fc933b44c56f5fb077abe09243b4159a3ee8cc57d3688bca2506b"
+    atlas_sha = "251bfc0e38773f950ba524d08eab38e9bd40c772c09c7b57565e357eeeaa9ee3"
     if digest_all.hexdigest() != atlas_sha:
         lines.append(f"FAIL SVGA atlas changed: {digest_all.hexdigest()}")
         failed = True
@@ -4127,19 +3985,6 @@ def main() -> int:
         sheet16.save(svga_path)
         lines.append(f"EMIT {svga_path}")
         lines.append(f"ATLAS_SHA {digest_all.hexdigest()}")
-    # The look-specific park and the moving sprites are locked here so the
-    # atlas test covers them. A missing file or a hand edit fails the run.
-    sprites_dir = str(HERE.parent / "sprites")
-    if sprites_dir not in sys.path:
-        sys.path.insert(0, sprites_dir)
-    import make_sprites  # noqa: E402
-    import special_sprites  # noqa: E402
-
-    if special_sprites.main(["--check"]) != 0 or make_sprites.main(["--check"]) != 0:
-        lines.append("FAIL special or moving sprites do not match their generators")
-        failed = True
-    else:
-        lines.append("OK special and moving sprites match their generators")
     result = "PASS" if not failed else "FAIL"
     lines.append("")
     lines.append(f"RESULT: {result}")

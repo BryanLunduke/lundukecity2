@@ -54,11 +54,6 @@ DIRT_MAP = {
     (113, 0, 28): (65, 0, 16),
     (65, 48, 0): (65, 32, 32),
     (65, 16, 0): (65, 0, 16),
-    # Smooth SVGA earth (scheme C). These colours are not on the approved
-    # woods, water, graveyard, crypt, asylum, or arena cells.
-    (113, 89, 81): (65, 48, 32),
-    (113, 105, 81): (65, 56, 32),
-    (65, 48, 44): (65, 32, 32),
 }
 
 # The rare dirt speck. Only on open ground, where it cannot be a sign.
