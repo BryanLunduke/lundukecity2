@@ -120,7 +120,10 @@ inline BudgetCopy budget_copy(const CitySession::BudgetBook &book, bool tax_year
         copy.tax_title = "Next year's tax rate";
     }
     const std::string flow = (book.cash_flow > 0 ? "+" : "") + graph_money(book.cash_flow);
-    copy.cash_flow = std::string(book.estimates ? "Estimated cash flow: " : "Cash flow: ") + flow;
+    // The graphs window labels the history sample ("last month" / "last
+    // year"). This line is the budget's own figure: an estimate until the
+    // tax year is collected.
+    copy.cash_flow = std::string(book.estimates ? "Estimated cash flow: " : "Collected cash flow: ") + flow;
     copy.previous_funds = "Previous funds: " + graph_money(book.previous_funds);
     copy.current_funds = "Current funds: " + graph_money(book.funds);
     copy.tax_value = std::to_string(book.tax_percent) + "%";
