@@ -307,12 +307,64 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         const TextMetrics metrics = measure_text(cr, menu_font(), strip_mnemonic(menu_table::column_title(c)), -1);
         drop_x += metrics.width + 24;
     }
-    const double row_h = dp(36);
-    const double drop_w = dp(320);
-    double drop_h = 10;
+    // 36px rows read well at 1280. A short window (1011x601) cannot hold
+    // the Options column at that pitch, so the rows shrink until the menu
+    // fits, and only then scroll. The keyboard cursor is always on screen.
+    int n_item = 0;
+    int n_sep = 0;
     for (int i = 0; i < count; ++i) {
-        drop_h += items[i].kind == ItemKind::Separator ? 8 : row_h;
+        if (items[i].kind == ItemKind::Separator) {
+            ++n_sep;
+        } else {
+            ++n_item;
+        }
     }
+    const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - 6));
+    double row_h = dp(36);
+    const double chrome = 10.0 + n_sep * 8.0;
+    if (n_item > 0 && chrome + n_item * row_h > avail) {
+        row_h = std::floor((avail - chrome) / n_item);
+        const double floor_h = std::max(22.0, static_cast<double>(dp(22)));
+        if (row_h < floor_h) {
+            row_h = floor_h;
+        }
+    }
+    const double drop_w = dp(320);
+    double content_h = chrome;
+    double item_top[64];
+    double cursor_y_rel = 5;
+    const int shown = count > 64 ? 64 : count;
+    {
+        double rel = 5;
+        for (int i = 0; i < shown; ++i) {
+            item_top[i] = rel;
+            const double h = items[i].kind == ItemKind::Separator ? 8.0 : row_h;
+            if (i == menu_.cursor) {
+                cursor_y_rel = rel;
+            }
+            rel += h;
+        }
+        content_h = rel;
+    }
+    const double view_h = std::min(content_h, avail);
+    double scroll = 0;
+    if (content_h > view_h + 0.5 && menu_.cursor >= 0 && menu_.cursor < shown) {
+        const double row = items[menu_.cursor].kind == ItemKind::Separator ? 8.0 : row_h;
+        if (cursor_y_rel + row > scroll + view_h - 4) {
+            scroll = cursor_y_rel + row - (view_h - 4);
+        }
+        if (cursor_y_rel < scroll + 4) {
+            scroll = cursor_y_rel - 4;
+        }
+        if (scroll < 0) {
+            scroll = 0;
+        }
+        const double max_scroll = std::max(0.0, content_h - view_h);
+        if (scroll > max_scroll) {
+            scroll = max_scroll;
+        }
+    }
+    const double drop_h = view_h;
     if (drop_x + drop_w > win_w_ - 4) {
         drop_x = std::max(4.0, win_w_ - drop_w - 4);
     }
@@ -322,17 +374,23 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     cairo_fill(cr);
     fill(cr, drop_x, menu_h_, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
     stroke_rect(cr, drop_x, menu_h_, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-    double y = menu_h_ + 5;
-    double recent_row_y = y;
+    cairo_save(cr);
+    cairo_rectangle(cr, drop_x, menu_h_, drop_w, drop_h);
+    cairo_clip(cr);
+    double recent_row_y = menu_h_ + 5;
     bool have_recent_row = false;
-    for (int i = 0; i < count; ++i) {
+    for (int i = 0; i < shown; ++i) {
         const MenuEntry &item = items[i];
+        const double y = menu_h_ + item_top[i] - scroll;
+        const double h = item.kind == ItemKind::Separator ? 8.0 : row_h;
+        if (y + h < menu_h_ || y > menu_h_ + drop_h) {
+            continue;
+        }
         if (item.kind == ItemKind::Separator) {
             cairo_set_source_rgb(cr, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
             cairo_move_to(cr, drop_x + 4, y + 4);
             cairo_line_to(cr, drop_x + drop_w - 4, y + 4);
             cairo_stroke(cr);
-            y += 8;
             continue;
         }
         const int id = kMenuItem + column * 40 + i;
@@ -435,8 +493,8 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             paint_text(cr, menu_font(), item.accel_text, drop_x + drop_w - accel.width - 12, y + 7, theme::kAccelR,
                        theme::kAccelG, theme::kAccelB, -1);
         }
-        y += row_h;
     }
+    cairo_restore(cr);
     if (!menu_.recent_open) {
         return;
     }
@@ -573,19 +631,15 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Welcome) {
         const std::string heading = "Welcome to Lunduke City 2";
         const std::string blurb = "Start a new city, load one you saved, or take on a scenario.";
-        const bool pad_hint = gamepad_nav_ || deck_ || touch_used_;
-        const std::string hint = pad_hint ? std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " Select    " +
-                                                glyph(SDL_GAMEPAD_BUTTON_EAST) + " Back"
-                                          : "Enter confirms    Esc closes";
         const double width = message_width(win_w_, margin, dp(440), dp(520));
         const double column = std::max(1.0, width - 2.0 * margin);
         const double heading_h = line_height(title_font(), heading, column);
         const double blurb_h = text_block_height(blurb, column);
-        const double hint_h = line_height(ui_font(), hint, column);
         const double bh = dp(44);
         const double gap = dp(10);
-        const double height = dp(40) + margin + heading_h + dp(8) + blurb_h + dp(16) + bh * 4.0 + gap * 3.0 + dp(12) +
-                              hint_h + margin;
+        // The key hint lives in the title bar (pad) or the status bar (mouse),
+        // not again under the buttons.
+        const double height = dp(40) + margin + heading_h + dp(8) + blurb_h + dp(16) + bh * 4.0 + gap * 3.0 + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Welcome");
         double text_y = panel.y + dp(40) + dp(12);
@@ -603,31 +657,20 @@ void Shell::draw_dialog(cairo_t *cr)
         button(cr, panel.x + margin, by, bw, bh, "Select a _Scenario", kWelcomeScenario, focus_id_ == kWelcomeScenario);
         by += bh + gap;
         button(cr, panel.x + margin, by, bw, bh, "_Quit", kWelcomeQuit, focus_id_ == kWelcomeQuit);
-        const TextMetrics hint_metrics = measure_text(cr, ui_font(), hint, -1);
-        const double hint_x = panel.x + (panel.w - hint_metrics.width) / 2.0;
-        paint_text(cr, ui_font(), hint, hint_x, by + bh + dp(10), theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
         return;
     }
     if (dialog_ == Dialog::QuitConfirm) {
         const std::string question = "Quit Lunduke City 2?";
-        const bool pad_hint = gamepad_nav_ || deck_ || touch_used_;
-        const std::string hint = pad_hint ? std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " Select    " +
-                                                glyph(SDL_GAMEPAD_BUTTON_EAST) + " Back"
-                                          : "Enter confirms    Esc closes";
         const double width = message_width(win_w_, margin, dp(420), dp(520));
         const double column = std::max(1.0, width - 2.0 * margin);
         const double body_h = text_block_height(question, column);
-        const double hint_h = line_height(ui_font(), hint, column);
-        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + dp(8) + hint_h + margin;
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Quit");
         place_line(body_font(), question, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
                    theme::kTextG, theme::kTextB);
-        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - hint_h - dp(8) - dp(36),
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
                    {{"_Cancel", kCancel}, {"_Quit", kOk}}, 0, focus_id_);
-        const TextMetrics hint_metrics = measure_text(cr, ui_font(), hint, -1);
-        paint_text(cr, ui_font(), hint, panel.x + (panel.w - hint_metrics.width) / 2.0,
-                   panel.y + panel.h - margin - hint_h, theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
         return;
     }
     if (dialog_ == Dialog::Unsaved) {
@@ -845,10 +888,16 @@ void Shell::draw_dialog(cairo_t *cr)
                 }
             }
             const double preview_y = seed_y + dp(40);
-            if (terrain_preview_ != nullptr) {
+            const double buttons_y = y + dh - margin - dp(36);
+            const double summary_y = buttons_y - dp(6) - dp(20);
+            // The map preview is 120x100. A clamped dialog (1011x601) used to
+            // draw it through the Generate line. Scale it into the gap.
+            const double preview_room = std::max(0.0, summary_y - dp(8) - preview_y);
+            const double preview_scale = preview_room >= 100.0 ? 1.0 : preview_room / 100.0;
+            if (terrain_preview_ != nullptr && preview_scale >= 0.35) {
                 cairo_save(cr);
                 cairo_translate(cr, x + margin, preview_y);
-                cairo_scale(cr, 1, 1);
+                cairo_scale(cr, preview_scale, preview_scale);
                 cairo_set_source_surface(cr, terrain_preview_, 0, 0);
                 cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
                 cairo_paint(cr);
@@ -860,8 +909,8 @@ void Shell::draw_dialog(cairo_t *cr)
                            static_cast<int>(dw - 2 * margin));
             }
             const std::string summary = "Generate \"" + field_a_ + "\". This replaces the city on the map.";
-            paint_text(cr, ui_font(), summary, x + margin, y + dh - margin - dp(36) - dp(22), theme::kTextR,
-                       theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin));
+            paint_text(cr, ui_font(), summary, x + margin, summary_y, theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(dw - 2 * margin));
             buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Generate", kGenerate}});
         } else {
             // A saved page index from an older session. Generate is on page 2 now.
@@ -1362,7 +1411,8 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Budget) {
         const auto book = session_.budget();
         const BudgetCopy copy = budget_copy(book, budget_is_tax_);
-        const double gap = static_cast<double>(dp(6));
+        double gap = static_cast<double>(dp(6));
+        double tail = static_cast<double>(dp(8));
         const double col_gap = static_cast<double>(dp(16));
         auto unwrapped = [&](const std::string &text) {
             return measure_text(cr, ui_font(), text, -1).width;
@@ -1389,7 +1439,7 @@ void Shell::draw_dialog(cairo_t *cr)
             if (!detail.empty()) {
                 h += line_height(ui_font(), detail, inner) + gap;
             }
-            h += static_cast<double>(dp(8) + dp(16) + dp(8));
+            h += tail + static_cast<double>(dp(16)) + tail;
             return h;
         };
         const double blocks = block_h(copy.tax_title, copy.tax_value, "") +
@@ -1402,6 +1452,18 @@ void Shell::draw_dialog(cairo_t *cr)
         const double y = panel.y;
         const double dw = panel.w;
         const double dh = panel.h;
+        // A short window clamps the panel. Tighten the rhythm so the fire
+        // slider stays above Cancel and OK.
+        if (dh + 1 < height) {
+            const double overflow = height - dh;
+            const double tail_save = std::max(0.0, (tail - 1.0) * 8.0);
+            if (overflow <= tail_save) {
+                tail = std::max(1.0, tail - overflow / 8.0);
+            } else {
+                tail = 1;
+                gap = std::max(2.0, gap - (overflow - tail_save) / 12.0);
+            }
+        }
         frame_panel(cr, x, y, dw, dh, "Budget");
         const double live_inner = dw - 2.0 * margin;
         const double live_col = std::max(1.0, (live_inner - col_gap) / 2.0);
@@ -1436,7 +1498,7 @@ void Shell::draw_dialog(cairo_t *cr)
                                                    theme::kAccelG, theme::kAccelB);
                 cursor += detail_h + gap;
             }
-            cursor += dp(8);
+            cursor += tail;
             const double bar_y = cursor;
             const double sx = x + margin;
             const double sw = live_inner;
@@ -1458,7 +1520,7 @@ void Shell::draw_dialog(cairo_t *cr)
                 cairo_rectangle(cr, sx + 1, bar_y - dp(4), sw - 2, dp(24));
                 cairo_stroke(cr);
             }
-            cursor += dp(16) + dp(8);
+            cursor += dp(16) + tail;
         };
         slider(1, copy.tax_title, copy.tax_value, "", tax_, 0, 20);
         auto funded = [](int percent, std::int64_t need) {
@@ -1551,12 +1613,12 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Evaluation) {
         const EvaluationCopy copy = evaluation_copy(session_.evaluation(), session_.scenario_progress());
         const std::string heading = session_.city_name() + " — " + session_.date_text();
-        const double gap = static_cast<double>(dp(6));
+        double gap = static_cast<double>(dp(6));
         const double col_gap = margin;
         const int delta_px = measure_text(cr, body_font(), copy.score_delta, -1).width;
         const double fitted_delta = static_cast<double>(delta_px + dp(12));
         const double want = std::max(static_cast<double>(dp(760)), 2.0 * margin + col_gap + 2.0 * fitted_delta);
-        const double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
+        double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
         const double inner = width - 2.0 * margin;
         const double col_w = std::max(1.0, (inner - col_gap) / 2.0);
         const std::string score_delta =
@@ -1599,7 +1661,31 @@ void Shell::draw_dialog(cairo_t *cr)
         const double left_h = column_h(left_rows, col_w) + (bar_h > 0.0 ? bar_h + gap : 0.0) + opinion_extra;
         const double right_h = column_h(right_rows, col_w);
         const double heading_h = line_height(body_font(), heading, inner);
-        const double height = dp(40) + margin + heading_h + gap + std::max(left_h, right_h) + dp(8) + dp(36) + margin;
+        double height = dp(40) + margin + heading_h + gap + std::max(left_h, right_h) + dp(8) + dp(36) + margin;
+        const double band_limit = band_h - 2.0 * margin;
+        // A narrow column wraps the scenario goal into the Close button.
+        // Use the full window width, then a tighter gap, before clamping.
+        if (height > band_limit && width < win_w_ - 2.0 * margin - 1) {
+            const double wide = std::max(1.0, win_w_ - 2.0 * margin);
+            const double wide_inner = wide - 2.0 * margin;
+            const double wide_col = std::max(1.0, (wide_inner - col_gap) / 2.0);
+            const double wide_left = column_h(left_rows, wide_col) + (bar_h > 0.0 ? bar_h + gap : 0.0) +
+                                     (copy.opinion_bar.empty() ? 0.0 : line_height(ui_font(), copy.opinion_bar, wide_col) + gap);
+            const double wide_right = column_h(right_rows, wide_col);
+            const double wide_head = line_height(body_font(), heading, wide_inner);
+            const double wide_h = dp(40) + margin + wide_head + gap + std::max(wide_left, wide_right) + dp(8) + dp(36) + margin;
+            if (wide_h < height) {
+                width = wide;
+                height = wide_h;
+            }
+        }
+        if (height > band_limit) {
+            gap = 2;
+            const double tight_left = column_h(left_rows, col_w) + (bar_h > 0.0 ? bar_h + gap : 0.0) +
+                                      (copy.opinion_bar.empty() ? 0.0 : line_height(ui_font(), copy.opinion_bar, col_w) + gap);
+            const double tight_right = column_h(right_rows, col_w);
+            height = dp(40) + margin + heading_h + gap + std::max(tight_left, tight_right) + dp(4) + dp(36) + margin;
+        }
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
@@ -2051,30 +2137,32 @@ std::string Shell::context_hint() const
         return pad ? a + " chooses    " + b + " closes" : "Enter chooses    Esc closes";
     }
     if (dialog_ != Dialog::None) {
+        // Pad players read this in the title bar. Mouse players read it here.
+        if (pad) {
+            return {};
+        }
         return dialog_title_hint();
     }
     if (special_open_) {
         return pad ? a + " selects    " + b + " closes" : "Enter selects    Esc closes";
     }
+    const ToolDef *tool = tool_by_index(tool_index_);
+    const char *phrase = tool_click_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY);
     if (overlay_on_) {
         return pad ? a + " builds    " + b + " closes the map    D-pad scrolls"
-                   : "Click builds    Esc closes the map";
+                   : std::string(phrase) + "    Esc closes the map";
     }
-    const ToolDef *tool = tool_by_index(tool_index_);
-    const bool query = tool != nullptr && tool->engine_id == TOOL_QUERY;
     if (pad) {
-        return a + (query ? " inspects    " : " builds    ") + b + " cancels    LB/RB tools    Start menu";
+        return std::string(phrase) + "    " + b + " cancels    LB/RB tools    Start menu";
     }
-    return query ? "Click inspects    Arrows pan    Space pauses" : "Click builds    Arrows pan    Space pauses";
+    return std::string(phrase) + "    Arrows pan    Space pauses";
 }
 
 std::string Shell::idle_message() const
 {
     const ToolDef *tool = tool_by_index(tool_index_);
-    if (tool != nullptr && tool->engine_id == TOOL_QUERY) {
-        return session_.date_text() + ". Click a tile to inspect it.";
-    }
-    return session_.date_text() + ". Pick a tool, then click the map.";
+    const char *phrase = tool_click_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY);
+    return session_.date_text() + ". " + phrase + ".";
 }
 
 void Shell::write_final_shot()

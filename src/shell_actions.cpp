@@ -212,6 +212,25 @@ void Shell::note_message()
 
 void Shell::set_speed(int speed)
 {
+    if (speed < 0) {
+        speed = 0;
+    }
+    if (speed > 3) {
+        speed = 3;
+    }
+    if (background_held_) {
+        // The window is covered. Remember the choice and keep the sim paused
+        // until the hold ends.
+        if (session_.outcome_pause_pending() && speed > 0) {
+            session_.resume_after_outcome();
+            speed = session_.speed();
+        }
+        background_speed_ = speed;
+        pref_speed_ = speed;
+        speed_ = 0;
+        session_.set_speed(0);
+        return;
+    }
     speed_ = speed;
     session_.set_speed(speed);
     if (session_.outcome_pause_pending() && speed > 0) {
@@ -646,7 +665,13 @@ void Shell::finish_open(const std::string &path)
     }
     welcome_gate_ = false;
     ++city_generation_;
+    const int loaded_speed = session_.speed();
     restore_play_preferences();
+    if (background_held_) {
+        // The file's own speed wins over the speed from before the window
+        // was covered. restore_play_preferences may have stored the preference.
+        adopt_loaded_speed(loaded_speed);
+    }
     center_on_fraction(0.5, 0.5);
     const std::string folder = parent_dir(path);
     if (!folder.empty()) {
@@ -1275,7 +1300,7 @@ void Shell::on_dialog_button(int id)
                     open_dialog(Dialog::Info);
                 } else {
                     welcome_gate_ = false;
-                    speed_ = session_.speed();
+                    adopt_loaded_speed(session_.speed());
                     center_on_fraction(0.5, 0.5);
                     sync_title();
                 }

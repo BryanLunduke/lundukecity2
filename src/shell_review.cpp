@@ -1333,8 +1333,7 @@ void Shell::run_review_checks()
         return;
     }
     note_keyboard_input();
-    if (context_hint().find("Click builds") == std::string::npos &&
-        context_hint().find("Click inspects") == std::string::npos) {
+    if (context_hint().find("click to") == std::string::npos) {
         fail("a key did not restore the keyboard hint");
         return;
     }

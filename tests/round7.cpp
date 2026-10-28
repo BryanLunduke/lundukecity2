@@ -279,6 +279,13 @@ int main()
     setenv("HOME", home, 1);
     const std::string xdg = std::string(home) + "/xdg-config";
     setenv("XDG_CONFIG_HOME", xdg.c_str(), 1);
+    if (remembered_city_folder() != folder) {
+        std::cerr << "migrated '" << remembered_city_folder() << "'\n";
+        return fail(12, "XDG_CONFIG_HOME did not pick up the old config folder");
+    }
+    if (!std::filesystem::exists(xdg + "/lunduke-city-2/last-folder", ec)) {
+        return fail(12, "the old config was not copied into XDG_CONFIG_HOME");
+    }
     remember_city_folder(folder + "/Tokyo.cty");
     if (remembered_city_folder() != folder) {
         std::cerr << "xdg remembered '" << remembered_city_folder() << "'\n";

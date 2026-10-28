@@ -504,6 +504,8 @@ void Shell::note_background_hold()
         if (!background_held_ && speed_ > 0) {
             background_speed_ = speed_;
             background_held_ = true;
+            // Stay paused without set_speed(0), which would store Pause as
+            // the preference. The resume below goes through set_speed.
             speed_ = 0;
             session_.set_speed(0);
         }
@@ -513,17 +515,54 @@ void Shell::note_background_hold()
         return;
     }
     background_held_ = false;
-    const int resume = background_speed_ > 0 ? background_speed_ : 0;
+    const int resume = background_speed_;
     background_speed_ = 0;
-    speed_ = resume;
-    session_.set_speed(resume);
+    set_speed(resume);
+}
+
+void Shell::release_occlusion()
+{
+    if (!window_suspended_) {
+        return;
+    }
+    // Some desktops send occlusion and never an expose. Input means the
+    // window is in front of the player again.
+    window_suspended_ = false;
+    window_exposed_ = true;
+    note_background_hold();
+}
+
+void Shell::adopt_loaded_speed(int loaded)
+{
+    if (loaded < 0) {
+        loaded = 0;
+    }
+    if (loaded > 3) {
+        loaded = 3;
+    }
+    if (background_held_) {
+        // Resume should run the speed this load established, not the speed
+        // that was current when the window was covered.
+        background_speed_ = loaded;
+        speed_ = 0;
+        session_.set_speed(0);
+        return;
+    }
+    speed_ = loaded;
+    session_.set_speed(loaded);
 }
 
 void Shell::restore_play_preferences()
 {
     if (pref_speed_ >= 0) {
-        session_.set_speed(pref_speed_);
-        speed_ = session_.speed();
+        if (background_held_) {
+            background_speed_ = pref_speed_;
+            speed_ = 0;
+            session_.set_speed(0);
+        } else {
+            session_.set_speed(pref_speed_);
+            speed_ = session_.speed();
+        }
     }
     if (pref_disasters_ >= 0) {
         session_.set_disasters(pref_disasters_ != 0);
@@ -1218,6 +1257,10 @@ void Shell::loop()
                 open_dialog(Dialog::Graphs);
                 graph_pointer_x_ = 280;
             } else if (demo_ == "evaluation") {
+                // San Francisco's goal is the long line that used to run into Close.
+                session_.load_scenario(CitySession::scenario_def(1).id);
+                speed_ = 0;
+                session_.set_speed(0);
                 session_.update_evaluation();
                 open_dialog(Dialog::Evaluation);
             } else if (demo_ == "query") {
@@ -1454,9 +1497,11 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
         unfocused_ = false;
+        release_occlusion();
         note_background_hold();
         break;
     case SDL_EVENT_MOUSE_MOTION: {
+        release_occlusion();
         touch_used_ = false;
         int ww = 1;
         int wh = 1;
@@ -1505,6 +1550,7 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+        release_occlusion();
         note_keyboard_input();
         int ww = 1;
         int wh = 1;
@@ -1602,7 +1648,7 @@ void Shell::handle_event(const SDL_Event &event)
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
         if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
             if (notches != 0) {
-                nudge_file_list(notches > 0 ? -notches : -notches, false, true);
+                nudge_file_list(-notches, false, true);
             }
             break;
         }
@@ -1629,7 +1675,7 @@ void Shell::handle_event(const SDL_Event &event)
             }
             pointer_x_ = pixel_x;
             pointer_y_ = pixel_y;
-            zoom_by(notches > 0 ? 2 * notches : 2 * notches, pointer_x_, pointer_y_);
+            zoom_by(2 * notches, pointer_x_, pointer_y_);
         } else if (dialog_ == Dialog::None && !menu_.open()) {
             scroll_x_ -= event.wheel.x * 48.0;
             scroll_y_ -= event.wheel.y * 48.0;
@@ -1638,6 +1684,7 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_KEY_DOWN: {
+        release_occlusion();
         note_keyboard_input();
         const SDL_Keycode key = event.key.key;
         const int mods = mods_from_sdl(event.key.mod);

@@ -218,6 +218,10 @@ private:
     void set_look_preference(Look look);
     void clear_transient_message();
     void note_background_hold();
+    void release_occlusion();
+    // Apply a speed that a load just established. While the window is held,
+    // that speed is what resume will run.
+    void adopt_loaded_speed(int loaded);
     // Put the global speed and disasters back after a city file's own options.
     void restore_play_preferences();
     void note_keyboard_input();

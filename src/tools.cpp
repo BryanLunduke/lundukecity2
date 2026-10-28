@@ -40,6 +40,48 @@ const ToolDef *tool_by_index(int index)
     return &kTools[index];
 }
 
+const char *tool_click_phrase(int engine_id)
+{
+    switch (engine_id) {
+    case TOOL_BULLDOZER:
+        return "Bulldozer: click to clear";
+    case TOOL_ROAD:
+        return "Roads: click to lay";
+    case TOOL_RAILROAD:
+        return "Rail: click to lay";
+    case TOOL_WIRE:
+        return "Wire: click to lay";
+    case TOOL_PARK:
+        return "Park: click to plant";
+    case TOOL_RESIDENTIAL:
+        return "Residential: click to zone";
+    case TOOL_COMMERCIAL:
+        return "Commercial: click to zone";
+    case TOOL_INDUSTRIAL:
+        return "Industrial: click to zone";
+    case TOOL_POLICESTATION:
+        return "Police: click to build";
+    case TOOL_FIRESTATION:
+        return "Fire dept: click to build";
+    case TOOL_STADIUM:
+        return "Stadium: click to build";
+    case TOOL_SEAPORT:
+        return "Seaport: click to build";
+    case TOOL_COALPOWER:
+        return "Coal power: click to build";
+    case TOOL_NUCLEARPOWER:
+        return "Nuclear power: click to build";
+    case TOOL_AIRPORT:
+        return "Airport: click to build";
+    case kSpecialEngineId:
+        return "Special: click to place";
+    case TOOL_QUERY:
+        return "Query: click to inspect";
+    default:
+        return "Click to build";
+    }
+}
+
 ToolFootprint tool_footprint(int engine_id)
 {
     // Same sizes as static gToolSize[] in the engine (indexed by EditingTool):
