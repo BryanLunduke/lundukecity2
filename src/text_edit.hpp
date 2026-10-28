@@ -149,7 +149,13 @@ inline bool text_has_path_separator(const std::string &text)
     return text.find('/') != std::string::npos || text.find('\\') != std::string::npos;
 }
 
-// Drop C0 controls and DEL, and stop at a UTF-8 boundary that still fits.
+// Tab and newline become one space so pasted words stay apart. Other C0
+// controls and DEL are dropped. The result stops on a UTF-8 boundary.
+inline bool paste_break(unsigned char lead)
+{
+    return lead == '\t' || lead == '\n' || lead == '\r' || lead == '\v' || lead == '\f';
+}
+
 inline std::string sanitize_pasted_text(const std::string &text, int max_bytes)
 {
     std::string out;
@@ -158,6 +164,16 @@ inline std::string sanitize_pasted_text(const std::string &text, int max_bytes)
     }
     for (std::size_t i = 0; i < text.size();) {
         const unsigned char lead = static_cast<unsigned char>(text[i]);
+        if (paste_break(lead)) {
+            if (out.empty() || out.back() != ' ') {
+                if (static_cast<int>(out.size()) + 1 > max_bytes) {
+                    break;
+                }
+                out.push_back(' ');
+            }
+            ++i;
+            continue;
+        }
         if (lead < 0x20 || lead == 0x7f) {
             ++i;
             continue;

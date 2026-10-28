@@ -406,7 +406,7 @@ int main()
         lost.set_speed(1);
         hostile_review_session_probe(lost, 6);
         const std::string lost_text = lost.scenario_outcome_text(false);
-        if (lost_text.find("Time's up. Hamburg missed the goal.") == std::string::npos ||
+        if (lost_text.find("Time is up. Hamburg missed the goal.") == std::string::npos ||
             lost_text.find("Population") == std::string::npos ||
             lost_text.find("Keep playing continues") != std::string::npos) {
             return fail(40, "the loss dialog is missing the stat line");

@@ -12,6 +12,24 @@
 
 // New City seed field. Blank or "auto" takes a seed from the clock.
 // Any other whole number, including 0, is the seed itself.
+// Ten characters covers "auto", a leading +, and 999999999. A longer
+// paste is cut here so the digits cannot wrap out of the box.
+inline constexpr int kCitySeedFieldMax = 10;
+
+// Which New City field failed. Both, the name only, or the seed only.
+inline const char *new_city_field_error(bool name_ok, bool seed_ok)
+{
+    if (name_ok && seed_ok) {
+        return nullptr;
+    }
+    if (!name_ok && !seed_ok) {
+        return "Check the name and the seed.";
+    }
+    if (!name_ok) {
+        return "Check the name.";
+    }
+    return "Check the seed.";
+}
 struct CitySeedParse {
     bool from_clock = true;
     int value = 0;

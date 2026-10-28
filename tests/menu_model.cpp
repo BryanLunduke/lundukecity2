@@ -4,6 +4,7 @@
 
 #include "controls_page.hpp"
 #include "menu_model.hpp"
+#include "osk_layout.hpp"
 #include "text_edit.hpp"
 
 #include <cmath>
@@ -179,6 +180,37 @@ int main()
     if (field_backspace_would_delete("Mesa", 0, 0) || !field_backspace_would_delete("Mesa", 2, 2) ||
         !field_backspace_would_delete("Mesa", 0, 4) || field_backspace_would_delete("", 0, 0)) {
         return fail("backspace is offered when the caret cannot delete");
+    }
+    {
+        const MenuEntry *options = menu_table::column_items(1);
+        const int count = menu_table::column_count(1);
+        int sep = -1;
+        for (int i = 0; i < count; ++i) {
+            if (options[i].kind == ItemKind::Separator) {
+                sep = i;
+                break;
+            }
+        }
+        if (sep < 1 || menu_table::menu_visible_top(options, count, sep, 1) <= sep ||
+            menu_table::menu_visible_top(options, count, sep, -1) >= sep ||
+            options[menu_table::menu_visible_top(options, count, sep, 1)].kind == ItemKind::Separator) {
+            return fail("a scrolled menu can start on a separator");
+        }
+    }
+    if (osk_key_height(100) != 0) {
+        return fail("a short on-screen keyboard still forces keys past the box");
+    }
+    {
+        OskPlacement boxes[64];
+        const int placed = osk_place(10, 20, 480, 160, boxes, 64);
+        if (placed < 40) {
+            return fail("the on-screen keyboard did not lay out");
+        }
+        for (int i = 0; i < placed; ++i) {
+            if (boxes[i].y + boxes[i].h > 20 + 160 + 0.5) {
+                return fail("an on-screen key is drawn below its box");
+            }
+        }
     }
     return 0;
 }

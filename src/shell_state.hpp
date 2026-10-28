@@ -203,6 +203,11 @@ private:
     // Up/Down on the on-screen keyboard. Returns false when focus is not a key.
     // The bottom row steps out to the control under the keyboard.
     bool move_osk_vertically(int direction);
+    // Up/Down in a dialog: the list, then the keyboard, then a button row.
+    // Down on the file-dialog buttons returns to the selected row.
+    bool nudge_dialog_up_down(int direction);
+    // The orange list ring tracks the blue selection.
+    void align_list_focus();
     void scroll_menu_by(int rows);
     void scroll_menu_to_pointer(double y);
     void autoscroll_menu();
@@ -240,7 +245,7 @@ private:
     // Apply a speed that a load just established. While the window is held,
     // that speed is what resume will run.
     void adopt_loaded_speed(int loaded);
-    // Put the global speed and disasters back after a city file's own options.
+    // Put the global preferences back after a city file's own options.
     void restore_play_preferences();
     void note_keyboard_input();
     void note_background_write_failed(const char *text);
@@ -329,6 +334,8 @@ private:
     int pref_auto_budget_ = -1;
     int pref_auto_bulldoze_ = -1;
     int pref_auto_goto_ = -1;
+    // 1 sound on, 0 muted. A loaded city must not replace this.
+    int pref_sound_ = -1;
     std::chrono::steady_clock::time_point modal_grace_until_{};
     bool modal_swallow_mouse_ = false;
     bool modal_swallow_pad_ = false;

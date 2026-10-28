@@ -93,7 +93,7 @@ int main()
             won.find(kGoals[0]) == std::string::npos ||
             won.find("Population") == std::string::npos ||
             won.find("previous speed") != std::string::npos ||
-            lost.find("Time's up. Dullsville missed the goal.") == std::string::npos ||
+            lost.find("Time is up. Dullsville missed the goal.") == std::string::npos ||
             lost.find(kGoals[0]) == std::string::npos ||
             lost.find("Population") == std::string::npos) {
             std::fprintf(stderr, "won '%s'\n", won.c_str());

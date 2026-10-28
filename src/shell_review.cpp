@@ -784,6 +784,99 @@ void Shell::run_review_checks()
         fail("loading a city replaced the global auto budget, bulldoze, or goto preference");
         return;
     }
+    {
+        const int old_volume = volume_;
+        const bool old_wheel = wheel_zooms_;
+        const bool old_pause = pause_unfocused_;
+        const int old_look = look_pref_.setting();
+        const auto sound_path = std::filesystem::temp_directory_path() / "lunduke-review-sound.cty";
+        session_.set_sound_enabled(true);
+        session_.set_disasters(true);
+        session_.set_auto_budget(false);
+        session_.set_auto_bulldoze(false);
+        session_.set_auto_goto(false);
+        session_.set_speed(3);
+        if (!session_.save_city_as(sound_path.string())) {
+            fail("could not save a city to check preferences");
+            return;
+        }
+        volume_ = 37;
+        wheel_zooms_ = true;
+        pause_unfocused_ = true;
+        pref_sound_ = 0;
+        session_.set_sound_enabled(false);
+        sound_.set_muted(true);
+        pref_speed_ = 1;
+        pref_disasters_ = 0;
+        pref_auto_budget_ = 1;
+        pref_auto_bulldoze_ = 1;
+        pref_auto_goto_ = 1;
+        if (!session_.load_city(sound_path.string()) || session_.sound_enabled()) {
+            std::filesystem::remove(sound_path);
+            fail("loading a city overwrote Mute");
+            return;
+        }
+        restore_play_preferences();
+        ui_scale::StoredSettings written;
+        written.sound = pref_sound_ >= 0 ? (pref_sound_ != 0 ? 1 : 0) : (session_.sound_enabled() ? 1 : 0);
+        written.speed = pref_speed_;
+        written.auto_budget = pref_auto_budget_;
+        written.disasters = pref_disasters_;
+        written.volume = volume_;
+        written.wheel_zoom = wheel_zooms_ ? 1 : 0;
+        written.pause_unfocused = pause_unfocused_ ? 1 : 0;
+        written.look = look_pref_.setting();
+        const std::string text = ui_scale::settings_text(written);
+        if (session_.sound_enabled() || !sound_.muted() || session_.speed() != 1 || session_.disasters() ||
+            !session_.auto_budget() || !session_.auto_bulldoze() || !session_.auto_goto() || volume_ != 37 ||
+            !wheel_zooms_ || !pause_unfocused_ || look_pref_.setting() != old_look || pref_sound_ != 0 ||
+            text.find("sound=0") == std::string::npos || text.find("sound=1") != std::string::npos ||
+            text.find("speed=1") == std::string::npos || text.find("auto_budget=1") == std::string::npos ||
+            text.find("disasters=0") == std::string::npos || text.find("volume=37") == std::string::npos) {
+            std::filesystem::remove(sound_path);
+            fail("a loaded city changed a settings.txt preference: " + text);
+            return;
+        }
+        std::filesystem::remove(sound_path);
+        volume_ = old_volume;
+        wheel_zooms_ = old_wheel;
+        pause_unfocused_ = old_pause;
+        pref_sound_ = 1;
+        session_.set_sound_enabled(true);
+        sound_.set_muted(false);
+    }
+    files_.clear();
+    for (int i = 0; i < 20; ++i) {
+        files_.push_back("row-" + std::to_string(i) + ".cty");
+    }
+    files_save_ = false;
+    dialog_ = Dialog::Files;
+    list_index_ = 4;
+    list_scroll_ = 0;
+    files_visible_ = 8;
+    focus_id_ = kListItem;
+    align_list_focus();
+    if (focus_id_ != kListItem + 4) {
+        fail("the load list focus is not on the selected row");
+        return;
+    }
+    if (!nudge_file_list(-1, false, false) || list_index_ != 3 || focus_id_ != kListItem + 3) {
+        fail("Up moved the orange box off the blue selection");
+        return;
+    }
+    list_index_ = 0;
+    list_scroll_ = 0;
+    focus_id_ = kListItem;
+    if (!nudge_file_list(-1, false, false) || list_index_ != 0 || focus_id_ != kListItem) {
+        fail("Up on the first load row left the selection");
+        return;
+    }
+    focus_id_ = kUp;
+    if (!nudge_dialog_up_down(1) || focus_id_ != kListItem) {
+        fail("Down from Up went to Cancel");
+        return;
+    }
+    dialog_ = Dialog::None;
     session_.set_speed(0);
 
 #ifndef _WIN32

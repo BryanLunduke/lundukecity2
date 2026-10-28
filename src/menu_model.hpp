@@ -332,6 +332,35 @@ inline double menu_row_scroll(const double *tops, int count, int index)
     return std::max(0.0, tops[index] - tops[0]);
 }
 
+// A separator is not a row to park on. direction < 0 walks upward.
+inline int menu_visible_top(const MenuEntry *items, int count, int row, int direction)
+{
+    if (items == nullptr || count < 1) {
+        return 0;
+    }
+    if (row < 0) {
+        row = 0;
+    }
+    if (row >= count) {
+        row = count - 1;
+    }
+    if (items[row].kind != ItemKind::Separator) {
+        return row;
+    }
+    const int step = direction < 0 ? -1 : 1;
+    for (int i = row + step; i >= 0 && i < count; i += step) {
+        if (items[i].kind != ItemKind::Separator) {
+            return i;
+        }
+    }
+    for (int i = row - step; i >= 0 && i < count; i -= step) {
+        if (items[i].kind != ItemKind::Separator) {
+            return i;
+        }
+    }
+    return row;
+}
+
 inline int menu_scroll_row(const double *tops, int count, double scroll)
 {
     if (tops == nullptr || count < 1) {
