@@ -49,6 +49,8 @@ public:
     // Advance the unpowered-zone blink. Returns true when the blink actually
     // changed a tile, so a paused city with nothing to flash can stay idle.
     bool tick(int elapsed_ms);
+    // Milliseconds until the next blink flip. The shell sleeps on this.
+    int blink_remaining_ms() const;
 
     void draw(cairo_t *cr);
 
@@ -61,7 +63,9 @@ public:
 
     // While a stroke is down, pan when the pointer sits in the viewport margin.
     // view_* is the pointer inside the visible map port, not map-local.
-    bool edge_scroll(double view_x, double view_y, int view_w, int view_h, double &dx, double &dy) const;
+    // Scrolling waits until the pointer has moved, then about 300 ms, and
+    // then advances by time (not by frame). elapsed_ms is the frame slice.
+    bool edge_scroll(double view_x, double view_y, int view_w, int view_h, int elapsed_ms, double &dx, double &dy);
 
     std::function<void(int, int)> on_tool_down;
     std::function<void(int, int, int, int)> on_tool_drag;
@@ -84,6 +88,11 @@ private:
     int shake_x_ = 0;
     int shake_y_ = 0;
     bool dragging_ = false;
+    bool drag_moved_ = false;
+    double press_local_x_ = 0;
+    double press_local_y_ = 0;
+    bool edge_holding_ = false;
+    std::chrono::steady_clock::time_point edge_hold_start_{};
     int last_x_ = -1;
     int last_y_ = -1;
     bool hover_valid_ = false;

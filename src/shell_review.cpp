@@ -185,7 +185,7 @@ void Shell::run_review_checks()
         tile_atlas().forget_svga();
         const int stored_look = loaded_.look;
         loaded_.look = 1;
-        set_look_preference(loaded_.look == 1);
+        set_look_preference(loaded_.look == 1 ? Look::Svga : Look::Classic);
         if (drawn_look_ != 0 || tile_atlas().use_svga() || look_pref_.setting() != 1) {
             fail("loading SVGA with no sheet stored Classic");
             return;
@@ -200,7 +200,7 @@ void Shell::run_review_checks()
             fail("picking Classic did not store Classic");
             return;
         }
-        set_look_preference(true);
+        set_look_preference(Look::Svga);
         if (drawn_look_ != 0 || look_pref_.setting() != 1) {
             fail("quitting would replace a stored SVGA choice with Classic");
             return;
@@ -209,7 +209,7 @@ void Shell::run_review_checks()
             fail("SVGA sheet could not be restored");
             return;
         }
-        set_look_preference(false);
+        set_look_preference(Look::Classic);
         loaded_.look = stored_look;
         if (drawn_look_ != 0 || tile_atlas().use_svga()) {
             fail("Classic did not come back after the missing-sheet check");
@@ -257,7 +257,7 @@ void Shell::run_review_checks()
             return;
         }
         tile_atlas().forget_spooky();
-        set_look_preference(2);
+        set_look_preference(Look::Spooky);
         if (drawn_look_ != 0 || tile_atlas().use_spooky() || look_pref_.setting() != 2) {
             fail("a missing Spooky sheet stored Classic");
             return;
@@ -271,7 +271,7 @@ void Shell::run_review_checks()
             fail("Spooky sheet could not be restored");
             return;
         }
-        set_look_preference(0);
+        set_look_preference(Look::Classic);
         if (drawn_look_ != 0 || tile_atlas().use_svga() || tile_atlas().use_spooky()) {
             fail("Classic did not come back after the Spooky check");
             return;
@@ -1333,7 +1333,8 @@ void Shell::run_review_checks()
         return;
     }
     note_keyboard_input();
-    if (context_hint().find("Click builds") == std::string::npos) {
+    if (context_hint().find("Click builds") == std::string::npos &&
+        context_hint().find("Click inspects") == std::string::npos) {
         fail("a key did not restore the keyboard hint");
         return;
     }

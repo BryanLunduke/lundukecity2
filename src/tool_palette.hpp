@@ -77,11 +77,14 @@ public:
     void set_selected(int index);
     int hover() const { return hover_; }
 
-    // Width and height of the grid for a given cell size.
-    static int width_for(int cell);
-    static int height_for(int cell);
+    // Width and height of the grid. columns is 2 until a short window
+    // switches the toolbar to 3 so the minimap and demand meters fit.
+    static int width_for(int cell, int columns = 2);
+    static int height_for(int cell, int columns = 2);
     void set_cell(int cell) { cell_ = cell; }
     int cell() const { return cell_; }
+    void set_columns(int columns);
+    int columns() const { return columns_; }
 
     int index_at(double x, double y) const;
     const char *tooltip() const;
@@ -94,9 +97,9 @@ public:
     std::function<void(int)> on_selected;
 
 private:
-    static constexpr int kCols = 2;
     static constexpr int kPad = 4;
 
+    int columns_ = 2;
     int cell_ = 44;
     int selected_ = 0;
     int hover_ = -1;

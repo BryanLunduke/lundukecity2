@@ -629,6 +629,7 @@ void Shell::finish_save(const std::string &path)
 void Shell::finish_open(const std::string &path)
 {
     reset_touch_state();
+    clear_transient_message();
     if (path.empty() || !session_.load_city(path)) {
         std::string reason = session_.last_load_error();
         if (reason.empty()) {
@@ -951,21 +952,21 @@ void Shell::apply_action(Action action)
         zoom_by(-2);
         break;
     case Action::ClassicLook:
-        set_look_preference(false);
+        set_look_preference(Look::Classic);
         map_.invalidate_all();
         save_window_settings();
         break;
     case Action::SvgaLook:
         // A missing sheet stays on Classic for this session, and the menu
         // check follows the sheet that is drawn. The stored choice stays SVGA.
-        set_look_preference(true);
+        set_look_preference(Look::Svga);
         map_.invalidate_all();
         save_window_settings();
         break;
     case Action::SpookyLook:
         // Same fallback as SVGA: a missing sheet stays Classic on screen,
         // the menu check follows the drawn sheet, and the stored choice stays.
-        set_look_preference(2);
+        set_look_preference(Look::Spooky);
         map_.invalidate_all();
         save_window_settings();
         break;
@@ -1228,19 +1229,7 @@ void Shell::on_dialog_button(int id)
             focus_id_ = kFieldSeed;
             return;
         }
-        if (id == kNext && new_page_ == 1) {
-            int seed = 0;
-            bool set = false;
-            if (!take_city_seed(field_b_, seed, set)) {
-                dialog_error_ = "Enter a whole number, or leave the field blank.";
-                return;
-            }
-            dialog_error_.clear();
-            new_page_ = 2;
-            focus_id_ = kGenerate;
-            return;
-        }
-        if (id == kGenerate) {
+        if (id == kGenerate || (id == kNext && new_page_ >= 1)) {
             int seed = 0;
             bool set = false;
             if (!take_city_seed(field_b_, seed, set) || !CitySession::name_is_usable(field_a_)) {
@@ -1261,6 +1250,7 @@ void Shell::on_dialog_button(int id)
             const int serial = session_.message_serial();
             ++city_generation_;
             reset_touch_state();
+            clear_transient_message();
             session_.new_city(spec);
             if (session_.message_serial() == serial) {
                 restore_play_preferences();
@@ -1278,6 +1268,7 @@ void Shell::on_dialog_button(int id)
                 const int id_num = CitySession::scenario_def(index).id;
                 ++city_generation_;
                 reset_touch_state();
+                clear_transient_message();
                 if (!session_.load_scenario(id_num)) {
                     info_title_ = "Play Scenario";
                     info_body_ = "Could not start that scenario.";
@@ -2078,7 +2069,7 @@ void Shell::activate_focus()
         return;
     }
     if (dialog_ == Dialog::NewCity) {
-        on_dialog_button(new_page_ < 2 ? kNext : kGenerate);
+        on_dialog_button(new_page_ == 0 ? kNext : kGenerate);
         return;
     }
     if (dialog_ == Dialog::Rename) {

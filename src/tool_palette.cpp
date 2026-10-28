@@ -103,14 +103,31 @@ ToolPalette::ToolPalette()
     selected_ = kDefaultToolIndex;
 }
 
-int ToolPalette::width_for(int cell)
+void ToolPalette::set_columns(int columns)
 {
-    return kPad * 2 + kCols * cell;
+    if (columns < 2) {
+        columns = 2;
+    }
+    if (columns > 3) {
+        columns = 3;
+    }
+    columns_ = columns;
 }
 
-int ToolPalette::height_for(int cell)
+int ToolPalette::width_for(int cell, int columns)
 {
-    const int rows = (kToolCount + kCols - 1) / kCols;
+    if (columns < 2) {
+        columns = 2;
+    }
+    return kPad * 2 + columns * cell;
+}
+
+int ToolPalette::height_for(int cell, int columns)
+{
+    if (columns < 2) {
+        columns = 2;
+    }
+    const int rows = (kToolCount + columns - 1) / columns;
     return kPad * 2 + rows * cell;
 }
 
@@ -132,10 +149,10 @@ int ToolPalette::index_at(double x, double y) const
     }
     const int col = static_cast<int>(x - kPad) / cell_;
     const int row = static_cast<int>(y - kPad) / cell_;
-    if (col < 0 || row < 0 || col >= kCols) {
+    if (col < 0 || row < 0 || col >= columns_) {
         return -1;
     }
-    const int index = row * kCols + col;
+    const int index = row * columns_ + col;
     if (index < 0 || index >= kToolCount) {
         return -1;
     }
@@ -229,12 +246,12 @@ cairo_surface_t *tool_icon_named(const char *stem)
 void ToolPalette::draw(cairo_t *cr) const
 {
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
-    const int rows = (kToolCount + kCols - 1) / kCols;
-    box(cr, 0, 0, kPad * 2 + kCols * cell_, kPad * 2 + rows * cell_, 0xED / 255.0, 0xEC / 255.0, 0xEB / 255.0);
+    const int rows = (kToolCount + columns_ - 1) / columns_;
+    box(cr, 0, 0, kPad * 2 + columns_ * cell_, kPad * 2 + rows * cell_, 0xED / 255.0, 0xEC / 255.0, 0xEB / 255.0);
 
     for (int i = 0; i < kToolCount; ++i) {
-        const int col = i % kCols;
-        const int row = i / kCols;
+        const int col = i % columns_;
+        const int row = i / columns_;
         const double x = kPad + col * cell_ + 1;
         const double y = kPad + row * cell_ + 1;
         const double bs = cell_ - 2;

@@ -20,6 +20,10 @@
 
 #include <SDL3/SDL.h>
 
+using Look = ui_scale::Look;
+using ui_scale::look_from_setting;
+using ui_scale::look_to_setting;
+
 #include <cairo.h>
 
 #include <chrono>
@@ -157,6 +161,7 @@ private:
     void reset_touch_state();
     std::string context_hint() const;
     std::string dialog_title_hint() const;
+    std::string idle_message() const;
     void set_speed(int speed);
     void toggle_pause();
     void cycle_tool(int delta);
@@ -210,7 +215,9 @@ private:
     void note_window_geometry();
     void apply_loaded_settings();
     // Remember the player's look. The drawn sheet may stay Classic.
-    void set_look_preference(int look);
+    void set_look_preference(Look look);
+    void clear_transient_message();
+    void note_background_hold();
     // Put the global speed and disasters back after a city file's own options.
     void restore_play_preferences();
     void note_keyboard_input();
@@ -487,6 +494,11 @@ private:
     bool presented_ = false;
     bool blink_drew_ = false;
     bool window_exposed_ = false;
+    bool window_suspended_ = false;
+    bool unfocused_ = false;
+    bool background_held_ = false;
+    int background_speed_ = 0;
+    float wheel_acc_y_ = 0.0f;
     int redraws_ = 0;
     int skipped_redraws_ = 0;
     int surface_builds_ = 0;
