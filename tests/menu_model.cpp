@@ -4,8 +4,11 @@
 
 #include "controls_page.hpp"
 #include "menu_model.hpp"
+#include "text_edit.hpp"
 
+#include <cmath>
 #include <iostream>
+#include <vector>
 
 namespace {
 
@@ -147,6 +150,35 @@ int main()
         pause_run_hint("\u25B3", "Options").find("Options then Options") != std::string::npos ||
         pause_run_hint("\u25B3", "Options").find("or Options,") == std::string::npos) {
         return fail("the PlayStation pause hint names Options twice");
+    }
+    {
+        constexpr int n = 18;
+        double tops[n];
+        double heights[n];
+        double rel = 5;
+        for (int i = 0; i < n; ++i) {
+            tops[i] = rel;
+            heights[i] = 30;
+            rel += 30;
+        }
+        const double content = rel;
+        const double view = 200;
+        const double scroll = menu_table::menu_reveal_scroll(tops, heights, n, n - 1, view, content);
+        const int first = menu_table::menu_scroll_row(tops, n, scroll);
+        if (std::fabs(scroll - (tops[first] - tops[0])) > 0.1) {
+            return fail("a scrolled menu starts in the middle of a row");
+        }
+        if (tops[n - 1] + heights[n - 1] > scroll + view + 0.5 || tops[n - 1] < scroll - 0.5) {
+            return fail("the last menu row is not in view when it has focus");
+        }
+        const int stepped = menu_table::menu_scroll_row(tops, n, menu_table::menu_row_scroll(tops, n, first + 1));
+        if (stepped != first + 1) {
+            return fail("the menu wheel did not move by one row");
+        }
+    }
+    if (field_backspace_would_delete("Mesa", 0, 0) || !field_backspace_would_delete("Mesa", 2, 2) ||
+        !field_backspace_would_delete("Mesa", 0, 4) || field_backspace_would_delete("", 0, 0)) {
+        return fail("backspace is offered when the caret cannot delete");
     }
     return 0;
 }

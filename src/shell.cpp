@@ -931,6 +931,7 @@ std::string Shell::visual_stamp() const
         << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
         << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
         << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
+        << ' ' << static_cast<int>(menu_scroll_) << ' ' << menu_edge_dir_
         << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_
         << ' ' << drawn_look_;
     return out.str();
@@ -997,6 +998,9 @@ void Shell::loop()
             }
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);
+            }
+            if (menu_.open() && menu_edge_dir_ != 0) {
+                timeout = std::min(timeout, 40);
             }
             if (SDL_WaitEventTimeout(&event, timeout)) {
                 if (event.type == SDL_EVENT_QUIT) {
@@ -1214,6 +1218,7 @@ void Shell::loop()
             }
         }
         set_paused_for_dialog();
+        autoscroll_menu();
         render();
         ++frame_;
         if (smoke_ && frame_ == 2) {
@@ -1646,6 +1651,9 @@ void Shell::handle_event(const SDL_Event &event)
             list_dragging_ = false;
         }
         if (menu_.open() && dialog_ == Dialog::None) {
+            if (menu_thumb_drag_) {
+                scroll_menu_to_pointer(pointer_y_);
+            }
             break;
         }
         if (slider_drag_ != 0) {
@@ -1749,6 +1757,7 @@ void Shell::handle_event(const SDL_Event &event)
             pointer_down_ = false;
             slider_drag_ = 0;
             list_dragging_ = false;
+            menu_thumb_drag_ = false;
             if (pointer_on_map_) {
                 map_.release();
                 pointer_on_map_ = false;
@@ -1774,6 +1783,12 @@ void Shell::handle_event(const SDL_Event &event)
             wheel_acc_y_ -= static_cast<float>(notches);
         }
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+        if (menu_.open() && dialog_ == Dialog::None && !ctrl) {
+            if (notches != 0) {
+                scroll_menu_by(-notches);
+            }
+            break;
+        }
         if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
             if (notches != 0) {
                 nudge_file_list(-notches, false, true);

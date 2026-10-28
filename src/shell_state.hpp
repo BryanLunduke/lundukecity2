@@ -179,6 +179,9 @@ private:
     void note_message();
     void arm_smoke_pad();
     bool show_osk() const;
+    // Stays up for the rest of the dialog once a pad or a finger has opened it,
+    // so the page does not jump when the pointer moves.
+    bool osk_visible() const;
     std::string *active_field();
     void type_text(const std::string &text);
     void backspace_field();
@@ -189,9 +192,12 @@ private:
     void push_hot(double x, double y, double w, double h, int id);
     void push_focus(int id);
     void move_focus(int delta);
-    // Up/Down on the on-screen keyboard. Returns false when focus is not a
-    // key, or the adjacent row does not exist (the caller then moves linearly).
+    // Up/Down on the on-screen keyboard. Returns false when focus is not a key.
+    // The bottom row steps out to the control under the keyboard.
     bool move_osk_vertically(int direction);
+    void scroll_menu_by(int rows);
+    void scroll_menu_to_pointer(double y);
+    void autoscroll_menu();
     void activate_focus();
     void activate_file_row();
     void button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary);
@@ -456,6 +462,21 @@ private:
     int slider_drag_ = 0;
     bool gamepad_nav_ = false;
     bool touch_used_ = false;
+    bool osk_latched_ = false;
+    double menu_scroll_ = 0;
+    int menu_scroll_menu_ = -2;
+    int menu_scroll_cursor_ = -2;
+    bool menu_thumb_drag_ = false;
+    int menu_edge_dir_ = 0;
+    std::chrono::steady_clock::time_point menu_edge_at_{};
+    double menu_drop_x_ = 0;
+    double menu_drop_w_ = 0;
+    double menu_drop_h_ = 0;
+    double menu_content_h_ = 0;
+    double menu_view_limit_ = 0;
+    double menu_item_top_[64] = {};
+    double menu_item_h_[64] = {};
+    int menu_item_n_ = 0;
     bool deck_ = false;
     bool headless_ = false;
     float cursor_x_ = 640;

@@ -315,6 +315,66 @@ inline double menu_scroll_for_row(double row_top, double row_h, double view_h, d
     return scroll;
 }
 
+// Scroll offsets that start on a row. A value between rows leaves a blank
+// strip at the top where the sliced row was skipped.
+inline double menu_row_scroll(const double *tops, int count, int index)
+{
+    if (tops == nullptr || count < 1) {
+        return 0.0;
+    }
+    if (index < 0) {
+        index = 0;
+    }
+    if (index >= count) {
+        index = count - 1;
+    }
+    return std::max(0.0, tops[index] - tops[0]);
+}
+
+inline int menu_scroll_row(const double *tops, int count, double scroll)
+{
+    if (tops == nullptr || count < 1) {
+        return 0;
+    }
+    const double origin = tops[0];
+    int row = 0;
+    for (int i = 0; i < count; ++i) {
+        if (tops[i] - origin <= scroll + 0.5) {
+            row = i;
+        } else {
+            break;
+        }
+    }
+    return row;
+}
+
+// Smallest row-aligned scroll that puts the cursor row fully inside the view.
+// The top of the view is then the top of a row, so nothing is sliced off.
+inline double menu_reveal_scroll(const double *tops, const double *heights, int count, int cursor, double view_h,
+                                 double content_h)
+{
+    if (tops == nullptr || heights == nullptr || count < 1 || cursor < 0 || cursor >= count) {
+        return 0.0;
+    }
+    if (content_h <= view_h + 0.5) {
+        return 0.0;
+    }
+    const double origin = tops[0];
+    const double row_top = tops[cursor];
+    const double row_h = heights[cursor];
+    for (int i = 0; i < count; ++i) {
+        const double scroll = tops[i] - origin;
+        if (scroll < -0.5) {
+            continue;
+        }
+        const double shown = std::min(view_h, content_h - scroll);
+        if (row_top + 0.5 >= scroll && row_top + row_h <= scroll + shown + 0.5) {
+            return scroll;
+        }
+    }
+    return menu_scroll_for_row(row_top, row_h, view_h, content_h);
+}
+
 inline int actionable_count()
 {
     int n = 0;

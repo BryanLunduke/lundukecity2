@@ -103,6 +103,7 @@ void Shell::close_dialog()
     dialog_ = Dialog::None;
     dialog_error_.clear();
     osk_shift_ = false;
+    osk_latched_ = false;
     if (text_input_on_ && window_ != nullptr) {
         SDL_StopTextInput(window_);
         text_input_on_ = false;
@@ -1604,6 +1605,11 @@ void Shell::on_hotspot(int id, double x, double y)
         }
         return;
     }
+    if (id == kMenuScroll && menu_.open()) {
+        menu_thumb_drag_ = true;
+        scroll_menu_to_pointer(y);
+        return;
+    }
     if (id >= kMenuItem && id < kRecentItem) {
         const int packed = id - kMenuItem;
         menu_.open_menu = packed / 40;
@@ -1829,6 +1835,11 @@ bool Shell::show_osk() const
     return gamepad_nav_ || deck_ || touch_used_;
 }
 
+bool Shell::osk_visible() const
+{
+    return show_osk() || osk_latched_;
+}
+
 std::string *Shell::active_field()
 {
     if (dialog_ == Dialog::NewCity && (focus_id_ == kFieldName || focus_id_ == kFieldSeed || new_page_ == 0)) {
@@ -1969,11 +1980,89 @@ bool Shell::move_osk_vertically(int direction)
         return false;
     }
     const int target = osk_vertical_target(keys, count, index, direction, center, present);
-    if (target < 0) {
-        return false;
+    if (target >= 0) {
+        focus_id_ = kOsk + target;
+        return true;
     }
-    focus_id_ = kOsk + target;
+    // No row that way. The next focus id is the key beside this one, so a
+    // plain step walks sideways along the bottom row.
+    const int leave = osk_exit_focus(focus_order_.data(), static_cast<int>(focus_order_.size()), focus_id_, direction,
+                                     kOsk, kOsk + 64);
+    if (leave >= 0) {
+        focus_id_ = leave;
+    }
     return true;
+}
+
+void Shell::scroll_menu_by(int rows)
+{
+    if (!menu_.open() || menu_item_n_ <= 0 || rows == 0) {
+        return;
+    }
+    int row = menu_table::menu_scroll_row(menu_item_top_, menu_item_n_, menu_scroll_);
+    row += rows;
+    if (row < 0) {
+        row = 0;
+    }
+    if (row >= menu_item_n_) {
+        row = menu_item_n_ - 1;
+    }
+    const double end = menu_table::menu_reveal_scroll(menu_item_top_, menu_item_h_, menu_item_n_, menu_item_n_ - 1,
+                                                      menu_view_limit_, menu_content_h_);
+    double scroll = menu_table::menu_row_scroll(menu_item_top_, menu_item_n_, row);
+    if (scroll > end) {
+        scroll = end;
+    }
+    menu_scroll_ = scroll;
+}
+
+void Shell::scroll_menu_to_pointer(double y)
+{
+    if (!menu_.open() || menu_item_n_ <= 0 || menu_drop_h_ < 1.0) {
+        return;
+    }
+    double t = (y - static_cast<double>(menu_h_)) / menu_drop_h_;
+    if (t < 0.0) {
+        t = 0.0;
+    }
+    if (t > 1.0) {
+        t = 1.0;
+    }
+    const int last = menu_item_n_ - 1;
+    const double end = menu_table::menu_reveal_scroll(menu_item_top_, menu_item_h_, menu_item_n_, last, menu_view_limit_,
+                                                      menu_content_h_);
+    const double desired = t * end;
+    const int row = menu_table::menu_scroll_row(menu_item_top_, menu_item_n_, desired);
+    menu_scroll_ = menu_table::menu_row_scroll(menu_item_top_, menu_item_n_, row);
+}
+
+void Shell::autoscroll_menu()
+{
+    if (!menu_.open() || menu_thumb_drag_ || menu_drop_h_ < 1.0 || menu_item_n_ <= 0) {
+        menu_edge_dir_ = 0;
+        return;
+    }
+    const bool inside = pointer_x_ >= menu_drop_x_ && pointer_x_ < menu_drop_x_ + menu_drop_w_ &&
+                        pointer_y_ >= static_cast<double>(menu_h_) &&
+                        pointer_y_ < static_cast<double>(menu_h_) + menu_drop_h_;
+    int dir = 0;
+    if (inside) {
+        if (pointer_y_ < static_cast<double>(menu_h_) + 18.0) {
+            dir = -1;
+        } else if (pointer_y_ > static_cast<double>(menu_h_) + menu_drop_h_ - 18.0) {
+            dir = 1;
+        }
+    }
+    if (dir == 0) {
+        menu_edge_dir_ = 0;
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (dir != menu_edge_dir_ || now - menu_edge_at_ >= std::chrono::milliseconds(160)) {
+        scroll_menu_by(dir);
+        menu_edge_dir_ = dir;
+        menu_edge_at_ = now;
+    }
 }
 
 void Shell::move_focus(int delta)

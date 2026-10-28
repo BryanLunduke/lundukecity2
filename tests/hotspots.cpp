@@ -134,5 +134,11 @@ int main()
         osk_vertical_target(keys, count, count - 1, 1, center, present) != -1) {
         return fail("vertical move walked off the keyboard");
     }
+    const int order[] = {6001, 6100, 6101, 6102, 105};
+    if (osk_exit_focus(order, 5, 6101, 1, 6100, 6100 + 64) != 105 ||
+        osk_exit_focus(order, 5, 6101, -1, 6100, 6100 + 64) != 6001 ||
+        osk_exit_focus(order, 5, 6102, 1, 6100, 6100 + 64) != 105) {
+        return fail("Down on the bottom keyboard row walked sideways");
+    }
     return 0;
 }

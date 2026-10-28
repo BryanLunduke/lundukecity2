@@ -22,6 +22,8 @@ enum HotspotId : int {
     kVScroll = 51,
     // Scrollbar for the in-window file list (and the scenario list).
     kListScroll = 52,
+    // Thumb and track of a menu that is taller than the window.
+    kMenuScroll = 53,
 
     // The map inside a power / water / crime overlay dialog.
     kOverlayMap = 90,

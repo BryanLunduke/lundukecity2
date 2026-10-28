@@ -175,3 +175,36 @@ inline int osk_vertical_target(const OskKey *keys, int count, int index, int dir
     }
     return best;
 }
+
+// Up or Down with no adjacent row leaves the keyboard. The next key on this
+// row is not a vertical step. -1 stays put.
+inline int osk_exit_focus(const int *order, int count, int current, int direction, int osk_first, int osk_last)
+{
+    if (order == nullptr || count <= 0 || direction == 0) {
+        return -1;
+    }
+    int at = -1;
+    for (int i = 0; i < count; ++i) {
+        if (order[i] == current) {
+            at = i;
+            break;
+        }
+    }
+    if (at < 0) {
+        return -1;
+    }
+    if (direction > 0) {
+        for (int i = at + 1; i < count; ++i) {
+            if (order[i] < osk_first || order[i] >= osk_last) {
+                return order[i];
+            }
+        }
+        return -1;
+    }
+    for (int i = at - 1; i >= 0; --i) {
+        if (order[i] < osk_first || order[i] >= osk_last) {
+            return order[i];
+        }
+    }
+    return -1;
+}
