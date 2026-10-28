@@ -4,13 +4,15 @@
 
 #pragma once
 
-// Menu model for the SDL shell. 46 actionable rows: 8 System, 16 Options,
-// 6 Disasters, 14 Windows, 2 Help. Fullscreen, the zone and coverage
-// maps, and Messages are the rows past the original 37. The look trio
-// sits at the bottom of Options. Hidden zoom accelerators are extra
-// bindings, not extra rows.
+// Menu model for the SDL shell. 50 actionable rows: 8 System, 16 Options,
+// 6 Disasters, 18 Windows, 2 Help. Fullscreen, the zone and coverage
+// maps, the single-zone and transportation maps, and Messages are the
+// rows past the original 37. The look trio sits at the bottom of Options.
+// Hidden zoom accelerators are extra bindings, not extra rows.
 
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -47,7 +49,8 @@ enum class Action {
     Power, Water, Pollution, Crime, LandValue, Traffic,
     About, Settings, Controls,
     Fullscreen,
-    Zones, PoliceMap, FireMap, Population, Growth, Messages,
+    Zones, ZoneResidential, ZoneCommercial, ZoneIndustrial, Transportation,
+    PoliceMap, FireMap, Population, Growth, Messages,
     ClassicLook, SvgaLook, SpookyLook,
     RecentIndex
 };
@@ -151,6 +154,10 @@ inline constexpr MenuEntry kWindows[] = {
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Power", nullptr, ItemKind::Check, Action::Power, AccelKey::None, 0, 0},
     {"All _zones", nullptr, ItemKind::Check, Action::Zones, AccelKey::None, 0, 0},
+    {"Resi_dential", nullptr, ItemKind::Check, Action::ZoneResidential, AccelKey::None, 0, 0},
+    {"Commerci_al", nullptr, ItemKind::Check, Action::ZoneCommercial, AccelKey::None, 0, 0},
+    {"_Industrial", nullptr, ItemKind::Check, Action::ZoneIndustrial, AccelKey::None, 0, 0},
+    {"Transportatio_n", nullptr, ItemKind::Check, Action::Transportation, AccelKey::None, 0, 0},
     {"P_ollution", nullptr, ItemKind::Check, Action::Pollution, AccelKey::None, 0, 0},
     {"_Crime", nullptr, ItemKind::Check, Action::Crime, AccelKey::None, 0, 0},
     {"_Land value", nullptr, ItemKind::Check, Action::LandValue, AccelKey::None, 0, 0},
@@ -221,6 +228,151 @@ inline const char *column_title(int index)
     default:
         return "";
     }
+}
+
+// Row pitch for a menu column. Rows never shrink below the label, so the
+// underline stays inside the row. A column that still will not fit scrolls
+// instead of clipping the last item.
+struct MenuPitch {
+    double row_h = 36;
+    bool scrolls = false;
+    double text_dy = 7;
+    double mark = 14;
+    double mark_dy = 8;
+};
+
+inline MenuPitch menu_pitch(double avail, int n_item, int n_sep, double preferred_row, double text_h)
+{
+    MenuPitch pitch;
+    if (n_item < 1) {
+        n_item = 1;
+    }
+    if (n_sep < 0) {
+        n_sep = 0;
+    }
+    if (text_h < 8.0) {
+        text_h = 8.0;
+    }
+    if (preferred_row < 1.0) {
+        preferred_row = 1.0;
+    }
+    const double chrome = 10.0 + static_cast<double>(n_sep) * 8.0;
+    const double min_row = text_h + 6.0;
+    double row = preferred_row < min_row ? min_row : preferred_row;
+    const double full = chrome + static_cast<double>(n_item) * row;
+    if (full > avail && avail > chrome + static_cast<double>(n_item)) {
+        const double squeezed = std::floor((avail - chrome) / static_cast<double>(n_item));
+        if (squeezed >= min_row) {
+            row = squeezed;
+        } else {
+            row = min_row;
+            pitch.scrolls = true;
+        }
+    }
+    pitch.row_h = row;
+    pitch.text_dy = (row - text_h) / 2.0;
+    if (pitch.text_dy < 0.0) {
+        pitch.text_dy = 0.0;
+    }
+    if (pitch.text_dy + text_h > row - 1.0) {
+        pitch.text_dy = row - 1.0 - text_h;
+        if (pitch.text_dy < 0.0) {
+            pitch.text_dy = 0.0;
+        }
+    }
+    pitch.mark = row >= 28.0 ? 14.0 : std::max(8.0, row - 12.0);
+    if (pitch.mark > row - 4.0) {
+        pitch.mark = std::max(6.0, row - 4.0);
+    }
+    pitch.mark_dy = (row - pitch.mark) / 2.0;
+    if (pitch.mark_dy < 0.0) {
+        pitch.mark_dy = 0.0;
+    }
+    return pitch;
+}
+
+// Scroll so the cursor row sits fully inside the menu. row_top is measured
+// from the top of the menu contents.
+inline double menu_scroll_for_row(double row_top, double row_h, double view_h, double content_h)
+{
+    if (content_h <= view_h + 0.5) {
+        return 0.0;
+    }
+    double scroll = 0.0;
+    if (row_top + row_h > view_h - 4.0) {
+        scroll = row_top + row_h - (view_h - 4.0);
+    }
+    if (row_top < scroll + 4.0) {
+        scroll = row_top - 4.0;
+    }
+    if (scroll < 0.0) {
+        scroll = 0.0;
+    }
+    const double max_scroll = content_h - view_h;
+    if (max_scroll > 0.0 && scroll > max_scroll) {
+        scroll = max_scroll;
+    }
+    return scroll;
+}
+
+// Scroll offsets that start on a row. A value between rows leaves a blank
+// strip at the top where the sliced row was skipped.
+inline double menu_row_scroll(const double *tops, int count, int index)
+{
+    if (tops == nullptr || count < 1) {
+        return 0.0;
+    }
+    if (index < 0) {
+        index = 0;
+    }
+    if (index >= count) {
+        index = count - 1;
+    }
+    return std::max(0.0, tops[index] - tops[0]);
+}
+
+inline int menu_scroll_row(const double *tops, int count, double scroll)
+{
+    if (tops == nullptr || count < 1) {
+        return 0;
+    }
+    const double origin = tops[0];
+    int row = 0;
+    for (int i = 0; i < count; ++i) {
+        if (tops[i] - origin <= scroll + 0.5) {
+            row = i;
+        } else {
+            break;
+        }
+    }
+    return row;
+}
+
+// Smallest row-aligned scroll that puts the cursor row fully inside the view.
+// The top of the view is then the top of a row, so nothing is sliced off.
+inline double menu_reveal_scroll(const double *tops, const double *heights, int count, int cursor, double view_h,
+                                 double content_h)
+{
+    if (tops == nullptr || heights == nullptr || count < 1 || cursor < 0 || cursor >= count) {
+        return 0.0;
+    }
+    if (content_h <= view_h + 0.5) {
+        return 0.0;
+    }
+    const double origin = tops[0];
+    const double row_top = tops[cursor];
+    const double row_h = heights[cursor];
+    for (int i = 0; i < count; ++i) {
+        const double scroll = tops[i] - origin;
+        if (scroll < -0.5) {
+            continue;
+        }
+        const double shown = std::min(view_h, content_h - scroll);
+        if (row_top + 0.5 >= scroll && row_top + row_h <= scroll + shown + 0.5) {
+            return scroll;
+        }
+    }
+    return menu_scroll_for_row(row_top, row_h, view_h, content_h);
 }
 
 inline int actionable_count()

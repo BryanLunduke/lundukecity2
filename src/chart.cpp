@@ -76,13 +76,31 @@ void fill_series(SeriesSpec out[kGraphSeriesCount])
 
 double sample_series(const CitySession &session, const SeriesSpec &item, CitySession::HistoryScale scale, int index)
 {
+    double value = 0.0;
     if (item.population) {
-        return static_cast<double>(population_at(session, scale, index));
+        value = static_cast<double>(population_at(session, scale, index));
+    } else if (item.cash) {
+        value = static_cast<double>(session.plot_cash_flow(scale, index));
+    } else {
+        value = session.history_value(item.history, scale, index);
     }
-    if (item.cash) {
-        return static_cast<double>(session.plot_cash_flow(scale, index));
+    // A scenario file stores 0 in the newest crime and pollution sample
+    // until the first census. The live averages are what Evaluation shows.
+    if (index == 0 && value <= 0.0) {
+        if (item.history == CitySession::HistorySeries::Crime) {
+            const int live = session.crime_average();
+            if (live > 0) {
+                return live;
+            }
+        }
+        if (item.history == CitySession::HistorySeries::Pollution) {
+            const int live = session.pollution_average();
+            if (live > 0) {
+                return live;
+            }
+        }
     }
-    return session.history_value(item.history, scale, index);
+    return value;
 }
 
 } // namespace

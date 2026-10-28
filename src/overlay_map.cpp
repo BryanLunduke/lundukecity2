@@ -87,6 +87,14 @@ const char *overlay_title(CitySession::MapLayer layer)
         return "Growth";
     case CitySession::MapLayer::Zones:
         return "Zones";
+    case CitySession::MapLayer::Residential:
+        return "Residential";
+    case CitySession::MapLayer::Commercial:
+        return "Commercial";
+    case CitySession::MapLayer::Industrial:
+        return "Industrial";
+    case CitySession::MapLayer::Transportation:
+        return "Transportation";
     }
     return "Map";
 }
@@ -116,6 +124,14 @@ const char *overlay_legend(CitySession::MapLayer layer)
         return "Red means the block is growing. Blue means it is shrinking. Clear means no change.";
     case CitySession::MapLayer::Zones:
         return "Green homes, blue shops, yellow industry, gray roads, brown rail, blue water.";
+    case CitySession::MapLayer::Residential:
+        return "Green is a residential zone. Everything else stays clear.";
+    case CitySession::MapLayer::Commercial:
+        return "Blue is a commercial zone. Everything else stays clear.";
+    case CitySession::MapLayer::Industrial:
+        return "Yellow is an industrial zone. Everything else stays clear.";
+    case CitySession::MapLayer::Transportation:
+        return "Gray is a road. Brown is rail. Land and water stay clear.";
     }
     return "";
 }
@@ -209,6 +225,38 @@ void OverlayMap::rebuild()
                     solid(140, 84, 36, 200, pixel);
                 } else if (value == 8) {
                     solid(40, 110, 230, 160, pixel);
+                }
+                continue;
+            case CitySession::MapLayer::Residential:
+                // Classic lawns are already this green. A lighter fill with a
+                // dark edge stays readable on those tiles without new art.
+                if (value > 0) {
+                    const bool edge = session_->layer_value(layer_, x - 1, y) == 0 ||
+                                      session_->layer_value(layer_, x + 1, y) == 0 ||
+                                      session_->layer_value(layer_, x, y - 1) == 0 ||
+                                      session_->layer_value(layer_, x, y + 1) == 0;
+                    if (edge) {
+                        solid(16, 72, 16, 235, pixel);
+                    } else {
+                        solid(186, 255, 64, 215, pixel);
+                    }
+                }
+                continue;
+            case CitySession::MapLayer::Commercial:
+                if (value > 0) {
+                    solid(48, 96, 210, 200, pixel);
+                }
+                continue;
+            case CitySession::MapLayer::Industrial:
+                if (value > 0) {
+                    solid(230, 190, 32, 200, pixel);
+                }
+                continue;
+            case CitySession::MapLayer::Transportation:
+                if (value == 1) {
+                    solid(48, 48, 52, 200, pixel);
+                } else if (value == 2) {
+                    solid(140, 84, 36, 200, pixel);
                 }
                 continue;
             case CitySession::MapLayer::Growth: {

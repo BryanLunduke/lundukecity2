@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <string>
+
 // Palette order matches the classic left-hand tool column (top to bottom,
 // left to right). engine_id values are the Micropolis EditingTool ordinals.
 struct ToolDef {
@@ -20,6 +22,9 @@ extern const int kDefaultToolIndex;
 const ToolDef *tool_by_index(int index);
 // Short instruction for the selected tool, such as "Bulldozer: click to clear".
 const char *tool_click_phrase(int engine_id);
+// Same instruction with a pad or touch verb, such as "Query: A inspects".
+// An empty button keeps the mouse "click to" wording.
+std::string tool_press_phrase(int engine_id, const char *button);
 
 // Footprint of a placeable tool, in tiles. width/height follow the engine's
 // gToolSize[] (tool.cpp). Buildings larger than one tile use the cursor as

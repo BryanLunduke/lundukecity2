@@ -127,6 +127,10 @@ private:
     void begin_load();
     void begin_save_as();
     void begin_files(bool save);
+    void cancel_dialog();
+    void cycle_speed();
+    void center_on_cursor();
+    void select_save_name();
     void refresh_files();
     void begin_system_files(bool save);
     void remember_saved(const std::string &path);
@@ -175,6 +179,9 @@ private:
     void note_message();
     void arm_smoke_pad();
     bool show_osk() const;
+    // Stays up for the rest of the dialog once a pad or a finger has opened it,
+    // so the page does not jump when the pointer moves.
+    bool osk_visible() const;
     std::string *active_field();
     void type_text(const std::string &text);
     void backspace_field();
@@ -185,9 +192,12 @@ private:
     void push_hot(double x, double y, double w, double h, int id);
     void push_focus(int id);
     void move_focus(int delta);
-    // Up/Down on the on-screen keyboard. Returns false when focus is not a
-    // key, or the adjacent row does not exist (the caller then moves linearly).
+    // Up/Down on the on-screen keyboard. Returns false when focus is not a key.
+    // The bottom row steps out to the control under the keyboard.
     bool move_osk_vertically(int direction);
+    void scroll_menu_by(int rows);
+    void scroll_menu_to_pointer(double y);
+    void autoscroll_menu();
     void activate_focus();
     void activate_file_row();
     void button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary);
@@ -425,6 +435,9 @@ private:
     std::chrono::steady_clock::time_point hint_until_{};
     std::chrono::steady_clock::time_point started_{};
     bool recovery_checked_ = false;
+    // Set once the player has picked a city this session. Recovery is not
+    // offered after that, and its default button is Not Now if it is.
+    bool city_chosen_ = false;
     // True from the launch screen until a city is actually started, loaded,
     // or a scenario begins. Cancelling those flows comes back here.
     bool welcome_gate_ = false;
@@ -449,6 +462,21 @@ private:
     int slider_drag_ = 0;
     bool gamepad_nav_ = false;
     bool touch_used_ = false;
+    bool osk_latched_ = false;
+    double menu_scroll_ = 0;
+    int menu_scroll_menu_ = -2;
+    int menu_scroll_cursor_ = -2;
+    bool menu_thumb_drag_ = false;
+    int menu_edge_dir_ = 0;
+    std::chrono::steady_clock::time_point menu_edge_at_{};
+    double menu_drop_x_ = 0;
+    double menu_drop_w_ = 0;
+    double menu_drop_h_ = 0;
+    double menu_content_h_ = 0;
+    double menu_view_limit_ = 0;
+    double menu_item_top_[64] = {};
+    double menu_item_h_[64] = {};
+    int menu_item_n_ = 0;
     bool deck_ = false;
     bool headless_ = false;
     float cursor_x_ = 640;
@@ -482,6 +510,8 @@ private:
 
     bool text_input_on_ = false;
     bool file_ready_ = false;
+    // A cancelled system dialog must not apply a later answer.
+    bool file_ignore_ = false;
     int file_state_ = 0;
     std::string file_path_;
     std::mutex file_mu_;

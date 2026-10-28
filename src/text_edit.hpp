@@ -70,6 +70,15 @@ inline void field_delete_selection(std::string &text, int &caret, int &anchor)
     anchor = from;
 }
 
+inline bool field_backspace_would_delete(const std::string &text, int caret, int anchor)
+{
+    field_clamp(text, caret, anchor);
+    if (caret != anchor) {
+        return true;
+    }
+    return caret > 0;
+}
+
 inline void field_backspace(std::string &text, int &caret, int &anchor)
 {
     field_clamp(text, caret, anchor);

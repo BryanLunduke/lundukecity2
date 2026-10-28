@@ -149,16 +149,16 @@ const ScenarioEntry kScenarios[] = {
       "Bring average traffic below 80 within 10 years.", 10},
      "snro.444"},
     {{SC_TOKYO, "Tokyo", 1957, "A monster is approaching.",
-      "Raise the city score above 500 within 5 years.", 5},
+      "Keep the city score above 500 until 1962.", 5},
      "snro.555"},
     {{SC_DETROIT, "Detroit", 1972, "Crime is out of control.",
       "Bring average crime below 60 within 10 years.", 10},
      "snro.666"},
     {{SC_BOSTON, "Boston", 2010, "A nuclear meltdown is coming.",
-      "Raise the city score above 500 within 5 years.", 5},
+      "Keep the city score above 500 until 2015.", 5},
      "snro.777"},
     {{SC_RIO, "Rio de Janeiro", 2047, "Flooding threatens the city.",
-      "Raise the city score above 500 within 10 years.", 10},
+      "Keep the city score above 500 until 2057.", 10},
      "snro.888"},
 };
 
@@ -843,7 +843,9 @@ bool CitySession::load_city(const std::string &path)
         } else {
             last_load_error_ = "The file could not be read as a city. It may be damaged.";
         }
-        message_ = "Could not load that city file. " + last_load_error_;
+        // The dialog shows the full reason. The message line stays a short
+        // sentence so a damaged file does not paste its whole explanation there.
+        message_ = "Could not load that city file.";
         notify();
         return false;
     }
@@ -1733,6 +1735,16 @@ int CitySession::history_value(HistorySeries series, HistoryScale scale, int ind
     return engine_->sim.getHistory(static_cast<int>(series), static_cast<int>(scale), index);
 }
 
+int CitySession::crime_average() const
+{
+    return static_cast<int>(engine_->sim.crimeAverage);
+}
+
+int CitySession::pollution_average() const
+{
+    return static_cast<int>(engine_->sim.pollutionAverage);
+}
+
 std::int64_t CitySession::cash_flow_history(HistoryScale scale, int index) const
 {
     return static_cast<std::int64_t>(engine_->sim.cashFlowHistory(static_cast<int>(scale), index));
@@ -1825,7 +1837,12 @@ std::string CitySession::scenario_meter() const
         return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < 80";
     }
     if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
-        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + " → goal > 500";
+        // Judged on the score at the deadline, after the disaster. A city
+        // that already sits above 500 has not won yet.
+        const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
+        const int deadline = def.year + def.years;
+        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + ", keep it above 500 until " +
+               std::to_string(deadline);
     }
     return "Population " + grouped_count(people > 0 ? people : 0) + " → 100,000";
 }
@@ -2074,6 +2091,20 @@ int CitySession::layer_value(MapLayer layer, int x, int y) const
         }
         return 0;
     }
+    case MapLayer::Residential:
+        return (tile >= RESBASE && tile < COMBASE) ? 1 : 0;
+    case MapLayer::Commercial:
+        return (tile >= COMBASE && tile < INDBASE) ? 1 : 0;
+    case MapLayer::Industrial:
+        return (tile >= INDBASE && tile < PORTBASE) ? 1 : 0;
+    case MapLayer::Transportation:
+        if ((tile >= ROADBASE && tile <= BRWXXX7) || tile == ROADVPOWERH) {
+            return 1;
+        }
+        if (tile >= RAILBASE && tile <= LASTRAIL) {
+            return 2;
+        }
+        return 0;
     }
     return 0;
 }

@@ -2,9 +2,13 @@
 // Copyright (C) 2026 The Lunduke City authors
 // See COPYING and NOTICE.
 
+#include "controls_page.hpp"
 #include "menu_model.hpp"
+#include "text_edit.hpp"
 
+#include <cmath>
 #include <iostream>
+#include <vector>
 
 namespace {
 
@@ -18,8 +22,8 @@ int fail(const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 46) {
-        return fail("expected 46 actionable menu rows");
+    if (menu_table::actionable_count() != 50) {
+        return fail("expected 50 actionable menu rows");
     }
     if (mnemonic_of("Rename Cit_y…") != 'y') {
         return fail("Rename should use Y");
@@ -79,6 +83,102 @@ int main()
     }
     if (!options_nav.handle_key(AccelKey::Letter, 0, 'y') || options_nav.activated != Action::SpookyLook) {
         return fail("Y should activate Spooky Look");
+    }
+
+    MenuNav windows;
+    if (!windows.handle_key(AccelKey::None, static_cast<int>(AccelMod::Alt), 'w') || windows.open_menu != 3) {
+        return fail("Alt+W should open Windows");
+    }
+    const MenuEntry *window_items = menu_table::column_items(3);
+    const int window_count = menu_table::column_count(3);
+    int last = window_count - 1;
+    while (last > 0 && window_items[last].kind == ItemKind::Separator) {
+        --last;
+    }
+    for (int i = 0; i < window_count + 2 && windows.cursor != last; ++i) {
+        windows.handle_key(AccelKey::Down, 0, 0);
+    }
+    if (windows.cursor != last) {
+        return fail("Down did not reach the last Windows row");
+    }
+    windows.handle_key(AccelKey::Return, 0, 0);
+    if (windows.activated != Action::Messages) {
+        return fail("the last Windows row should be Messages");
+    }
+
+    const double text_h = 17;
+    const double avails[] = {478, 485, 520, 678};
+    for (double avail : avails) {
+        for (int column = 1; column <= 3; column += 2) {
+            const MenuEntry *items = menu_table::column_items(column);
+            const int count = menu_table::column_count(column);
+            int n_item = 0;
+            int n_sep = 0;
+            for (int i = 0; i < count; ++i) {
+                if (items[i].kind == ItemKind::Separator) {
+                    ++n_sep;
+                } else {
+                    ++n_item;
+                }
+            }
+            const menu_table::MenuPitch pitch = menu_table::menu_pitch(avail, n_item, n_sep, 36, text_h);
+            if (pitch.text_dy + text_h > pitch.row_h - 0.5) {
+                return fail("a menu label does not fit in its row");
+            }
+            double rel = 5;
+            double last_top = 5;
+            for (int i = 0; i < count; ++i) {
+                if (i == count - 1) {
+                    last_top = rel;
+                }
+                rel += items[i].kind == ItemKind::Separator ? 8.0 : pitch.row_h;
+            }
+            const double content = rel;
+            const double view = content < avail ? content : avail;
+            const double row_h = items[count - 1].kind == ItemKind::Separator ? 8.0 : pitch.row_h;
+            const double scroll = menu_table::menu_scroll_for_row(last_top, row_h, view, content);
+            const double top = last_top - scroll;
+            const double bottom = top + row_h;
+            if (top < -0.5 || bottom > view + 0.5) {
+                std::cerr << "avail " << avail << " column " << column << " top " << top << " bottom " << bottom
+                          << " view " << view << "\n";
+                return fail("the last menu row is clipped when it has focus");
+            }
+        }
+    }
+    if (pause_run_hint("Y", "\u2630").find("then Options") == std::string::npos ||
+        pause_run_hint("\u25B3", "Options").find("Options then Options") != std::string::npos ||
+        pause_run_hint("\u25B3", "Options").find("or Options,") == std::string::npos) {
+        return fail("the PlayStation pause hint names Options twice");
+    }
+    {
+        constexpr int n = 18;
+        double tops[n];
+        double heights[n];
+        double rel = 5;
+        for (int i = 0; i < n; ++i) {
+            tops[i] = rel;
+            heights[i] = 30;
+            rel += 30;
+        }
+        const double content = rel;
+        const double view = 200;
+        const double scroll = menu_table::menu_reveal_scroll(tops, heights, n, n - 1, view, content);
+        const int first = menu_table::menu_scroll_row(tops, n, scroll);
+        if (std::fabs(scroll - (tops[first] - tops[0])) > 0.1) {
+            return fail("a scrolled menu starts in the middle of a row");
+        }
+        if (tops[n - 1] + heights[n - 1] > scroll + view + 0.5 || tops[n - 1] < scroll - 0.5) {
+            return fail("the last menu row is not in view when it has focus");
+        }
+        const int stepped = menu_table::menu_scroll_row(tops, n, menu_table::menu_row_scroll(tops, n, first + 1));
+        if (stepped != first + 1) {
+            return fail("the menu wheel did not move by one row");
+        }
+    }
+    if (field_backspace_would_delete("Mesa", 0, 0) || !field_backspace_would_delete("Mesa", 2, 2) ||
+        !field_backspace_would_delete("Mesa", 0, 4) || field_backspace_would_delete("", 0, 0)) {
+        return fail("backspace is offered when the caret cannot delete");
     }
     return 0;
 }

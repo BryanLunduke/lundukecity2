@@ -130,6 +130,48 @@ inline double chrome_hover_b()
     return chrome_look() == 2 ? 180.0 / 255.0 : kHoverB;
 }
 
+// Goal banner and the message line. Classic and SVGA keep the pale tooltip
+// yellow. Spooky uses the orange title-bar family, snapped to exact VGA
+// entries: dark brown (65, 32, 0), orange (255, 190, 0), edge (170, 85, 0).
+inline void banner_fill(double &r, double &g, double &b)
+{
+    if (chrome_look() == 2) {
+        r = 65.0 / 255.0;
+        g = 32.0 / 255.0;
+        b = 0.0;
+        return;
+    }
+    r = kTooltipR;
+    g = kTooltipG;
+    b = kTooltipB;
+}
+
+inline void banner_ink(double &r, double &g, double &b)
+{
+    if (chrome_look() == 2) {
+        r = 255.0 / 255.0;
+        g = 190.0 / 255.0;
+        b = 0.0;
+        return;
+    }
+    r = kTextR;
+    g = kTextG;
+    b = kTextB;
+}
+
+inline void banner_edge(double &r, double &g, double &b)
+{
+    if (chrome_look() == 2) {
+        r = 170.0 / 255.0;
+        g = 85.0 / 255.0;
+        b = 0.0;
+        return;
+    }
+    r = kMenuFrameR;
+    g = kMenuFrameG;
+    b = kMenuFrameB;
+}
+
 inline constexpr const char *kUiFont = "Sans 13";
 inline constexpr const char *kBodyFont = "Sans 14";
 inline constexpr const char *kTitleFont = "Sans Bold 18";

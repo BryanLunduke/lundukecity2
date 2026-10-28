@@ -14,6 +14,7 @@ engine_fixes = executable(
   'engine_fixes',
   'engine_fixes.cpp',
   dependencies: [micropolis_dep],
+  cpp_args: ['-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"'],
 )
 
 test('engine_fixes', engine_fixes)

@@ -20,6 +20,16 @@ inline char controls_letter(char key)
 // A Deck session leads with the gamepad page. D-pad left and right turn
 // the page. The shell scrolls a page that is taller than the window.
 
+// Y runs the city. The menu button then opens Options, unless that button
+// is already named Options (a PlayStation pad), which would read twice.
+inline std::string pause_run_hint(const std::string &run_button, const std::string &menu_button)
+{
+    if (menu_button == "Options") {
+        return "Game paused. Press " + run_button + ", or Options, to run the city.";
+    }
+    return "Game paused. Press " + run_button + ", or " + menu_button + " then Options, to run the city.";
+}
+
 inline int controls_page_count()
 {
     return 3;
@@ -78,28 +88,70 @@ inline std::string controls_tool_column(int begin, int end)
     return text;
 }
 
-inline std::string controls_page_body(int page, bool deck)
+// Names come from Shell::glyph so a Deck says L1 and a PlayStation pad says
+// its own face symbols. The back grips and the Guide button are not mapped,
+// so this page does not mention them.
+struct ControlsPadNames {
+    const char *confirm = "A";
+    const char *cancel = "B";
+    const char *west = "X";
+    const char *north = "Y";
+    const char *left = "LB";
+    const char *right = "RB";
+    const char *menu = "Start";
+    const char *view = "Back";
+    const char *l3 = "LS";
+    const char *r3 = "RS";
+};
+
+inline std::string controls_page_body(int page, bool deck, const ControlsPadNames &pad = {})
 {
     switch (controls_page_index(page, deck)) {
-    case 1:
-        return "A confirms, builds, or opens the highlighted row.\n"
-               "B cancels or closes. On a field, B deletes a letter. On an empty field, B closes the window.\n"
-               "X is Query on the map, and deletes a letter while a field is active.\n"
-               "Y pauses the city. On the on-screen keyboard it types a space. On the land page it draws new terrain.\n"
-               "Start opens the menu. On a field or a keyboard key, Start confirms that page.\n"
-               "D-pad moves the highlight, scrolls a list or this page, or pans the map.\n"
-               "LB and RB change tools when no window is open.\n"
-               "The right stick pans. Each trigger press zooms one step.\n"
-               "B closes a map overlay.";
+    case 1: {
+        std::string body;
+        body += pad.confirm;
+        body += " confirms, builds, or opens the highlighted row.\n";
+        body += pad.cancel;
+        body += " cancels or closes. On a field, ";
+        body += pad.cancel;
+        body += " deletes a letter. On an empty field, ";
+        body += pad.cancel;
+        body += " closes the window.\n";
+        body += pad.view;
+        body += " does the same as ";
+        body += pad.cancel;
+        body += ".\n";
+        body += pad.west;
+        body += " is Query on the map, and deletes a letter while a field is active.\n";
+        body += pad.north;
+        body += " cycles pause, slow, medium, and fast. On the on-screen keyboard it types a space. On the land page it draws new terrain.\n";
+        body += pad.menu;
+        body += " opens the menu. On a field or a keyboard key, ";
+        body += pad.menu;
+        body += " confirms that page.\n";
+        body += "The left stick moves the cursor. The D-pad moves the highlight, scrolls a list or this page, or pans the map.\n";
+        body += pad.left;
+        body += " and ";
+        body += pad.right;
+        body += " change tools when no window is open.\n";
+        body += pad.l3;
+        body += " toggles the map overlay. ";
+        body += pad.r3;
+        body += " centers the view on the cursor.\n";
+        body += "The right stick pans. Each trigger press zooms one step.\n";
+        body += pad.cancel;
+        body += " closes a map overlay.";
+        return body;
+    }
     case 2:
-        return "Tap a tool, a menu, or a button to use it.\n"
+        return std::string("Tap a tool, a menu, or a button to use it.\n"
                "A tap on the map builds when the finger lifts. Moving past a short distance starts a drag, and the drag builds as it moves.\n"
                "A second finger before that drag starts cancels it, and nothing is built. A second finger during a drag ends the stroke and keeps the tiles already placed, then pans or pinches to zoom.\n"
                "Drag the minimap to jump across the city.\n"
                "Drag a list to scroll it.\n"
                "The on-screen keyboard types into the name and seed fields.\n"
-               "Random fills a city name and does not repeat the last one.\n"
-               "Start confirms the page instead of typing the highlighted key.";
+               "Random fills a city name and does not repeat the last one.\n") +
+               pad.menu + " confirms the page instead of typing the highlighted key.";
     default:
         break;
     }

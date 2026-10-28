@@ -30,10 +30,10 @@ int main()
         "Keep the city a Metropolis (over 100,000) until 1911 despite the quake.",
         "Keep the city a Metropolis (over 100,000) until 1949 despite the fire.",
         "Bring average traffic below 80 within 10 years.",
-        "Raise the city score above 500 within 5 years.",
+        "Keep the city score above 500 until 1962.",
         "Bring average crime below 60 within 10 years.",
-        "Raise the city score above 500 within 5 years.",
-        "Raise the city score above 500 within 10 years.",
+        "Keep the city score above 500 until 2015.",
+        "Keep the city score above 500 until 2057.",
     };
     static const int kYears[] = {30, 5, 5, 10, 5, 10, 5, 10};
     if (CitySession::kScenarioCount != 8) {
@@ -45,6 +45,21 @@ int main()
             def.summary[0] == '\0') {
             std::fprintf(stderr, "%s goal '%s' years %d\n", def.name, def.goal, def.years);
             return fail(2, "a scenario goal is not the classic win condition and deadline");
+        }
+    }
+    {
+        CitySession tokyo;
+        CitySession rio;
+        if (!tokyo.load_scenario(CitySession::scenario_def(4).id) || !rio.load_scenario(CitySession::scenario_def(7).id)) {
+            return fail(2, "Tokyo or Rio did not load");
+        }
+        const std::string tokyo_meter = tokyo.scenario_meter();
+        const std::string rio_meter = rio.scenario_meter();
+        if (tokyo_meter.find("keep it above 500 until 1962") == std::string::npos ||
+            rio_meter.find("keep it above 500 until 2057") == std::string::npos ||
+            tokyo_meter.find("goal >") != std::string::npos) {
+            std::fprintf(stderr, "tokyo '%s' rio '%s'\n", tokyo_meter.c_str(), rio_meter.c_str());
+            return fail(2, "Tokyo and Rio still read as if the score goal is already met");
         }
     }
 

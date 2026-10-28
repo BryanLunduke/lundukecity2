@@ -7,6 +7,7 @@
 #include "assets.hpp"
 #include "atomic_write.hpp"
 #include "city_seed.hpp"
+#include "controls_page.hpp"
 #include "dialog_copy.hpp"
 #include "notice_bar.hpp"
 #include "platform.hpp"
@@ -21,6 +22,8 @@
 #include "tools.hpp"
 #include "version.hpp"
 #include "zoom_keys.hpp"
+
+#include "micropolis.h"
 
 #include <SDL3/SDL.h>
 
@@ -183,6 +186,9 @@ unsigned gdk_key(SDL_Keycode key)
 void Shell::on_file_result(const char *const *filelist)
 {
     std::lock_guard<std::mutex> lock(file_mu_);
+    if (file_ignore_) {
+        return;
+    }
     file_ready_ = true;
     if (filelist == nullptr) {
         file_state_ = 3;
@@ -287,11 +293,19 @@ int Shell::run(int argc, char **argv)
     const bool scripted = smoke_ || ui_test_ || review_ || !demo_.empty();
     if (!scripted && !launched_with_file) {
         welcome_gate_ = true;
+        // Offer recovery before Welcome. The gate used to keep a dialog
+        // open from the first frame, so the offer waited until the player
+        // had already started a city.
+        recovery_checked_ = true;
+        offer_recovery();
         if (dialog_ == Dialog::None) {
             open_dialog(Dialog::Welcome);
         }
-    } else if (launched_with_file && dialog_ == Dialog::LoadError) {
-        welcome_gate_ = true;
+    } else if (launched_with_file) {
+        recovery_checked_ = true;
+        if (dialog_ == Dialog::LoadError) {
+            welcome_gate_ = true;
+        }
     }
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
         demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget" &&
@@ -917,6 +931,7 @@ std::string Shell::visual_stamp() const
         << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
         << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
         << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
+        << ' ' << static_cast<int>(menu_scroll_) << ' ' << menu_edge_dir_
         << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_
         << ' ' << drawn_look_;
     return out.str();
@@ -984,6 +999,9 @@ void Shell::loop()
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);
             }
+            if (menu_.open() && menu_edge_dir_ != 0) {
+                timeout = std::min(timeout, 40);
+            }
             if (SDL_WaitEventTimeout(&event, timeout)) {
                 if (event.type == SDL_EVENT_QUIT) {
                     request_with_save(AfterSave::Quit);
@@ -1013,7 +1031,13 @@ void Shell::loop()
         // Keep up to half a second. Fast runs several phases per slice so a
         // year does not take minutes. See sim_pace.hpp.
         sim_acc += std::min(elapsed, 500);
-        blink_drew_ = map_.tick(elapsed);
+        // Tile blink (unpowered zones, and any frame the blink clock would
+        // redraw) stays still while the city is paused, including under a
+        // dialog. A burning city used to keep repainting.
+        blink_drew_ = false;
+        if (speed_ > 0 && !dialog_pauses()) {
+            blink_drew_ = map_.tick(elapsed);
+        }
         while (sim_acc >= 100) {
             sim_acc -= 100;
             const int bursts = sim_bursts_for_speed(speed_);
@@ -1026,7 +1050,7 @@ void Shell::loop()
             autosave(false);
             next_autosave_ = wall + std::chrono::seconds(60);
         }
-        if (!recovery_checked_ && pending_opens_.empty() && demo_.empty() && !smoke_ &&
+        if (!recovery_checked_ && !city_chosen_ && pending_opens_.empty() && demo_.empty() && !smoke_ &&
             wall >= started_ + std::chrono::milliseconds(450) && dialog_ == Dialog::None) {
             recovery_checked_ = true;
             offer_recovery();
@@ -1040,10 +1064,10 @@ void Shell::loop()
         const bool skip_pause_note = smoke_ || ui_test_ || review_ || (!demo_.empty() && demo_ != "paused");
         if (!pause_noted_ && !skip_pause_note && dialog_ == Dialog::None && !welcome_gate_ && speed_ == 0 && frame_ > 1) {
             pause_noted_ = true;
-            if (deck_ || gamepad_nav_) {
-                shown_message_ = "Game paused. Press Start, then Options, to run the city.";
+            if (deck_ || gamepad_nav_ || pad_ != nullptr) {
+                shown_message_ = pause_run_hint(glyph(SDL_GAMEPAD_BUTTON_NORTH), glyph(SDL_GAMEPAD_BUTTON_START));
             } else {
-                shown_message_ = "Game paused. Press Space, or Start then Options, to run the city.";
+                shown_message_ = "Game paused. Press Space to run the city.";
             }
             hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(8);
         }
@@ -1194,6 +1218,7 @@ void Shell::loop()
             }
         }
         set_paused_for_dialog();
+        autoscroll_menu();
         render();
         ++frame_;
         if (smoke_ && frame_ == 2) {
@@ -1253,7 +1278,14 @@ void Shell::loop()
                 open_dialog(Dialog::Budget);
                 gamepad_nav_ = false;
             } else if (demo_ == "graphs") {
-                session_.load_scenario(CitySession::scenario_def(0).id);
+                int scenario = 0;
+                if (const char *which = std::getenv("LUNDUKE_CITY2_SCENARIO")) {
+                    scenario = std::atoi(which);
+                }
+                if (scenario < 0 || scenario >= CitySession::kScenarioCount) {
+                    scenario = 0;
+                }
+                session_.load_scenario(CitySession::scenario_def(scenario).id);
                 speed_ = 0;
                 session_.set_speed(0);
                 open_dialog(Dialog::Graphs);
@@ -1460,6 +1492,72 @@ void Shell::loop()
                 }
                 center_on_fraction(0.45, 0.42);
                 gamepad_nav_ = deck_;
+                if (deck_) {
+                    // The "Playing …" notice would hide the pad hint this
+                    // shot is meant to show.
+                    shown_message_serial_ = session_.message_serial();
+                    shown_message_.clear();
+                    hint_until_ = std::chrono::steady_clock::now();
+                }
+            } else if (demo_ == "tornado") {
+                disaster_ = Action::Tornado;
+                open_dialog(Dialog::Disaster);
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "windows") {
+                menu_.open_menu = 3;
+                menu_.cursor = 6;
+                menu_.alt_shown = true;
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "residential") {
+                session_.load_scenario(CitySession::scenario_def(0).id);
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
+                speed_ = 0;
+                session_.set_speed(0);
+                close_dialog();
+                overlay_.set_layer(CitySession::MapLayer::Residential);
+                overlay_on_ = true;
+                goal_dismissed_ = true;
+                center_on_fraction(0.5, 0.5);
+            } else if (demo_ == "monster") {
+                int scenario = 4;
+                if (const char *which = std::getenv("LUNDUKE_CITY2_SCENARIO")) {
+                    scenario = std::atoi(which);
+                }
+                if (scenario < 0 || scenario >= CitySession::kScenarioCount) {
+                    scenario = 4;
+                }
+                session_.load_scenario(CitySession::scenario_def(scenario).id);
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
+                speed_ = 0;
+                session_.set_speed(0);
+                session_.disaster_monster();
+                close_dialog();
+                goal_dismissed_ = true;
+                for (const CitySession::SpriteDot &dot : session_.sprites()) {
+                    if (dot.type == SPRITE_MONSTER && dot.frame != 0) {
+                        center_on_fraction((dot.tile_x + 0.5) / CitySession::kWorldW,
+                                           (dot.tile_y + 0.5) / CitySession::kWorldH);
+                        break;
+                    }
+                }
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);
@@ -1553,6 +1651,9 @@ void Shell::handle_event(const SDL_Event &event)
             list_dragging_ = false;
         }
         if (menu_.open() && dialog_ == Dialog::None) {
+            if (menu_thumb_drag_) {
+                scroll_menu_to_pointer(pointer_y_);
+            }
             break;
         }
         if (slider_drag_ != 0) {
@@ -1656,6 +1757,7 @@ void Shell::handle_event(const SDL_Event &event)
             pointer_down_ = false;
             slider_drag_ = 0;
             list_dragging_ = false;
+            menu_thumb_drag_ = false;
             if (pointer_on_map_) {
                 map_.release();
                 pointer_on_map_ = false;
@@ -1681,6 +1783,12 @@ void Shell::handle_event(const SDL_Event &event)
             wheel_acc_y_ -= static_cast<float>(notches);
         }
         const bool ctrl = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+        if (menu_.open() && dialog_ == Dialog::None && !ctrl) {
+            if (notches != 0) {
+                scroll_menu_by(-notches);
+            }
+            break;
+        }
         if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
             if (notches != 0) {
                 nudge_file_list(-notches, false, true);
@@ -1750,7 +1858,7 @@ void Shell::handle_event(const SDL_Event &event)
             }
             if (!ctrl && !alt) {
                 if (accel == AccelKey::Escape) {
-                    on_dialog_button(kCancel);
+                    cancel_dialog();
                     break;
                 }
                 if (accel == AccelKey::Return) {
@@ -1782,7 +1890,7 @@ void Shell::handle_event(const SDL_Event &event)
         }
         if (dialog_ != Dialog::None) {
             if (accel == AccelKey::Escape) {
-                on_dialog_button(kCancel);
+                cancel_dialog();
             } else if (accel == AccelKey::Return || accel == AccelKey::Space) {
                 activate_focus();
             } else if (accel == AccelKey::Left || accel == AccelKey::Right) {
@@ -1930,6 +2038,10 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
             if (active_field() != nullptr) {
+                if (dialog_ == Dialog::Files && files_save_ && focus_id_ == kFieldName) {
+                    on_dialog_button(kSave);
+                    break;
+                }
                 activate_focus();
                 break;
             }
@@ -1945,8 +2057,16 @@ void Shell::handle_event(const SDL_Event &event)
         }
         if (button == SDL_GAMEPAD_BUTTON_EAST || button == SDL_GAMEPAD_BUTTON_BACK) {
             if (active_field() != nullptr && dialog_ != Dialog::None) {
+                // The untouched "auto" seed is the default, not something the
+                // player typed. B leaves the land page instead of erasing it.
+                if (dialog_ == Dialog::NewCity && new_page_ > 0 && focus_id_ == kFieldSeed && field_b_ == "auto") {
+                    cancel_dialog();
+                    break;
+                }
+                // An empty field on page 2 is Back, so the name from page 1
+                // is kept. A letter the player typed is deleted.
                 if (active_field()->empty()) {
-                    on_dialog_button(kCancel);
+                    cancel_dialog();
                 } else {
                     backspace_field();
                 }
@@ -1961,7 +2081,7 @@ void Shell::handle_event(const SDL_Event &event)
             } else if (menu_.open()) {
                 menu_.handle_key(AccelKey::Escape, 0, 0);
             } else if (dialog_ != Dialog::None) {
-                on_dialog_button(kCancel);
+                cancel_dialog();
             } else if (pad_dragging_ || pointer_on_map_) {
                 release_pad_drag();
             }
@@ -2000,8 +2120,16 @@ void Shell::handle_event(const SDL_Event &event)
             } else if (dialog_ == Dialog::NewCity && new_page_ == 1) {
                 reroll_terrain();
             } else if (dialog_ == Dialog::None && !menu_.open()) {
-                toggle_pause();
+                cycle_speed();
             }
+            break;
+        }
+        if (button == SDL_GAMEPAD_BUTTON_LEFT_STICK && dialog_ == Dialog::None && !menu_.open() && !special_open_) {
+            overlay_on_ = !overlay_on_;
+            break;
+        }
+        if (button == SDL_GAMEPAD_BUTTON_RIGHT_STICK && dialog_ == Dialog::None && !menu_.open() && !special_open_) {
+            center_on_cursor();
             break;
         }
         if (button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER && !menu_.open() && dialog_ == Dialog::None) {

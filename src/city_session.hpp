@@ -73,6 +73,10 @@ public:
         Population,
         Growth,
         Zones,
+        Residential,
+        Commercial,
+        Industrial,
+        Transportation,
     };
 
     using Listener = std::function<void()>;
@@ -273,6 +277,10 @@ public:
     };
     static constexpr int kHistoryPoints = 120;
     int history_value(HistorySeries series, HistoryScale scale, int index) const;
+    // Live census averages (0..255). The history byte at the right edge of
+    // a freshly loaded scenario is still 0 until the next monthly census.
+    int crime_average() const;
+    int pollution_average() const;
     // Dollars for one cash-flow sample. Index 0 is the newest.
     std::int64_t cash_flow_history(HistoryScale scale, int index) const;
     // The sample the graphs plot. A fresh short-scale point of zero uses
