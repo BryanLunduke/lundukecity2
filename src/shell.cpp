@@ -311,7 +311,8 @@ int Shell::run(int argc, char **argv)
         demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget" &&
         demo_ != "crime" && demo_ != "zones" && demo_ != "police" && demo_ != "graphs" && demo_ != "terrain" &&
         demo_ != "controls" && demo_ != "settings" && demo_ != "won" && demo_ != "lost" &&         demo_ != "fire" &&
-        demo_ != "saveempty" && demo_ != "savefull" && demo_ != "newname") {
+        demo_ != "saveempty" && demo_ != "savefull" && demo_ != "newname" && demo_ != "about" &&
+        demo_ != "howto" && demo_ != "help") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -429,10 +430,10 @@ void Shell::save_window_settings()
     stored.speed = std::max(0, std::min(3, pref_speed_ >= 0 ? pref_speed_ : speed_));
     stored.sound = session_.sound_enabled() ? 1 : 0;
     stored.volume = std::max(0, std::min(100, volume_));
-    stored.auto_budget = session_.auto_budget() ? 1 : 0;
-    stored.auto_bulldoze = session_.auto_bulldoze() ? 1 : 0;
+    stored.auto_budget = pref_auto_budget_ >= 0 ? pref_auto_budget_ : (session_.auto_budget() ? 1 : 0);
+    stored.auto_bulldoze = pref_auto_bulldoze_ >= 0 ? pref_auto_bulldoze_ : (session_.auto_bulldoze() ? 1 : 0);
     stored.disasters = pref_disasters_ >= 0 ? (pref_disasters_ != 0 ? 1 : 0) : (session_.disasters() ? 1 : 0);
-    stored.auto_goto = session_.auto_goto() ? 1 : 0;
+    stored.auto_goto = pref_auto_goto_ >= 0 ? pref_auto_goto_ : (session_.auto_goto() ? 1 : 0);
     stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
     stored.wheel_zoom = wheel_zooms_ ? 1 : 0;
     // The drawn sheet may be Classic because an optional file is missing.
@@ -491,6 +492,9 @@ void Shell::apply_loaded_settings()
     // These are the global preferences. A city file must not replace them.
     pref_speed_ = speed_;
     pref_disasters_ = session_.disasters() ? 1 : 0;
+    pref_auto_budget_ = session_.auto_budget() ? 1 : 0;
+    pref_auto_bulldoze_ = session_.auto_bulldoze() ? 1 : 0;
+    pref_auto_goto_ = session_.auto_goto() ? 1 : 0;
     session_.accept_preferences();
 }
 
@@ -582,6 +586,15 @@ void Shell::restore_play_preferences()
     }
     if (pref_disasters_ >= 0) {
         session_.set_disasters(pref_disasters_ != 0);
+    }
+    if (pref_auto_budget_ >= 0) {
+        session_.set_auto_budget(pref_auto_budget_ != 0);
+    }
+    if (pref_auto_bulldoze_ >= 0) {
+        session_.set_auto_bulldoze(pref_auto_bulldoze_ != 0);
+    }
+    if (pref_auto_goto_ >= 0) {
+        session_.set_auto_goto(pref_auto_goto_ != 0);
     }
     session_.accept_preferences();
 }
@@ -730,6 +743,31 @@ bool Shell::init_video()
     if (window_ == nullptr) {
         std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << "\n";
         return false;
+    }
+    {
+        const std::string icon_path = ui_data_file("icons/hicolor/64x64/apps/lunduke-city.png");
+        if (!icon_path.empty()) {
+            cairo_surface_t *png = cairo_image_surface_create_from_png(icon_path.c_str());
+            if (cairo_surface_status(png) == CAIRO_STATUS_SUCCESS &&
+                cairo_image_surface_get_format(png) == CAIRO_FORMAT_ARGB32) {
+                const int iw = cairo_image_surface_get_width(png);
+                const int ih = cairo_image_surface_get_height(png);
+                SDL_Surface *icon = SDL_CreateSurface(iw, ih, SDL_PIXELFORMAT_ARGB8888);
+                if (icon != nullptr) {
+                    const int src_stride = cairo_image_surface_get_stride(png);
+                    const unsigned char *src = cairo_image_surface_get_data(png);
+                    SDL_LockSurface(icon);
+                    auto *dst = static_cast<unsigned char *>(icon->pixels);
+                    for (int y = 0; y < ih; ++y) {
+                        std::memcpy(dst + y * icon->pitch, src + y * src_stride, static_cast<std::size_t>(iw * 4));
+                    }
+                    SDL_UnlockSurface(icon);
+                    SDL_SetWindowIcon(window_, icon);
+                    SDL_DestroySurface(icon);
+                }
+            }
+            cairo_surface_destroy(png);
+        }
     }
     int min_w = 960;
     int min_h = 600;
@@ -892,8 +930,17 @@ void Shell::shutdown()
         cairo_surface_destroy(frame_surface_);
         frame_surface_ = nullptr;
     }
-    if (pad_ != nullptr) {
-        SDL_CloseGamepad(pad_);
+    {
+        const bool listed = std::find(pads_.begin(), pads_.end(), pad_) != pads_.end();
+        if (pad_ != nullptr && !listed) {
+            SDL_CloseGamepad(pad_);
+        }
+        for (SDL_Gamepad *pad : pads_) {
+            if (pad != nullptr) {
+                SDL_CloseGamepad(pad);
+            }
+        }
+        pads_.clear();
         pad_ = nullptr;
     }
     if (texture_ != nullptr) {
@@ -933,15 +980,73 @@ std::string Shell::visual_stamp() const
         << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
         << ' ' << static_cast<int>(menu_scroll_) << ' ' << menu_edge_dir_
         << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_
-        << ' ' << drawn_look_;
+        << ' ' << drawn_look_ << ' ' << anim_epoch_;
     return out.str();
+}
+
+void Shell::note_animation()
+{
+    if (speed_ <= 0 || dialog_pauses()) {
+        return;
+    }
+    const unsigned tiles = session_.tile_sample();
+    const unsigned sprites = session_.sprite_sample();
+    if (!samples_ready_) {
+        tile_sample_ = tiles;
+        sprite_sample_ = sprites;
+        samples_ready_ = true;
+        return;
+    }
+    bool bump = sprites != sprite_sample_;
+    if (tiles != tile_sample_) {
+        // Fast keeps every animated slice. Slow and Medium paint fewer of them.
+        const int stride = speed_ >= 3 ? 1 : speed_ == 2 ? 2 : 4;
+        if ((anim_slice_ % stride) == 0) {
+            bump = true;
+        }
+        ++anim_slice_;
+    }
+    tile_sample_ = tiles;
+    sprite_sample_ = sprites;
+    if (bump) {
+        ++anim_epoch_;
+    }
+}
+
+void Shell::open_gamepad_id(SDL_JoystickID id, bool make_active)
+{
+    if (id == 0) {
+        return;
+    }
+    for (SDL_Gamepad *have : pads_) {
+        if (have != nullptr && SDL_GetGamepadID(have) == id) {
+            if (make_active) {
+                pad_ = have;
+                gamepad_nav_ = true;
+            }
+            return;
+        }
+    }
+    SDL_Gamepad *opened = SDL_OpenGamepad(id);
+    if (opened == nullptr) {
+        return;
+    }
+    pads_.push_back(opened);
+    if (make_active || pad_ == nullptr) {
+        pad_ = opened;
+    }
+    if (make_active) {
+        gamepad_nav_ = true;
+    }
 }
 
 redraw::Reasons Shell::redraw_reasons() const
 {
     redraw::Reasons reasons;
     reasons.forced = !presented_ || ui_test_ || smoke_ || !demo_.empty() || !shot_path_.empty();
-    reasons.sim_running = speed_ > 0 && !dialog_pauses();
+    // A running city used to repaint the whole window on every sim slice.
+    // Tile animation and sprites request a frame through the stamp instead.
+    reasons.sim_running = false;
     reasons.quake = quake_strength_ > 0;
     reasons.navigating = pointer_down_ || pad_dragging_ || std::fabs(stick_x_) > 0.05f || std::fabs(stick_y_) > 0.05f ||
                          std::fabs(pan_x_) > 0.05f || std::fabs(pan_y_) > 0.05f;
@@ -1045,6 +1150,7 @@ void Shell::loop()
                 tick_sim(100);
             }
         }
+        note_animation();
         const auto wall = std::chrono::steady_clock::now();
         if (wall >= next_autosave_) {
             autosave(false);
@@ -1168,7 +1274,10 @@ void Shell::loop()
                 open_road_ = road_;
                 open_police_ = police_;
                 open_fire_ = fire_;
-                open_dialog(Dialog::Budget);
+                open_dialog(Dialog::Budget, false);
+                if (!sound_.muted()) {
+                    sound_.play("computer");
+                }
             }
         }
         if (const int outcome = session_.take_scenario_outcome()) {
@@ -1558,6 +1667,13 @@ void Shell::loop()
                         break;
                     }
                 }
+            } else if (demo_ == "about") {
+                open_dialog(Dialog::About);
+            } else if (demo_ == "howto") {
+                open_dialog(Dialog::HowToPlay);
+            } else if (demo_ == "help") {
+                menu_.open_menu = 4;
+                menu_.cursor = 0;
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);
@@ -1713,6 +1829,10 @@ void Shell::handle_event(const SDL_Event &event)
         if (event.button.button != SDL_BUTTON_LEFT) {
             break;
         }
+        if (modal_blocks_pointer()) {
+            pointer_down_ = true;
+            break;
+        }
         if (notice_sticky_ && pointer_y_ >= win_h_ - message_h_) {
             dismiss_background_notice();
             break;
@@ -1755,6 +1875,7 @@ void Shell::handle_event(const SDL_Event &event)
         }
         if (event.button.button == SDL_BUTTON_LEFT) {
             pointer_down_ = false;
+            modal_swallow_mouse_ = false;
             slider_drag_ = 0;
             list_dragging_ = false;
             menu_thumb_drag_ = false;
@@ -1927,6 +2048,8 @@ void Shell::handle_event(const SDL_Event &event)
                 }
             } else if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
                 nudge_file_list(key == SDLK_PAGEUP ? -1 : 1, true, true);
+            } else if (key == SDLK_HOME || key == SDLK_END) {
+                jump_list_edge(key == SDLK_END);
             } else if (key == SDLK_TAB) {
                 move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
             }
@@ -2012,18 +2135,24 @@ void Shell::handle_event(const SDL_Event &event)
             type_text(event.text.text);
         }
         break;
-    case SDL_EVENT_GAMEPAD_ADDED:
-        if (pad_ == nullptr) {
-            pad_ = SDL_OpenGamepad(event.gdevice.which);
-            gamepad_nav_ = pad_ != nullptr;
+    case SDL_EVENT_GAMEPAD_ADDED: {
+        const bool first = pad_ == nullptr;
+        open_gamepad_id(event.gdevice.which, false);
+        if (first && pad_ != nullptr) {
+            gamepad_nav_ = true;
         }
         break;
+    }
     case SDL_EVENT_GAMEPAD_REMOVED:
         forget_gamepad(event.gdevice.which);
         break;
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
+        open_gamepad_id(event.gbutton.which, true);
         gamepad_nav_ = true;
         const auto button = static_cast<SDL_GamepadButton>(event.gbutton.button);
+        if (button == SDL_GAMEPAD_BUTTON_SOUTH && modal_blocks_pad()) {
+            break;
+        }
         if (button == SDL_GAMEPAD_BUTTON_START) {
             if (dialog_ != Dialog::None && focus_id_ >= kOsk && focus_id_ < kOsk + 64) {
                 if (dialog_ == Dialog::NewCity) {
@@ -2216,11 +2345,13 @@ void Shell::handle_event(const SDL_Event &event)
     case SDL_EVENT_GAMEPAD_BUTTON_UP: {
         const auto button = static_cast<SDL_GamepadButton>(event.gbutton.button);
         if (button == SDL_GAMEPAD_BUTTON_SOUTH) {
+            modal_swallow_pad_ = false;
             release_pad_drag();
         }
         break;
     }
     case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
+        open_gamepad_id(event.gaxis.which, true);
         const float norm = std::max(-1.0f, std::min(1.0f, event.gaxis.value / 32767.0f));
         const float dead = std::fabs(norm) < 0.18f ? 0.0f : norm;
         if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX) {

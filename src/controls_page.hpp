@@ -35,6 +35,18 @@ inline int controls_page_count()
     return 3;
 }
 
+// One screen on first launch: zones, power, roads, the demand meters, and the budget.
+inline std::string how_to_play_text()
+{
+    return "Place residential, commercial, and industrial zones. That is where the city grows.\n"
+           "Connect them with roads, and run power lines from a coal or nuclear plant to every zone.\n"
+           "The R, C, and I meters show demand. A bar above the middle means the city wants more of that zone.\n"
+           "Each January the budget opens. Set the tax and the road, police, and fire funding, then collect taxes. "
+           "Auto budget does this for you.\n"
+           "Police and fire stations need that funding, or they stop covering the blocks around them.\n"
+           "A scenario names a goal and a deadline. Query explains a tile. The minimap jumps across the city.";
+}
+
 inline int controls_page_index(int page, bool deck)
 {
     int index = page % 3;

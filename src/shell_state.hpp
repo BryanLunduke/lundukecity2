@@ -55,6 +55,7 @@ enum class Dialog : int {
     Overwrite,
     Settings,
     Controls,
+    HowToPlay,
     Welcome,
     QuitConfirm,
     Messages
@@ -121,7 +122,14 @@ private:
     // Close the dialog. When the launch screen is still the way back in,
     // open it again instead of leaving the window on an untouched city.
     void dismiss_dialog();
-    void open_dialog(Dialog dialog);
+    void open_dialog(Dialog dialog, bool prompted = true);
+    void arm_modal_grace();
+    bool modal_blocks_pointer() const;
+    bool modal_blocks_pad() const;
+    void open_gamepad_id(SDL_JoystickID id, bool make_active);
+    bool jump_list_edge(bool to_end);
+    void note_animation();
+    void clear_pause_notice();
     void proceed(AfterSave next);
     void request_with_save(AfterSave next);
     void begin_load();
@@ -262,6 +270,7 @@ private:
     int tex_w_ = 0;
     int tex_h_ = 0;
     SDL_Gamepad *pad_ = nullptr;
+    std::vector<SDL_Gamepad *> pads_;
     SDL_Joystick *virtual_joy_ = nullptr;
 
     int win_w_ = 1280;
@@ -317,6 +326,17 @@ private:
     // Global preferences. A loaded city does not replace these.
     int pref_speed_ = -1;
     int pref_disasters_ = -1;
+    int pref_auto_budget_ = -1;
+    int pref_auto_bulldoze_ = -1;
+    int pref_auto_goto_ = -1;
+    std::chrono::steady_clock::time_point modal_grace_until_{};
+    bool modal_swallow_mouse_ = false;
+    bool modal_swallow_pad_ = false;
+    int anim_epoch_ = 0;
+    int anim_slice_ = 0;
+    unsigned tile_sample_ = 0;
+    unsigned sprite_sample_ = 0;
+    bool samples_ready_ = false;
     int volume_ = 100;
     int scale_percent_ = 0;
     bool pause_unfocused_ = false;

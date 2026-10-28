@@ -122,13 +122,71 @@ void Shell::dismiss_dialog()
     }
 }
 
-void Shell::open_dialog(Dialog dialog)
+void Shell::arm_modal_grace()
+{
+    modal_grace_until_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(350);
+    float x = 0;
+    float y = 0;
+    const SDL_MouseButtonFlags buttons = SDL_GetMouseState(&x, &y);
+    modal_swallow_mouse_ = (buttons & SDL_BUTTON_LMASK) != 0;
+    modal_swallow_pad_ = false;
+    for (SDL_Gamepad *pad : pads_) {
+        if (pad != nullptr && SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_SOUTH)) {
+            modal_swallow_pad_ = true;
+        }
+    }
+    if (pad_ != nullptr && SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_SOUTH)) {
+        modal_swallow_pad_ = true;
+    }
+}
+
+bool Shell::modal_blocks_pointer() const
+{
+    if (dialog_ == Dialog::None) {
+        return false;
+    }
+    if (std::chrono::steady_clock::now() < modal_grace_until_) {
+        return true;
+    }
+    return modal_swallow_mouse_;
+}
+
+bool Shell::modal_blocks_pad() const
+{
+    if (dialog_ == Dialog::None) {
+        return false;
+    }
+    if (std::chrono::steady_clock::now() < modal_grace_until_) {
+        return true;
+    }
+    return modal_swallow_pad_;
+}
+
+void Shell::clear_pause_notice()
+{
+    if (notice_sticky_) {
+        return;
+    }
+    if (shown_message_.compare(0, 12, "Game paused.") == 0) {
+        shown_message_.clear();
+        hint_until_ = std::chrono::steady_clock::now();
+    }
+}
+
+void Shell::open_dialog(Dialog dialog, bool prompted)
 {
     reset_touch_state();
     menu_.close();
     special_open_ = false;
     dialog_ = dialog;
     dialog_error_.clear();
+    if (!prompted) {
+        arm_modal_grace();
+    } else {
+        modal_grace_until_ = {};
+        modal_swallow_mouse_ = false;
+        modal_swallow_pad_ = false;
+    }
     // A hover left over from the map must not light a dialog button.
     hover_id_ = 0;
     focus_id_ = kOk;
@@ -177,6 +235,8 @@ void Shell::open_dialog(Dialog dialog)
         focus_id_ = session_.notices().empty() ? kClose : kListItem;
         list_index_ = 0;
         list_scroll_ = 0;
+    } else if (dialog == Dialog::HowToPlay || dialog == Dialog::About) {
+        focus_id_ = kClose;
     } else if (dialog == Dialog::Controls) {
         // Deck already leads with the gamepad page. A desktop pad should too,
         // once that pad was the last input.
@@ -244,6 +304,9 @@ void Shell::set_speed(int speed)
         speed_ = session_.speed();
     }
     pref_speed_ = speed_;
+    if (speed_ > 0) {
+        clear_pause_notice();
+    }
 }
 
 void Shell::toggle_pause()
@@ -904,6 +967,7 @@ void Shell::proceed(AfterSave next)
             break;
         }
         own_recovery_ = recovery_.path;
+        restore_play_preferences();
         welcome_gate_ = false;
         city_chosen_ = true;
         ++city_generation_;
@@ -991,10 +1055,12 @@ void Shell::apply_action(Action action)
         break;
     case Action::AutoBudget:
         session_.set_auto_budget(!session_.auto_budget());
+        pref_auto_budget_ = session_.auto_budget() ? 1 : 0;
         save_window_settings();
         break;
     case Action::AutoBulldoze:
         session_.set_auto_bulldoze(!session_.auto_bulldoze());
+        pref_auto_bulldoze_ = session_.auto_bulldoze() ? 1 : 0;
         save_window_settings();
         break;
     case Action::DisastersEnabled:
@@ -1004,6 +1070,7 @@ void Shell::apply_action(Action action)
         break;
     case Action::AutoGoto:
         session_.set_auto_goto(!session_.auto_goto());
+        pref_auto_goto_ = session_.auto_goto() ? 1 : 0;
         save_window_settings();
         break;
     case Action::Mute:
@@ -1149,6 +1216,9 @@ void Shell::apply_action(Action action)
         break;
     case Action::Controls:
         open_dialog(Dialog::Controls);
+        break;
+    case Action::HowToPlay:
+        open_dialog(Dialog::HowToPlay);
         break;
     case Action::RecentIndex:
     case Action::None:
@@ -1445,6 +1515,10 @@ void Shell::on_dialog_button(int id)
                 }
                 if (!save_name_has_stem(field_a_)) {
                     dialog_error_ = "Enter a file name. The name cannot be only .cty.";
+                    return;
+                }
+                if (save_name_starts_with_dot(field_a_)) {
+                    dialog_error_ = "Names cannot start with a dot.";
                     return;
                 }
                 const std::string path = with_cty_suffix(path_join(files_dir_, field_a_));
@@ -1925,8 +1999,49 @@ void Shell::paste_field()
     if (clip == nullptr) {
         return;
     }
-    type_text(clip);
+    std::string *field = active_field();
+    if (field == nullptr) {
+        SDL_free(clip);
+        return;
+    }
+    const int from = std::min(field_caret_, field_anchor_);
+    const int to = std::max(field_caret_, field_anchor_);
+    const int room = 64 - (static_cast<int>(field->size()) - (to - from));
+    const std::string clean = sanitize_pasted_text(clip, std::max(0, room));
     SDL_free(clip);
+    if (!clean.empty()) {
+        type_text(clean);
+    }
+}
+
+bool Shell::jump_list_edge(bool to_end)
+{
+    const bool scenarios = dialog_ == Dialog::Scenario;
+    const bool messages = dialog_ == Dialog::Messages;
+    const bool files = dialog_ == Dialog::Files;
+    if (!scenarios && !messages && !files) {
+        return false;
+    }
+    const int count = scenarios ? CitySession::kScenarioCount
+                                : messages ? static_cast<int>(session_.notices().size())
+                                           : static_cast<int>(files_.size());
+    if (count <= 0) {
+        return false;
+    }
+    const int next = to_end ? count - 1 : 0;
+    if (scenarios) {
+        scenario_index_ = next;
+    }
+    list_index_ = next;
+    reveal_file_list();
+    const bool keep_field = focus_id_ == kFieldName || focus_id_ == kFieldSeed;
+    if (!keep_field) {
+        const int row = list_index_ - list_scroll_;
+        if (row >= 0 && row < 64) {
+            focus_id_ = kListItem + row;
+        }
+    }
+    return true;
 }
 
 int Shell::hit(double x, double y) const
@@ -2264,6 +2379,9 @@ void Shell::activate_focus()
         return;
     }
     if (focus_id_ >= kSlider && focus_id_ < kSlider + 8) {
+        if (dialog_ != Dialog::None) {
+            on_dialog_button(kOk);
+        }
         return;
     }
     if (dialog_ != Dialog::None && is_dialog_button(focus_id_)) {

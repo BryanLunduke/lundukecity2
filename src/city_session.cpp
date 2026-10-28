@@ -210,6 +210,12 @@ int hostile_review_session_probe(CitySession &session, int op)
         sim.budgetAwaitingAccept = true;
         return 0;
     }
+    if (op == 22) {
+        return static_cast<int>(sim.scoreWait);
+    }
+    if (op == 23) {
+        return static_cast<int>(sim.scoreType);
+    }
     if (op == 2) {
         // A finished census, and the next simulator step is phase 0.
         sim.resPop = 40;
@@ -819,35 +825,127 @@ std::string CitySession::load_problem(const std::string &path)
     if (st.st_size == 0) {
         return "The file is empty.";
     }
+    if (static_cast<unsigned long long>(st.st_size) > kMaxCityBytes) {
+        return "This file is too large to be a city save.";
+    }
     if (st.st_size < 27120) {
         return "The file is too short to be a city file (" + std::to_string(static_cast<long long>(st.st_size)) +
                " bytes; a city file is at least 27,120 bytes). It may be damaged or a different kind of file.";
     }
-    if (classify_city_path(path) == CityFileKind::AllZero) {
+    std::vector<unsigned char> data;
+    std::string read_error;
+    if (!read_city_bounded(path, data, read_error)) {
+        return read_error.empty() ? "The file could not be read." : read_error;
+    }
+    if (classify_city_bytes(data.empty() ? nullptr : data.data(), data.size()) == CityFileKind::AllZero) {
         return "The file is all zeros and is not a city. It may be damaged.";
     }
     return std::string();
 }
+
+namespace {
+
+std::string present_load_failure(const std::string &detail)
+{
+    if (detail.empty()) {
+        return "This file isn't a Lunduke City save, or it's damaged.";
+    }
+    const bool already_plain = detail.find("permission") != std::string::npos ||
+                               detail.find("not found") != std::string::npos ||
+                               detail.find("folder") != std::string::npos ||
+                               detail.find("empty") != std::string::npos ||
+                               detail.find("too large") != std::string::npos ||
+                               detail.find("too short") != std::string::npos ||
+                               detail.find("all zeros") != std::string::npos ||
+                               detail.find("regular file") != std::string::npos ||
+                               detail.find("could not be opened") != std::string::npos;
+    if (already_plain) {
+        return detail;
+    }
+    std::fprintf(stderr, "Could not load city: %s\n", detail.c_str());
+    return "This file isn't a Lunduke City save, or it's damaged.\nDetails: " + detail;
+}
+
+bool bytes_match_scenario(const std::vector<unsigned char> &data)
+{
+    if (data.size() != kClassicCityBytes) {
+        return false;
+    }
+    const std::string root = asset_root();
+    if (root.empty()) {
+        return false;
+    }
+    static const char *names[] = {"snro.111", "snro.222", "snro.333", "snro.444",
+                                  "snro.555", "snro.666", "snro.777", "snro.888"};
+    constexpr std::size_t kMap = 3120;
+    for (const char *name : names) {
+        std::ifstream in(root + "/res/" + name, std::ios::binary);
+        if (!in) {
+            continue;
+        }
+        in.seekg(static_cast<std::streamoff>(kMap));
+        std::vector<unsigned char> map(kClassicCityBytes - kMap);
+        if (!in.read(reinterpret_cast<char *>(map.data()), static_cast<std::streamsize>(map.size()))) {
+            continue;
+        }
+        if (std::memcmp(data.data() + kMap, map.data(), map.size()) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void raise_unspecified_funding(Micropolis &sim)
+{
+    auto raise = [](float &percent) {
+        if (percent < 0.005f) {
+            percent = 1.0f;
+        }
+    };
+    raise(sim.roadPercent);
+    raise(sim.policePercent);
+    raise(sim.firePercent);
+    sim.roadEffect = static_cast<Quad>(sim.roadPercent * static_cast<float>(MAX_ROAD_EFFECT));
+    sim.policeEffect = static_cast<Quad>(sim.policePercent * static_cast<float>(MAX_POLICE_STATION_EFFECT));
+    sim.fireEffect = static_cast<Quad>(sim.firePercent * static_cast<float>(MAX_FIRE_STATION_EFFECT));
+    sim.roadFundingTouched = false;
+    sim.policeFundingTouched = false;
+    sim.fireFundingTouched = false;
+}
+
+} // namespace
 
 bool CitySession::load_city(const std::string &path)
 {
     message_.clear();
     Micropolis &sim = engine_->sim;
     last_load_error_.clear();
-    const std::string problem = load_problem(path);
-    if (!problem.empty() || !sim.loadCity(path.c_str())) {
-        if (!problem.empty()) {
-            last_load_error_ = problem;
-        } else if (!sim.loadErrorDetail.empty()) {
-            last_load_error_ = "It is not a city file, or it is damaged: " + sim.loadErrorDetail;
-        } else {
-            last_load_error_ = "The file could not be read as a city. It may be damaged.";
+    std::vector<unsigned char> data;
+    std::string read_error;
+    // Stat and one read. load_problem repeats the stat checks (and a read only
+    // when the size is already under the cap) if this read does not succeed.
+    const bool got = read_city_bounded(path, data, read_error);
+    const CityFileKind kind = got ? classify_city_bytes(data.empty() ? nullptr : data.data(), data.size()) : CityFileKind::Unreadable;
+    const bool scenario_map = got && bytes_match_scenario(data);
+    const bool body_ok = got && kind != CityFileKind::AllZero && kind != CityFileKind::TooShort && kind != CityFileKind::Unreadable;
+    if (!body_ok || !sim.loadCityFromMemory(path.c_str(), data.data(), data.size())) {
+        std::string detail = read_error;
+        if (detail.empty()) {
+            detail = load_problem(path);
         }
+        if (detail.empty()) {
+            detail = sim.loadErrorDetail;
+        }
+        last_load_error_ = present_load_failure(detail.empty() ? "The file could not be read as a city. It may be damaged."
+                                                               : detail);
         // The dialog shows the full reason. The message line stays a short
         // sentence so a damaged file does not paste its whole explanation there.
         message_ = "Could not load that city file.";
         notify();
         return false;
+    }
+    if (scenario_map) {
+        raise_unspecified_funding(sim);
     }
     int loaded_speed = static_cast<int>(sim.simSpeed);
     if (loaded_speed < 0) {
@@ -874,7 +972,7 @@ bool CitySession::load_city(const std::string &path)
     recount_population_from_map();
     refresh_loaded_meters();
     arm_eval_baseline();
-    if (classify_city_path(path) == CityFileKind::Incomplete) {
+    if (kind == CityFileKind::Incomplete) {
         post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
     } else {
         post_message("Loaded a saved city.");
@@ -2272,14 +2370,23 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
 
 void CitySession::read_scenario_sidecar(const std::string &path)
 {
-    std::ifstream in(scenario_sidecar_path(path));
+    std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
         return;
     }
-    std::stringstream buffer;
-    buffer << in.rdbuf();
+    in.seekg(0, std::ios::end);
+    const std::streamoff end = in.tellg();
+    // A sidecar is a few dozen bytes. A huge file next to the city is ignored.
+    if (end < 0 || end > 65536) {
+        return;
+    }
+    in.seekg(0, std::ios::beg);
+    std::string text(static_cast<std::size_t>(end), '\0');
+    if (end > 0 && !in.read(&text[0], end)) {
+        return;
+    }
     ScenarioClock clock;
-    if (!scenario_sidecar_parse(buffer.str(), clock)) {
+    if (!scenario_sidecar_parse(text, clock)) {
         return;
     }
     Micropolis &sim = engine_->sim;
@@ -2292,11 +2399,14 @@ void CitySession::read_scenario_sidecar(const std::string &path)
         sim.scoreWait = 0;
         return;
     }
-    if (clock.scenario != 0) {
-        const int type = clock.score_type != 0 ? clock.score_type : clock.scenario;
-        sim.scoreType = static_cast<Scenario>(type);
-        sim.scoreWait = static_cast<short>(std::max(0, clock.score_wait));
+    const int type = accepted_sidecar_score_type(clock.score_type, clock.scenario);
+    if (type == 0) {
+        sim.scoreType = SC_NONE;
+        sim.scoreWait = 0;
+        return;
     }
+    sim.scoreType = static_cast<Scenario>(type);
+    sim.scoreWait = static_cast<short>(clamp_sidecar_score_wait(clock.score_wait));
 }
 
 bool CitySession::preview_terrain(int seed, int island, int rivers, int lakes, int trees,
@@ -2329,6 +2439,31 @@ std::int64_t CitySession::plot_cash_flow(HistoryScale scale, int index) const
 unsigned CitySession::map_serial() const
 {
     return static_cast<unsigned>(engine_->sim.mapSerial);
+}
+
+unsigned CitySession::tile_sample() const
+{
+    unsigned hash = 2166136261u;
+    const int n = kWorldW * kWorldH;
+    for (int i = 0; i < n; i += 29) {
+        hash ^= static_cast<unsigned>(map_value(i % kWorldW, i / kWorldW));
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+unsigned CitySession::sprite_sample() const
+{
+    unsigned hash = 2166136261u;
+    for (const SpriteDot &dot : sprites()) {
+        hash ^= static_cast<unsigned>(dot.x);
+        hash *= 16777619u;
+        hash ^= static_cast<unsigned>(dot.y);
+        hash *= 16777619u;
+        hash ^= static_cast<unsigned>(dot.frame);
+        hash *= 16777619u;
+    }
+    return hash;
 }
 
 std::vector<CitySession::SpriteDot> CitySession::sprites() const

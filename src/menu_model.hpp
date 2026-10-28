@@ -4,8 +4,8 @@
 
 #pragma once
 
-// Menu model for the SDL shell. 50 actionable rows: 8 System, 16 Options,
-// 6 Disasters, 18 Windows, 2 Help. Fullscreen, the zone and coverage
+// Menu model for the SDL shell. 51 actionable rows: 8 System, 16 Options,
+// 6 Disasters, 18 Windows, 3 Help. Fullscreen, the zone and coverage
 // maps, the single-zone and transportation maps, and Messages are the
 // rows past the original 37. The look trio sits at the bottom of Options.
 // Hidden zoom accelerators are extra bindings, not extra rows.
@@ -47,7 +47,7 @@ enum class Action {
     Fire, Flood, Tornado, Earthquake, Monster, Meltdown,
     Budget, Graphs, Evaluation,
     Power, Water, Pollution, Crime, LandValue, Traffic,
-    About, Settings, Controls,
+    About, Settings, Controls, HowToPlay,
     Fullscreen,
     Zones, ZoneResidential, ZoneCommercial, ZoneIndustrial, Transportation,
     PoliceMap, FireMap, Population, Growth, Messages,
@@ -170,6 +170,7 @@ inline constexpr MenuEntry kWindows[] = {
 };
 
 inline constexpr MenuEntry kHelp[] = {
+    {"_How to play", nullptr, ItemKind::Normal, Action::HowToPlay, AccelKey::None, 0, 0},
     {"_Controls", nullptr, ItemKind::Normal, Action::Controls, AccelKey::None, 0, 0},
     {"_About Lunduke City 2", nullptr, ItemKind::Normal, Action::About, AccelKey::None, 0, 0},
 };

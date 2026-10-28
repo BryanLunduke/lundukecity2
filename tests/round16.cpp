@@ -9,7 +9,14 @@
 // message log, and the sprite cache.
 
 #include "city_glance.hpp"
+#include "city_seed.hpp"
 #include "city_session.hpp"
+#include "city_tail.hpp"
+#include "controls_page.hpp"
+#include "save_path.hpp"
+#include "sound_player.hpp"
+#include "text_edit.hpp"
+#include "version.hpp"
 #include "dialog_copy.hpp"
 #include "history_span.hpp"
 #include "menu_model.hpp"
@@ -25,7 +32,10 @@
 
 #include <cairo.h>
 
+#include "micropolis.h"
+
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -44,8 +54,8 @@ int fail(int code, const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 50) {
-        return fail(1, "the menu does not have 50 actionable rows");
+    if (menu_table::actionable_count() != 51) {
+        return fail(1, "the menu does not have 51 actionable rows");
     }
     if (kDefaultToolIndex != 16 || kToolCount != 17) {
         return fail(2, "a new city does not start on Query");
@@ -288,6 +298,127 @@ int main()
     }
     sprite_art_shutdown();
     sprite_art_shutdown();
+
+    not_reached(__LINE__, "round16");
+
+    if (accepted_sidecar_score_type(42, 5) != 5 || accepted_sidecar_score_type(0, 5) != 5 ||
+        accepted_sidecar_score_type(99, 99) != 0 || clamp_sidecar_score_wait(70000) != 32767 ||
+        clamp_sidecar_score_wait(-4) != 0) {
+        return fail(29, "sidecar score values were trusted");
+    }
+    ScenarioClock overflow;
+    if (scenario_sidecar_parse("{\"scenario\":1,\"score_wait\":999999999999,\"score_type\":1,\"outcome\":0}", overflow) &&
+        overflow.score_wait != 0) {
+        return fail(29, "an overflowing sidecar number was accepted");
+    }
+    {
+        const auto crash_path = dir / "crash.cty";
+        std::filesystem::copy_file(city_path, crash_path, std::filesystem::copy_options::overwrite_existing);
+        std::ofstream side(std::string(crash_path.string()) + ".json", std::ios::trunc);
+        side << "{\"scenario\":5,\"score_wait\":70000,\"score_type\":42,\"outcome\":0,\"month\":1,\"year\":1957}\n";
+        side.close();
+        CitySession crashed;
+        if (!crashed.load_city(crash_path.string())) {
+            std::fprintf(stderr, "sidecar load: %s\n", crashed.last_load_error().c_str());
+            return fail(30, "a bad sidecar score type rejected the city");
+        }
+        if (hostile_review_session_probe(crashed, 23) != 5 || hostile_review_session_probe(crashed, 22) != 32767) {
+            std::fprintf(stderr, "type %d wait %d\n", hostile_review_session_probe(crashed, 23),
+                         hostile_review_session_probe(crashed, 22));
+            return fail(30, "a bad sidecar score was copied into the simulator");
+        }
+        for (int i = 0; i < 80; ++i) {
+            crashed.tick();
+        }
+        if (crashed.city_name().empty()) {
+            return fail(30, "ticking a bad sidecar score stopped the city");
+        }
+        std::filesystem::remove(std::string(crash_path.string()) + ".json");
+        std::filesystem::remove(crash_path);
+    }
+    {
+        const auto huge = dir / "huge.cty";
+        {
+            std::ofstream out(huge, std::ios::binary | std::ios::trunc);
+            out.seekp(static_cast<std::streamoff>(kMaxCityBytes + 1));
+            out.put('\0');
+        }
+        const std::string huge_problem = CitySession::load_problem(huge.string());
+        if (huge_problem.find("too large") == std::string::npos) {
+            std::fprintf(stderr, "huge: %s\n", huge_problem.c_str());
+            return fail(31, "an oversized city file was not rejected");
+        }
+        CitySession huge_session;
+        if (huge_session.load_city(huge.string()) || huge_session.last_load_error().find("too large") == std::string::npos) {
+            return fail(31, "loading an oversized city did not explain itself");
+        }
+        const auto tiny = dir / "tiny.cty";
+        {
+            std::ofstream out(tiny, std::ios::binary | std::ios::trunc);
+            const char bytes[] = "not a city";
+            out.write(bytes, sizeof(bytes) - 1);
+        }
+        if (CitySession::load_problem(tiny.string()).find("too short") == std::string::npos) {
+            return fail(32, "a truncated city file was not rejected");
+        }
+        const auto junk = dir / "junk.cty";
+        {
+            std::ofstream out(junk, std::ios::binary | std::ios::trunc);
+            const std::vector<char> bytes(27120, '\x7f');
+            out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        }
+        CitySession junk_session;
+        if (junk_session.load_city(junk.string()) || junk_session.last_load_error().find("isn't") == std::string::npos ||
+            junk_session.last_load_error().find("Details:") == std::string::npos) {
+            std::fprintf(stderr, "junk: %s\n", junk_session.last_load_error().c_str());
+            return fail(32, "a corrupt city file did not use the friendly wording");
+        }
+        std::filesystem::remove(huge);
+        std::filesystem::remove(tiny);
+        std::filesystem::remove(junk);
+    }
+    {
+        const std::string root = std::getenv("LUNDUKE_CITY_ASSETS") != nullptr ? std::getenv("LUNDUKE_CITY_ASSETS") : "";
+        const auto rio = root + "/res/snro.888";
+        const CityGlance glance = city_glance(rio);
+        if (!glance.ok || glance.year != 9999 || glance.month != 0 || glance.summary.find("Jan 9999") == std::string::npos) {
+            std::fprintf(stderr, "glance %d %d %s\n", glance.year, glance.month, glance.summary.c_str());
+            return fail(33, "the load list did not clamp the scenario date");
+        }
+        const auto copy = dir / "rio-free.cty";
+        std::filesystem::copy_file(rio, copy, std::filesystem::copy_options::overwrite_existing);
+        CitySession scenario;
+        if (!scenario.load_city(copy.string())) {
+            std::fprintf(stderr, "scenario: %s\n", scenario.last_load_error().c_str());
+            return fail(34, "a classic scenario file did not open");
+        }
+        const auto book = scenario.budget();
+        if (book.road_percent != 100 || book.police_percent != 100 || book.fire_percent != 100) {
+            std::fprintf(stderr, "funding %d %d %d\n", book.road_percent, book.police_percent, book.fire_percent);
+            return fail(34, "a classic scenario file kept 0% funding");
+        }
+        std::filesystem::remove(copy);
+    }
+    if (!save_name_starts_with_dot(".secret") || save_name_starts_with_dot("secret")) {
+        return fail(35, "a save name starting with a dot was allowed");
+    }
+    const unsigned key = terrain_preview_key(1, -1, -1, -1, -1);
+    if (key == 0 || preview_seed_from_field("999999999999999999999") != 2147483647) {
+        return fail(36, "the terrain preview key is not defined for a random knob or a huge seed");
+    }
+    const std::string pasted = sanitize_pasted_text(std::string("a\nb\t") + std::string(80, 'x'), 64);
+    if (pasted.find('\n') != std::string::npos || pasted.find('\t') != std::string::npos || pasted.size() > 64 ||
+        pasted.empty()) {
+        return fail(37, "pasted text kept a control character or was not truncated");
+    }
+    if (about_text().find("Version 2.0.0") == std::string::npos || about_text().find("Lunduke City 2 2") != std::string::npos ||
+        about_text().find("Will Wright") == std::string::npos || about_text().find("Don Hopkins") == std::string::npos ||
+        how_to_play_text().find("budget") == std::string::npos || how_to_play_text().find("power") == std::string::npos) {
+        return fail(38, "about or how to play copy is missing");
+    }
+    if (kMaxVoices != 8 || kSoundCooldownMs != 80 || kAudioIdleCloseMs < 1000 || kMaxCityBytes < 27120) {
+        return fail(39, "audio or city size limits moved");
+    }
 
     std::filesystem::remove(city_path);
     std::filesystem::remove(side_path);

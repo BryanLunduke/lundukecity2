@@ -354,6 +354,9 @@ public:
     int map_value(int x, int y) const;
     int layer_value(MapLayer layer, int x, int y) const;
     unsigned map_serial() const;
+    // Cheap samples so the shell can skip a full repaint when the picture is still.
+    unsigned tile_sample() const;
+    unsigned sprite_sample() const;
     // Filled by the last query. False until the player queries a tile.
     bool query_tile(int &x, int &y) const;
     struct CityNotice {

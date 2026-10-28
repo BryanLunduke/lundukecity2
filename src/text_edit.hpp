@@ -148,3 +148,52 @@ inline bool text_has_path_separator(const std::string &text)
 {
     return text.find('/') != std::string::npos || text.find('\\') != std::string::npos;
 }
+
+// Drop C0 controls and DEL, and stop at a UTF-8 boundary that still fits.
+inline std::string sanitize_pasted_text(const std::string &text, int max_bytes)
+{
+    std::string out;
+    if (max_bytes < 1) {
+        return out;
+    }
+    for (std::size_t i = 0; i < text.size();) {
+        const unsigned char lead = static_cast<unsigned char>(text[i]);
+        if (lead < 0x20 || lead == 0x7f) {
+            ++i;
+            continue;
+        }
+        int length = 1;
+        if ((lead & 0x80) == 0) {
+            length = 1;
+        } else if ((lead & 0xE0) == 0xC0) {
+            length = 2;
+        } else if ((lead & 0xF0) == 0xE0) {
+            length = 3;
+        } else if ((lead & 0xF8) == 0xF0) {
+            length = 4;
+        } else {
+            ++i;
+            continue;
+        }
+        if (i + static_cast<std::size_t>(length) > text.size()) {
+            break;
+        }
+        bool ok = true;
+        for (int n = 1; n < length; ++n) {
+            if (!utf8_continuation(static_cast<unsigned char>(text[i + static_cast<std::size_t>(n)]))) {
+                ok = false;
+                break;
+            }
+        }
+        if (!ok) {
+            ++i;
+            continue;
+        }
+        if (static_cast<int>(out.size()) + length > max_bytes) {
+            break;
+        }
+        out.append(text, i, static_cast<std::size_t>(length));
+        i += static_cast<std::size_t>(length);
+    }
+    return out;
+}

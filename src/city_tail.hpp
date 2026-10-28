@@ -20,6 +20,9 @@ enum class CityFileKind {
 };
 
 inline constexpr std::size_t kClassicCityBytes = 27120;
+// Largest real save is about 27 KB plus trailers. 4 MB is generous and
+// keeps a truncated image or a huge file from being read into memory.
+inline constexpr std::size_t kMaxCityBytes = 4u * 1024u * 1024u;
 
 inline CityFileKind classify_city_bytes(const unsigned char *data, std::size_t size)
 {
@@ -99,10 +102,43 @@ inline CityFileKind classify_city_path(const std::string &path)
     if (end < 0) {
         return CityFileKind::Unreadable;
     }
+    if (static_cast<unsigned long long>(end) > kMaxCityBytes) {
+        return CityFileKind::Unreadable;
+    }
     in.seekg(0, std::ios::beg);
     std::vector<unsigned char> data(static_cast<std::size_t>(end));
     if (!data.empty() && !in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(data.size()))) {
         return CityFileKind::Unreadable;
     }
     return classify_city_bytes(data.empty() ? nullptr : data.data(), data.size());
+}
+
+// One bounded read. error is a sentence for the player when this returns false.
+inline bool read_city_bounded(const std::string &path, std::vector<unsigned char> &data, std::string &error)
+{
+    data.clear();
+    error.clear();
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        error = "The file could not be opened.";
+        return false;
+    }
+    in.seekg(0, std::ios::end);
+    const std::streamoff end = in.tellg();
+    if (end < 0) {
+        error = "The file could not be read.";
+        return false;
+    }
+    if (static_cast<unsigned long long>(end) > kMaxCityBytes) {
+        error = "This file is too large to be a city save.";
+        return false;
+    }
+    in.seekg(0, std::ios::beg);
+    data.resize(static_cast<std::size_t>(end));
+    if (!data.empty() && !in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(data.size()))) {
+        data.clear();
+        error = "The file could not be read.";
+        return false;
+    }
+    return true;
 }
