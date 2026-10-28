@@ -206,6 +206,7 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
         Slot svga[8];
         Slot spooky[8];
         Slot spooky_park;
+        Slot svga_park;
         ~Cache()
         {
             for (Slot &slot : slots) {
@@ -225,6 +226,9 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
             }
             if (spooky_park.image != nullptr) {
                 cairo_surface_destroy(spooky_park.image);
+            }
+            if (svga_park.image != nullptr) {
+                cairo_surface_destroy(svga_park.image);
             }
         }
     };
@@ -246,6 +250,20 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
         if (park.image != nullptr) {
             vga_snap = true;
             return park.image;
+        }
+    }
+    // Big Park follows the library and the zoo: the SVGA sheet when it
+    // loaded, and the classic park when it did not. Spooky already
+    // returned above when its own file loaded.
+    if (look >= 1 && std::strcmp(name, "big-park") == 0) {
+        Slot &day = cache.svga_park;
+        if (!day.tried) {
+            day.tried = true;
+            day.image = load_png(ui_data_file("special-tiles/big-park-svga.png"));
+        }
+        if (day.image != nullptr) {
+            vga_snap = true;
+            return day.image;
         }
     }
     // Library and zoo have a drawn SVGA sheet. Spooky uses its own file
@@ -649,6 +667,7 @@ void MapView::draw(cairo_t *cr)
     cairo_paint(cr);
 
     if (session_ != nullptr) {
+        sprite_art_set_look(tile_atlas().look());
         for (const auto &dot : session_->sprites()) {
             cairo_surface_t *image = sprite_frame(dot.type, dot.frame);
             if (image == nullptr) {
