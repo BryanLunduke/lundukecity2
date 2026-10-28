@@ -9,6 +9,7 @@
 #include "atomic_write.hpp"
 #include "city_tail.hpp"
 #include "messages.hpp"
+#include "text_edit.hpp"
 #include "scenario_sidecar.hpp"
 #include "special_buildings.hpp"
 
@@ -685,7 +686,7 @@ void CitySession::new_city(const NewCitySpec &spec)
     sim.setAutoBudget(true);
     sim.setAutoBulldoze(true);
     sim.setEnableDisasters(true);
-    const std::string city = spec.name.empty() ? "New City" : spec.name;
+    const std::string city = utf8_prefix(spec.name.empty() ? std::string("New City") : spec.name, kCityNameMaxBytes);
     sim.setCleanCityName(city);
     sim.setSpeed(static_cast<short>(speed_));
     sim.setPasses(1);
@@ -763,10 +764,10 @@ void CitySession::rename_city(const std::string &name)
             pending_space = false;
         }
         clean.push_back(static_cast<char>(ch));
-        if (clean.size() >= 48) {
-            break;
-        }
     }
+    // Stop on a character boundary. The engine cuts at 48 bytes and would
+    // otherwise leave a broken character in the status bar and the file name.
+    clean = utf8_prefix(clean, kCityNameMaxBytes);
     if (clean.empty()) {
         post_message("Enter a name that is not only spaces.");
         return;
@@ -1800,7 +1801,8 @@ std::string CitySession::city_name() const
     if (engine_->sim.cityName.empty()) {
         return "New City";
     }
-    return engine_->sim.cityName;
+    // A name already cut mid-character still displays as whole characters.
+    return utf8_prefix(engine_->sim.cityName, static_cast<int>(engine_->sim.cityName.size()));
 }
 
 std::string CitySession::funds_text() const

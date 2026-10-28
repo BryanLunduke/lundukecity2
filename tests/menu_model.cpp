@@ -181,6 +181,66 @@ int main()
         !field_backspace_would_delete("Mesa", 0, 4) || field_backspace_would_delete("", 0, 0)) {
         return fail("backspace is offered when the caret cannot delete");
     }
+    // Menu view heights at UI scale 1: 960x600, 1011x601, and 1024x640.
+    const double window_avails[] = {478, 479, 518};
+    for (double avail : window_avails) {
+        for (int column = 0; column < menu_table::kColumnCount; ++column) {
+            const MenuEntry *items = menu_table::column_items(column);
+            const int count = menu_table::column_count(column);
+            int n_item = 0;
+            int n_sep = 0;
+            int first = -1;
+            int last = -1;
+            for (int i = 0; i < count; ++i) {
+                if (items[i].kind == ItemKind::Separator) {
+                    ++n_sep;
+                    continue;
+                }
+                ++n_item;
+                if (first < 0) {
+                    first = i;
+                }
+                last = i;
+            }
+            const menu_table::MenuPitch pitch = menu_table::menu_pitch(avail, n_item, n_sep, 36, 17);
+            std::vector<double> tops(static_cast<std::size_t>(count));
+            std::vector<double> heights(static_cast<std::size_t>(count));
+            double rel = 5;
+            for (int i = 0; i < count; ++i) {
+                tops[static_cast<std::size_t>(i)] = rel;
+                heights[static_cast<std::size_t>(i)] = items[i].kind == ItemKind::Separator ? 8.0 : pitch.row_h;
+                rel += heights[static_cast<std::size_t>(i)];
+            }
+            const double content = rel;
+            auto visible = [&](double scroll, int index) {
+                const double y = tops[static_cast<std::size_t>(index)] - scroll;
+                const double h = heights[static_cast<std::size_t>(index)];
+                return y + 0.5 >= 0.0 && y + h <= avail + 0.5;
+            };
+            const double top_scroll = menu_table::menu_clamped_scroll(tops.data(), items, count, 0, 0);
+            if (!visible(top_scroll, first)) {
+                return fail("the first menu row is not visible at the top");
+            }
+            const double end = menu_table::menu_reveal_scroll(tops.data(), heights.data(), count, last, avail, content);
+            const double bottom = menu_table::menu_clamped_scroll(tops.data(), items, count, end, end);
+            if (!visible(bottom, last)) {
+                std::cerr << "column " << column << " avail " << avail << " scroll " << bottom << " end " << end
+                          << "\n";
+                return fail("the last menu row is not visible at the bottom");
+            }
+            for (int i = 0; i < count; ++i) {
+                if (items[i].kind == ItemKind::Separator) {
+                    continue;
+                }
+                const double reveal = menu_table::menu_reveal_scroll(tops.data(), heights.data(), count, i, avail, content);
+                const double scroll = menu_table::menu_clamped_scroll(tops.data(), items, count, reveal, end);
+                if (!visible(scroll, i)) {
+                    std::cerr << "column " << column << " row " << i << " avail " << avail << "\n";
+                    return fail("the highlighted menu row is off screen");
+                }
+            }
+        }
+    }
     {
         const MenuEntry *options = menu_table::column_items(1);
         const int count = menu_table::column_count(1);

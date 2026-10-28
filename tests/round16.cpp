@@ -419,6 +419,31 @@ int main()
     if (clipped.size() != 63 || clipped.find('\xC3') != std::string::npos) {
         return fail(37, "paste truncated in the middle of a UTF-8 character");
     }
+    if (kCityNameMaxBytes != 48) {
+        return fail(44, "the city name limit is not the engine's 48 bytes");
+    }
+    {
+        const std::string crossed = std::string(47, 'A') + "\xC3\xA9";
+        const std::string kept = utf8_prefix(crossed, kCityNameMaxBytes);
+        if (kept.size() != 47 || kept.find('\xC3') != std::string::npos) {
+            return fail(44, "a city name was cut in the middle of a character");
+        }
+        const std::string fits = std::string(46, 'A') + "\xC3\xA9";
+        if (utf8_prefix(fits, kCityNameMaxBytes) != fits) {
+            return fail(44, "a 48-byte city name lost its last character");
+        }
+        CitySession named;
+        named.new_city(crossed, 1);
+        if (named.city_name().size() > 48 || named.city_name().find('\xC3') != std::string::npos) {
+            std::fprintf(stderr, "name '%s' (%zu)\n", named.city_name().c_str(), named.city_name().size());
+            return fail(44, "a new city kept a split character in its name");
+        }
+        named.rename_city(fits);
+        if (named.city_name() != fits) {
+            std::fprintf(stderr, "renamed '%s'\n", named.city_name().c_str());
+            return fail(44, "rename dropped a character that fits in 48 bytes");
+        }
+    }
     if (kCitySeedFieldMax != 10 || new_city_field_error(true, true) != nullptr ||
         std::string(new_city_field_error(false, true)) != "Check the name." ||
         std::string(new_city_field_error(true, false)) != "Check the seed." ||

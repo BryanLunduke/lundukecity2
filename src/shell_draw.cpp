@@ -386,32 +386,11 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         menu_scroll_cursor_ = menu_.cursor;
     }
     {
-        // Snap to a row start. Stopping at content-avail used to hide the
-        // last row: the next aligned step is a few pixels past that, and the
-        // menu box simply gets shorter instead of slicing a row.
-        int row = menu_table::menu_scroll_row(menu_item_top_, shown, menu_scroll_);
-        if (row < 0) {
-            row = 0;
-        }
-        if (row >= shown) {
-            row = shown - 1;
-        }
+        // Snap to a row start. A separator stays at the top only when
+        // stepping past it would hide the last row. Never step backward:
+        // that kept Messages below the fold on a short window.
         const double end = menu_table::menu_reveal_scroll(menu_item_top_, menu_item_h_, shown, shown - 1, avail, content_h);
-        // A separator at the top of a scrolled menu is a stray line. Step
-        // past it when that still shows the last row; otherwise step back.
-        if (row < shown && items[row].kind == ItemKind::Separator) {
-            const int forward = menu_table::menu_visible_top(items, shown, row, 1);
-            const double forward_scroll = menu_table::menu_row_scroll(menu_item_top_, shown, forward);
-            if (forward != row && forward_scroll <= end + 0.5) {
-                row = forward;
-            } else {
-                row = menu_table::menu_visible_top(items, shown, row, -1);
-            }
-        }
-        menu_scroll_ = menu_table::menu_row_scroll(menu_item_top_, shown, row);
-        if (menu_scroll_ > end) {
-            menu_scroll_ = end;
-        }
+        menu_scroll_ = menu_table::menu_clamped_scroll(menu_item_top_, items, shown, menu_scroll_, end);
     }
     const double scroll = menu_scroll_;
     double visible_bottom = static_cast<double>(menu_h_) + 5.0;

@@ -1603,8 +1603,21 @@ void Shell::on_dialog_button(int id)
             close_dialog();
             return;
         }
-        // Cancel outside a tax year used to keep the live slider edits.
-        // Both paths restore the rates the window opened with.
+        // The year-end window says the year is collected when it closes.
+        // Escape is not a way to skip the taxes. The rates on the sliders
+        // are what gets collected, same as Collect Taxes. A budget opened
+        // from the menu has nothing waiting, so Cancel still restores the
+        // rates from when that window opened.
+        if (session_.budget_pending()) {
+            session_.set_tax(tax_);
+            session_.set_road_funding(road_);
+            session_.set_police_funding(police_);
+            session_.set_fire_funding(fire_);
+            session_.finish_budget_edit();
+            budget_is_tax_ = false;
+            close_dialog();
+            return;
+        }
         session_.restore_budget_rates(open_tax_, open_road_, open_police_, open_fire_);
         tax_ = open_tax_;
         road_ = open_road_;
@@ -1963,7 +1976,8 @@ void Shell::type_text(const std::string &text)
         dialog_error_ = "That name cannot contain / or \\.";
         return;
     }
-    const int limit = field == &field_b_ ? kCitySeedFieldMax : 64;
+    const bool city_name = field == &field_a_ && (dialog_ == Dialog::NewCity || dialog_ == Dialog::Rename);
+    const int limit = field == &field_b_ ? kCitySeedFieldMax : city_name ? kCityNameMaxBytes : 64;
     if (!field_insert(*field, field_caret_, field_anchor_, text, limit)) {
         dialog_error_ = field == &field_b_ ? "That seed is too long." : "That name is too long.";
     } else if (dialog_error_ == "That name cannot contain / or \\." || dialog_error_ == "That name is too long." ||
@@ -2011,7 +2025,8 @@ void Shell::paste_field()
     }
     const int from = std::min(field_caret_, field_anchor_);
     const int to = std::max(field_caret_, field_anchor_);
-    const int limit = field == &field_b_ ? kCitySeedFieldMax : 64;
+    const bool city_name = field == &field_a_ && (dialog_ == Dialog::NewCity || dialog_ == Dialog::Rename);
+    const int limit = field == &field_b_ ? kCitySeedFieldMax : city_name ? kCityNameMaxBytes : 64;
     const int room = limit - (static_cast<int>(field->size()) - (to - from));
     const std::string clean = sanitize_pasted_text(clip, std::max(0, room));
     SDL_free(clip);
