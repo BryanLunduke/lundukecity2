@@ -55,6 +55,36 @@ inline bool path_has_cty_suffix(const std::string &path)
     return dot == '.' && std::tolower(a) == 'c' && std::tolower(b) == 't' && std::tolower(c) == 'y';
 }
 
+// The name the player typed, without a trailing .cty and without surrounding
+// spaces. Empty, ".cty", and "." are not a file stem.
+inline std::string save_name_stem(const std::string &name)
+{
+    std::string stem = name;
+    while (!stem.empty() && (stem.back() == ' ' || stem.back() == '\t' || stem.back() == '\r')) {
+        stem.pop_back();
+    }
+    std::size_t start = 0;
+    while (start < stem.size() && (stem[start] == ' ' || stem[start] == '\t')) {
+        ++start;
+    }
+    if (start > 0) {
+        stem.erase(0, start);
+    }
+    if (path_has_cty_suffix(stem)) {
+        stem.resize(stem.size() - 4);
+    }
+    while (!stem.empty() && (stem.back() == ' ' || stem.back() == '\t' || stem.back() == '.')) {
+        stem.pop_back();
+    }
+    return stem;
+}
+
+inline bool save_name_has_stem(const std::string &name)
+{
+    const std::string stem = save_name_stem(name);
+    return !stem.empty() && stem != "." && stem != "..";
+}
+
 // The path that will actually be opened. Append .cty before the chooser
 // confirms a name that does not already have the suffix.
 inline std::string with_cty_suffix(const std::string &path)

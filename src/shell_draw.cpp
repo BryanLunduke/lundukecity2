@@ -307,9 +307,9 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         const TextMetrics metrics = measure_text(cr, menu_font(), strip_mnemonic(menu_table::column_title(c)), -1);
         drop_x += metrics.width + 24;
     }
-    // 36px rows read well at 1280. A short window (1011x601) cannot hold
-    // the Options column at that pitch, so the rows shrink until the menu
-    // fits, and only then scroll. The keyboard cursor is always on screen.
+    // 36px rows read well at 1280. A short window keeps the label inside the
+    // row (the underline used to spill into the next line) and scrolls when
+    // the column still will not fit above the status bar.
     int n_item = 0;
     int n_sep = 0;
     for (int i = 0; i < count; ++i) {
@@ -319,20 +319,12 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             ++n_item;
         }
     }
-    // Stop above the status and message bars. A short window used to let a
-    // long column (Windows, once it gained the zone maps) cover "Funds".
     const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - status_h_ - message_h_ - 6));
-    double row_h = dp(36);
-    const double chrome = 10.0 + n_sep * 8.0;
-    if (n_item > 0 && chrome + n_item * row_h > avail) {
-        row_h = std::floor((avail - chrome) / n_item);
-        const double floor_h = std::max(22.0, static_cast<double>(dp(22)));
-        if (row_h < floor_h) {
-            row_h = floor_h;
-        }
-    }
+    const int label_h = measure_text(cr, menu_font(), "Ag", -1).height;
+    const menu_table::MenuPitch pitch = menu_table::menu_pitch(avail, n_item, n_sep, dp(36), label_h);
+    const double row_h = pitch.row_h;
     const double drop_w = dp(320);
-    double content_h = chrome;
+    double content_h = 5;
     double item_top[64];
     double cursor_y_rel = 5;
     const int shown = count > 64 ? 64 : count;
@@ -350,21 +342,9 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     }
     const double view_h = std::min(content_h, avail);
     double scroll = 0;
-    if (content_h > view_h + 0.5 && menu_.cursor >= 0 && menu_.cursor < shown) {
+    if (menu_.cursor >= 0 && menu_.cursor < shown) {
         const double row = items[menu_.cursor].kind == ItemKind::Separator ? 8.0 : row_h;
-        if (cursor_y_rel + row > scroll + view_h - 4) {
-            scroll = cursor_y_rel + row - (view_h - 4);
-        }
-        if (cursor_y_rel < scroll + 4) {
-            scroll = cursor_y_rel - 4;
-        }
-        if (scroll < 0) {
-            scroll = 0;
-        }
-        const double max_scroll = std::max(0.0, content_h - view_h);
-        if (scroll > max_scroll) {
-            scroll = max_scroll;
-        }
+        scroll = menu_table::menu_scroll_for_row(cursor_y_rel, row, view_h, content_h);
     }
     const double drop_h = view_h;
     if (drop_x + drop_w > win_w_ - 4) {
@@ -385,7 +365,9 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         const MenuEntry &item = items[i];
         const double y = menu_h_ + item_top[i] - scroll;
         const double h = item.kind == ItemKind::Separator ? 8.0 : row_h;
-        if (y + h < menu_h_ || y > menu_h_ + drop_h) {
+        // A row that starts inside the menu but runs past the bottom used to
+        // be clipped through the middle of the label.
+        if (y + 0.5 < menu_h_ || y + h > menu_h_ + drop_h + 0.5) {
             continue;
         }
         if (item.kind == ItemKind::Separator) {
@@ -403,7 +385,8 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             if (gamepad_nav_ && menu_.cursor == i) {
                 cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
                 cairo_set_line_width(cr, 2);
-                cairo_rectangle(cr, drop_x + 4, y + 2, drop_w - 8, row_h - 4);
+                const double inset = h >= 28.0 ? 2.0 : 1.0;
+                cairo_rectangle(cr, drop_x + 4, y + inset, drop_w - 8, h - inset * 2);
                 cairo_stroke(cr);
             }
         }
@@ -465,34 +448,41 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
                 on = drawn_look_ == 2;
             }
             cairo_set_source_rgb(cr, theme::kTextR, theme::kTextG, theme::kTextB);
+            const double mark_x = drop_x + 8;
+            const double mark_y = y + pitch.mark_dy;
+            const double mark = pitch.mark;
             if (item.kind == ItemKind::Check) {
-                cairo_rectangle(cr, drop_x + 8, y + 8, 14, 14);
+                cairo_rectangle(cr, mark_x, mark_y, mark, mark);
                 cairo_stroke(cr);
                 if (on) {
-                    cairo_move_to(cr, drop_x + 10, y + 15);
-                    cairo_line_to(cr, drop_x + 14, y + 19);
-                    cairo_line_to(cr, drop_x + 22, y + 9);
+                    cairo_move_to(cr, mark_x + mark * 0.15, mark_y + mark * 0.55);
+                    cairo_line_to(cr, mark_x + mark * 0.40, mark_y + mark * 0.80);
+                    cairo_line_to(cr, mark_x + mark * 0.88, mark_y + mark * 0.18);
                     cairo_stroke(cr);
                 }
             } else {
                 // Pango leaves the current point at the end of the previous
                 // row. cairo_arc joins to that point, which draws a diagonal
                 // from the row above into this radio circle.
+                const double radius = mark / 2.0;
+                const double cx = mark_x + radius;
+                const double cy = mark_y + radius;
                 cairo_new_sub_path(cr);
-                cairo_arc(cr, drop_x + 15, y + 16, 6, 0, 6.3);
+                cairo_arc(cr, cx, cy, std::max(3.0, radius), 0, 6.3);
                 cairo_stroke(cr);
                 if (on) {
                     cairo_new_sub_path(cr);
-                    cairo_arc(cr, drop_x + 15, y + 16, 3, 0, 6.3);
+                    cairo_arc(cr, cx, cy, std::max(1.5, radius * 0.5), 0, 6.3);
                     cairo_fill(cr);
                 }
             }
         }
-        paint_mnemonic(cr, menu_font(), item.label, drop_x + 28, y + 7, menu_.alt_shown, theme::kTextR,
+        const double text_y = y + pitch.text_dy;
+        paint_mnemonic(cr, menu_font(), item.label, drop_x + 28, text_y, menu_.alt_shown, theme::kTextR,
                        theme::kTextG, theme::kTextB);
         if (item.kind == ItemKind::Submenu) {
-            paint_text(cr, menu_font(), ">", drop_x + drop_w - dp(28), y + 7, theme::kTextR, theme::kTextG, theme::kTextB,
-                       -1);
+            paint_text(cr, menu_font(), ">", drop_x + drop_w - dp(28), text_y, theme::kTextR, theme::kTextG,
+                       theme::kTextB, -1);
         }
         if (item.action == Action::Recent) {
             recent_row_y = y;
@@ -500,9 +490,17 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         }
         if (item.accel_text != nullptr && !gamepad_nav_) {
             const TextMetrics accel = measure_text(cr, menu_font(), item.accel_text, -1);
-            paint_text(cr, menu_font(), item.accel_text, drop_x + drop_w - accel.width - 12, y + 7, theme::kAccelR,
-                       theme::kAccelG, theme::kAccelB, -1);
+            paint_text(cr, menu_font(), item.accel_text, drop_x + drop_w - accel.width - 12, y + pitch.text_dy,
+                       theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
         }
+    }
+    if (content_h > view_h + 0.5) {
+        const double track_x = drop_x + drop_w - 10;
+        const double thumb_h = std::max(12.0, view_h * (view_h / content_h));
+        const double max_scroll = std::max(1.0, content_h - view_h);
+        const double thumb_y = menu_h_ + (view_h - thumb_h) * (scroll / max_scroll);
+        fill(cr, track_x, thumb_y, 6, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(),
+             theme::chrome_select_b());
     }
     cairo_restore(cr);
     if (!menu_.recent_open) {
@@ -1162,7 +1160,20 @@ void Shell::draw_dialog(cairo_t *cr)
         const TextMetrics path_metrics = measure_text(cr, ui_font(), files_dir_, static_cast<int>(dw - 32));
         label(cr, ui_font(), files_dir_, x + 16, y + dp(46), static_cast<int>(dw - 32));
         const double list_top = y + dp(46) + path_metrics.height + 6;
-        const double list_h = (y + dh - margin - dp(36) - dp(12)) - list_top - (files_save_ ? dp(48) : 0);
+        const double buttons_top = y + dh - margin - dp(36);
+        const double name_h = files_save_ ? dp(36) : 0;
+        const double name_y = files_save_ ? buttons_top - dp(8) - name_h : buttons_top;
+        double osk_h = 0;
+        if (show_osk() && files_save_) {
+            const double room = name_y - dp(8) - list_top - dp(8);
+            osk_h = std::min(static_cast<double>(dp(200)), std::max(0.0, room - dp(48)));
+            if (osk_h < dp(88)) {
+                osk_h = 0;
+            }
+        }
+        const double osk_y = name_y - dp(8) - osk_h;
+        const double list_bottom = (osk_h > 0 ? osk_y : name_y) - dp(8);
+        const double list_h = std::max(static_cast<double>(dp(40)), list_bottom - list_top);
         const int row_px = dp(56);
         const int visible = std::max(1, static_cast<int>(list_h / row_px));
         files_visible_ = visible;
@@ -1208,7 +1219,10 @@ void Shell::draw_dialog(cairo_t *cr)
                 }
                 full += name;
                 const CityGlance glance = city_glance(full);
-                if (glance.ok && !glance.swatch.empty()) {
+                if (!glance.ok && !glance.summary.empty()) {
+                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, theme::kAccelR, theme::kAccelG,
+                               theme::kAccelB, static_cast<int>(row_w - (text_x - x)));
+                } else if (glance.ok && !glance.swatch.empty()) {
                     const int tw = 48;
                     const int th = 40;
                     cairo_surface_t *swatch = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 120, 100);
@@ -1259,13 +1273,16 @@ void Shell::draw_dialog(cairo_t *cr)
                        theme::kAccelB, static_cast<int>(dw - 56));
         }
         if (files_save_) {
-            fill(cr, x + 16, y + dh - 100, dw - 32, 34, 1, 1, 1);
-            stroke_rect(cr, x + 16, y + dh - 100, dw - 32, 34, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-            push_hot(x + 16, y + dh - 100, dw - 32, 34, kFieldName);
+            if (osk_h > 0) {
+                draw_osk(cr, x + 16, osk_y, dw - 32, osk_h);
+            }
+            fill(cr, x + 16, name_y, dw - 32, name_h, 1, 1, 1);
+            stroke_rect(cr, x + 16, name_y, dw - 32, name_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+            push_hot(x + 16, name_y, dw - 32, name_h, kFieldName);
             push_focus(kFieldName);
-            paint_text(cr, body_font(), field_a_, x + 24, y + dh - 92, theme::kTextR, theme::kTextG, theme::kTextB,
+            paint_text(cr, body_font(), field_a_, x + 24, name_y + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 48));
-            paint_caret(x + 24, y + dh - 92, dp(18), field_a_, focus_id_ == kFieldName);
+            paint_caret(x + 24, name_y + dp(8), dp(18), field_a_, focus_id_ == kFieldName);
         }
         bool folder_row = false;
         if (!files_save_ && list_index_ >= 0 && list_index_ < static_cast<int>(files_.size())) {
@@ -1273,7 +1290,7 @@ void Shell::draw_dialog(cairo_t *cr)
         }
         const char *open_label = files_save_ ? "_Save" : (folder_row ? "Open _Folder" : "_Open");
         const int open_id = files_save_ ? kSave : kOk;
-        buttons_at(x, dw, y + dh - margin - dp(36), {{"_Up", kUp}, {"_Cancel", kCancel}, {open_label, open_id}}, 1);
+        buttons_at(x, dw, buttons_top, {{"_Up", kUp}, {"_Cancel", kCancel}, {open_label, open_id}}, 1);
         return;
     }
     if (dialog_ == Dialog::LoadError || dialog_ == Dialog::SaveError || dialog_ == Dialog::Info) {
@@ -2104,11 +2121,26 @@ void Shell::draw(cairo_t *cr)
         stroke_rect(cr, lx, ly, lw, lh, legend_edge_r, legend_edge_g, legend_edge_b);
         paint_text(cr, ui_font(), legend, lx + pad, ly + pad, legend_ink_r, legend_ink_g, legend_ink_b, wrap);
         const double ramp_y = ly + lh - dp(10);
-        for (int i = 0; i < 8; ++i) {
-            const double t = i / 7.0;
-            cairo_set_source_rgba(cr, 1, 0.86 * (1.0 - t), 0.12 * (1.0 - t), 0.35 + 0.6 * t);
-            cairo_rectangle(cr, lx + pad + i * ((lw - pad * 2) / 8.0), ramp_y, (lw - pad * 2) / 8.0, dp(6));
-            cairo_fill(cr);
+        const CitySession::MapLayer shown = overlay_.layer();
+        const bool on_off = shown == CitySession::MapLayer::Residential || shown == CitySession::MapLayer::Commercial ||
+                            shown == CitySession::MapLayer::Industrial || shown == CitySession::MapLayer::Transportation;
+        if (!on_off) {
+            for (int i = 0; i < 8; ++i) {
+                const double t = i / 7.0;
+                cairo_set_source_rgba(cr, 1, 0.86 * (1.0 - t), 0.12 * (1.0 - t), 0.35 + 0.6 * t);
+                cairo_rectangle(cr, lx + pad + i * ((lw - pad * 2) / 8.0), ramp_y, (lw - pad * 2) / 8.0, dp(6));
+                cairo_fill(cr);
+            }
+        } else if (shown == CitySession::MapLayer::Transportation) {
+            fill(cr, lx + pad, ramp_y, dp(28), dp(6), 48 / 255.0, 48 / 255.0, 52 / 255.0);
+            fill(cr, lx + pad + dp(34), ramp_y, dp(28), dp(6), 140 / 255.0, 84 / 255.0, 36 / 255.0);
+        } else if (shown == CitySession::MapLayer::Commercial) {
+            fill(cr, lx + pad, ramp_y, dp(28), dp(6), 48 / 255.0, 96 / 255.0, 210 / 255.0);
+        } else if (shown == CitySession::MapLayer::Industrial) {
+            fill(cr, lx + pad, ramp_y, dp(28), dp(6), 230 / 255.0, 190 / 255.0, 32 / 255.0);
+        } else {
+            fill(cr, lx + pad, ramp_y, dp(14), dp(6), 16 / 255.0, 72 / 255.0, 16 / 255.0);
+            fill(cr, lx + pad + dp(14), ramp_y, dp(28), dp(6), 186 / 255.0, 255 / 255.0, 64 / 255.0);
         }
     }
     if (gamepad_nav_ && dialog_ == Dialog::None) {
@@ -2157,10 +2189,17 @@ std::string Shell::dialog_title_hint() const
         int key_count = 0;
         const OskKey *keys = osk_keys(key_count);
         const int index = focus_id_ - kOsk;
+        const bool name_page = dialog_ == Dialog::NewCity && new_page_ == 0;
+        const bool save_name = dialog_ == Dialog::Files && files_save_;
+        const std::string &typed = (dialog_ == Dialog::NewCity && focus_id_ == kFieldSeed) ? field_b_ : field_a_;
+        const bool erases = (name_page || save_name || dialog_ == Dialog::Rename || dialog_ == Dialog::NewCity) &&
+                            !typed.empty();
+        const std::string b_does = erases ? b + " deletes" : b + " closes";
         if (index >= 0 && index < key_count && keys[index].kind == OskKind::Auto) {
-            return pad ? a + " picks a name    " + b + " closes    " + menu + " confirms" : "Enter picks a name    Esc closes";
+            return pad ? a + " picks a name    " + b_does + "    " + menu + " confirms"
+                       : "Enter picks a name    Esc closes";
         }
-        return pad ? a + " types    " + b + " closes    " + menu + " confirms" : "Enter types    Esc closes";
+        return pad ? a + " types    " + b_does + "    " + menu + " confirms" : "Enter types    Esc closes";
     }
     if (field) {
         return pad ? a + " types    " + b + " deletes    " + menu + " confirms" : "Type here    Enter confirms    Esc closes";

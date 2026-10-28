@@ -237,6 +237,13 @@ int main()
     if (proposed_city_filename("  ...  ", "") != "city.cty") {
         return fail(7, "a blank city name did not fall back to city.cty");
     }
+    if (save_name_has_stem("") || save_name_has_stem(".cty") || save_name_has_stem("  .CTY") || save_name_has_stem(".") ||
+        save_name_has_stem("..")) {
+        return fail(7, "an empty save stem was accepted");
+    }
+    if (!save_name_has_stem("Tokyo") || !save_name_has_stem("Tokyo.cty") || !save_name_has_stem(" New City ")) {
+        return fail(7, "a real save name lost its stem");
+    }
     if (proposed_city_filename("Tokyo", "/tmp/maps/harbor.cty") != "harbor.cty") {
         return fail(8, "Save As ignored the current file name");
     }

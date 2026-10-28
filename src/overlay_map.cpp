@@ -228,8 +228,18 @@ void OverlayMap::rebuild()
                 }
                 continue;
             case CitySession::MapLayer::Residential:
+                // Classic lawns are already this green. A lighter fill with a
+                // dark edge stays readable on those tiles without new art.
                 if (value > 0) {
-                    solid(40, 170, 48, 200, pixel);
+                    const bool edge = session_->layer_value(layer_, x - 1, y) == 0 ||
+                                      session_->layer_value(layer_, x + 1, y) == 0 ||
+                                      session_->layer_value(layer_, x, y - 1) == 0 ||
+                                      session_->layer_value(layer_, x, y + 1) == 0;
+                    if (edge) {
+                        solid(16, 72, 16, 235, pixel);
+                    } else {
+                        solid(186, 255, 64, 215, pixel);
+                    }
                 }
                 continue;
             case CitySession::MapLayer::Commercial:

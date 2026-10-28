@@ -7,6 +7,7 @@
 #include "assets.hpp"
 #include "atomic_write.hpp"
 #include "city_seed.hpp"
+#include "controls_page.hpp"
 #include "dialog_copy.hpp"
 #include "notice_bar.hpp"
 #include "platform.hpp"
@@ -1060,9 +1061,7 @@ void Shell::loop()
         if (!pause_noted_ && !skip_pause_note && dialog_ == Dialog::None && !welcome_gate_ && speed_ == 0 && frame_ > 1) {
             pause_noted_ = true;
             if (deck_ || gamepad_nav_ || pad_ != nullptr) {
-                const std::string y = glyph(SDL_GAMEPAD_BUTTON_NORTH);
-                const std::string menu = glyph(SDL_GAMEPAD_BUTTON_START);
-                shown_message_ = "Game paused. Press " + y + ", or " + menu + " then Options, to run the city.";
+                shown_message_ = pause_run_hint(glyph(SDL_GAMEPAD_BUTTON_NORTH), glyph(SDL_GAMEPAD_BUTTON_START));
             } else {
                 shown_message_ = "Game paused. Press Space to run the city.";
             }
@@ -2024,6 +2023,10 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
             if (active_field() != nullptr) {
+                if (dialog_ == Dialog::Files && files_save_ && focus_id_ == kFieldName) {
+                    on_dialog_button(kSave);
+                    break;
+                }
                 activate_focus();
                 break;
             }
@@ -2039,8 +2042,14 @@ void Shell::handle_event(const SDL_Event &event)
         }
         if (button == SDL_GAMEPAD_BUTTON_EAST || button == SDL_GAMEPAD_BUTTON_BACK) {
             if (active_field() != nullptr && dialog_ != Dialog::None) {
-                // Page 2 of New City treats an empty field like Back, so the
-                // name from page 1 is kept. A letter in the field is deleted.
+                // The untouched "auto" seed is the default, not something the
+                // player typed. B leaves the land page instead of erasing it.
+                if (dialog_ == Dialog::NewCity && new_page_ > 0 && focus_id_ == kFieldSeed && field_b_ == "auto") {
+                    cancel_dialog();
+                    break;
+                }
+                // An empty field on page 2 is Back, so the name from page 1
+                // is kept. A letter the player typed is deleted.
                 if (active_field()->empty()) {
                     cancel_dialog();
                 } else {

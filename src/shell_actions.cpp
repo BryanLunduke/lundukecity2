@@ -177,7 +177,9 @@ void Shell::open_dialog(Dialog dialog)
         list_index_ = 0;
         list_scroll_ = 0;
     } else if (dialog == Dialog::Controls) {
-        controls_page_ = 0;
+        // Deck already leads with the gamepad page. A desktop pad should too,
+        // once that pad was the last input.
+        controls_page_ = (gamepad_nav_ && !deck_) ? 1 : 0;
         focus_id_ = kCancel;
     } else if (dialog == Dialog::Settings) {
         open_volume_ = volume_;
@@ -1313,6 +1315,12 @@ void Shell::on_dialog_button(int id)
             if (new_page_ > 0) {
                 --new_page_;
             }
+            // The seed field is not on this page. Leave the caret in the
+            // name, with nothing selected and no leftover seed error.
+            focus_id_ = kFieldName;
+            field_caret_ = static_cast<int>(field_a_.size());
+            field_anchor_ = field_caret_;
+            dialog_error_.clear();
             return;
         }
         if (id == kNext && new_page_ == 0) {
@@ -1323,6 +1331,7 @@ void Shell::on_dialog_button(int id)
             dialog_error_.clear();
             new_page_ = 1;
             focus_id_ = kFieldSeed;
+            field_select_all(field_b_, field_caret_, field_anchor_);
             return;
         }
         if (id == kGenerate || (id == kNext && new_page_ >= 1)) {
@@ -1431,6 +1440,10 @@ void Shell::on_dialog_button(int id)
             if (files_save_) {
                 if (text_has_path_separator(field_a_)) {
                     dialog_error_ = "That name cannot contain / or \\.";
+                    return;
+                }
+                if (!save_name_has_stem(field_a_)) {
+                    dialog_error_ = "Enter a file name. The name cannot be only .cty.";
                     return;
                 }
                 const std::string path = with_cty_suffix(path_join(files_dir_, field_a_));
@@ -1831,7 +1844,8 @@ std::string *Shell::active_field()
     if (dialog_ == Dialog::Rename && (focus_id_ == kFieldName || focus_id_ == 0)) {
         return &field_a_;
     }
-    if (dialog_ == Dialog::Files && files_save_ && focus_id_ == kFieldName) {
+    if (dialog_ == Dialog::Files && files_save_ &&
+        (focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64))) {
         return &field_a_;
     }
     if ((dialog_ == Dialog::NewCity && new_page_ == 1 && focus_id_ == kFieldSeed) ||
@@ -2177,6 +2191,12 @@ void Shell::activate_focus()
     }
     if (dialog_ == Dialog::Files) {
         if (files_save_ && focus_id_ == kFieldName) {
+            // A on the name opens the on-screen keyboard. Start, and the
+            // Save button, still write the file.
+            if (show_osk()) {
+                focus_id_ = kOsk;
+                return;
+            }
             on_dialog_button(kSave);
             return;
         }
@@ -2331,7 +2351,7 @@ const char *Shell::glyph(SDL_GamepadButton button) const
         return playstation ? "Options" : "Start";
     case SDL_GAMEPAD_BUTTON_BACK:
         if (deck_) {
-            return "\u29C9";
+            return "View";
         }
         if (playstation) {
             if (pad_ != nullptr && SDL_GetGamepadType(pad_) == SDL_GAMEPAD_TYPE_PS5) {

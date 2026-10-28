@@ -165,6 +165,18 @@ int main()
             glance.summary.find("$") == std::string::npos) {
             return fail(19, "the file list could not read a saved city");
         }
+        const auto junk_path = dir / "not-a-city.cty";
+        {
+            std::ofstream junk(junk_path, std::ios::binary | std::ios::trunc);
+            const std::vector<char> bytes(27120, '\xff');
+            junk.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        }
+        const CityGlance junk = city_glance(junk_path.string());
+        if (junk.ok || junk.summary != "Not a valid city" || !junk.swatch.empty()) {
+            std::fprintf(stderr, "junk ok %d summary '%s'\n", junk.ok ? 1 : 0, junk.summary.c_str());
+            return fail(19, "an invalid file still showed city details");
+        }
+        std::filesystem::remove(junk_path);
     }
     {
         ScenarioClock done;

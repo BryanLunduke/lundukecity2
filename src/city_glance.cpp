@@ -168,6 +168,40 @@ CityGlance city_glance(const std::string &path)
     constexpr int kMap = 3120;
     constexpr int kClassic = 27120;
     if (static_cast<int>(data.size()) < kClassic) {
+        glance.summary = "Not a valid city";
+        return glance;
+    }
+    bool zero = true;
+    for (int i = 0; i < kClassic; ++i) {
+        if (data[static_cast<std::size_t>(i)] != 0) {
+            zero = false;
+            break;
+        }
+    }
+    if (zero) {
+        glance.summary = "Not a valid city";
+        return glance;
+    }
+    int unknown = 0;
+    int centres = 0;
+    int bad_centres = 0;
+    for (int i = 0; i < 120 * 100; ++i) {
+        const int raw = be_short(data.data() + kMap + i * 2);
+        const int tile = raw & LOMASK;
+        const bool special_center = tile == SPECIAL_ZOO || tile == SPECIAL_PARK || tile == SPECIAL_LIBRARY;
+        const bool special = special_center || tile == SPECIAL_BODY;
+        if (tile > CHURCH7LAST && !special) {
+            ++unknown;
+        }
+        if ((raw & ZONEBIT) != 0) {
+            ++centres;
+            if (tile > CHURCH7LAST && !special_center) {
+                ++bad_centres;
+            }
+        }
+    }
+    if (unknown > 0 || bad_centres > 0 || centres > (120 * 100) / 9) {
+        glance.summary = "Not a valid city";
         return glance;
     }
     const int res = be_short(data.data() + kMisc + 4);

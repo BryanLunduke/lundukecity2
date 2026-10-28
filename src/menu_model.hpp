@@ -10,7 +10,9 @@
 // rows past the original 37. The look trio sits at the bottom of Options.
 // Hidden zoom accelerators are extra bindings, not extra rows.
 
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -226,6 +228,91 @@ inline const char *column_title(int index)
     default:
         return "";
     }
+}
+
+// Row pitch for a menu column. Rows never shrink below the label, so the
+// underline stays inside the row. A column that still will not fit scrolls
+// instead of clipping the last item.
+struct MenuPitch {
+    double row_h = 36;
+    bool scrolls = false;
+    double text_dy = 7;
+    double mark = 14;
+    double mark_dy = 8;
+};
+
+inline MenuPitch menu_pitch(double avail, int n_item, int n_sep, double preferred_row, double text_h)
+{
+    MenuPitch pitch;
+    if (n_item < 1) {
+        n_item = 1;
+    }
+    if (n_sep < 0) {
+        n_sep = 0;
+    }
+    if (text_h < 8.0) {
+        text_h = 8.0;
+    }
+    if (preferred_row < 1.0) {
+        preferred_row = 1.0;
+    }
+    const double chrome = 10.0 + static_cast<double>(n_sep) * 8.0;
+    const double min_row = text_h + 6.0;
+    double row = preferred_row < min_row ? min_row : preferred_row;
+    const double full = chrome + static_cast<double>(n_item) * row;
+    if (full > avail && avail > chrome + static_cast<double>(n_item)) {
+        const double squeezed = std::floor((avail - chrome) / static_cast<double>(n_item));
+        if (squeezed >= min_row) {
+            row = squeezed;
+        } else {
+            row = min_row;
+            pitch.scrolls = true;
+        }
+    }
+    pitch.row_h = row;
+    pitch.text_dy = (row - text_h) / 2.0;
+    if (pitch.text_dy < 0.0) {
+        pitch.text_dy = 0.0;
+    }
+    if (pitch.text_dy + text_h > row - 1.0) {
+        pitch.text_dy = row - 1.0 - text_h;
+        if (pitch.text_dy < 0.0) {
+            pitch.text_dy = 0.0;
+        }
+    }
+    pitch.mark = row >= 28.0 ? 14.0 : std::max(8.0, row - 12.0);
+    if (pitch.mark > row - 4.0) {
+        pitch.mark = std::max(6.0, row - 4.0);
+    }
+    pitch.mark_dy = (row - pitch.mark) / 2.0;
+    if (pitch.mark_dy < 0.0) {
+        pitch.mark_dy = 0.0;
+    }
+    return pitch;
+}
+
+// Scroll so the cursor row sits fully inside the menu. row_top is measured
+// from the top of the menu contents.
+inline double menu_scroll_for_row(double row_top, double row_h, double view_h, double content_h)
+{
+    if (content_h <= view_h + 0.5) {
+        return 0.0;
+    }
+    double scroll = 0.0;
+    if (row_top + row_h > view_h - 4.0) {
+        scroll = row_top + row_h - (view_h - 4.0);
+    }
+    if (row_top < scroll + 4.0) {
+        scroll = row_top - 4.0;
+    }
+    if (scroll < 0.0) {
+        scroll = 0.0;
+    }
+    const double max_scroll = content_h - view_h;
+    if (max_scroll > 0.0 && scroll > max_scroll) {
+        scroll = max_scroll;
+    }
+    return scroll;
 }
 
 inline int actionable_count()

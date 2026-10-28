@@ -20,6 +20,16 @@ inline char controls_letter(char key)
 // A Deck session leads with the gamepad page. D-pad left and right turn
 // the page. The shell scrolls a page that is taller than the window.
 
+// Y runs the city. The menu button then opens Options, unless that button
+// is already named Options (a PlayStation pad), which would read twice.
+inline std::string pause_run_hint(const std::string &run_button, const std::string &menu_button)
+{
+    if (menu_button == "Options") {
+        return "Game paused. Press " + run_button + ", or Options, to run the city.";
+    }
+    return "Game paused. Press " + run_button + ", or " + menu_button + " then Options, to run the city.";
+}
+
 inline int controls_page_count()
 {
     return 3;
