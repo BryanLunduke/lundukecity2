@@ -203,10 +203,22 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
     };
     struct Cache {
         Slot slots[8];
+        Slot svga[8];
+        Slot spooky[8];
         Slot spooky_park;
         ~Cache()
         {
             for (Slot &slot : slots) {
+                if (slot.image != nullptr) {
+                    cairo_surface_destroy(slot.image);
+                }
+            }
+            for (Slot &slot : svga) {
+                if (slot.image != nullptr) {
+                    cairo_surface_destroy(slot.image);
+                }
+            }
+            for (Slot &slot : spooky) {
                 if (slot.image != nullptr) {
                     cairo_surface_destroy(slot.image);
                 }
@@ -220,10 +232,12 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
     if (index < 0 || index >= 8 || index >= special_building_count()) {
         return nullptr;
     }
+    const char *name = special_building(index).map_sprite;
+    const int look = tile_atlas().look();
     // Big Park is a separate sprite, not an atlas cell. Spooky draws the
     // graveyard sheet when it loaded. A missing file keeps the classic park
     // and does not snap that fallback.
-    if (tile_atlas().look() == 2 && std::strcmp(special_building(index).map_sprite, "big-park") == 0) {
+    if (look == 2 && std::strcmp(name, "big-park") == 0) {
         Slot &park = cache.spooky_park;
         if (!park.tried) {
             park.tried = true;
@@ -232,6 +246,30 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
         if (park.image != nullptr) {
             vga_snap = true;
             return park.image;
+        }
+    }
+    // Library and zoo have a drawn SVGA sheet. Spooky uses its own file
+    // when that loaded, and the SVGA sheet otherwise.
+    if (look >= 1 && (std::strcmp(name, "library") == 0 || std::strcmp(name, "zoo") == 0)) {
+        if (look == 2) {
+            Slot &night = cache.spooky[index];
+            if (!night.tried) {
+                night.tried = true;
+                night.image = load_png(ui_data_file(std::string("special-tiles/") + name + "-spooky.png"));
+            }
+            if (night.image != nullptr) {
+                vga_snap = true;
+                return night.image;
+            }
+        }
+        Slot &day = cache.svga[index];
+        if (!day.tried) {
+            day.tried = true;
+            day.image = load_png(ui_data_file(std::string("special-tiles/") + name + "-svga.png"));
+        }
+        if (day.image != nullptr) {
+            vga_snap = true;
+            return day.image;
         }
     }
     Slot &slot = cache.slots[index];

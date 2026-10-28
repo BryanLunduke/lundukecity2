@@ -68,6 +68,68 @@ inline constexpr double kFocusR = 0xE6 / 255.0;
 inline constexpr double kFocusG = 0x6A / 255.0;
 inline constexpr double kFocusB = 0x00 / 255.0;
 
+// Spooky swaps the blue selection chrome for a restrained orange. The focus
+// ring is already orange in every look. Classic and SVGA stay on the blues.
+inline int &chrome_look()
+{
+    static int look = 0;
+    return look;
+}
+
+inline void set_chrome_look(int look)
+{
+    chrome_look() = look == 2 ? 2 : 0;
+}
+
+inline double chrome_select_r()
+{
+    return chrome_look() == 2 ? 176.0 / 255.0 : kSelectR;
+}
+inline double chrome_select_g()
+{
+    return chrome_look() == 2 ? 96.0 / 255.0 : kSelectG;
+}
+inline double chrome_select_b()
+{
+    return chrome_look() == 2 ? 32.0 / 255.0 : kSelectB;
+}
+inline double chrome_select_hi_r()
+{
+    return chrome_look() == 2 ? 220.0 / 255.0 : kSelectHiR;
+}
+inline double chrome_select_hi_g()
+{
+    return chrome_look() == 2 ? 156.0 / 255.0 : kSelectHiG;
+}
+inline double chrome_select_hi_b()
+{
+    return chrome_look() == 2 ? 88.0 / 255.0 : kSelectHiB;
+}
+inline double chrome_select_edge_r()
+{
+    return chrome_look() == 2 ? 120.0 / 255.0 : kSelectEdgeR;
+}
+inline double chrome_select_edge_g()
+{
+    return chrome_look() == 2 ? 64.0 / 255.0 : kSelectEdgeG;
+}
+inline double chrome_select_edge_b()
+{
+    return chrome_look() == 2 ? 24.0 / 255.0 : kSelectEdgeB;
+}
+inline double chrome_hover_r()
+{
+    return chrome_look() == 2 ? 236.0 / 255.0 : kHoverR;
+}
+inline double chrome_hover_g()
+{
+    return chrome_look() == 2 ? 210.0 / 255.0 : kHoverG;
+}
+inline double chrome_hover_b()
+{
+    return chrome_look() == 2 ? 180.0 / 255.0 : kHoverB;
+}
+
 inline constexpr const char *kUiFont = "Sans 13";
 inline constexpr const char *kBodyFont = "Sans 14";
 inline constexpr const char *kTitleFont = "Sans Bold 18";

@@ -80,7 +80,7 @@ bool allowed_city2_hook(const std::vector<unsigned char> &bytes, std::size_t at,
     static const char *kAllowed[] = {
         "LUNDUKE_CITY2_DEMO", "LUNDUKE_CITY2_SHOT",     "LUNDUKE_CITY2_SAVE", "LUNDUKE_CITY2_SMOKE",
         "LUNDUKE_CITY2_UI_TEST", "LUNDUKE_CITY2_ZOOM", "LUNDUKE_CITY2_LOOK", "LUNDUKE_CITY2_SIZE",
-        "LUNDUKE_CITY2_SCALE", "LUNDUKE_CITY2_REVIEW",
+        "LUNDUKE_CITY2_SCALE", "LUNDUKE_CITY2_REVIEW", "LUNDUKE_CITY2_SCENARIO",
     };
     for (const char *token : kAllowed) {
         if (exact_token(bytes, at, end, token)) {

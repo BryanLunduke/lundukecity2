@@ -78,17 +78,25 @@ install_data(
     'data/tool-icons/special.png',
     'data/tool-icons/query.png',
     'data/tool-icons/zoo.png',
+    'data/tool-icons/zoo-svga.png',
+    'data/tool-icons/zoo-spooky.png',
     'data/tool-icons/bigpark.png',
     'data/tool-icons/library.png',
+    'data/tool-icons/library-svga.png',
+    'data/tool-icons/library-spooky.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'tool-icons',
 )
 install_data(
   [
     'data/special-tiles/zoo.png',
+    'data/special-tiles/zoo-svga.png',
+    'data/special-tiles/zoo-spooky.png',
     'data/special-tiles/big-park.png',
     'data/special-tiles/big-park-spooky.png',
     'data/special-tiles/library.png',
+    'data/special-tiles/library-svga.png',
+    'data/special-tiles/library-spooky.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'special-tiles',
 )

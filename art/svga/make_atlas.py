@@ -30,6 +30,7 @@ from pathlib import Path
 from PIL import Image
 
 from vga_palette import vga_palette_8bit
+from polish import assert_palette, polish_tile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -2366,6 +2367,9 @@ def _output_paths(args: list[str]) -> tuple[Path, Path]:
             out = Path(args[index + 1])
             index += 2
             continue
+        if arg == "--emit":
+            index += 1
+            continue
         raise SystemExit(f"unknown argument: {arg}")
     if out is None:
         return PREVIEW_DIR, REPORT_PATH
@@ -2438,7 +2442,8 @@ def main() -> int:
         "Dirt rim stays off thin taxiways. It remains on solid walls and the runway.",
         "Disasters: rubble 44-47, flood 48-51, radiation 52, fire 56-63,",
         "lightning 827, explosions 860-867. Teleport 844-851. Leftovers 38-39,",
-        "53-55, 223, and the line art 868-883. Tiles 956-959 stay blank white.",
+        "53-55, 223. Tiny explosions 868-883 are fire on dirt, one silhouette",
+        "per frame. Tiles 956-959 stay blank white.",
         "Monster and tornado are sprites, not atlas tiles.",
         "Fire is three warm steps: (255, 65, 0), (255, 125, 0), (255, 255, 85).",
         "Radiation 52 is (255, 85, 85) with a yellow core, a (65, 0, 0) ring,",
@@ -3394,7 +3399,9 @@ def main() -> int:
     overview_pixels = 0
     for index in range(960):
         classic = crop_tile(atlas, index)
-        single = paint(classic, [[tile_kind(index)]])
+        painted = paint(classic, [[tile_kind(index)]])
+        single = polish_tile(index, classic, painted)
+        assert_palette(single, palette)
         digest_all.update(single.tobytes())
         col, row = index % columns, index // columns
         sheet16.paste(single, (col * TILE, row * TILE))
@@ -3404,7 +3411,9 @@ def main() -> int:
         overview_pixels += half.size[0] * half.size[1]
         digest_all.update(snapped.tobytes())
         sheet8.paste(snapped, (col * TILE // 2, row * TILE // 2))
-        stats = compare(classic, single, palette)
+        # compare() locks the paint() remap. Polish (roofs, blasts, the R)
+        # is checked for palette above and by the committed-sheet hash.
+        stats = compare(classic, painted, palette)
         if _ok(stats):
             continue
         tile_bad += 1
@@ -3435,7 +3444,7 @@ def main() -> int:
             f"OK 8px atlas: {sheet8.size[0]}x{sheet8.size[1]}, on palette, "
             f"{snapped_off}/{overview_pixels} box-average pixels moved to the nearest VGA entry"
         )
-    atlas_sha = "f52025ef83195f674be2d7a45935da7d7e534df8b9da9befe4552fdacb38e8f3"
+    atlas_sha = "251bfc0e38773f950ba524d08eab38e9bd40c772c09c7b57565e357eeeaa9ee3"
     if digest_all.hexdigest() != atlas_sha:
         lines.append(f"FAIL SVGA atlas changed: {digest_all.hexdigest()}")
         failed = True
@@ -3972,6 +3981,10 @@ def main() -> int:
         "disaster-32.png",
     ):
         lines.append(f"  previews/{name}")
+    if "--emit" in sys.argv:
+        sheet16.save(svga_path)
+        lines.append(f"EMIT {svga_path}")
+        lines.append(f"ATLAS_SHA {digest_all.hexdigest()}")
     result = "PASS" if not failed else "FAIL"
     lines.append("")
     lines.append(f"RESULT: {result}")

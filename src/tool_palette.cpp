@@ -5,6 +5,7 @@
 #include "tool_palette.hpp"
 
 #include "assets.hpp"
+#include "tile_atlas.hpp"
 #include "tools.hpp"
 
 #include <algorithm>
@@ -195,12 +196,12 @@ void ToolPalette::leave()
 cairo_surface_t *tool_icon_named(const char *stem)
 {
     struct Slot {
-        const char *stem = nullptr;
+        std::string key;
         cairo_surface_t *image = nullptr;
         bool tried = false;
     };
     struct Cache {
-        Slot slots[8];
+        Slot slots[16];
         ~Cache()
         {
             for (Slot &slot : slots) {
@@ -214,9 +215,11 @@ cairo_surface_t *tool_icon_named(const char *stem)
     if (stem == nullptr || stem[0] == '\0') {
         return nullptr;
     }
+    const int look = tile_atlas().look();
+    const std::string key = std::string(stem) + "#" + std::to_string(look);
     Slot *free_slot = nullptr;
     for (Slot &slot : cache.slots) {
-        if (slot.tried && slot.stem != nullptr && std::string(slot.stem) == stem) {
+        if (slot.tried && slot.key == key) {
             return slot.image;
         }
         if (!slot.tried && free_slot == nullptr) {
@@ -227,20 +230,33 @@ cairo_surface_t *tool_icon_named(const char *stem)
         return nullptr;
     }
     free_slot->tried = true;
-    free_slot->stem = stem;
-    const std::string path = ui_data_file(std::string("tool-icons/") + stem + ".png");
-    if (path.empty()) {
-        return nullptr;
+    free_slot->key = key;
+    // Spooky prefers its own icon, then the SVGA drawing, then Classic.
+    const char *suffixes[3] = {"", "", ""};
+    int count = 0;
+    if (look == 2) {
+        suffixes[count++] = "-spooky";
+        suffixes[count++] = "-svga";
+    } else if (look == 1) {
+        suffixes[count++] = "-svga";
     }
-    cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
-    if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
-        if (surface != nullptr) {
-            cairo_surface_destroy(surface);
+    suffixes[count++] = "";
+    for (int i = 0; i < count; ++i) {
+        const std::string path = ui_data_file(std::string("tool-icons/") + stem + suffixes[i] + ".png");
+        if (path.empty()) {
+            continue;
         }
-        return nullptr;
+        cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
+        if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+            if (surface != nullptr) {
+                cairo_surface_destroy(surface);
+            }
+            continue;
+        }
+        free_slot->image = surface;
+        return surface;
     }
-    free_slot->image = surface;
-    return surface;
+    return nullptr;
 }
 
 void ToolPalette::draw(cairo_t *cr) const

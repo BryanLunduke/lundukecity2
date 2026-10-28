@@ -15,6 +15,7 @@
 #include "special_buildings.hpp"
 #include "sprite_art.hpp"
 #include "text_paint.hpp"
+#include "theme.hpp"
 #include "tile_atlas.hpp"
 #include "tool_keys.hpp"
 #include "tools.hpp"
@@ -485,6 +486,7 @@ void Shell::set_look_preference(Look look)
     look_pref_.look = which;
     tile_atlas().set_look(which);
     drawn_look_ = tile_atlas().look();
+    theme::set_chrome_look(drawn_look_);
 }
 
 void Shell::clear_transient_message()
@@ -1294,6 +1296,17 @@ void Shell::loop()
                 session_.set_speed(0);
                 close_dialog();
             } else if (demo_ == "special") {
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0 ||
+                        std::strncmp(look, "Spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
                 select_tool(special_tool_index());
                 special_choice_ = 0;
                 special_cursor_ = 0;
@@ -1304,6 +1317,21 @@ void Shell::loop()
                 cursor_y_ = static_cast<float>(view_y_ + view_h_ / 2);
             } else if (demo_ == "gifts") {
                 demo_place_gifts(false);
+                if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
+                    map_.set_tile_size(std::atoi(zoom));
+                }
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0 ||
+                        std::strncmp(look, "Spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
+                center_on_fraction(0.07, 0.045);
             } else if (demo_ == "giftquery") {
                 demo_place_gifts(true);
             } else if (demo_ == "giftbudget") {
@@ -1405,7 +1433,14 @@ void Shell::loop()
                 }
                 gamepad_nav_ = deck_;
             } else if (demo_ == "city" || demo_ == "paused") {
-                session_.load_scenario(CitySession::scenario_def(0).id);
+                int scenario = 0;
+                if (const char *which = std::getenv("LUNDUKE_CITY2_SCENARIO")) {
+                    scenario = std::atoi(which);
+                }
+                if (scenario < 0 || scenario >= CitySession::kScenarioCount) {
+                    scenario = 0;
+                }
+                session_.load_scenario(CitySession::scenario_def(scenario).id);
                 speed_ = 0;
                 session_.set_speed(0);
                 if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
