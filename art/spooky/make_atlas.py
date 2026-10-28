@@ -96,11 +96,12 @@ CHANGED = (
     + tuple(range(818, 820))
     + tuple(range(822, 827))
     + tuple(range(828, 952))
+    + (372, 379, 382, 400, 770, 772)
 )
 
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
 # 8px overview, in tile order. The big-park sprite has its own hash.
-ATLAS_SHA = "7f7b76598624bf6faed829f0fe7f712779e80e26b9fe05188436baefefbad15d"
+ATLAS_SHA = "c87721b0c12634bbfbe8dd03b37a6d6606168ada2db0fd1886fe8ebf73827988"
 PARK_SHA = "3f0e20d7313a54d8268a938d9c25efc6532611ff7c89c6877e575f442412cc42"
 
 GRASS = (0, 113, 0)

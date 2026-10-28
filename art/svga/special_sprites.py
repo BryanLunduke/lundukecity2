@@ -133,9 +133,22 @@ def _shadow(image: Image.Image, body: set[tuple[int, int]]) -> None:
 
 
 def _grass(px, w: int, h: int, spooky: bool) -> None:
-    base = NIGHT_GRASS if spooky else GRASS
-    lit = NIGHT_LIT if spooky else GRASS_LIT
-    dark = NIGHT_DARK if spooky else GRASS_DARK
+    if spooky:
+        # Darker than a flat (0, 65, 16) sheet, so the lot sits with the
+        # night lawn instead of a bright green.
+        for y in range(h):
+            for x in range(w):
+                n = (x * 5 + y * 3) % 19
+                if n == 0:
+                    px[x, y] = (32, 65, 32, 255)
+                elif n in (1, 2):
+                    px[x, y] = (*NIGHT_GRASS, 255)
+                elif n == 3:
+                    px[x, y] = (*NIGHT_LIT, 255)
+                else:
+                    px[x, y] = (*NIGHT_DARK, 255)
+        return
+    base, lit, dark = GRASS, GRASS_LIT, GRASS_DARK
     for y in range(h):
         for x in range(w):
             if (x + y * 3) % 11 == 0:

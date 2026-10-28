@@ -316,6 +316,115 @@ def _place_pumpkin(tile: Image.Image, slot: int) -> bool:
     return False
 
 
+# Saturated lawn green. It is also the lot border, the R letter, and the
+# stadium pitch, so it is darkened only where the caller says so.
+BRIGHT_LAWN = (0, 170, 0)
+NIGHT_LAWN = (
+    (0, 65, 0),
+    (0, 65, 0),
+    (0, 65, 0),
+    (0, 65, 16),
+    (16, 65, 0),
+    (32, 65, 32),
+)
+LAWN_GREENS = frozenset(
+    {
+        BRIGHT_LAWN,
+        (0, 65, 0),
+        (0, 65, 16),
+        (0, 65, 32),
+        (0, 65, 48),
+        (16, 65, 0),
+        (32, 65, 0),
+        (32, 65, 32),
+        (44, 65, 44),
+        (0, 113, 0),
+        (28, 113, 0),
+        (56, 113, 0),
+        (56, 113, 56),
+    }
+)
+
+
+def _night_lawn(x: int, y: int) -> tuple[int, int, int]:
+    return NIGHT_LAWN[(x * 3 + y * 5) % len(NIGHT_LAWN)]
+
+
+def _bright_components(px) -> list[list[tuple[int, int]]]:
+    seen = [[False] * TILE for _ in range(TILE)]
+    groups: list[list[tuple[int, int]]] = []
+    for y in range(TILE):
+        for x in range(TILE):
+            if seen[y][x] or px[x, y] != BRIGHT_LAWN:
+                continue
+            stack = [(x, y)]
+            seen[y][x] = True
+            group: list[tuple[int, int]] = []
+            while stack:
+                cx, cy = stack.pop()
+                group.append((cx, cy))
+                for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < TILE and 0 <= ny < TILE and not seen[ny][nx] and px[nx, ny] == BRIGHT_LAWN:
+                        seen[ny][nx] = True
+                        stack.append((nx, ny))
+            groups.append(group)
+    return groups
+
+
+def _dim_lawns(atlas: Image.Image) -> None:
+    """Night grass on saturated lots. Lot borders and the R letter stay bright.
+
+    A filled lawn is thick, so its interior has three or four bright
+    neighbours and drops to the night palette. What remains is a one-pixel
+    stroke. Strokes of eight pixels or more are the lot border and stay
+    solid (0, 170, 0). Shorter leftovers are lawn specks.
+
+    The empty R zone's frame is that same stroke, and it is darkened. The
+    R on tile 244 stays. Houses 297-305, the asylum, the arena, woods, and
+    water are not in the sets below. The stadium pitch is left alone.
+    """
+    houses = [index for index in range(249, 405) if index < 297 or index > 305]
+    targets = set(range(240, 249)) | set(houses) | set(range(761, 770)) | set(range(770, 779))
+    for index in targets:
+        if index == 244:
+            continue
+        tile = _crop(atlas, index)
+        px = tile.load()
+        changed = False
+        if 240 <= index <= 248:
+            for y in range(TILE):
+                for x in range(TILE):
+                    if px[x, y] == BRIGHT_LAWN:
+                        px[x, y] = (0, 65, 16)
+                        changed = True
+        else:
+            # Interior lawn is bright green with lawn on every side. The
+            # lot border is the skin that touches a wall, the outline, or
+            # the tile edge. Specks are the short pieces left after that.
+            for y in range(TILE):
+                for x in range(TILE):
+                    if px[x, y] != BRIGHT_LAWN:
+                        continue
+                    interior = True
+                    for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                        nx, ny = x + dx, y + dy
+                        if not (0 <= nx < TILE and 0 <= ny < TILE) or px[nx, ny] not in LAWN_GREENS:
+                            interior = False
+                            break
+                    if interior:
+                        px[x, y] = _night_lawn(x, y)
+                        changed = True
+            for group in _bright_components(px):
+                if len(group) >= 8:
+                    continue
+                for x, y in group:
+                    px[x, y] = _night_lawn(x, y)
+                    changed = True
+        if changed:
+            _paste(atlas, index, tile)
+
+
 def _pennant(tile: Image.Image, index: int) -> None:
     """Two orange pixels on the stand, never on the pitch or a yard line."""
     # Empty stadium top row, full stadium top row. Football frames are the
@@ -376,3 +485,4 @@ def apply(atlas: Image.Image) -> None:
             _remap(tile, ARENA_MAP)
             _pennant(tile, index)
         _paste(atlas, index, tile)
+    _dim_lawns(atlas)
