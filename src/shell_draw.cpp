@@ -271,6 +271,9 @@ void Shell::draw_osk(cairo_t *cr, double x, double y, double w, double max_h)
     const OskKey *keys = osk_keys(count);
     OskPlacement placed[64];
     const int n = osk_place(x, y, w, max_h, placed, 64);
+    cairo_save(cr);
+    cairo_rectangle(cr, x, y, w, max_h);
+    cairo_clip(cr);
     for (int i = 0; i < n; ++i) {
         const OskPlacement &box = placed[i];
         if (box.index < 0 || box.index >= count) {
@@ -282,6 +285,7 @@ void Shell::draw_osk(cairo_t *cr, double x, double y, double w, double max_h)
         const bool primary = (key.kind == OskKind::Shift && osk_shift_) || focus_id_ == kOsk + box.index;
         button(cr, box.x, box.y, box.w, box.h, label, kOsk + box.index, primary);
     }
+    cairo_restore(cr);
 }
 
 void Shell::draw_menubar(cairo_t *cr)
@@ -302,8 +306,9 @@ void Shell::draw_menubar(cairo_t *cr)
         const int id = kMenuTitle + c;
         push_hot(x, 2, w, menu_h_ - 4, id);
         const bool open = menu_.open_menu == c;
-        // A focused Close button used to share the System title's id.
-        const bool lit = dialog_ == Dialog::None && (open || hover_id_ == id);
+        // While a menu is open, only that title is lit. A hover left on
+        // System used to stay blue after the keyboard moved to Options.
+        const bool lit = dialog_ == Dialog::None && (open || (hover_id_ == id && !menu_.open()));
         if (lit) {
             fill(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
             stroke_rect(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_edge_r(), theme::chrome_select_edge_g(), theme::chrome_select_edge_b());
@@ -381,21 +386,11 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         menu_scroll_cursor_ = menu_.cursor;
     }
     {
-        // Snap to a row start. Stopping at content-avail used to hide the
-        // last row: the next aligned step is a few pixels past that, and the
-        // menu box simply gets shorter instead of slicing a row.
-        int row = menu_table::menu_scroll_row(menu_item_top_, shown, menu_scroll_);
-        if (row < 0) {
-            row = 0;
-        }
-        if (row >= shown) {
-            row = shown - 1;
-        }
+        // Snap to a row start. A separator stays at the top only when
+        // stepping past it would hide the last row. Never step backward:
+        // that kept Messages below the fold on a short window.
         const double end = menu_table::menu_reveal_scroll(menu_item_top_, menu_item_h_, shown, shown - 1, avail, content_h);
-        menu_scroll_ = menu_table::menu_row_scroll(menu_item_top_, shown, row);
-        if (menu_scroll_ > end) {
-            menu_scroll_ = end;
-        }
+        menu_scroll_ = menu_table::menu_clamped_scroll(menu_item_top_, items, shown, menu_scroll_, end);
     }
     const double scroll = menu_scroll_;
     double visible_bottom = static_cast<double>(menu_h_) + 5.0;
@@ -916,9 +911,34 @@ void Shell::draw_dialog(cairo_t *cr)
             stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
             push_hot(seed_x, seed_y, seed_w, dp(32), kFieldSeed);
             push_focus(kFieldSeed);
-            paint_text(cr, body_font(), field_b_, seed_x + dp(8), seed_y + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(seed_w - dp(16)));
-            paint_caret(seed_x + dp(8), seed_y + dp(6), dp(18), field_b_, focus_id_ == kFieldSeed);
+            // One line, clipped to the box. A long seed used to wrap onto
+            // the error line under the field.
+            {
+                const double inset = dp(8);
+                const double room = std::max(1.0, seed_w - inset * 2);
+                cairo_save(cr);
+                cairo_rectangle(cr, seed_x + 1, seed_y + 1, std::max(1.0, seed_w - 2), dp(32) - 2);
+                cairo_clip(cr);
+                const int full = measure_text(cr, body_font(), field_b_, -1).width;
+                double shift = 0;
+                if (static_cast<double>(full) > room) {
+                    field_clamp(field_b_, field_caret_, field_anchor_);
+                    const int caret_x =
+                        measure_text(cr, body_font(), field_b_.substr(0, static_cast<std::size_t>(field_caret_)), -1).width;
+                    shift = static_cast<double>(caret_x) - (room - dp(4));
+                    if (shift < 0) {
+                        shift = 0;
+                    }
+                    const double max_shift = static_cast<double>(full) - room;
+                    if (shift > max_shift) {
+                        shift = max_shift;
+                    }
+                }
+                paint_text(cr, body_font(), field_b_, seed_x + inset - shift, seed_y + dp(6), theme::kTextR, theme::kTextG,
+                           theme::kTextB, -1);
+                paint_caret(seed_x + inset - shift, seed_y + dp(6), dp(18), field_b_, focus_id_ == kFieldSeed);
+                cairo_restore(cr);
+            }
             const int preview_seed = preview_seed_from_field(field_b_);
             const int preview_key = static_cast<int>(terrain_preview_key(preview_seed, new_island_, new_rivers_, new_lakes_,
                                                                          new_trees_));
@@ -1048,6 +1068,7 @@ void Shell::draw_dialog(cairo_t *cr)
         }
         list_index_ = scenario_index_;
         place_list_window(scenario_index_, count);
+        align_list_focus();
         const double track_w = dp(12);
         const double row_w = dw - margin - track_w - dp(16);
         const int preview_w = dp(72);
@@ -1293,7 +1314,8 @@ void Shell::draw_dialog(cairo_t *cr)
         if (osk_visible() && files_save_) {
             const double room = name_y - dp(8) - list_top - dp(8);
             osk_h = std::min(static_cast<double>(dp(200)), std::max(0.0, room - dp(48)));
-            if (osk_h < dp(88)) {
+            // A short box used to force 28px keys and paint them over Up.
+            if (osk_key_height(osk_h) < 1) {
                 osk_h = 0;
             }
         }
@@ -1315,6 +1337,7 @@ void Shell::draw_dialog(cairo_t *cr)
                 list_index_ = count - 1;
             }
             place_list_window(list_index_, count);
+            align_list_focus();
         }
         const double row_w = dw - 24 - 16;
         for (int row = 0; row < visible; ++row) {
@@ -1924,6 +1947,7 @@ void Shell::draw_dialog(cairo_t *cr)
                 list_index_ = count - 1;
             }
             place_list_window(list_index_, count);
+            align_list_focus();
             for (int row = 0; row < visible; ++row) {
                 const int i = list_scroll_ + row;
                 if (i < 0 || i >= count) {
@@ -2280,7 +2304,14 @@ void Shell::draw(cairo_t *cr)
         if (theme::chrome_look() == 2) {
             cairo_set_source_rgb(cr, 1.0, 0.86, 0.35);
             cairo_set_line_width(cr, 1.0);
-            const double chip_w = on_off ? (shown == CitySession::MapLayer::Transportation ? dp(62) : dp(42)) : (lw - pad * 2);
+            double chip_w = lw - pad * 2;
+            if (shown == CitySession::MapLayer::Residential) {
+                chip_w = static_cast<double>(dp(14) + dp(28));
+            } else if (shown == CitySession::MapLayer::Commercial || shown == CitySession::MapLayer::Industrial) {
+                chip_w = static_cast<double>(dp(legend_chip_px(shown)));
+            } else if (shown == CitySession::MapLayer::Transportation) {
+                chip_w = static_cast<double>(dp(34) + dp(28));
+            }
             cairo_rectangle(cr, lx + pad + 0.5, ramp_y + 0.5, chip_w - 1.0, dp(6) - 1.0);
             cairo_stroke(cr);
         }

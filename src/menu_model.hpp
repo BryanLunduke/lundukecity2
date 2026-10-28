@@ -332,6 +332,35 @@ inline double menu_row_scroll(const double *tops, int count, int index)
     return std::max(0.0, tops[index] - tops[0]);
 }
 
+// A separator is not a row to park on. direction < 0 walks upward.
+inline int menu_visible_top(const MenuEntry *items, int count, int row, int direction)
+{
+    if (items == nullptr || count < 1) {
+        return 0;
+    }
+    if (row < 0) {
+        row = 0;
+    }
+    if (row >= count) {
+        row = count - 1;
+    }
+    if (items[row].kind != ItemKind::Separator) {
+        return row;
+    }
+    const int step = direction < 0 ? -1 : 1;
+    for (int i = row + step; i >= 0 && i < count; i += step) {
+        if (items[i].kind != ItemKind::Separator) {
+            return i;
+        }
+    }
+    for (int i = row - step; i >= 0 && i < count; i -= step) {
+        if (items[i].kind != ItemKind::Separator) {
+            return i;
+        }
+    }
+    return row;
+}
+
 inline int menu_scroll_row(const double *tops, int count, double scroll)
 {
     if (tops == nullptr || count < 1) {
@@ -374,6 +403,47 @@ inline double menu_reveal_scroll(const double *tops, const double *heights, int 
         }
     }
     return menu_scroll_for_row(row_top, row_h, view_h, content_h);
+}
+
+// Snap a menu scroll. A separator is not the first row when the next real
+// row still fits. If stepping past the separator would pass `end` (the
+// scroll that shows the last row), keep `end`. Stepping back hides that row.
+inline double menu_clamped_scroll(const double *tops, const MenuEntry *items, int count, double scroll, double end)
+{
+    if (tops == nullptr || count < 1) {
+        return 0.0;
+    }
+    if (end < 0.0) {
+        end = 0.0;
+    }
+    int row = menu_scroll_row(tops, count, scroll);
+    if (row < 0) {
+        row = 0;
+    }
+    if (row >= count) {
+        row = count - 1;
+    }
+    if (items != nullptr && items[row].kind == ItemKind::Separator) {
+        int forward = -1;
+        for (int i = row + 1; i < count; ++i) {
+            if (items[i].kind != ItemKind::Separator) {
+                forward = i;
+                break;
+            }
+        }
+        if (forward >= 0) {
+            const double forward_scroll = menu_row_scroll(tops, count, forward);
+            if (forward_scroll <= end + 0.5) {
+                return forward_scroll;
+            }
+        }
+        return end;
+    }
+    double snapped = menu_row_scroll(tops, count, row);
+    if (snapped > end) {
+        snapped = end;
+    }
+    return snapped;
 }
 
 inline int actionable_count()

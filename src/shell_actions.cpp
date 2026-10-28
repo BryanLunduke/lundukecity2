@@ -1076,6 +1076,7 @@ void Shell::apply_action(Action action)
     case Action::Mute:
         session_.set_sound_enabled(!session_.sound_enabled());
         sound_.set_muted(!session_.sound_enabled());
+        pref_sound_ = session_.sound_enabled() ? 1 : 0;
         save_window_settings();
         break;
     case Action::SetPause:
@@ -1408,8 +1409,10 @@ void Shell::on_dialog_button(int id)
         if (id == kGenerate || (id == kNext && new_page_ >= 1)) {
             int seed = 0;
             bool set = false;
-            if (!take_city_seed(field_b_, seed, set) || !CitySession::name_is_usable(field_a_)) {
-                dialog_error_ = "Check the name and the seed.";
+            const bool name_ok = CitySession::name_is_usable(field_a_);
+            const bool seed_ok = take_city_seed(field_b_, seed, set);
+            if (!name_ok || !seed_ok) {
+                dialog_error_ = new_city_field_error(name_ok, seed_ok);
                 return;
             }
             CitySession::NewCitySpec spec;
@@ -1600,8 +1603,21 @@ void Shell::on_dialog_button(int id)
             close_dialog();
             return;
         }
-        // Cancel outside a tax year used to keep the live slider edits.
-        // Both paths restore the rates the window opened with.
+        // The year-end window says the year is collected when it closes.
+        // Escape is not a way to skip the taxes. The rates on the sliders
+        // are what gets collected, same as Collect Taxes. A budget opened
+        // from the menu has nothing waiting, so Cancel still restores the
+        // rates from when that window opened.
+        if (session_.budget_pending()) {
+            session_.set_tax(tax_);
+            session_.set_road_funding(road_);
+            session_.set_police_funding(police_);
+            session_.set_fire_funding(fire_);
+            session_.finish_budget_edit();
+            budget_is_tax_ = false;
+            close_dialog();
+            return;
+        }
         session_.restore_budget_rates(open_tax_, open_road_, open_police_, open_fire_);
         tax_ = open_tax_;
         road_ = open_road_;
@@ -1960,9 +1976,12 @@ void Shell::type_text(const std::string &text)
         dialog_error_ = "That name cannot contain / or \\.";
         return;
     }
-    if (!field_insert(*field, field_caret_, field_anchor_, text, 64)) {
-        dialog_error_ = "That name is too long.";
-    } else if (dialog_error_ == "That name cannot contain / or \\." || dialog_error_ == "That name is too long.") {
+    const bool city_name = field == &field_a_ && (dialog_ == Dialog::NewCity || dialog_ == Dialog::Rename);
+    const int limit = field == &field_b_ ? kCitySeedFieldMax : city_name ? kCityNameMaxBytes : 64;
+    if (!field_insert(*field, field_caret_, field_anchor_, text, limit)) {
+        dialog_error_ = field == &field_b_ ? "That seed is too long." : "That name is too long.";
+    } else if (dialog_error_ == "That name cannot contain / or \\." || dialog_error_ == "That name is too long." ||
+               dialog_error_ == "That seed is too long.") {
         dialog_error_.clear();
     }
 }
@@ -2006,7 +2025,9 @@ void Shell::paste_field()
     }
     const int from = std::min(field_caret_, field_anchor_);
     const int to = std::max(field_caret_, field_anchor_);
-    const int room = 64 - (static_cast<int>(field->size()) - (to - from));
+    const bool city_name = field == &field_a_ && (dialog_ == Dialog::NewCity || dialog_ == Dialog::Rename);
+    const int limit = field == &field_b_ ? kCitySeedFieldMax : city_name ? kCityNameMaxBytes : 64;
+    const int room = limit - (static_cast<int>(field->size()) - (to - from));
     const std::string clean = sanitize_pasted_text(clip, std::max(0, room));
     SDL_free(clip);
     if (!clean.empty()) {
@@ -2040,6 +2061,7 @@ bool Shell::jump_list_edge(bool to_end)
         if (row >= 0 && row < 64) {
             focus_id_ = kListItem + row;
         }
+        align_list_focus();
     }
     return true;
 }
@@ -2099,14 +2121,69 @@ bool Shell::move_osk_vertically(int direction)
         focus_id_ = kOsk + target;
         return true;
     }
-    // No row that way. The next focus id is the key beside this one, so a
-    // plain step walks sideways along the bottom row.
+    // No row that way. Leave for the control past the keyboard. A list row
+    // in the focus order is the last visible line, which is not the blue
+    // selection, so land on the selection instead.
     const int leave = osk_exit_focus(focus_order_.data(), static_cast<int>(focus_order_.size()), focus_id_, direction,
                                      kOsk, kOsk + 64);
+    if (leave >= kListItem && leave < kListItem + 64) {
+        reveal_file_list();
+        const int index_now = dialog_ == Dialog::Scenario ? scenario_index_ : list_index_;
+        const int row = index_now - list_scroll_;
+        if (row >= 0 && row < 64) {
+            focus_id_ = kListItem + row;
+        }
+        return true;
+    }
     if (leave >= 0) {
         focus_id_ = leave;
     }
     return true;
+}
+
+bool Shell::nudge_dialog_up_down(int direction)
+{
+    if (direction == 0 || dialog_ == Dialog::None) {
+        return false;
+    }
+    if (nudge_file_list(direction < 0 ? -1 : 1, false, false)) {
+        return true;
+    }
+    if (move_osk_vertically(direction)) {
+        return true;
+    }
+    // The Save/Load buttons are one row. Down from Up used to step to
+    // Cancel. Down returns to the selected file; Left and Right still
+    // move along the buttons.
+    if (direction > 0 && dialog_ == Dialog::Files &&
+        (focus_id_ == kUp || focus_id_ == kCancel || focus_id_ == kSave || focus_id_ == kOk)) {
+        if (files_.empty()) {
+            return false;
+        }
+        const int visible = std::max(1, files_visible_);
+        const int row = list_index_ - list_scroll_;
+        if (row >= 0 && row < visible && row < 64) {
+            focus_id_ = kListItem + row;
+            return true;
+        }
+    }
+    return false;
+}
+
+void Shell::align_list_focus()
+{
+    if (dialog_ != Dialog::Files && dialog_ != Dialog::Scenario && dialog_ != Dialog::Messages) {
+        return;
+    }
+    if (focus_id_ < kListItem || focus_id_ >= kListItem + 64) {
+        return;
+    }
+    const int index = dialog_ == Dialog::Scenario ? scenario_index_ : list_index_;
+    const int row = index - list_scroll_;
+    const int visible = std::max(1, files_visible_);
+    if (row >= 0 && row < visible && row < 64) {
+        focus_id_ = kListItem + row;
+    }
 }
 
 void Shell::scroll_menu_by(int rows)
@@ -2122,6 +2199,11 @@ void Shell::scroll_menu_by(int rows)
     if (row >= menu_item_n_) {
         row = menu_item_n_ - 1;
     }
+    const MenuEntry *items = menu_table::column_items(menu_.open_menu);
+    const int column_n = menu_table::column_count(menu_.open_menu);
+    if (items != nullptr && row < column_n) {
+        row = menu_table::menu_visible_top(items, column_n, row, rows);
+    }
     const double end = menu_table::menu_reveal_scroll(menu_item_top_, menu_item_h_, menu_item_n_, menu_item_n_ - 1,
                                                       menu_view_limit_, menu_content_h_);
     double scroll = menu_table::menu_row_scroll(menu_item_top_, menu_item_n_, row);
@@ -2129,6 +2211,9 @@ void Shell::scroll_menu_by(int rows)
         scroll = end;
     }
     menu_scroll_ = scroll;
+    if (hover_id_ >= kMenuItem && hover_id_ < kRecentItem) {
+        hover_id_ = 0;
+    }
 }
 
 void Shell::scroll_menu_to_pointer(double y)
@@ -2204,6 +2289,7 @@ void Shell::move_focus(int delta)
                 list_index_ = 0;
             }
             reveal_file_list();
+            align_list_focus();
         } else if (dialog_ == Dialog::Messages) {
             list_index_ = list_scroll_ + (focus_id_ - kListItem);
             if (list_index_ >= static_cast<int>(session_.notices().size())) {
@@ -2213,6 +2299,7 @@ void Shell::move_focus(int delta)
                 list_index_ = 0;
             }
             reveal_file_list();
+            align_list_focus();
         } else if (dialog_ == Dialog::Scenario) {
             scenario_index_ = list_scroll_ + (focus_id_ - kListItem);
             if (scenario_index_ >= CitySession::kScenarioCount) {
@@ -2223,6 +2310,7 @@ void Shell::move_focus(int delta)
             }
             list_index_ = scenario_index_;
             reveal_file_list();
+            align_list_focus();
         } else {
             list_index_ = focus_id_ - kListItem;
         }
@@ -2319,7 +2407,13 @@ bool Shell::nudge_file_list(int delta, bool page, bool force)
     const int step = page ? std::max(1, files_visible_ - 1) : std::max(1, std::abs(delta));
     const int sign = delta < 0 ? -1 : 1;
     int next = index + sign * step;
-    if (!page && !force && on_list && (next < 0 || next >= count)) {
+    // Up on the first row used to give up and move the orange ring onto a
+    // button, leaving the blue selection where it was.
+    if (!page && !force && on_list && next < 0) {
+        align_list_focus();
+        return true;
+    }
+    if (!page && !force && on_list && next >= count) {
         return false;
     }
     if (next < 0) {
@@ -2339,6 +2433,7 @@ bool Shell::nudge_file_list(int delta, bool page, bool force)
         if (row >= 0 && row < 64) {
             focus_id_ = kListItem + row;
         }
+        align_list_focus();
     }
     return true;
 }

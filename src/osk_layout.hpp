@@ -79,6 +79,26 @@ inline const OskKey *osk_keys(int &count)
 
 inline constexpr int kOskRows = 5;
 inline constexpr double kOskGap = 4;
+// Keys stay inside the box. 28px is the comfortable size; a short Save
+// dialog may go down to 18px rather than drawing the grid over the buttons.
+inline constexpr double kOskKeyMax = 56;
+inline constexpr double kOskKeyMin = 18;
+
+inline double osk_key_height(double max_h)
+{
+    const double gaps = kOskGap * (kOskRows - 1);
+    if (max_h < kOskRows * kOskKeyMin + gaps) {
+        return 0;
+    }
+    double key_h = std::floor((max_h - gaps) / kOskRows);
+    if (key_h > kOskKeyMax) {
+        key_h = kOskKeyMax;
+    }
+    if (key_h < kOskKeyMin) {
+        return 0;
+    }
+    return key_h;
+}
 
 struct OskPlacement {
     int index = 0;
@@ -101,15 +121,14 @@ inline int osk_place(double origin_x, double origin_y, double width, double max_
     }
     const double gap = kOskGap;
     const double unit = std::max(8.0, (width - gap * 9.0) / 10.0);
-    double key_h = 52;
-    key_h = std::floor((max_h - gap * (kOskRows - 1)) / kOskRows);
-    if (key_h > 56) {
-        key_h = 56;
-    }
-    if (key_h < 28) {
-        key_h = 28;
+    const double key_h = osk_key_height(max_h);
+    if (key_h < 1) {
+        return 0;
     }
     const double row_pitch = key_h + gap;
+    if (origin_y + kOskRows * row_pitch - gap > origin_y + max_h + 0.5) {
+        return 0;
+    }
     const double full_w = 10.0 * unit + 9.0 * gap;
     const double right = origin_x + width;
     int placed = 0;
