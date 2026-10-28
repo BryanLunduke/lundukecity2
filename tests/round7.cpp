@@ -253,6 +253,7 @@ int main()
         return fail(11, "could not make a home directory");
     }
     setenv("HOME", home, 1);
+    unsetenv("XDG_CONFIG_HOME");
     const std::string folder = std::string(home) + "/maps";
     std::error_code ec;
     std::filesystem::create_directories(folder, ec);
@@ -276,6 +277,18 @@ int main()
         return fail(15, "the folder memory wrote an XFCE home");
     }
     setenv("HOME", home, 1);
+    const std::string xdg = std::string(home) + "/xdg-config";
+    setenv("XDG_CONFIG_HOME", xdg.c_str(), 1);
+    remember_city_folder(folder + "/Tokyo.cty");
+    if (remembered_city_folder() != folder) {
+        std::cerr << "xdg remembered '" << remembered_city_folder() << "'\n";
+        return fail(12, "XDG_CONFIG_HOME was not used for the remembered folder");
+    }
+    if (!std::filesystem::exists(xdg + "/lunduke-city-2/last-folder", ec)) {
+        return fail(12, "the remembered folder was not stored under XDG_CONFIG_HOME");
+    }
+    unsetenv("XDG_CONFIG_HOME");
+    remember_city_folder(folder + "/Tokyo.cty");
 #endif
 
 #ifndef LUNDUKE_CITY_SOURCE_DIR

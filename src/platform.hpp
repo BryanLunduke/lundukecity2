@@ -48,8 +48,9 @@ inline std::string user_home_dir()
 }
 
 // Config lives here, never under an XFCE tree. On Windows this is
-// %APPDATA%\lunduke-city-2. On POSIX it is ~/.config/lunduke-city-2.
-// XDG_CONFIG_HOME is ignored on purpose, matching the 0.9.5 save folder.
+// %APPDATA%\lunduke-city-2. On POSIX an absolute XDG_CONFIG_HOME wins;
+// otherwise the directory is ~/.config/lunduke-city-2. A relative
+// XDG_CONFIG_HOME is ignored, matching the XDG base-directory spec.
 inline std::string city_config_dir()
 {
 #ifdef _WIN32
@@ -63,11 +64,17 @@ inline std::string city_config_dir()
     }
     return home + "\\AppData\\Roaming\\lunduke-city-2";
 #else
-    const std::string home = user_home_dir();
-    if (home.empty()) {
-        return {};
+    const char *xdg = std::getenv("XDG_CONFIG_HOME");
+    std::string dir;
+    if (xdg != nullptr && xdg[0] == '/') {
+        dir = std::string(xdg) + "/lunduke-city-2";
+    } else {
+        const std::string home = user_home_dir();
+        if (home.empty()) {
+            return {};
+        }
+        dir = home + "/.config/lunduke-city-2";
     }
-    const std::string dir = home + "/.config/lunduke-city-2";
     if (dir.find("/xfce") != std::string::npos) {
         return {};
     }
