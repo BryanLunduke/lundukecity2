@@ -286,10 +286,13 @@ inline Entry read_entry(const std::string &recovery)
     return e;
 }
 
+inline void sweep_orphan_sidecars();
+
 // Recovery files left by other runs, newest first. own_path (this run's
 // file) is never listed.
 inline std::vector<Entry> list(const std::string &own_path = std::string())
 {
+    sweep_orphan_sidecars();
     std::vector<Entry> out;
     const std::string d = dir(false);
     if (d.empty()) {
@@ -349,17 +352,79 @@ inline std::vector<Entry> list(const std::string &own_path = std::string())
     return out;
 }
 
+// recovery-*.cty.json is the scenario clock written beside the autosave.
+inline bool is_recovery_sidecar_name(const std::string &name)
+{
+    const std::string suffix = ".json";
+    if (name.size() <= suffix.size() || name.compare(name.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return false;
+    }
+    return is_recovery_name(name.substr(0, name.size() - suffix.size()));
+}
+
 inline void remove(const std::string &recovery)
 {
     if (recovery.empty()) {
         return;
     }
+    const std::string sidecar = recovery + ".json";
 #ifdef _WIN32
     DeleteFileA(recovery.c_str());
     DeleteFileA(info_path(recovery).c_str());
+    DeleteFileA(sidecar.c_str());
 #else
     ::unlink(recovery.c_str());
     ::unlink(info_path(recovery).c_str());
+    ::unlink(sidecar.c_str());
+#endif
+}
+
+// Drop scenario sidecars whose recovery city file is already gone.
+inline void sweep_orphan_sidecars()
+{
+    const std::string d = dir(false);
+    if (d.empty()) {
+        return;
+    }
+#ifdef _WIN32
+    const std::string pattern = d + "\\*";
+    WIN32_FIND_DATAA found;
+    HANDLE handle = FindFirstFileA(pattern.c_str(), &found);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    do {
+        const std::string name = found.cFileName;
+        if (!is_recovery_sidecar_name(name)) {
+            continue;
+        }
+        const std::string json_path = d + "\\" + name;
+        const std::string city = json_path.substr(0, json_path.size() - 5);
+        if (GetFileAttributesA(city.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            continue;
+        }
+        DeleteFileA(json_path.c_str());
+    } while (FindNextFileA(handle, &found));
+    FindClose(handle);
+#else
+    DIR *dp = ::opendir(d.c_str());
+    if (dp == nullptr) {
+        return;
+    }
+    while (dirent *ent = ::readdir(dp)) {
+        const std::string name = ent->d_name;
+        if (!is_recovery_sidecar_name(name)) {
+            continue;
+        }
+        const std::string json_path = d + "/" + name;
+        const std::string city = json_path.substr(0, json_path.size() - 5);
+        struct stat st;
+        if (lstat(city.c_str(), &st) == 0) {
+            continue;
+        }
+        ::unlink(json_path.c_str());
+    }
+    ::closedir(dp);
 #endif
 }
 
