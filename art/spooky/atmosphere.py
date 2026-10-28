@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Lunduke City authors
 # See COPYING and NOTICE.
 
-"""Night ground, violet water, dead woods, and two civic reskins.
+"""Night ground, deep blue water, bare woods, and two civic reskins.
 
 The graveyard (40-43), the crypt (840-843), and the paused manor
 (297-305) are left byte-for-byte. Grey cemetery dirt is not in the
@@ -72,22 +72,35 @@ LAWN_MAP = {
     (0, 113, 56): (0, 65, 32),
 }
 
-# Bare branches. Lighter than the night dirt so a tree still has a shape.
-# The darkest greens become the gaps between limbs.
-DEAD_MAP = {
-    (0, 170, 0): (113, 85, 56),
-    (0, 113, 0): (113, 85, 56),
-    (56, 113, 0): (113, 113, 56),
-    (28, 113, 0): (113, 85, 0),
-    (56, 113, 56): (65, 56, 32),
-    (0, 113, 28): (113, 85, 56),
-    (0, 113, 56): (65, 56, 32),
-    (0, 65, 0): (32, 32, 32),
-    (16, 65, 0): (44, 44, 44),
-    (0, 65, 16): (32, 32, 32),
-    (0, 65, 32): (44, 44, 44),
-    (0, 65, 48): (56, 56, 56),
-}
+# Light grass is the clearing. Dark green is the tree. A one-pixel bark
+# rim grows off a real crown, and the crown itself is two flat colours,
+# so the old grass dither does not survive as speckle.
+_LIGHT_WOOD = frozenset(
+    {
+        (0, 170, 0),
+        (0, 113, 0),
+        (56, 113, 0),
+        (28, 113, 0),
+        (56, 113, 56),
+        (0, 113, 28),
+        (0, 113, 56),
+    }
+)
+_DARK_WOOD = frozenset(
+    {
+        (0, 65, 0),
+        (16, 65, 0),
+        (0, 65, 16),
+        (0, 65, 32),
+        (0, 65, 48),
+        (32, 65, 32),
+        (44, 65, 44),
+    }
+)
+# One dead-wood face and one limb shade. The clearing is the night dirt base.
+BARK = (113, 85, 56)
+LIMB = (44, 44, 44)
+CLEARING = (65, 48, 32)
 
 # Asylum stone. The cross stays (170, 0, 0). Glass is barred separately.
 # Lit stone steps down into real VGA purples. There is no light purple-grey
@@ -121,13 +134,16 @@ ARENA_MAP = {
 HOSPITAL = frozenset(range(405, 414))
 STADIUM = frozenset(list(range(779, 811)) + list(range(932, 948)))
 
+# Navy, darker than the SVGA teal. The body is (0, 0, 113). A little red
+# stays only in the deepest holes, so the tint does not turn the lake purple.
+# The shore is a darker blue-grey, still separate from the brown bank.
 WATER_MAP = {
-    (0, 85, 113): (85, 56, 113),
-    (0, 56, 113): (56, 0, 113),
-    (0, 28, 113): (32, 0, 65),
+    (0, 85, 113): (0, 28, 113),
+    (0, 56, 113): (0, 0, 113),
+    (0, 28, 113): (0, 0, 65),
     (0, 0, 170): (16, 0, 65),
-    (0, 48, 65): (44, 44, 65),
-    (0, 32, 65): (32, 32, 65),
+    (0, 48, 65): (0, 32, 65),
+    (0, 32, 65): (0, 16, 65),
 }
 
 # Pumpkins sit in clearings, not on the limbs. Body, shade, stem.
@@ -151,12 +167,13 @@ GROUND = frozenset(DIRT_MAP.values()) | frozenset(DIRT_MAP)
 def _check_colours() -> None:
     palette = set(vga_palette_8bit())
     colours = []
-    for table in (DIRT_MAP, LAWN_MAP, DEAD_MAP, ASYLUM_MAP, ARENA_MAP, WATER_MAP, PUMPKIN_INK):
+    for table in (DIRT_MAP, LAWN_MAP, ASYLUM_MAP, ARENA_MAP, WATER_MAP, PUMPKIN_INK):
         for value in table.values():
             if value is not None:
                 colours.append(value)
     colours.append(ACCENT_NIGHT)
     colours.append(BAR)
+    colours.extend((BARK, LIMB, CLEARING))
     missing = sorted({c for c in colours if c not in palette})
     if missing:
         raise SystemExit(f"atmosphere colour is not in the VGA palette: {missing}")
@@ -184,6 +201,70 @@ def _remap(tile: Image.Image, table: dict[tuple[int, int, int], tuple[int, int, 
                 px[x, y] = nxt
                 changed = True
     return changed
+
+
+def _quiet_woods(tile: Image.Image) -> None:
+    """Clearings become night ground. A crown is bark plus a flat limb shade.
+
+    Single dark pixels are the grass dither, not a tree, so they join the
+    clearing. A crown of three or more dark pixels keeps a one-pixel bark rim.
+    """
+    px = tile.load()
+    light: set[tuple[int, int]] = set()
+    dark: set[tuple[int, int]] = set()
+    for y in range(TILE):
+        for x in range(TILE):
+            colour = px[x, y]
+            if colour in _LIGHT_WOOD:
+                light.add((x, y))
+            elif colour in _DARK_WOOD:
+                dark.add((x, y))
+    remaining = set(dark)
+    crowns: set[tuple[int, int]] = set()
+    while remaining:
+        start = remaining.pop()
+        stack = [start]
+        group = [start]
+        while stack:
+            x, y = stack.pop()
+            for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                nxt = (x + dx, y + dy)
+                if nxt in remaining:
+                    remaining.remove(nxt)
+                    stack.append(nxt)
+                    group.append(nxt)
+        if len(group) >= 3:
+            crowns.update(group)
+    bark: set[tuple[int, int]] = set()
+    for x, y in light:
+        if any((x + dx, y + dy) in crowns for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0))):
+            bark.add((x, y))
+    for y in range(TILE):
+        for x in range(TILE):
+            if (x, y) in crowns:
+                # A limb only where the dark green is itself a clump.
+                neighbours = sum((x + dx, y + dy) in crowns for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)))
+                px[x, y] = LIMB if neighbours >= 2 else BARK
+            elif (x, y) in bark:
+                px[x, y] = BARK
+            elif (x, y) in light or (x, y) in dark:
+                px[x, y] = CLEARING
+
+
+def _quiet_clearing_specks(tile: Image.Image) -> None:
+    """Drop the orange and red dirt specks inside a woods tile.
+
+    The night field keeps its soft neighbour colour. The hot specks are
+    what made a clearing look noisy next to open ground.
+    """
+    px = tile.load()
+    for y in range(TILE):
+        for x in range(TILE):
+            colour = px[x, y]
+            if colour in ((113, 85, 0), (65, 0, 16)):
+                px[x, y] = CLEARING
+            elif colour == (65, 32, 32):
+                px[x, y] = (65, 48, 32)
 
 
 def _bars(tile: Image.Image) -> None:
@@ -270,7 +351,7 @@ def apply(atlas: Image.Image) -> None:
         tile = _crop(atlas, index)
         if index in WOODS:
             _remap(tile, DIRT_MAP)
-            _remap(tile, DEAD_MAP)
+            _quiet_woods(tile)
         else:
             _remap(tile, DIRT_MAP)
             _remap(tile, LAWN_MAP)
@@ -280,6 +361,8 @@ def apply(atlas: Image.Image) -> None:
                 for x in range(TILE):
                     if px[x, y] == ACCENT:
                         px[x, y] = ACCENT_NIGHT
+        if index in WOODS:
+            _quiet_clearing_specks(tile)
         if index in PUMPKIN_TILES:
             _place_pumpkin(tile, PUMPKIN_TILES.index(index))
         if index in WATER_TILES:

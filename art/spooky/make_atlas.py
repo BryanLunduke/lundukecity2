@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Lunduke City authors
 # See COPYING and NOTICE.
 
-"""Spooky look. The SVGA atlas, then a night ground, violet water, dead woods, and the graveyard.
+"""Spooky look. The SVGA atlas, then a night ground, deep blue water, bare woods, and the graveyard.
 
 The committed sheet is checked in place and is not rewritten. Pass --out to
 write the report under another directory (the test does this). Pass --emit
@@ -100,7 +100,7 @@ CHANGED = (
 
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
 # 8px overview, in tile order. The big-park sprite has its own hash.
-ATLAS_SHA = "7fdb45c832034e3631dd3a5d706fbdcc2c651459ac360bc952e2f36f0ee3a32b"
+ATLAS_SHA = "7f7b76598624bf6faed829f0fe7f712779e80e26b9fe05188436baefefbad15d"
 PARK_SHA = "3f0e20d7313a54d8268a938d9c25efc6532611ff7c89c6877e575f442412cc42"
 
 GRASS = (0, 113, 0)
@@ -1127,7 +1127,7 @@ def main(argv: list[str]) -> int:
 
     lines = [
         "Spooky atlas",
-        "groups: night dirt and lawns, violet water 2-20 and the bridge tiles,",
+        "groups: night dirt and lawns, deep blue water 2-20 and the bridge tiles,",
         "dead woods 21-37, pumpkins 30 31 33 35, parks 40-43, fountain 840-843,",
         "houses 252 254 256, manor 297-305 (untouched), fence manor 324-332,",
         "asylum 405-413, haunted arena 779-810 and 932-947, big park sprite",
