@@ -179,11 +179,11 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
     const bool hot = !suppressed && (hover_id_ == id || focus_id_ == id);
     cairo_pattern_t *pattern = cairo_pattern_create_linear(x, y, x, y + h);
     if (primary) {
-        cairo_pattern_add_color_stop_rgb(pattern, 0, theme::kSelectHiR, theme::kSelectHiG, theme::kSelectHiB);
-        cairo_pattern_add_color_stop_rgb(pattern, 1, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        cairo_pattern_add_color_stop_rgb(pattern, 0, theme::chrome_select_hi_r(), theme::chrome_select_hi_g(), theme::chrome_select_hi_b());
+        cairo_pattern_add_color_stop_rgb(pattern, 1, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     } else if (hot) {
-        cairo_pattern_add_color_stop_rgb(pattern, 0, theme::kHoverR, theme::kHoverG, theme::kHoverB);
-        cairo_pattern_add_color_stop_rgb(pattern, 1, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+        cairo_pattern_add_color_stop_rgb(pattern, 0, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
+        cairo_pattern_add_color_stop_rgb(pattern, 1, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
     } else {
         cairo_pattern_add_color_stop_rgb(pattern, 0, theme::kButtonHiR, theme::kButtonHiG, theme::kButtonHiB);
         cairo_pattern_add_color_stop_rgb(pattern, 1, theme::kButtonLoR, theme::kButtonLoG, theme::kButtonLoB);
@@ -221,7 +221,7 @@ void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, con
     push_hot(0, 0, win_w_, win_h_, 0);
     fill(cr, x, y, w, h, theme::kWindowR, theme::kWindowG, theme::kWindowB);
     const double kTitleBand = dp(40);
-    fill(cr, x, y, w, kTitleBand, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+    fill(cr, x, y, w, kTitleBand, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     const TextMetrics title_metrics = measure_text(cr, title_font(), title, static_cast<int>(w - 24));
     const double title_y = y + std::max(2.0, (kTitleBand - title_metrics.height) / 2.0);
     // Pad players read the hint in the title. Mouse players read it in the
@@ -281,8 +281,8 @@ void Shell::draw_menubar(cairo_t *cr)
         // A focused Close button used to share the System title's id.
         const bool lit = dialog_ == Dialog::None && (open || hover_id_ == id);
         if (lit) {
-            fill(cr, x, 3, w, menu_h_ - 6, theme::kSelectR, theme::kSelectG, theme::kSelectB);
-            stroke_rect(cr, x, 3, w, menu_h_ - 6, theme::kSelectEdgeR, theme::kSelectEdgeG, theme::kSelectEdgeB);
+            fill(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
+            stroke_rect(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_edge_r(), theme::chrome_select_edge_g(), theme::chrome_select_edge_b());
         }
         paint_mnemonic(cr, menu_font(), title, x + 10, 9, menu_.alt_shown || menu_.open(),
                        lit ? 1 : theme::kTextR, lit ? 1 : theme::kTextG, lit ? 1 : theme::kTextB);
@@ -397,7 +397,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         push_hot(drop_x + 2, y, drop_w - 4, row_h, id);
         const bool selected = menu_.cursor == i || hover_id_ == id;
         if (selected) {
-            fill(cr, drop_x + 3, y, drop_w - 6, row_h, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+            fill(cr, drop_x + 3, y, drop_w - 6, row_h, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
             if (gamepad_nav_ && menu_.cursor == i) {
                 cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
                 cairo_set_line_width(cr, 2);
@@ -528,7 +528,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         const int id = kRecentItem + i;
         push_hot(sub.x + 2, ry, std::max(1.0, sub.w - 4), row_h, id);
         if (menu_.recent_cursor == i || hover_id_ == id) {
-            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), row_h, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), row_h, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
         }
         const std::string shown = recent_[static_cast<std::size_t>(i)];
         const auto slash = shown.find_last_of("/\\");
@@ -613,7 +613,7 @@ void Shell::draw_dialog(cairo_t *cr)
         if (from != to) {
             const int x0 = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(from)), -1).width;
             const int x1 = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(to)), -1).width;
-            cairo_set_source_rgba(cr, theme::kSelectR, theme::kSelectG, theme::kSelectB, 0.55);
+            cairo_set_source_rgba(cr, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b(), 0.55);
             cairo_rectangle(cr, tx + x0, ty - dp(2), std::max(2, x1 - x0), th);
             cairo_fill(cr);
         }
@@ -979,7 +979,7 @@ void Shell::draw_dialog(cairo_t *cr)
             push_hot(x + dp(8), ry, row_w, row_box_h, id);
             push_focus(id);
             if (scenario_index_ == i) {
-                fill(cr, x + dp(8), ry, row_w, row_box_h, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+                fill(cr, x + dp(8), ry, row_w, row_box_h, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
             }
             if (focus_id_ == id) {
                 cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
@@ -1027,7 +1027,7 @@ void Shell::draw_dialog(cairo_t *cr)
         double thumb_y = list_top;
         double thumb_h = track_h;
         list_thumb(list_scroll_, count, visible, list_top, track_h, thumb_y, thumb_h);
-        fill(cr, track_x, thumb_y, track_w, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        fill(cr, track_x, thumb_y, track_w, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         stroke_rect(cr, track_x, list_top, track_w, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
         push_hot(track_x - dp(4), list_top, track_w + dp(8), track_h, kListScroll);
         buttons_at(x, dw, buttons_y, {{"_Cancel", kCancel}, {"_Play", kPlay}}, 0, kPlay);
@@ -1089,7 +1089,7 @@ void Shell::draw_dialog(cairo_t *cr)
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "About Lunduke City 2");
         const double icon_x = panel.x + margin;
         const double icon_y = panel.y + dp(48);
-        fill(cr, icon_x, icon_y + dp(36), icon, dp(28), theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        fill(cr, icon_x, icon_y + dp(36), icon, dp(28), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         fill(cr, icon_x + dp(8), icon_y + dp(16), dp(18), dp(48), 0.93, 0.93, 0.90);
         fill(cr, icon_x + dp(30), icon_y + dp(4), dp(14), dp(60), 0.55, 0.62, 0.70);
         fill(cr, icon_x + dp(48), icon_y + dp(22), dp(16), dp(42), 0.75, 0.55, 0.28);
@@ -1175,7 +1175,7 @@ void Shell::draw_dialog(cairo_t *cr)
             push_hot(x + 12, ry, row_w, row_h, id);
             push_focus(id);
             if (list_index_ == i) {
-                fill(cr, x + 12, ry, row_w, row_h, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+                fill(cr, x + 12, ry, row_w, row_h, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
             }
             if (focus_id_ == id) {
                 cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
@@ -1232,7 +1232,8 @@ void Shell::draw_dialog(cairo_t *cr)
             double thumb_y = track_y;
             double thumb_h = track_h;
             list_thumb(list_scroll_, count, visible, track_y, track_h, thumb_y, thumb_h);
-            fill(cr, track_x, thumb_y, 12, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+            fill(cr, track_x, thumb_y, 12, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(),
+                 theme::chrome_select_b());
             stroke_rect(cr, track_x, track_y, 12, track_h, theme::kButtonEdgeR, theme::kButtonEdgeG,
                         theme::kButtonEdgeB);
             push_hot(track_x - 4, track_y, 20, track_h, kListScroll);
@@ -1313,11 +1314,11 @@ void Shell::draw_dialog(cairo_t *cr)
             const double sw = dw - 2 * margin;
             fill(cr, sx, bar_y, sw, dp(16), 1, 1, 1);
             const double t = (value - min) / static_cast<double>(std::max(1, max - min));
-            fill(cr, sx, bar_y, sw * t, dp(16), theme::kSelectR, theme::kSelectG, theme::kSelectB);
+            fill(cr, sx, bar_y, sw * t, dp(16), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
             const double thumb = dp(14);
             fill(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), 1, 1, 1);
-            stroke_rect(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), theme::kSelectR, theme::kSelectG,
-                        theme::kSelectB);
+            stroke_rect(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), theme::chrome_select_r(), theme::chrome_select_g(),
+                        theme::chrome_select_b());
             stroke_rect(cr, sx, bar_y, sw, dp(16), theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
             const int id = kSlider + index;
             push_hot(sx, bar_y - dp(6), sw, dp(28), id);
@@ -1400,7 +1401,7 @@ void Shell::draw_dialog(cairo_t *cr)
             const double travel = std::max(0.0, view_h - thumb_h);
             const double thumb_y =
                 body_top + travel * (static_cast<double>(controls_scroll_) / static_cast<double>(controls_scroll_max_));
-            fill(cr, track_x, thumb_y, track_w, thumb_h, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+            fill(cr, track_x, thumb_y, track_w, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         }
         const double footer_y = body_top + view_h + dp(4);
         paint_text(cr, ui_font(), "Left and right change page.", panel.x + margin, footer_y, theme::kTextR,
@@ -1504,11 +1505,11 @@ void Shell::draw_dialog(cairo_t *cr)
             const double sw = live_inner;
             fill(cr, sx, bar_y, sw, dp(16), 1, 1, 1);
             const double t = (value - min) / static_cast<double>(std::max(1, max - min));
-            fill(cr, sx, bar_y, sw * t, dp(16), theme::kSelectR, theme::kSelectG, theme::kSelectB);
+            fill(cr, sx, bar_y, sw * t, dp(16), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
             const double thumb = dp(14);
             fill(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), 1, 1, 1);
-            stroke_rect(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), theme::kSelectR, theme::kSelectG,
-                        theme::kSelectB);
+            stroke_rect(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), theme::chrome_select_r(), theme::chrome_select_g(),
+                        theme::chrome_select_b());
             stroke_rect(cr, sx, bar_y, sw, dp(16), theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
             const int id = kSlider + index;
             push_hot(sx, bar_y - dp(6), sw, dp(28), id);
@@ -1711,8 +1712,8 @@ void Shell::draw_dialog(cairo_t *cr)
         if (copy.yes_percent >= 0) {
             const double bw = std::min(live_col, static_cast<double>(dp(180)));
             fill(cr, left_x, left_y, bw, bar_h, 0.9, 0.9, 0.9);
-            fill(cr, left_x, left_y, bw * (copy.yes_percent / 100.0), bar_h, theme::kSelectR, theme::kSelectG,
-                 theme::kSelectB);
+            fill(cr, left_x, left_y, bw * (copy.yes_percent / 100.0), bar_h, theme::chrome_select_r(), theme::chrome_select_g(),
+                 theme::chrome_select_b());
             left_y += bar_h + gap;
         }
         if (!copy.opinion_bar.empty()) {
@@ -1760,7 +1761,7 @@ void Shell::draw_dialog(cairo_t *cr)
                 push_hot(x + margin, ry, dw - 2 * margin, row_px - 2, id);
                 push_focus(id);
                 if (list_index_ == i) {
-                    fill(cr, x + margin, ry, dw - 2 * margin, row_px - 2, theme::kHoverR, theme::kHoverG, theme::kHoverB);
+                    fill(cr, x + margin, ry, dw - 2 * margin, row_px - 2, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
                 }
                 if (focus_id_ == id) {
                     cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
@@ -1841,7 +1842,7 @@ void Shell::draw_special_menu(cairo_t *cr)
         const double y = drop_y + 4 + i * row_h;
         const bool lit = i == special_cursor_;
         if (lit) {
-            fill(cr, drop_x + 3, y, drop_w - 6, row_h - 2, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+            fill(cr, drop_x + 3, y, drop_w - 6, row_h - 2, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         }
         cairo_surface_t *sprite = tool_icon_named(building.icon);
         if (sprite != nullptr) {
@@ -1872,6 +1873,7 @@ void Shell::draw_special_menu(cairo_t *cr)
 
 void Shell::draw(cairo_t *cr)
 {
+    theme::set_chrome_look(drawn_look_);
     menu_.recent_count = static_cast<int>(recent_.size());
     fill(cr, 0, 0, win_w_, win_h_, theme::kWindowR, theme::kWindowG, theme::kWindowB);
     draw_menubar(cr);
@@ -1931,12 +1933,12 @@ void Shell::draw(cairo_t *cr)
     if (max_x > 0) {
         const double bw = std::max(20.0, view_w_ * (view_w_ / static_cast<double>(map_.pixel_width())));
         const double bx = view_x_ + (view_w_ - bw) * (scroll_x_ / max_x);
-        fill(cr, bx, view_y_ + view_h_ - 8, bw, 6, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        fill(cr, bx, view_y_ + view_h_ - 8, bw, 6, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     }
     if (max_y > 0) {
         const double bh = std::max(20.0, view_h_ * (view_h_ / static_cast<double>(map_.pixel_height())));
         const double by = view_y_ + (view_h_ - bh) * (scroll_y_ / max_y);
-        fill(cr, view_x_ + view_w_ - 8, by, 6, bh, theme::kSelectR, theme::kSelectG, theme::kSelectB);
+        fill(cr, view_x_ + view_w_ - 8, by, 6, bh, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     }
     const int status_y = win_h_ - status_h_ - message_h_;
     fill(cr, 0, status_y, win_w_, status_h_, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);

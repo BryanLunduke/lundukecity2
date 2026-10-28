@@ -217,9 +217,9 @@ void Shell::run_review_checks()
         }
     }
 
-    // Spooky changes the park tile and leaves the rest of the SVGA sheet
-    // alone. A missing Spooky sheet is Classic on screen. The stored choice
-    // stays Spooky, the same way a missing SVGA sheet stays stored as SVGA.
+    // Spooky changes the park tile and the night ground. A missing Spooky
+    // sheet is Classic on screen. The stored choice stays Spooky, the same
+    // way a missing SVGA sheet stays stored as SVGA. Blank tile 956 matches.
     {
         if (!tile_atlas().spooky_available() || !tile_atlas().set_look(1)) {
             fail("SVGA sheet was not ready for the Spooky compare");
@@ -227,8 +227,10 @@ void Shell::run_review_checks()
         }
         unsigned char svga_park[16 * 16 * 4];
         unsigned char svga_dirt[16 * 16 * 4];
+        unsigned char svga_blank[16 * 16 * 4];
         tile_atlas().blit(40, svga_park, 16 * 4);
         tile_atlas().blit(0, svga_dirt, 16 * 4);
+        tile_atlas().blit(956, svga_blank, 16 * 4);
         if (!tile_atlas().set_look(2) || !tile_atlas().use_spooky()) {
             fail("Spooky tiles did not load");
             return;
@@ -236,14 +238,20 @@ void Shell::run_review_checks()
         drawn_look_ = 2;
         unsigned char spooky_park[16 * 16 * 4];
         unsigned char spooky_dirt[16 * 16 * 4];
+        unsigned char spooky_blank[16 * 16 * 4];
         tile_atlas().blit(40, spooky_park, 16 * 4);
         tile_atlas().blit(0, spooky_dirt, 16 * 4);
+        tile_atlas().blit(956, spooky_blank, 16 * 4);
         if (std::memcmp(svga_park, spooky_park, sizeof(svga_park)) == 0) {
             fail("Spooky look did not change the park tile");
             return;
         }
-        if (std::memcmp(svga_dirt, spooky_dirt, sizeof(svga_dirt)) != 0) {
-            fail("Spooky look changed a tile that should match SVGA");
+        if (std::memcmp(svga_dirt, spooky_dirt, sizeof(svga_dirt)) == 0) {
+            fail("Spooky look did not change the ground tile");
+            return;
+        }
+        if (std::memcmp(svga_blank, spooky_blank, sizeof(svga_blank)) != 0) {
+            fail("Spooky look changed the blank tile");
             return;
         }
         map_.invalidate_all();

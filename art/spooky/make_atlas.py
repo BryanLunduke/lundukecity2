@@ -3,7 +3,7 @@
 # Copyright (C) 2026 The Lunduke City authors
 # See COPYING and NOTICE.
 
-"""Spooky look. A clone of the SVGA atlas with a graveyard, a crypt, and the Spooky houses.
+"""Spooky look. The SVGA atlas, then a night ground, violet water, dead woods, and the graveyard.
 
 The committed sheet is checked in place and is not rewritten. Pass --out to
 write the report under another directory (the test does this). Pass --emit
@@ -26,6 +26,8 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "svga"))
 from vga_palette import vga_palette_8bit  # noqa: E402
 
+import atmosphere  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 SVGA_PATH = ROOT / "third_party/micropolis-assets/images/micropolisEngine/tiles-svga.png"
@@ -35,17 +37,70 @@ SPOOKY_PARK_PATH = ROOT / "data/special-tiles/big-park-spooky.png"
 TILE = 16
 
 # Atlas cells that the Spooky sheet is allowed to change. Everything else
-# stays byte-identical to tiles-svga.png.
+# stays byte-identical to tiles-svga.png. The night pass recolors ground,
+# water, and lawns on most tiles. 39, 293, and the other gaps have no
+# remapped colour, so they stay. 297-305 and 40-43 / 840-843 are in the
+# list because the graveyard and the paused manor already differ; the
+# atmosphere pass does not repaint those cells.
 PARK_TILES = (40, 41, 42, 43)
 FOUNTAIN_TILES = (840, 841, 842, 843)
 HOUSE_TILES = (252, 254, 256)
 MANOR_TURRET = tuple(range(297, 306))
 MANOR_FENCE = tuple(range(324, 333))
-CHANGED = PARK_TILES + FOUNTAIN_TILES + HOUSE_TILES + MANOR_TURRET + MANOR_FENCE
+CHANGED = (
+    tuple(range(0, 39))
+    + tuple(range(40, 293))
+    + tuple(range(294, 364))
+    + tuple(range(365, 372))
+    + tuple(range(373, 379))
+    + tuple(range(380, 382))
+    + tuple(range(383, 385))
+    + tuple(range(386, 399))
+    + tuple(range(401, 403))
+    + tuple(range(404, 418))
+    + tuple(range(420, 460))
+    + tuple(range(468, 472))
+    + tuple(range(473, 482))
+    + tuple(range(483, 506))
+    + (509,)
+    + tuple(range(512, 515))
+    + tuple(range(516, 520))
+    + tuple(range(521, 535))
+    + tuple(range(537, 539))
+    + tuple(range(540, 542))
+    + tuple(range(549, 551))
+    + tuple(range(558, 560))
+    + (563,)
+    + tuple(range(566, 577))
+    + tuple(range(578, 588))
+    + tuple(range(589, 591))
+    + (593,)
+    + (597,)
+    + tuple(range(603, 606))
+    + (608,)
+    + tuple(range(611, 649))
+    + (650,)
+    + tuple(range(653, 670))
+    + tuple(range(671, 688))
+    + tuple(range(689, 698))
+    + tuple(range(700, 729))
+    + tuple(range(731, 736))
+    + tuple(range(737, 746))
+    + tuple(range(747, 750))
+    + tuple(range(751, 754))
+    + tuple(range(755, 765))
+    + tuple(range(766, 770))
+    + (771,)
+    + (776,)
+    + tuple(range(778, 816))
+    + tuple(range(818, 820))
+    + tuple(range(822, 827))
+    + tuple(range(828, 952))
+)
 
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
 # 8px overview, in tile order. The big-park sprite has its own hash.
-ATLAS_SHA = "f14f2e8c69a05f1347b1fd1c6a6fa08ace9355a04b045452d1fccecfcd2c05c0"
+ATLAS_SHA = "7fdb45c832034e3631dd3a5d706fbdcc2c651459ac360bc952e2f36f0ee3a32b"
 PARK_SHA = "3f0e20d7313a54d8268a938d9c25efc6532611ff7c89c6877e575f442412cc42"
 
 GRASS = (0, 113, 0)
@@ -629,6 +684,15 @@ def _paint_shack(tile: Image.Image) -> Image.Image:
     return out
 
 
+# SVGA polish lifts these roof greys. The cottage is approved art, so the
+# lift is undone before the luma ramp and the house stays the one that shipped.
+_ROOF_LIFT_BACK = {
+    (113, 113, 113): (56, 56, 56),
+    (130, 130, 130): (69, 69, 69),
+    (146, 146, 146): (81, 81, 81),
+}
+
+
 def _paint_cottage(tile: Image.Image) -> Image.Image:
     """The wide SVGA house, knocked down to purple stone, with a cross on the peak."""
     src = tile.load()
@@ -636,7 +700,7 @@ def _paint_cottage(tile: Image.Image) -> Image.Image:
     px = out.load()
     for y in range(16):
         for x in range(16):
-            colour = src[x, y]
+            colour = _ROOF_LIFT_BACK.get(src[x, y], src[x, y])
             if colour in GROUND:
                 continue
             red, green, blue = colour
@@ -908,6 +972,7 @@ def build() -> tuple[Image.Image, Image.Image]:
     _paint_fountains(atlas)
     _paint_houses(atlas)
     _paint_manors(atlas)
+    atmosphere.apply(atlas)
     with Image.open(PARK_PATH) as opened:
         park = _paint_big_park(opened)
     return atlas, park
@@ -1060,7 +1125,13 @@ def main(argv: list[str]) -> int:
             continue
         raise SystemExit(f"unknown argument: {arg}")
 
-    lines = ["Spooky atlas", "groups: parks 40-43, fountain 840-843, houses 252 254 256,", "manor 297-305, fence manor 324-332, big park sprite"]
+    lines = [
+        "Spooky atlas",
+        "groups: night dirt and lawns, violet water 2-20 and the bridge tiles,",
+        "dead woods 21-37, pumpkins 30 31 33 35, parks 40-43, fountain 840-843,",
+        "houses 252 254 256, manor 297-305 (untouched), fence manor 324-332,",
+        "asylum 405-413, haunted arena 779-810 and 932-947, big park sprite",
+    ]
     ok, atlas, park, digest, park_digest = _check(lines)
     if emit:
         _save(atlas, SPOOKY_PATH)

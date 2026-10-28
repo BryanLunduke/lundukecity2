@@ -188,8 +188,9 @@ int main()
     std::vector<std::uint32_t> tile0(classic16.size());
     atlas.blit(52, reinterpret_cast<unsigned char *>(tile0.data()), TileAtlas::kSize * 4);
 
-    // Spooky is the SVGA sheet with a new look value. Dirt stays, the park
-    // tile changes, and the 8px overview of that tile is the snapped average.
+    // Spooky starts from the SVGA sheet. The night ground (tile 0) and the
+    // graveyard (tile 40) both differ. Blank tile 956 stays white, and the
+    // 8px overview of the park is the snapped average.
     if (!atlas.set_look(1)) {
         return fail("could not return to SVGA for the Spooky compare");
     }
@@ -208,8 +209,21 @@ int main()
     atlas.blit(0, reinterpret_cast<unsigned char *>(spooky_dirt.data()), TileAtlas::kSize * 4);
     atlas.blit(40, reinterpret_cast<unsigned char *>(spooky_park.data()), TileAtlas::kSize * 4);
     atlas.blit_overview(40, reinterpret_cast<unsigned char *>(spooky_park8.data()), TileAtlas::kOverview * 4);
-    if (std::memcmp(spooky_dirt.data(), svga_dirt.data(), svga_dirt.size() * sizeof(std::uint32_t)) != 0) {
-        return fail("Spooky dirt does not match SVGA");
+    if (std::memcmp(spooky_dirt.data(), svga_dirt.data(), svga_dirt.size() * sizeof(std::uint32_t)) == 0) {
+        return fail("Spooky dirt still matches SVGA");
+    }
+    std::vector<std::uint32_t> svga_blank(classic16.size());
+    std::vector<std::uint32_t> spooky_blank(classic16.size());
+    if (!atlas.set_look(1)) {
+        return fail("could not return to SVGA for the blank-tile compare");
+    }
+    atlas.blit(956, reinterpret_cast<unsigned char *>(svga_blank.data()), TileAtlas::kSize * 4);
+    if (!atlas.set_look(2)) {
+        return fail("could not return to Spooky for the blank-tile compare");
+    }
+    atlas.blit(956, reinterpret_cast<unsigned char *>(spooky_blank.data()), TileAtlas::kSize * 4);
+    if (std::memcmp(svga_blank.data(), spooky_blank.data(), svga_blank.size() * sizeof(std::uint32_t)) != 0) {
+        return fail("Spooky changed the blank tile");
     }
     if (std::memcmp(spooky_park.data(), svga_park.data(), svga_park.size() * sizeof(std::uint32_t)) == 0) {
         return fail("Spooky park matches SVGA");
