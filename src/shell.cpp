@@ -428,7 +428,9 @@ void Shell::save_window_settings()
     ui_scale::StoredSettings stored;
     stored.user_scale = user_scale_;
     stored.speed = std::max(0, std::min(3, pref_speed_ >= 0 ? pref_speed_ : speed_));
-    stored.sound = session_.sound_enabled() ? 1 : 0;
+    // Sound, speed, and the auto flags are player preferences. A city file
+    // has its own copies; those must not be what settings.txt stores.
+    stored.sound = pref_sound_ >= 0 ? (pref_sound_ != 0 ? 1 : 0) : (session_.sound_enabled() ? 1 : 0);
     stored.volume = std::max(0, std::min(100, volume_));
     stored.auto_budget = pref_auto_budget_ >= 0 ? pref_auto_budget_ : (session_.auto_budget() ? 1 : 0);
     stored.auto_bulldoze = pref_auto_bulldoze_ >= 0 ? pref_auto_bulldoze_ : (session_.auto_bulldoze() ? 1 : 0);
@@ -495,6 +497,7 @@ void Shell::apply_loaded_settings()
     pref_auto_budget_ = session_.auto_budget() ? 1 : 0;
     pref_auto_bulldoze_ = session_.auto_bulldoze() ? 1 : 0;
     pref_auto_goto_ = session_.auto_goto() ? 1 : 0;
+    pref_sound_ = session_.sound_enabled() ? 1 : 0;
     session_.accept_preferences();
 }
 
@@ -537,7 +540,13 @@ void Shell::note_background_hold()
     background_held_ = false;
     const int resume = background_speed_;
     background_speed_ = 0;
+    const int keep_speed = pref_speed_;
     set_speed(resume);
+    // A covered load resumes at the city's speed. That is this session's
+    // clock. The preference written to settings.txt stays the player's.
+    if (keep_speed >= 0) {
+        pref_speed_ = keep_speed;
+    }
 }
 
 void Shell::release_occlusion()
@@ -595,6 +604,10 @@ void Shell::restore_play_preferences()
     }
     if (pref_auto_goto_ >= 0) {
         session_.set_auto_goto(pref_auto_goto_ != 0);
+    }
+    if (pref_sound_ >= 0) {
+        session_.set_sound_enabled(pref_sound_ != 0);
+        sound_.set_muted(pref_sound_ == 0);
     }
     session_.accept_preferences();
 }
@@ -1520,6 +1533,87 @@ void Shell::loop()
                 new_page_ = 1;
                 focus_id_ = kNewTerrain;
                 gamepad_nav_ = deck_;
+            } else if (demo_ == "seed") {
+                open_dialog(Dialog::NewCity);
+                new_page_ = 1;
+                field_a_ = "Harbor";
+                field_b_ = "12345678901234567890";
+                dialog_error_ = "Check the seed.";
+                focus_id_ = kFieldSeed;
+                field_caret_ = static_cast<int>(field_b_.size());
+                field_anchor_ = field_caret_;
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                }
+            } else if (demo_ == "commercial") {
+                session_.load_scenario(CitySession::scenario_def(0).id);
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
+                speed_ = 0;
+                session_.set_speed(0);
+                close_dialog();
+                overlay_.set_layer(CitySession::MapLayer::Commercial);
+                overlay_on_ = true;
+                goal_dismissed_ = true;
+                center_on_fraction(0.5, 0.5);
+            } else if (demo_ == "industrial") {
+                session_.load_scenario(CitySession::scenario_def(0).id);
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
+                speed_ = 0;
+                session_.set_speed(0);
+                close_dialog();
+                overlay_.set_layer(CitySession::MapLayer::Industrial);
+                overlay_on_ = true;
+                goal_dismissed_ = true;
+                center_on_fraction(0.5, 0.5);
+            } else if (demo_ == "tokyowon") {
+                session_.load_scenario(CitySession::scenario_def(4).id);
+                speed_ = 3;
+                session_.set_speed(3);
+                int guard = 0;
+                while (session_.scenario_clock_text() != "Time is up" && guard < 8000) {
+                    session_.tick();
+                    ++guard;
+                }
+                speed_ = 0;
+                session_.set_speed(0);
+                goal_dismissed_ = true;
+                info_title_ = "Scenario won";
+                info_body_ = session_.scenario_outcome_text(true);
+                open_dialog(Dialog::Outcome);
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
             } else if (demo_ == "saveempty") {
                 const auto dir = std::filesystem::temp_directory_path() / "lunduke-shot-empty";
                 std::error_code ec;
@@ -1767,6 +1861,16 @@ void Shell::handle_event(const SDL_Event &event)
             list_dragging_ = false;
         }
         if (menu_.open() && dialog_ == Dialog::None) {
+            // Moving onto another title switches the menu. Leaving the
+            // highlight on System after the pointer has moved is the stale
+            // title the review kept seeing.
+            if (!menu_thumb_drag_ && hover_id_ >= kMenuTitle && hover_id_ < kMenuTitle + menu_table::kColumnCount &&
+                hover_id_ != kMenuTitle + menu_.open_menu) {
+                menu_.open_menu = hover_id_ - kMenuTitle;
+                menu_.cursor = 0;
+                menu_.recent_open = false;
+                menu_.alt_shown = true;
+            }
             if (menu_thumb_drag_) {
                 scroll_menu_to_pointer(pointer_y_);
             }
@@ -1907,12 +2011,18 @@ void Shell::handle_event(const SDL_Event &event)
         if (menu_.open() && dialog_ == Dialog::None && !ctrl) {
             if (notches != 0) {
                 scroll_menu_by(-notches);
+                // The row under the pointer changed. Keeping the old hover
+                // paints the highlight on a row the pointer has left.
+                hover_id_ = 0;
             }
             break;
         }
         if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
             if (notches != 0) {
                 nudge_file_list(-notches, false, true);
+                if (hover_id_ >= kListItem && hover_id_ < kListItem + 64) {
+                    hover_id_ = 0;
+                }
             }
             break;
         }
@@ -2029,10 +2139,7 @@ void Shell::handle_event(const SDL_Event &event)
                     controls_scroll_ = std::max(0, controls_scroll_ - dp(28));
                     break;
                 }
-                if (nudge_file_list(-1, false, false)) {
-                    break;
-                }
-                if (!move_osk_vertically(-1)) {
+                if (!nudge_dialog_up_down(-1)) {
                     move_focus(-1);
                 }
             } else if (accel == AccelKey::Down) {
@@ -2040,10 +2147,7 @@ void Shell::handle_event(const SDL_Event &event)
                     controls_scroll_ = std::min(controls_scroll_max_, controls_scroll_ + dp(28));
                     break;
                 }
-                if (nudge_file_list(1, false, false)) {
-                    break;
-                }
-                if (!move_osk_vertically(1)) {
+                if (!nudge_dialog_up_down(1)) {
                     move_focus(1);
                 }
             } else if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
@@ -2317,13 +2421,7 @@ void Shell::handle_event(const SDL_Event &event)
                 adjust_focused_slider(dir == AccelKey::Left ? -1 : 1)) {
                 break;
             }
-            if (dir == AccelKey::Up && nudge_file_list(-1, false, false)) {
-                break;
-            }
-            if (dir == AccelKey::Down && nudge_file_list(1, false, false)) {
-                break;
-            }
-            if ((dir == AccelKey::Up && move_osk_vertically(-1)) || (dir == AccelKey::Down && move_osk_vertically(1))) {
+            if ((dir == AccelKey::Up && nudge_dialog_up_down(-1)) || (dir == AccelKey::Down && nudge_dialog_up_down(1))) {
                 break;
             }
             move_focus(dir == AccelKey::Up || dir == AccelKey::Left ? -1 : 1);

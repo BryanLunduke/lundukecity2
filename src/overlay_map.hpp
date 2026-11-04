@@ -44,3 +44,21 @@ private:
 
 const char *overlay_title(CitySession::MapLayer layer);
 const char *overlay_legend(CitySession::MapLayer layer);
+
+// Unscaled width of the on/off legend chip. Commercial and Industrial are
+// one 28px bar. Residential is the 14+28 pair, transportation is 34+28.
+// 0 means the ramp uses the full legend width. The outline uses this width.
+inline int legend_chip_px(CitySession::MapLayer layer)
+{
+    switch (layer) {
+    case CitySession::MapLayer::Residential:
+        return 42;
+    case CitySession::MapLayer::Commercial:
+    case CitySession::MapLayer::Industrial:
+        return 28;
+    case CitySession::MapLayer::Transportation:
+        return 62;
+    default:
+        return 0;
+    }
+}

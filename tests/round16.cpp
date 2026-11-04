@@ -408,8 +408,107 @@ int main()
     }
     const std::string pasted = sanitize_pasted_text(std::string("a\nb\t") + std::string(80, 'x'), 64);
     if (pasted.find('\n') != std::string::npos || pasted.find('\t') != std::string::npos || pasted.size() > 64 ||
-        pasted.empty()) {
-        return fail(37, "pasted text kept a control character or was not truncated");
+        pasted.compare(0, 4, "a b ") != 0) {
+        std::fprintf(stderr, "pasted '%s'\n", pasted.c_str());
+        return fail(37, "pasted text kept a control character, ran words together, or was not truncated");
+    }
+    if (sanitize_pasted_text("a\n\nb\t\tc", 64) != "a b c") {
+        return fail(37, "pasted breaks were not collapsed to one space");
+    }
+    const std::string clipped = sanitize_pasted_text(std::string(63, 'a') + "\xC3\xA9", 64);
+    if (clipped.size() != 63 || clipped.find('\xC3') != std::string::npos) {
+        return fail(37, "paste truncated in the middle of a UTF-8 character");
+    }
+    if (kCityNameMaxBytes != 48) {
+        return fail(44, "the city name limit is not the engine's 48 bytes");
+    }
+    {
+        const std::string crossed = std::string(47, 'A') + "\xC3\xA9";
+        const std::string kept = utf8_prefix(crossed, kCityNameMaxBytes);
+        if (kept.size() != 47 || kept.find('\xC3') != std::string::npos) {
+            return fail(44, "a city name was cut in the middle of a character");
+        }
+        const std::string fits = std::string(46, 'A') + "\xC3\xA9";
+        if (utf8_prefix(fits, kCityNameMaxBytes) != fits) {
+            return fail(44, "a 48-byte city name lost its last character");
+        }
+        CitySession named;
+        named.new_city(crossed, 1);
+        if (named.city_name().size() > 48 || named.city_name().find('\xC3') != std::string::npos) {
+            std::fprintf(stderr, "name '%s' (%zu)\n", named.city_name().c_str(), named.city_name().size());
+            return fail(44, "a new city kept a split character in its name");
+        }
+        named.rename_city(fits);
+        if (named.city_name() != fits) {
+            std::fprintf(stderr, "renamed '%s'\n", named.city_name().c_str());
+            return fail(44, "rename dropped a character that fits in 48 bytes");
+        }
+    }
+    if (kCitySeedFieldMax != 10 || new_city_field_error(true, true) != nullptr ||
+        std::string(new_city_field_error(false, true)) != "Check the name." ||
+        std::string(new_city_field_error(true, false)) != "Check the seed." ||
+        std::string(new_city_field_error(false, false)) != "Check the name and the seed.") {
+        return fail(40, "the New City error does not name the bad field");
+    }
+    {
+        CitySeedParse parsed;
+        if (parse_city_seed("12345678901234567890", parsed) || !parse_city_seed("+999999999", parsed) ||
+            parsed.value != 999999999) {
+            return fail(40, "the seed field accepted a 20-digit value");
+        }
+    }
+    if (legend_chip_px(CitySession::MapLayer::Commercial) != 28 ||
+        legend_chip_px(CitySession::MapLayer::Industrial) != 28 ||
+        legend_chip_px(CitySession::MapLayer::Residential) != 42 ||
+        legend_chip_px(CitySession::MapLayer::Transportation) != 62) {
+        return fail(41, "the Commercial or Industrial swatch outline is wider than the fill");
+    }
+    {
+        CitySession quiet;
+        quiet.new_city("Quiet", 2);
+        quiet.set_sound_enabled(true);
+        const auto sound_path = dir / "lunduke-round16-sound.cty";
+        if (!quiet.save_city_as(sound_path.string())) {
+            return fail(42, "could not save a city with sound on");
+        }
+        quiet.set_sound_enabled(false);
+        if (!quiet.load_city(sound_path.string()) || quiet.sound_enabled()) {
+            std::filesystem::remove(sound_path);
+            return fail(42, "loading a city turned sound on");
+        }
+        quiet.set_sound_enabled(false);
+        if (!quiet.save_city_as(sound_path.string())) {
+            std::filesystem::remove(sound_path);
+            return fail(42, "could not save a city with sound off");
+        }
+        quiet.set_sound_enabled(true);
+        if (!quiet.load_city(sound_path.string()) || !quiet.sound_enabled()) {
+            std::filesystem::remove(sound_path);
+            return fail(42, "loading a city turned sound off");
+        }
+        std::filesystem::remove(sound_path);
+    }
+    {
+        CitySession tokyo;
+        if (!tokyo.load_scenario(CitySession::scenario_def(4).id) || hostile_review_session_probe(tokyo, 24) != 1) {
+            return fail(43, "Tokyo's clock did not reach Time is up");
+        }
+        const std::string won = tokyo.scenario_outcome_text(true);
+        const std::string lost = tokyo.scenario_outcome_text(false);
+        auto count = [](const std::string &text, const std::string &needle) {
+            int n = 0;
+            for (std::size_t at = 0; (at = text.find(needle, at)) != std::string::npos; at += needle.size()) {
+                ++n;
+            }
+            return n;
+        };
+        if (won.find("You did it! Tokyo met the goal.") == std::string::npos || won.find("Score 683.") == std::string::npos ||
+            won.find("keep it above") != std::string::npos || count(won, "until 1962") != 1 || count(won, "Time is up") != 1 ||
+            lost.find("Time is up. Tokyo missed the goal.") == std::string::npos || lost.find("Time's up") != std::string::npos ||
+            count(lost, "until 1962") != 1 || count(lost, "Time is up") != 1) {
+            std::fprintf(stderr, "won '%s'\nlost '%s'\n", won.c_str(), lost.c_str());
+            return fail(43, "the win dialog repeats the goal or disagrees with Time is up");
+        }
     }
     if (about_text().find("Version 2.0.0") == std::string::npos || about_text().find("Lunduke City 2 2") != std::string::npos ||
         about_text().find("Will Wright") == std::string::npos || about_text().find("Don Hopkins") == std::string::npos ||

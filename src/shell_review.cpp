@@ -784,6 +784,99 @@ void Shell::run_review_checks()
         fail("loading a city replaced the global auto budget, bulldoze, or goto preference");
         return;
     }
+    {
+        const int old_volume = volume_;
+        const bool old_wheel = wheel_zooms_;
+        const bool old_pause = pause_unfocused_;
+        const int old_look = look_pref_.setting();
+        const auto sound_path = std::filesystem::temp_directory_path() / "lunduke-review-sound.cty";
+        session_.set_sound_enabled(true);
+        session_.set_disasters(true);
+        session_.set_auto_budget(false);
+        session_.set_auto_bulldoze(false);
+        session_.set_auto_goto(false);
+        session_.set_speed(3);
+        if (!session_.save_city_as(sound_path.string())) {
+            fail("could not save a city to check preferences");
+            return;
+        }
+        volume_ = 37;
+        wheel_zooms_ = true;
+        pause_unfocused_ = true;
+        pref_sound_ = 0;
+        session_.set_sound_enabled(false);
+        sound_.set_muted(true);
+        pref_speed_ = 1;
+        pref_disasters_ = 0;
+        pref_auto_budget_ = 1;
+        pref_auto_bulldoze_ = 1;
+        pref_auto_goto_ = 1;
+        if (!session_.load_city(sound_path.string()) || session_.sound_enabled()) {
+            std::filesystem::remove(sound_path);
+            fail("loading a city overwrote Mute");
+            return;
+        }
+        restore_play_preferences();
+        ui_scale::StoredSettings written;
+        written.sound = pref_sound_ >= 0 ? (pref_sound_ != 0 ? 1 : 0) : (session_.sound_enabled() ? 1 : 0);
+        written.speed = pref_speed_;
+        written.auto_budget = pref_auto_budget_;
+        written.disasters = pref_disasters_;
+        written.volume = volume_;
+        written.wheel_zoom = wheel_zooms_ ? 1 : 0;
+        written.pause_unfocused = pause_unfocused_ ? 1 : 0;
+        written.look = look_pref_.setting();
+        const std::string text = ui_scale::settings_text(written);
+        if (session_.sound_enabled() || !sound_.muted() || session_.speed() != 1 || session_.disasters() ||
+            !session_.auto_budget() || !session_.auto_bulldoze() || !session_.auto_goto() || volume_ != 37 ||
+            !wheel_zooms_ || !pause_unfocused_ || look_pref_.setting() != old_look || pref_sound_ != 0 ||
+            text.find("sound=0") == std::string::npos || text.find("sound=1") != std::string::npos ||
+            text.find("speed=1") == std::string::npos || text.find("auto_budget=1") == std::string::npos ||
+            text.find("disasters=0") == std::string::npos || text.find("volume=37") == std::string::npos) {
+            std::filesystem::remove(sound_path);
+            fail("a loaded city changed a settings.txt preference: " + text);
+            return;
+        }
+        std::filesystem::remove(sound_path);
+        volume_ = old_volume;
+        wheel_zooms_ = old_wheel;
+        pause_unfocused_ = old_pause;
+        pref_sound_ = 1;
+        session_.set_sound_enabled(true);
+        sound_.set_muted(false);
+    }
+    files_.clear();
+    for (int i = 0; i < 20; ++i) {
+        files_.push_back("row-" + std::to_string(i) + ".cty");
+    }
+    files_save_ = false;
+    dialog_ = Dialog::Files;
+    list_index_ = 4;
+    list_scroll_ = 0;
+    files_visible_ = 8;
+    focus_id_ = kListItem;
+    align_list_focus();
+    if (focus_id_ != kListItem + 4) {
+        fail("the load list focus is not on the selected row");
+        return;
+    }
+    if (!nudge_file_list(-1, false, false) || list_index_ != 3 || focus_id_ != kListItem + 3) {
+        fail("Up moved the orange box off the blue selection");
+        return;
+    }
+    list_index_ = 0;
+    list_scroll_ = 0;
+    focus_id_ = kListItem;
+    if (!nudge_file_list(-1, false, false) || list_index_ != 0 || focus_id_ != kListItem) {
+        fail("Up on the first load row left the selection");
+        return;
+    }
+    focus_id_ = kUp;
+    if (!nudge_dialog_up_down(1) || focus_id_ != kListItem) {
+        fail("Down from Up went to Cancel");
+        return;
+    }
+    dialog_ = Dialog::None;
     session_.set_speed(0);
 
 #ifndef _WIN32
@@ -1390,5 +1483,160 @@ void Shell::run_review_checks()
     if (!overlay_redraws || !controls_redraw || !land_redraws) {
         fail("a paused window change did not ask for a redraw");
         return;
+    }
+
+    // Every menu, at the short window heights, can show its first row and
+    // its last row, and the keyboard highlight stays on screen.
+    {
+        const int saved_w = win_w_;
+        const int saved_h = win_h_;
+        const int sizes[][2] = {{960, 600}, {1011, 601}, {1024, 640}};
+        auto row_visible = [&](int column, int index) {
+            const int id = kMenuItem + column * 40 + index;
+            for (const Hotspot &hot : hot_) {
+                if (hot.id != id) {
+                    continue;
+                }
+                if (hot.y + 0.5 < static_cast<double>(menu_h_)) {
+                    return false;
+                }
+                if (hot.y + hot.h > static_cast<double>(menu_h_) + menu_drop_h_ + 1.0) {
+                    return false;
+                }
+                return hot.h >= 8.0;
+            }
+            return false;
+        };
+        for (const auto &size : sizes) {
+            SDL_SetWindowSize(window_, size[0], size[1]);
+            dialog_ = Dialog::None;
+            menu_.close();
+            render();
+            if (win_w_ != size[0] || win_h_ != size[1]) {
+                fail("the window did not resize to " + std::to_string(size[0]) + "x" + std::to_string(size[1]));
+                SDL_SetWindowSize(window_, saved_w, saved_h);
+                render();
+                return;
+            }
+            for (int column = 0; column < menu_table::kColumnCount; ++column) {
+                const MenuEntry *items = menu_table::column_items(column);
+                const int count = menu_table::column_count(column);
+                int first = -1;
+                int last = -1;
+                for (int i = 0; i < count; ++i) {
+                    if (items[i].kind == ItemKind::Separator) {
+                        continue;
+                    }
+                    if (first < 0) {
+                        first = i;
+                    }
+                    last = i;
+                }
+                menu_.open_menu = column;
+                menu_.cursor = first;
+                menu_.recent_open = false;
+                menu_scroll_ = 0;
+                menu_scroll_menu_ = -3;
+                menu_scroll_cursor_ = -3;
+                render();
+                if (!row_visible(column, first)) {
+                    fail("the first row of menu " + std::to_string(column) + " is hidden at " +
+                         std::to_string(size[0]) + "x" + std::to_string(size[1]));
+                    menu_.close();
+                    SDL_SetWindowSize(window_, saved_w, saved_h);
+                    render();
+                    return;
+                }
+                for (int i = 0; i < count; ++i) {
+                    if (items[i].kind == ItemKind::Separator) {
+                        continue;
+                    }
+                    menu_.cursor = i;
+                    menu_scroll_cursor_ = -3;
+                    render();
+                    if (!row_visible(column, i)) {
+                        fail("menu " + std::to_string(column) + " row " + std::to_string(i) +
+                             " is off screen at " + std::to_string(size[0]) + "x" + std::to_string(size[1]));
+                        menu_.close();
+                        SDL_SetWindowSize(window_, saved_w, saved_h);
+                        render();
+                        return;
+                    }
+                }
+                menu_.cursor = first;
+                menu_scroll_cursor_ = first;
+                menu_scroll_menu_ = column;
+                menu_scroll_ = 0;
+                render();
+                for (int step = 0; step < 80; ++step) {
+                    scroll_menu_by(1);
+                }
+                render();
+                if (!row_visible(column, last)) {
+                    fail("the wheel cannot bring the last row of menu " + std::to_string(column) + " on screen at " +
+                         std::to_string(size[0]) + "x" + std::to_string(size[1]));
+                    menu_.close();
+                    SDL_SetWindowSize(window_, saved_w, saved_h);
+                    render();
+                    return;
+                }
+                for (int step = 0; step < 80; ++step) {
+                    scroll_menu_by(-1);
+                }
+                render();
+                if (!row_visible(column, first)) {
+                    fail("the wheel cannot bring the first row of menu " + std::to_string(column) + " on screen at " +
+                         std::to_string(size[0]) + "x" + std::to_string(size[1]));
+                    menu_.close();
+                    SDL_SetWindowSize(window_, saved_w, saved_h);
+                    render();
+                    return;
+                }
+            }
+        }
+        menu_.close();
+        SDL_SetWindowSize(window_, saved_w, saved_h);
+        render();
+    }
+
+    // Escape on the year-end budget closes the year. Taxes are collected.
+    // A budget opened from the menu still restores its sliders instead.
+    {
+        if (!session_.load_scenario(CitySession::scenario_def(0).id)) {
+            fail("Dullsville did not load for the year-end budget");
+            return;
+        }
+        session_.set_auto_budget(false);
+        session_.set_simulation_paused(false);
+        session_.set_speed(3);
+        speed_ = 3;
+        int guard = 0;
+        while (!session_.budget_pending() && guard < 2000) {
+            session_.tick();
+            ++guard;
+        }
+        if (!session_.budget_pending()) {
+            fail("a year passed without opening the budget");
+            return;
+        }
+        const auto before = session_.funds();
+        const auto flow = session_.budget().cash_flow;
+        dialog_ = Dialog::Budget;
+        budget_is_tax_ = true;
+        open_tax_ = session_.tax();
+        open_road_ = session_.budget().road_percent;
+        open_police_ = session_.budget().police_percent;
+        open_fire_ = session_.budget().fire_percent;
+        tax_ = open_tax_;
+        road_ = open_road_;
+        police_ = open_police_;
+        fire_ = open_fire_;
+        on_dialog_button(kCancel);
+        if (dialog_ != Dialog::None || session_.budget_pending() || session_.funds() != before + flow) {
+            fail("Escape on the year-end budget left the taxes uncollected");
+            return;
+        }
+        session_.set_speed(0);
+        speed_ = 0;
     }
 }

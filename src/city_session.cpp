@@ -9,6 +9,7 @@
 #include "atomic_write.hpp"
 #include "city_tail.hpp"
 #include "messages.hpp"
+#include "text_edit.hpp"
 #include "scenario_sidecar.hpp"
 #include "special_buildings.hpp"
 
@@ -215,6 +216,11 @@ int hostile_review_session_probe(CitySession &session, int op)
     }
     if (op == 23) {
         return static_cast<int>(sim.scoreType);
+    }
+    if (op == 24) {
+        sim.scoreWait = 0;
+        sim.cityScore = 683;
+        return session.scenario_clock_text() == "Time is up" ? 1 : 0;
     }
     if (op == 2) {
         // A finished census, and the next simulator step is phase 0.
@@ -680,7 +686,7 @@ void CitySession::new_city(const NewCitySpec &spec)
     sim.setAutoBudget(true);
     sim.setAutoBulldoze(true);
     sim.setEnableDisasters(true);
-    const std::string city = spec.name.empty() ? "New City" : spec.name;
+    const std::string city = utf8_prefix(spec.name.empty() ? std::string("New City") : spec.name, kCityNameMaxBytes);
     sim.setCleanCityName(city);
     sim.setSpeed(static_cast<short>(speed_));
     sim.setPasses(1);
@@ -758,10 +764,10 @@ void CitySession::rename_city(const std::string &name)
             pending_space = false;
         }
         clean.push_back(static_cast<char>(ch));
-        if (clean.size() >= 48) {
-            break;
-        }
     }
+    // Stop on a character boundary. The engine cuts at 48 bytes and would
+    // otherwise leave a broken character in the status bar and the file name.
+    clean = utf8_prefix(clean, kCityNameMaxBytes);
     if (clean.empty()) {
         post_message("Enter a name that is not only spaces.");
         return;
@@ -956,7 +962,9 @@ bool CitySession::load_city(const std::string &path)
     }
     outcome_paused_ = false;
     speed_ = loaded_speed;
-    sound_enabled_ = sim.enableSound;
+    // Mute is a player preference. The city file stores a sound flag, and
+    // adopting it used to un-mute the session and then settings.txt.
+    sim.setEnableSound(sound_enabled_);
     sim.budgetAwaitingAccept = false;
     sim.evalPreviewValid = false;
     save_path_ = path;
@@ -1793,7 +1801,8 @@ std::string CitySession::city_name() const
     if (engine_->sim.cityName.empty()) {
         return "New City";
     }
-    return engine_->sim.cityName;
+    // A name already cut mid-character still displays as whole characters.
+    return utf8_prefix(engine_->sim.cityName, static_cast<int>(engine_->sim.cityName.size()));
 }
 
 std::string CitySession::funds_text() const
@@ -1948,21 +1957,32 @@ std::string CitySession::scenario_meter() const
 std::string CitySession::scenario_outcome_text(bool won) const
 {
     const std::string name = city_name();
-    std::string text = won ? "You did it! " + name + " met the goal." : "Time's up. " + name + " missed the goal.";
+    // The status bar says "Time is up" when the clock hits the deadline.
+    // The dialog uses those words once. The live score meter repeats the
+    // goal ("keep it above 500 until …"), so the dialog states the goal
+    // and then the number, not both sentences.
+    std::string text = won ? "You did it! " + name + " met the goal." : "Time is up. " + name + " missed the goal.";
     const int id = scenario_id();
     if (id != 0) {
         const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
         text += " ";
         text += def.goal;
     }
-    const std::string meter = scenario_meter();
-    if (!meter.empty()) {
-        text += " ";
-        text += meter;
-        text += ".";
+    if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
+        text += " Score " + grouped_count(static_cast<std::int64_t>(engine_->sim.cityScore)) + ".";
     } else {
-        const Evaluation report = evaluation();
-        text += " Population " + grouped_count(report.population) + ", score " + grouped_count(report.score) + ".";
+        const std::string meter = scenario_meter();
+        if (!meter.empty()) {
+            text += " ";
+            text += meter;
+            text += ".";
+        } else {
+            const Evaluation report = evaluation();
+            text += " Population " + grouped_count(report.population) + ", score " + grouped_count(report.score) + ".";
+        }
+    }
+    if (won && scenario_clock_text() == "Time is up") {
+        text += " Time is up.";
     }
     return text;
 }

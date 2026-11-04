@@ -10,6 +10,51 @@ inline bool utf8_continuation(unsigned char byte)
     return (byte & 0xC0) == 0x80;
 }
 
+// The engine's city-name filter stops at 48 bytes and can cut a character
+// in half. Names are limited here, on a character boundary, before that.
+inline constexpr int kCityNameMaxBytes = 48;
+
+// Longest prefix of complete UTF-8 characters that fits in max_bytes.
+inline std::string utf8_prefix(const std::string &text, int max_bytes)
+{
+    if (max_bytes < 1 || text.empty()) {
+        return {};
+    }
+    const int n = static_cast<int>(text.size());
+    const int limit = max_bytes < n ? max_bytes : n;
+    int end = 0;
+    while (end < limit) {
+        const unsigned char lead = static_cast<unsigned char>(text[static_cast<std::size_t>(end)]);
+        int need = 1;
+        if ((lead & 0x80) == 0) {
+            need = 1;
+        } else if ((lead & 0xE0) == 0xC0) {
+            need = 2;
+        } else if ((lead & 0xF0) == 0xE0) {
+            need = 3;
+        } else if ((lead & 0xF8) == 0xF0) {
+            need = 4;
+        } else {
+            break;
+        }
+        if (end + need > limit) {
+            break;
+        }
+        bool ok = true;
+        for (int i = 1; i < need; ++i) {
+            if (!utf8_continuation(static_cast<unsigned char>(text[static_cast<std::size_t>(end + i)]))) {
+                ok = false;
+                break;
+            }
+        }
+        if (!ok) {
+            break;
+        }
+        end += need;
+    }
+    return text.substr(0, static_cast<std::size_t>(end));
+}
+
 inline int utf8_prev(const std::string &text, int index)
 {
     if (index <= 0) {
@@ -149,7 +194,13 @@ inline bool text_has_path_separator(const std::string &text)
     return text.find('/') != std::string::npos || text.find('\\') != std::string::npos;
 }
 
-// Drop C0 controls and DEL, and stop at a UTF-8 boundary that still fits.
+// Tab and newline become one space so pasted words stay apart. Other C0
+// controls and DEL are dropped. The result stops on a UTF-8 boundary.
+inline bool paste_break(unsigned char lead)
+{
+    return lead == '\t' || lead == '\n' || lead == '\r' || lead == '\v' || lead == '\f';
+}
+
 inline std::string sanitize_pasted_text(const std::string &text, int max_bytes)
 {
     std::string out;
@@ -158,6 +209,16 @@ inline std::string sanitize_pasted_text(const std::string &text, int max_bytes)
     }
     for (std::size_t i = 0; i < text.size();) {
         const unsigned char lead = static_cast<unsigned char>(text[i]);
+        if (paste_break(lead)) {
+            if (out.empty() || out.back() != ' ') {
+                if (static_cast<int>(out.size()) + 1 > max_bytes) {
+                    break;
+                }
+                out.push_back(' ');
+            }
+            ++i;
+            continue;
+        }
         if (lead < 0x20 || lead == 0x7f) {
             ++i;
             continue;
