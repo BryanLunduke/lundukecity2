@@ -5,6 +5,7 @@
 #include "shell_state.hpp"
 
 #include "city_tail.hpp"
+#include "view_math.hpp"
 #include "osk_layout.hpp"
 #include "dialog_layout.hpp"
 #include "file_list.hpp"
@@ -1760,5 +1761,444 @@ void Shell::run_review_checks()
         }
         session_.set_speed(0);
         speed_ = 0;
+    }
+
+    // New City land page: Up and Down stay in the column. Left and Right
+    // still walk the row. The same rule covers the rows under the grid.
+    {
+        close_dialog();
+        dialog_ = Dialog::NewCity;
+        new_page_ = 1;
+        field_a_ = "Harbor";
+        field_b_ = "auto";
+        field_caret_ = static_cast<int>(field_b_.size());
+        field_anchor_ = field_caret_;
+        focus_id_ = kChoice;
+        render();
+        auto press_key = [&](SDL_Keycode key) {
+            SDL_Event event{};
+            event.type = SDL_EVENT_KEY_DOWN;
+            event.key.key = key;
+            event.key.down = true;
+            event.key.mod = SDL_KMOD_NONE;
+            handle_event(event);
+        };
+        auto press_pad = [&](SDL_GamepadButton button) {
+            SDL_Event event{};
+            event.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+            event.gbutton.button = button;
+            event.gbutton.down = true;
+            handle_event(event);
+        };
+        for (int option = 0; option < 3; ++option) {
+            focus_id_ = kChoice + option;
+            for (int group = 0; group < 4; ++group) {
+                const bool use_key = option == 1;
+                if (use_key) {
+                    press_key(SDLK_DOWN);
+                } else {
+                    press_pad(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+                }
+                const int expect = kChoice + (group + 1) * 10 + option;
+                if (focus_id_ != expect) {
+                    fail("Down from column " + std::to_string(option) + " row " + std::to_string(group) +
+                         " landed on " + std::to_string(focus_id_));
+                    return;
+                }
+            }
+            for (int group = 4; group > 0; --group) {
+                if (option == 2) {
+                    press_key(SDLK_UP);
+                } else {
+                    press_pad(SDL_GAMEPAD_BUTTON_DPAD_UP);
+                }
+                const int expect = kChoice + (group - 1) * 10 + option;
+                if (focus_id_ != expect) {
+                    fail("Up from column " + std::to_string(option) + " row " + std::to_string(group) +
+                         " landed on " + std::to_string(focus_id_));
+                    return;
+                }
+            }
+        }
+        focus_id_ = kChoice;
+        press_pad(SDL_GAMEPAD_BUTTON_DPAD_UP);
+        if (focus_id_ != kChoice) {
+            fail("Up from the first land row left the column");
+            return;
+        }
+        press_key(SDLK_RIGHT);
+        if (focus_id_ != kChoice + 1) {
+            fail("Right did not step along the land row");
+            return;
+        }
+        press_pad(SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+        if (focus_id_ != kChoice) {
+            fail("Left did not step back along the land row");
+            return;
+        }
+        focus_id_ = kChoice + 2;
+        press_pad(SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+        if (focus_id_ != kChoice + 10) {
+            fail("Right at the end of a land row did not step to the next row");
+            return;
+        }
+        focus_id_ = kChoice + 42;
+        press_pad(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+        if (focus_id_ == kChoice + 40 || focus_id_ == kChoice + 41 || focus_id_ == kChoice + 42) {
+            fail("Down from the last land row walked across the row");
+            return;
+        }
+        focus_id_ = kGenerate;
+        press_key(SDLK_UP);
+        if (focus_id_ == kBack) {
+            fail("Up from Generate stepped sideways to Back");
+            return;
+        }
+        focus_id_ = kBack;
+        press_pad(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+        if (focus_id_ != kBack) {
+            fail("Down from Back stepped to " + std::to_string(focus_id_));
+            return;
+        }
+        press_pad(SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+        if (focus_id_ != kGenerate) {
+            fail("Right did not step from Back to Generate");
+            return;
+        }
+        close_dialog();
+    }
+
+    // A name that is only spaces keeps its message until the field becomes
+    // a real name. The same clear applies to the other field checks.
+    {
+        open_dialog(Dialog::Rename);
+        field_a_ = "   ";
+        field_caret_ = static_cast<int>(field_a_.size());
+        field_anchor_ = 0;
+        on_dialog_button(kRename);
+        if (dialog_ != Dialog::Rename || dialog_error_ != "Enter a name that is not only spaces.") {
+            fail("rename did not ask for a name that is not only spaces");
+            return;
+        }
+        type_text(" ");
+        if (dialog_error_ != "Enter a name that is not only spaces.") {
+            fail("a space cleared the rename message");
+            return;
+        }
+        type_text("A");
+        if (!dialog_error_.empty() || !CitySession::name_is_usable(field_a_)) {
+            fail("a letter left the rename message up");
+            return;
+        }
+        field_a_ = "   Q";
+        field_caret_ = static_cast<int>(field_a_.size());
+        field_anchor_ = field_caret_;
+        dialog_error_ = "Enter a name that is not only spaces.";
+        backspace_field();
+        if (dialog_error_.empty() || CitySession::name_is_usable(field_a_)) {
+            fail("backspace to spaces cleared the rename message");
+            return;
+        }
+        type_text("Z");
+        if (!dialog_error_.empty()) {
+            fail("typing after backspace left the rename message up");
+            return;
+        }
+        close_dialog();
+
+        open_dialog(Dialog::NewCity);
+        field_a_ = "   ";
+        field_caret_ = static_cast<int>(field_a_.size());
+        field_anchor_ = field_caret_;
+        focus_id_ = kFieldName;
+        on_dialog_button(kNext);
+        if (new_page_ != 0 || dialog_error_ != "Enter a name that is not only spaces.") {
+            fail("New City Next accepted a name that is only spaces");
+            return;
+        }
+        type_text("N");
+        if (!dialog_error_.empty() || new_page_ != 0) {
+            fail("the New City name message stayed after a letter");
+            return;
+        }
+        field_a_ = "Harbor";
+        field_b_ = "nope";
+        new_page_ = 1;
+        focus_id_ = kFieldSeed;
+        field_caret_ = static_cast<int>(field_b_.size());
+        field_anchor_ = field_caret_;
+        on_dialog_button(kGenerate);
+        if (dialog_error_ != "Check the seed.") {
+            fail("a bad seed did not say to check the seed");
+            return;
+        }
+        field_anchor_ = 0;
+        type_text("15");
+        if (!dialog_error_.empty() || field_b_ != "15") {
+            fail("a valid seed left Check the seed up");
+            return;
+        }
+        field_a_ = "   ";
+        field_b_ = "zz";
+        field_caret_ = static_cast<int>(field_b_.size());
+        field_anchor_ = field_caret_;
+        focus_id_ = kFieldSeed;
+        on_dialog_button(kGenerate);
+        if (dialog_error_ != "Check the name and the seed.") {
+            fail("a bad name and seed did not name both");
+            return;
+        }
+        field_anchor_ = 0;
+        type_text("4");
+        if (dialog_error_ != "Check the name.") {
+            fail("fixing the seed left the combined message up");
+            return;
+        }
+        focus_id_ = kFieldName;
+        field_a_ = "   ";
+        field_caret_ = static_cast<int>(field_a_.size());
+        field_anchor_ = 0;
+        type_text("Ada");
+        if (!dialog_error_.empty()) {
+            fail("a valid New City name left Check the name up");
+            return;
+        }
+        close_dialog();
+
+        dialog_ = Dialog::Files;
+        files_save_ = true;
+        focus_id_ = kFieldName;
+        field_a_ = ".secret";
+        field_caret_ = static_cast<int>(field_a_.size());
+        field_anchor_ = field_caret_;
+        on_dialog_button(kSave);
+        if (dialog_error_ != "Names cannot start with a dot.") {
+            fail("a dotted save name did not warn");
+            return;
+        }
+        field_anchor_ = 0;
+        type_text("Town");
+        if (!dialog_error_.empty() || field_a_ != "Town") {
+            fail("a normal file name left the dot message up");
+            return;
+        }
+        field_a_ = ".cty";
+        field_caret_ = static_cast<int>(field_a_.size());
+        field_anchor_ = field_caret_;
+        on_dialog_button(kSave);
+        if (dialog_error_ != "Enter a file name. The name cannot be only .cty.") {
+            fail("a bare .cty name did not warn");
+            return;
+        }
+        type_text("a");
+        if (!dialog_error_.empty()) {
+            fail("adding a letter left the .cty message up");
+            return;
+        }
+        field_a_ = std::string(48, 'a');
+        field_caret_ = static_cast<int>(field_a_.size());
+        field_anchor_ = field_caret_;
+        dialog_ = Dialog::Rename;
+        focus_id_ = kFieldName;
+        type_text("b");
+        if (dialog_error_ != "That name is too long." || field_a_.size() != 48) {
+            fail("a too-long name was accepted");
+            return;
+        }
+        backspace_field();
+        if (!dialog_error_.empty()) {
+            fail("backspace left the too-long message up");
+            return;
+        }
+        field_a_ = "Town";
+        field_caret_ = static_cast<int>(field_a_.size());
+        field_anchor_ = field_caret_;
+        type_text("/");
+        if (field_a_ != "Town" || dialog_error_.find("/") == std::string::npos) {
+            fail("a slash was accepted in a city name");
+            return;
+        }
+        backspace_field();
+        if (!dialog_error_.empty()) {
+            fail("editing after a rejected slash left the slash message up");
+            return;
+        }
+        close_dialog();
+        files_save_ = false;
+    }
+
+    // D-pad pans while the city still extends off screen. At the map edge
+    // the same press, and a hold-repeat, steps the cursor onto the next tile.
+    {
+        close_dialog();
+        menu_.close();
+        special_open_ = false;
+        pad_dragging_ = false;
+        if (!attach_test_pad()) {
+            fail("the map D-pad check had no controller");
+            return;
+        }
+        gamepad_nav_ = true;
+        map_.set_tile_size(32);
+        layout();
+        scroll_x_ = 0;
+        scroll_y_ = 0;
+        clamp_scroll();
+        cursor_x_ = static_cast<float>(view_x_ + view_w_ * 0.5);
+        cursor_y_ = static_cast<float>(view_y_ + view_h_ * 0.5);
+        clamp_gamepad_cursor(0.0f, 0.0f);
+        auto tile_at = [&](int &tx, int &ty) {
+            return map_tile_at(map_local_x(cursor_x_), map_local_y(cursor_y_), map_.shake_x(), map_.shake_y(),
+                               map_.tile_size(), CitySession::kWorldW, CitySession::kWorldH, tx, ty);
+        };
+        int tx = 0;
+        int ty = 0;
+        if (!tile_at(tx, ty) || tx < 1 || ty < 1) {
+            fail("the map cursor did not start on an interior tile");
+            return;
+        }
+        const float cursor_before = cursor_x_;
+        const double scroll_before = scroll_x_;
+        apply_pad_direction(SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+        if (!(scroll_x_ > scroll_before + 1.0) || cursor_x_ != cursor_before) {
+            fail("D-pad Right panned while the cursor was free to stay put");
+            return;
+        }
+        scroll_x_ = 0;
+        scroll_y_ = 0;
+        clamp_scroll();
+        cursor_x_ = static_cast<float>(view_x_ + view_w_ * 0.5);
+        cursor_y_ = static_cast<float>(view_y_ + view_h_ * 0.5);
+        clamp_gamepad_cursor(0.0f, 0.0f);
+        if (!tile_at(tx, ty)) {
+            fail("the cursor left the map before the edge step");
+            return;
+        }
+        const int left_from = tx;
+        const double scroll_at_left = scroll_x_;
+        apply_pad_direction(SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+        int left_tx = 0;
+        int left_ty = 0;
+        if (scroll_x_ != scroll_at_left || !tile_at(left_tx, left_ty) || left_tx != left_from - 1 || left_ty != ty) {
+            fail("D-pad Left at the map edge did not step the cursor");
+            return;
+        }
+        // The virtual pad packs buttons in mapping order, not enum order.
+        int dpad_index = -1;
+        if (virtual_joy_ != nullptr && pad_ != nullptr) {
+            for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i) {
+                SDL_SetJoystickVirtualButton(virtual_joy_, i, true);
+                SDL_UpdateJoysticks();
+                if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_LEFT)) {
+                    dpad_index = i;
+                    break;
+                }
+                SDL_SetJoystickVirtualButton(virtual_joy_, i, false);
+                SDL_UpdateJoysticks();
+            }
+        }
+        if (dpad_index < 0) {
+            fail("the virtual pad did not report D-pad Left");
+            return;
+        }
+        nav_repeat_button_ = SDL_GAMEPAD_BUTTON_DPAD_LEFT;
+        nav_repeat_fresh_ = true;
+        pad_feel::repeat_arm(nav_repeat_);
+        service_gamepad(16);
+        const int held_from = left_tx;
+        service_gamepad(pad_feel::kRepeatDelayMs);
+        int held_tx = 0;
+        int held_ty = 0;
+        if (scroll_x_ != scroll_at_left || !tile_at(held_tx, held_ty) || held_tx != held_from - 1) {
+            fail("holding D-pad Left did not repeat the edge step");
+            return;
+        }
+        SDL_SetJoystickVirtualButton(virtual_joy_, dpad_index, false);
+        SDL_UpdateJoysticks();
+        pad_feel::repeat_clear(nav_repeat_);
+        nav_repeat_button_ = SDL_GAMEPAD_BUTTON_INVALID;
+
+        scroll_x_ = 1.0e9;
+        scroll_y_ = 1.0e9;
+        clamp_scroll();
+        const double edge_x = scroll_x_;
+        const double edge_y = scroll_y_;
+        cursor_x_ = static_cast<float>(view_x_ + view_w_ * 0.5);
+        cursor_y_ = static_cast<float>(view_y_ + view_h_ * 0.5);
+        clamp_gamepad_cursor(0.0f, 0.0f);
+        if (!tile_at(tx, ty) || tx >= CitySession::kWorldW - 1 || ty >= CitySession::kWorldH - 1) {
+            fail("the cursor started on the corner tile");
+            return;
+        }
+        for (int step = 0; step < CitySession::kWorldW + 2 && tx < CitySession::kWorldW - 1; ++step) {
+            const int prev = tx;
+            apply_pad_direction(SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+            if (scroll_x_ != edge_x || !tile_at(tx, ty) || tx != prev + 1) {
+                fail("walking right at the map edge skipped a tile");
+                return;
+            }
+        }
+        for (int step = 0; step < CitySession::kWorldH + 2 && ty < CitySession::kWorldH - 1; ++step) {
+            const int prev = ty;
+            const int keep_x = tx;
+            apply_pad_direction(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+            if (scroll_y_ != edge_y || !tile_at(tx, ty) || ty != prev + 1 || tx != keep_x) {
+                fail("walking down at the map edge skipped a tile");
+                return;
+            }
+        }
+        if (tx != CitySession::kWorldW - 1 || ty != CitySession::kWorldH - 1) {
+            fail("the D-pad did not reach the corner tile");
+            return;
+        }
+        apply_pad_direction(SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+        apply_pad_direction(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+        int end_x = 0;
+        int end_y = 0;
+        if (scroll_x_ != edge_x || scroll_y_ != edge_y || !tile_at(end_x, end_y) || end_x != tx || end_y != ty) {
+            fail("the D-pad walked off the corner tile");
+            return;
+        }
+
+        map_.set_tile_size(kMapTileOverview);
+        layout();
+        scroll_x_ = 0;
+        scroll_y_ = 0;
+        clamp_scroll();
+        const double map_left = snapped_map_origin(view_x_, map_ox_, scroll_x_);
+        const double map_top = snapped_map_origin(view_y_, map_oy_, scroll_y_);
+        cursor_x_ = static_cast<float>(map_left + map_.tile_size() * 0.5);
+        cursor_y_ = static_cast<float>(map_top + map_.tile_size() * 0.5);
+        clamp_gamepad_cursor(0.0f, 0.0f);
+        if (!tile_at(tx, ty)) {
+            fail("the overview cursor missed tile 0");
+            return;
+        }
+        const double overview_scroll_x = scroll_x_;
+        for (int step = 0; step < CitySession::kWorldW + 8 && tx < CitySession::kWorldW - 1; ++step) {
+            apply_pad_direction(SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+            if (!tile_at(tx, ty)) {
+                fail("the overview cursor left the map");
+                return;
+            }
+        }
+        for (int step = 0; step < CitySession::kWorldH + 8 && ty < CitySession::kWorldH - 1; ++step) {
+            apply_pad_direction(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+            if (!tile_at(tx, ty)) {
+                fail("the overview cursor left the map on the way down");
+                return;
+            }
+        }
+        if (tx != CitySession::kWorldW - 1 || ty != CitySession::kWorldH - 1) {
+            fail("the overview D-pad did not reach the corner");
+            return;
+        }
+        const double overview_max_x = std::max(0, map_.pixel_width() - view_w_);
+        if (overview_max_x < 0.5 && (scroll_x_ != overview_scroll_x || overview_scroll_x != 0.0)) {
+            fail("the overview panned a map that already fit");
+            return;
+        }
+        gamepad_nav_ = false;
+        pad_feel::repeat_clear(nav_repeat_);
     }
 }

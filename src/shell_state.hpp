@@ -194,6 +194,8 @@ private:
     std::string *active_field();
     void type_text(const std::string &text);
     void backspace_field();
+    // Drop a field error once the text no longer has that problem.
+    void clear_resolved_field_error();
     void select_field();
     void move_field_caret(int direction, bool extend, bool home, bool end);
     void paste_field();
@@ -206,6 +208,10 @@ private:
     void service_gamepad(int elapsed_ms);
     void advance_pad_drag(int dx, int dy, int elapsed_ms);
     void apply_pad_direction(SDL_GamepadButton button);
+    // One tile toward the map edge, when that tile is still on screen.
+    void step_cursor_on_map(int dx, int dy);
+    // Held D-pad is panning or walking the cursor, so the loop stays awake.
+    bool map_dpad_repeating() const;
     void note_speed_feedback();
     void note_controller_connected();
     void activate_dialog_start();
@@ -217,6 +223,8 @@ private:
     // Up/Down in a dialog: the list, then the keyboard, then a button row.
     // Down on the file-dialog buttons returns to the selected row.
     bool nudge_dialog_up_down(int direction);
+    // New City land page. Up and Down keep the column; Left and Right do not.
+    bool nudge_new_city_column(int direction);
     // The orange list ring tracks the blue selection.
     void align_list_focus();
     void scroll_menu_by(int rows);
