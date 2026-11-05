@@ -636,17 +636,117 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
         move_focus(delta);
         return;
     }
-    const int pan = map_.tile_size() * 3;
+    int dx = 0;
+    int dy = 0;
     if (dir == AccelKey::Left) {
-        scroll_x_ -= pan;
+        dx = -1;
     } else if (dir == AccelKey::Right) {
-        scroll_x_ += pan;
+        dx = 1;
     } else if (dir == AccelKey::Up) {
-        scroll_y_ -= pan;
+        dy = -1;
     } else if (dir == AccelKey::Down) {
-        scroll_y_ += pan;
+        dy = 1;
     }
+    // Pan while more of the city is off screen. At the map edge that pan
+    // does not move, so the cursor steps onto the next visible tile instead.
+    const double before_x = scroll_x_;
+    const double before_y = scroll_y_;
+    const int pan = std::max(1, map_.tile_size()) * 3;
+    scroll_x_ += static_cast<double>(dx) * pan;
+    scroll_y_ += static_cast<double>(dy) * pan;
     clamp_scroll();
+    if (std::fabs(scroll_x_ - before_x) > 0.01 || std::fabs(scroll_y_ - before_y) > 0.01) {
+        return;
+    }
+    step_cursor_on_map(dx, dy);
+}
+
+bool Shell::map_dpad_repeating() const
+{
+    return nav_repeat_.held && dialog_ == Dialog::None && !menu_.open() && !special_open_ && !pad_dragging_;
+}
+
+void Shell::step_cursor_on_map(int dx, int dy)
+{
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+    const int tile = std::max(1, map_.tile_size());
+    const double map_left = snapped_map_origin(view_x_, map_ox_, scroll_x_);
+    const double map_top = snapped_map_origin(view_y_, map_oy_, scroll_y_);
+    const double shake_x = map_.shake_x();
+    const double shake_y = map_.shake_y();
+    const double view_r = static_cast<double>(view_x_) + view_w_;
+    const double view_b = static_cast<double>(view_y_) + view_h_;
+    const double local_l = std::max(0.0, static_cast<double>(view_x_) - map_left - shake_x);
+    const double local_t = std::max(0.0, static_cast<double>(view_y_) - map_top - shake_y);
+    const double local_r = std::min(static_cast<double>(map_.pixel_width()), view_r - map_left - shake_x);
+    const double local_b = std::min(static_cast<double>(map_.pixel_height()), view_b - map_top - shake_y);
+    if (local_r <= local_l || local_b <= local_t) {
+        return;
+    }
+    const int x0 = std::max(0, std::min(CitySession::kWorldW - 1, static_cast<int>(std::floor(local_l / tile))));
+    const int y0 = std::max(0, std::min(CitySession::kWorldH - 1, static_cast<int>(std::floor(local_t / tile))));
+    const int x1 = std::max(0, std::min(CitySession::kWorldW - 1, static_cast<int>(std::floor((local_r - 0.001) / tile))));
+    const int y1 = std::max(0, std::min(CitySession::kWorldH - 1, static_cast<int>(std::floor((local_b - 0.001) / tile))));
+    if (x1 < x0 || y1 < y0) {
+        return;
+    }
+    const double vis_left = std::max(static_cast<double>(view_x_), map_left + shake_x);
+    const double vis_top = std::max(static_cast<double>(view_y_), map_top + shake_y);
+    const double vis_right = std::min(view_r, map_left + shake_x + map_.pixel_width());
+    const double vis_bottom = std::min(view_b, map_top + shake_y + map_.pixel_height());
+    int tx = 0;
+    int ty = 0;
+    const bool on = map_tile_at(map_local_x(cursor_x_), map_local_y(cursor_y_), map_.shake_x(), map_.shake_y(), tile,
+                                CitySession::kWorldW, CitySession::kWorldH, tx, ty);
+    auto place = [&](int index, double origin, double shake, double vis0, double vis1, float &cursor) {
+        const double t0 = origin + shake + static_cast<double>(index) * tile;
+        const double t1 = t0 + tile;
+        const double hit0 = std::max(t0, vis0);
+        const double hit1 = std::min(t1, vis1);
+        if (hit1 <= hit0 + 0.25) {
+            return false;
+        }
+        cursor = static_cast<float>(hit0 + (hit1 - hit0) * 0.5);
+        return true;
+    };
+    auto nearest = [&](int dir, int first, int last, double origin, double shake, float cursor_at) {
+        if (dir > 0) {
+            for (int i = first; i <= last; ++i) {
+                const double edge = origin + shake + static_cast<double>(i + 1) * tile;
+                if (edge > static_cast<double>(cursor_at) + 0.5) {
+                    return i;
+                }
+            }
+        } else if (dir < 0) {
+            for (int i = last; i >= first; --i) {
+                const double edge = origin + shake + static_cast<double>(i) * tile;
+                if (edge < static_cast<double>(cursor_at) - 0.5) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    };
+    bool moved = false;
+    if (dx != 0) {
+        const int nx = on ? tx + dx : nearest(dx, x0, x1, map_left, shake_x, cursor_x_);
+        if (nx >= x0 && nx <= x1 && !(on && nx == tx) &&
+            place(nx, map_left, shake_x, vis_left, vis_right, cursor_x_)) {
+            moved = true;
+        }
+    }
+    if (dy != 0) {
+        const int ny = on ? ty + dy : nearest(dy, y0, y1, map_top, shake_y, cursor_y_);
+        if (ny >= y0 && ny <= y1 && !(on && ny == ty) &&
+            place(ny, map_top, shake_y, vis_top, vis_bottom, cursor_y_)) {
+            moved = true;
+        }
+    }
+    if (moved) {
+        clamp_gamepad_cursor(static_cast<float>(dx), static_cast<float>(dy));
+    }
 }
 
 void Shell::advance_pad_drag(int dx, int dy, int elapsed_ms)
@@ -2008,6 +2108,7 @@ void Shell::on_hotspot(int id, double x, double y)
                 *active_field() = names[pick];
                 field_caret_ = static_cast<int>(active_field()->size());
                 field_anchor_ = field_caret_;
+                clear_resolved_field_error();
             }
         } else if (key.kind == OskKind::Shift) {
             osk_shift_ = !osk_shift_;
@@ -2167,9 +2268,65 @@ void Shell::type_text(const std::string &text)
     const int limit = field == &field_b_ ? kCitySeedFieldMax : city_name ? kCityNameMaxBytes : 64;
     if (!field_insert(*field, field_caret_, field_anchor_, text, limit)) {
         dialog_error_ = field == &field_b_ ? "That seed is too long." : "That name is too long.";
-    } else if (dialog_error_ == "That name cannot contain / or \\." || dialog_error_ == "That name is too long." ||
-               dialog_error_ == "That seed is too long.") {
+    } else {
+        clear_resolved_field_error();
+    }
+}
+
+void Shell::clear_resolved_field_error()
+{
+    if (dialog_error_.empty()) {
+        return;
+    }
+    if (dialog_error_ == "Enter a name that is not only spaces.") {
+        if (CitySession::name_is_usable(field_a_)) {
+            dialog_error_.clear();
+        }
+        return;
+    }
+    if (dialog_error_ == "Check the name." || dialog_error_ == "Check the seed." ||
+        dialog_error_ == "Check the name and the seed.") {
+        int seed = 0;
+        bool set = false;
+        const bool name_ok = CitySession::name_is_usable(field_a_);
+        const bool seed_ok = take_city_seed(field_b_, seed, set);
+        if (name_ok && seed_ok) {
+            dialog_error_.clear();
+            return;
+        }
+        if (dialog_error_ == "Check the name and the seed.") {
+            if (name_ok) {
+                dialog_error_ = "Check the seed.";
+            } else if (seed_ok) {
+                dialog_error_ = "Check the name.";
+            }
+        } else if (dialog_error_ == "Check the name." && name_ok) {
+            dialog_error_.clear();
+        } else if (dialog_error_ == "Check the seed." && seed_ok) {
+            dialog_error_.clear();
+        }
+        return;
+    }
+    if (dialog_error_ == "That name cannot contain / or \\.") {
+        if (!text_has_path_separator(field_a_)) {
+            dialog_error_.clear();
+        }
+        return;
+    }
+    if (dialog_error_ == "That name is too long." || dialog_error_ == "That seed is too long.") {
         dialog_error_.clear();
+        return;
+    }
+    if (dialog_error_ == "Enter a file name. The name cannot be only .cty.") {
+        if (save_name_has_stem(field_a_)) {
+            dialog_error_.clear();
+        }
+        return;
+    }
+    if (dialog_error_ == "Names cannot start with a dot.") {
+        if (!save_name_starts_with_dot(field_a_)) {
+            dialog_error_.clear();
+        }
     }
 }
 
@@ -2180,6 +2337,7 @@ void Shell::backspace_field()
         return;
     }
     field_backspace(*field, field_caret_, field_anchor_);
+    clear_resolved_field_error();
 }
 
 void Shell::move_field_caret(int direction, bool extend, bool home, bool end)
@@ -2328,6 +2486,95 @@ bool Shell::move_osk_vertically(int direction)
     return true;
 }
 
+bool Shell::nudge_new_city_column(int direction)
+{
+    if (direction == 0 || dialog_ != Dialog::NewCity || new_page_ != 1) {
+        return false;
+    }
+    const bool choice = focus_id_ >= kChoice && focus_id_ < kChoice + 50;
+    const int packed = choice ? focus_id_ - kChoice : -1;
+    const int group = choice ? packed / 10 : -1;
+    const int option = choice ? packed % 10 : -1;
+    const bool choice_cell = choice && group >= 0 && group <= 4 && option >= 0 && option <= 2;
+    const bool land = choice_cell || focus_id_ == kFieldSeed || focus_id_ == kNewTerrain || focus_id_ == kBack ||
+                      focus_id_ == kGenerate;
+    if (!land) {
+        return false;
+    }
+    if (choice_cell) {
+        const int next = group + (direction < 0 ? -1 : 1);
+        if (next >= 0 && next <= 4) {
+            focus_id_ = kChoice + next * 10 + option;
+            return true;
+        }
+    }
+    const Hotspot *from = nullptr;
+    for (const Hotspot &hot : hot_) {
+        if (hot.id == focus_id_) {
+            from = &hot;
+        }
+    }
+    if (from == nullptr) {
+        return true;
+    }
+    const double cx = from->x + from->w * 0.5;
+    const double cy = from->y + from->h * 0.5;
+    const double band = std::max(4.0, from->h * 0.45);
+    int best = -1;
+    double best_dy = 0;
+    double best_dx = 0;
+    double best_overlap = -1.0e9;
+    for (int id : focus_order_) {
+        if (id == focus_id_) {
+            continue;
+        }
+        const Hotspot *hot = nullptr;
+        for (const Hotspot &item : hot_) {
+            if (item.id == id) {
+                hot = &item;
+            }
+        }
+        if (hot == nullptr || hot->w < 1.0 || hot->h < 1.0) {
+            continue;
+        }
+        const double oy = hot->y + hot->h * 0.5;
+        const double dy = oy - cy;
+        if (direction > 0 && dy <= band) {
+            continue;
+        }
+        if (direction < 0 && dy >= -band) {
+            continue;
+        }
+        const double ady = std::fabs(dy);
+        const double ox = hot->x + hot->w * 0.5;
+        const double adx = std::fabs(ox - cx);
+        const double overlap = std::min(from->x + from->w, hot->x + hot->w) - std::max(from->x, hot->x);
+        const bool closer_row = best < 0 || ady < best_dy - band;
+        const bool same_row = best >= 0 && std::fabs(ady - best_dy) <= band;
+        if (closer_row) {
+            best = id;
+            best_dy = ady;
+            best_dx = adx;
+            best_overlap = overlap;
+        } else if (same_row) {
+            const bool better_overlap = overlap > best_overlap + 1.0;
+            const bool nearer = std::fabs(overlap - best_overlap) <= 1.0 && adx < best_dx - 0.5;
+            if (better_overlap || nearer) {
+                best = id;
+                best_dx = adx;
+                best_overlap = overlap;
+                if (ady < best_dy) {
+                    best_dy = ady;
+                }
+            }
+        }
+    }
+    if (best >= 0) {
+        focus_id_ = best;
+    }
+    return true;
+}
+
 bool Shell::nudge_dialog_up_down(int direction)
 {
     if (direction == 0 || dialog_ == Dialog::None) {
@@ -2337,6 +2584,9 @@ bool Shell::nudge_dialog_up_down(int direction)
         return true;
     }
     if (move_osk_vertically(direction)) {
+        return true;
+    }
+    if (nudge_new_city_column(direction)) {
         return true;
     }
     // The Save/Load buttons are one row. Down from Up used to step to

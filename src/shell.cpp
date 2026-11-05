@@ -1079,8 +1079,8 @@ redraw::Reasons Shell::redraw_reasons() const
     // Tile animation and sprites request a frame through the stamp instead.
     reasons.sim_running = false;
     reasons.quake = quake_strength_ > 0;
-    reasons.navigating = pointer_down_ || pad_dragging_ || std::fabs(stick_x_) > 0.05f || std::fabs(stick_y_) > 0.05f ||
-                         std::fabs(pan_x_) > 0.05f || std::fabs(pan_y_) > 0.05f;
+    reasons.navigating = pointer_down_ || pad_dragging_ || map_dpad_repeating() || std::fabs(stick_x_) > 0.05f ||
+                         std::fabs(stick_y_) > 0.05f || std::fabs(pan_x_) > 0.05f || std::fabs(pan_y_) > 0.05f;
     reasons.blink = blink_drew_;
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
@@ -1100,7 +1100,7 @@ void Shell::loop()
         }
 #endif
         const bool spin = ui_test_ || smoke_ || review_ || !demo_.empty() || !shot_path_.empty();
-        const bool moving = pad_dragging_ || pointer_down_ || std::fabs(stick_x_) > 0.05f ||
+        const bool moving = pad_dragging_ || pointer_down_ || map_dpad_repeating() || std::fabs(stick_x_) > 0.05f ||
                             std::fabs(stick_y_) > 0.05f || std::fabs(pan_x_) > 0.05f || std::fabs(pan_y_) > 0.05f;
         const bool animate = (speed_ > 0 && !dialog_pauses()) || quake_strength_ > 0 || moving;
         SDL_Event event;
