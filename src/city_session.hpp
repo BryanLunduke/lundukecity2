@@ -228,6 +228,13 @@ public:
     // A generated city that has never been saved, still in the month it
     // was created, does not count the clock alone as a change.
     bool needs_save_prompt() const;
+    bool dirty() const { return dirty_; }
+    // Cancel of a budget preview puts the flag back. The rates are restored
+    // by the caller; this only owns the unsaved bit.
+    void set_dirty(bool on);
+    // A stroke ends when the button lifts. "Cannot build here" during a
+    // stroke that already placed a tile is the drag touching its own road.
+    void end_tool_stroke();
     bool time_advanced_since_save() const;
     long long city_time() const;
     // Tile the engine asked the view to center on (auto-goto).
@@ -404,6 +411,7 @@ private:
     bool simulation_paused_ = false;
     int speed_ = 2;
     bool dirty_ = false;
+    int tool_stroke_placed_ = 0;
     // True only after new_city(), until the city is saved, loaded, or a
     // scenario starts. birth_* is the month cityTime shows at that moment
     // (January 1900 for a generated city). Changing speed does not count

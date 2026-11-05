@@ -39,12 +39,29 @@ inline int controls_page_count()
 inline std::string how_to_play_text()
 {
     return "Place residential, commercial, and industrial zones. That is where the city grows.\n"
+           "\n"
            "Connect them with roads, and run power lines from a coal or nuclear plant to every zone.\n"
+           "\n"
            "The R, C, and I meters show demand. A bar above the middle means the city wants more of that zone.\n"
+           "\n"
            "Each January the budget opens. Set the tax and the road, police, and fire funding, then collect taxes. "
            "Auto budget does this for you.\n"
+           "\n"
            "Police and fire stations need that funding, or they stop covering the blocks around them.\n"
-           "A scenario names a goal and a deadline. Query explains a tile. The minimap jumps across the city.";
+           "\n"
+           "A scenario names a goal and a deadline. Query explains a tile. The minimap jumps across the city.\n"
+           "\n"
+           "On a touchscreen, a tap builds one tile. A drag pans the map. Hold still, then drag, to lay a line. "
+           "Two fingers pan or pinch to zoom.";
+}
+
+inline std::string controls_page_indicator(int page)
+{
+    int index = page % 3;
+    if (index < 0) {
+        index += 3;
+    }
+    return std::to_string(index + 1) + "/3";
 }
 
 inline int controls_page_index(int page, bool deck)
@@ -126,7 +143,9 @@ inline std::string controls_page_body(int page, bool deck, const ControlsPadName
         body += pad.cancel;
         body += " cancels or closes. On a field, ";
         body += pad.cancel;
-        body += " deletes a letter. On an empty field, ";
+        body += " deletes a letter. When nothing is left to delete, ";
+        body += pad.cancel;
+        body += " leaves the field, and the next ";
         body += pad.cancel;
         body += " closes the window.\n";
         body += pad.view;
@@ -136,16 +155,18 @@ inline std::string controls_page_body(int page, bool deck, const ControlsPadName
         body += pad.west;
         body += " is Query on the map, and deletes a letter while a field is active.\n";
         body += pad.north;
-        body += " cycles pause, slow, medium, and fast. On the on-screen keyboard it types a space. On the land page it draws new terrain.\n";
+        body += " pauses and resumes the previous speed. Hold ";
+        body += pad.north;
+        body += " to change speed. On the on-screen keyboard it types a space. On the land page it draws new terrain.\n";
         body += pad.menu;
-        body += " opens the menu. On a field or a keyboard key, ";
+        body += " opens the menu, and confirms the highlighted button in a window. On a field or a keyboard key, ";
         body += pad.menu;
         body += " confirms that page.\n";
-        body += "The left stick moves the cursor. The D-pad moves the highlight, scrolls a list or this page, or pans the map.\n";
+        body += "The left stick moves the cursor. The D-pad moves one step, then repeats while held. It scrolls a list, adjusts a slider, or pans the map.\n";
         body += pad.left;
         body += " and ";
         body += pad.right;
-        body += " change tools when no window is open.\n";
+        body += " change tools when no window is open, and take a larger step on a slider.\n";
         body += pad.l3;
         body += " toggles the map overlay. ";
         body += pad.r3;
@@ -156,13 +177,14 @@ inline std::string controls_page_body(int page, bool deck, const ControlsPadName
         return body;
     }
     case 2:
-        return std::string("Tap a tool, a menu, or a button to use it.\n"
-               "A tap on the map builds when the finger lifts. Moving past a short distance starts a drag, and the drag builds as it moves.\n"
-               "A second finger before that drag starts cancels it, and nothing is built. A second finger during a drag ends the stroke and keeps the tiles already placed, then pans or pinches to zoom.\n"
-               "Drag the minimap to jump across the city.\n"
-               "Drag a list to scroll it.\n"
-               "The on-screen keyboard types into the name and seed fields.\n"
-               "Random fills a city name and does not repeat the last one.\n") +
+        return std::string("Tap a tool, a menu, or a button to use it. Buttons and menu rows are sized for a finger.\n"
+               "\n"
+               "A tap on the map builds one tile when the finger lifts. A drag pans. Hold still for a moment, then drag, to lay a line with the current tool.\n"
+               "\n"
+               "A second finger pans or pinches to zoom. Drag a slider, the minimap, or a list with one finger.\n"
+               "\n"
+               "The on-screen keyboard types into the name and seed fields. Random fills a city name and does not repeat the last one.\n"
+               "\n") +
                pad.menu + " confirms the page instead of typing the highlighted key.";
     default:
         break;

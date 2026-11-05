@@ -66,7 +66,7 @@ Mouse and keyboard work as in Lunduke City.
 
 | Input | Action |
 |---|---|
-| Left button / one-finger tap | Select a tool, or build on the map. Drag paints a line. |
+| Left button / one-finger tap | Select a tool, or build on the map. A touch drag pans. Hold, then drag, to paint a line. |
 | Two-finger drag | Pan the map |
 | Pinch | Zoom |
 | Wheel | Scroll the map. Ctrl+wheel zooms |
@@ -89,7 +89,7 @@ Gamepad (Xbox letters, PlayStation symbols when the pad reports them, Steam Deck
 | A / Cross | Build, or confirm the highlighted control |
 | B / Circle | Cancel, close a menu or dialog |
 | X / Square | Query tool |
-| Y / Triangle | Pause / resume |
+| Y / Triangle | Pause / resume. Hold to change speed |
 | LB / RB | Previous / next tool |
 | LT / RT | Zoom out / in |
 | Start | Open or close the menu |

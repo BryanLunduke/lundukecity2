@@ -6,6 +6,7 @@
 
 #include "chart.hpp"
 #include "hotspots.hpp"
+#include "pad_feel.hpp"
 #include "city_recovery.hpp"
 #include "city_session.hpp"
 #include "map_fit.hpp"
@@ -199,7 +200,16 @@ private:
     int hit(double x, double y) const;
     void push_hot(double x, double y, double w, double h, int id);
     void push_focus(int id);
-    void move_focus(int delta);
+    void move_focus(int delta, bool wrap = true);
+    bool focus_is_flat_buttons() const;
+    void leave_text_field();
+    void service_gamepad(int elapsed_ms);
+    void advance_pad_drag(int dx, int dy, int elapsed_ms);
+    void apply_pad_direction(SDL_GamepadButton button);
+    void note_speed_feedback();
+    void note_controller_connected();
+    void activate_dialog_start();
+    int control_px(int design, int floor) const;
     // Up/Down on the on-screen keyboard. Returns false when focus is not a key.
     // The bottom row steps out to the control under the keyboard.
     bool move_osk_vertically(int direction);
@@ -217,7 +227,7 @@ private:
     void label(cairo_t *cr, const char *font, const std::string &text, double x, double y, int wrap);
     void frame_panel(cairo_t *cr, double x, double y, double w, double h, const char *title);
     const char *glyph(SDL_GamepadButton button) const;
-    bool adjust_focused_slider(int direction);
+    bool adjust_focused_slider(int direction, int coarse = 1);
     bool nudge_file_list(int delta, bool page, bool force);
     void reveal_file_list();
     // Touch drag. Moves the window and leaves the selection where it is.
@@ -518,6 +528,26 @@ private:
     bool zoom_r_latched_ = false;
     bool pad_dragging_ = false;
     int pad_repeat_ms_ = 0;
+    int pad_held_dx_ = 0;
+    int pad_held_dy_ = 0;
+    pad_feel::RepeatClock drag_repeat_{};
+    pad_feel::RepeatClock nav_repeat_{};
+    SDL_GamepadButton nav_repeat_button_ = SDL_GAMEPAD_BUTTON_INVALID;
+    bool y_hold_ = false;
+    bool y_hold_fresh_ = false;
+    int y_hold_ms_ = 0;
+    bool y_hold_fired_ = false;
+    bool nav_repeat_fresh_ = false;
+    bool budget_was_dirty_ = false;
+    float raw_lx_ = 0.0f;
+    float raw_ly_ = 0.0f;
+    float raw_rx_ = 0.0f;
+    float raw_ry_ = 0.0f;
+    int touch_slider_id_ = 0;
+    bool touch_panning_ = false;
+    float touch_pan_x_ = 0.0f;
+    float touch_pan_y_ = 0.0f;
+    Uint32 touch_down_ticks_ = 0;
     bool osk_shift_ = false;
     bool ui_test_ = false;
     bool review_ = false;

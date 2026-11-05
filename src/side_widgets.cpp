@@ -99,7 +99,11 @@ void MinimapView::set_viewport_provider(std::function<void(double &, double &, d
 
 AspectBox MinimapView::land_box(int width, int height) const
 {
-    return largest_aspect_box(width, height, 6.0, 5.0);
+    AspectBox box = largest_aspect_box(width, height, 6.0, 5.0);
+    if (pin_top_ && box.y > 2.0) {
+        box.y = 2.0;
+    }
+    return box;
 }
 
 void MinimapView::sync()
@@ -151,6 +155,9 @@ bool MinimapView::press(double x, double y, int width, int height)
 {
     const AspectBox box = land_box(width, height);
     if (box.width <= 1.0 || box.height <= 1.0) {
+        return false;
+    }
+    if (x < box.x || y < box.y || x >= box.x + box.width || y >= box.y + box.height) {
         return false;
     }
     double fx = 0;

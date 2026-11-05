@@ -23,7 +23,8 @@ struct ChartLegend {
 // enabled_mask bit i draws series i. pointer_x is relative to the chart;
 // negative means no readout. readout, when set, receives the hover line.
 void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int width, int height,
-                        int enabled_mask = 0x7f, int pointer_x = -1, std::string *readout = nullptr);
+                        int enabled_mask = 0x7f, int pointer_x = -1, std::string *readout = nullptr,
+                        float ui_scale = 1.0f);
 std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale);
 std::string chart_population_line(CitySession *session);
 std::string chart_funds_line(CitySession *session);

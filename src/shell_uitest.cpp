@@ -119,10 +119,14 @@ void Shell::pump_events()
 void Shell::release_pad_drag()
 {
     map_.release();
+    session_.end_tool_stroke();
     pad_dragging_ = false;
     pointer_on_map_ = false;
     pointer_down_ = false;
     pad_repeat_ms_ = 0;
+    pad_held_dx_ = 0;
+    pad_held_dy_ = 0;
+    pad_feel::repeat_clear(drag_repeat_);
 }
 
 void Shell::forget_gamepad(SDL_JoystickID id)
@@ -159,6 +163,10 @@ void Shell::forget_gamepad(SDL_JoystickID id)
         stick_y_ = 0;
         pan_x_ = 0;
         pan_y_ = 0;
+        raw_lx_ = 0;
+        raw_ly_ = 0;
+        raw_rx_ = 0;
+        raw_ry_ = 0;
         trig_l_ = 0;
         trig_r_ = 0;
         zoom_l_latched_ = false;
@@ -1044,6 +1052,11 @@ void Shell::drive_ui_test()
             fail("the welcome screen did not focus Start a New City");
             return;
         }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeNew; });
+        if (focus_id_ != kWelcomeNew) {
+            fail("Welcome focus wrapped onto Quit");
+            return;
+        }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeNew; });
         if (focus_id_ != kWelcomeLoad) {
             fail("D-pad Down did not move to Load a Saved City");
@@ -1122,9 +1135,25 @@ void Shell::drive_ui_test()
             fail("Start a New City did not open");
             return;
         }
+        // B deletes the selected name and stays. A second B leaves the field.
+        // A third B closes. An empty field must not drop the whole dialog.
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return field_a_ == "New City"; });
+        if (dialog_ != Dialog::NewCity || !field_a_.empty()) {
+            fail("B on the new-city name should delete it and stay, field is '" + field_a_ + "'");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64); });
+        if (dialog_ != Dialog::NewCity) {
+            fail("B on an empty name closed New City");
+            return;
+        }
+        if (focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64)) {
+            fail("B on an empty name did not leave the field");
+            return;
+        }
         tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return dialog_ == Dialog::NewCity; });
         if (dialog_ != Dialog::Welcome) {
-            fail("cancelling New City did not return to the welcome screen");
+            fail("B after leaving the name did not return to the welcome screen");
             return;
         }
         ui_step_ = 23;
@@ -1297,6 +1326,174 @@ void Shell::drive_ui_test()
             fail("return did not choose the special building");
             return;
         }
+        // One D-pad tap while A is held lays one road tile and spends $10.
+        // A hold waits, then repeats. Y pauses and resumes the previous speed.
+        select_tool(1);
+        int road_x = -1;
+        int road_y = -1;
+        for (int y = 4; y < CitySession::kWorldH - 4 && road_x < 0; ++y) {
+            for (int x = 4; x < CitySession::kWorldW - 10; ++x) {
+                bool open = true;
+                for (int i = 0; i < 8; ++i) {
+                    if ((session_.map_value(x + i, y) & 0x03ff) != 0) {
+                        open = false;
+                        break;
+                    }
+                }
+                if (open) {
+                    road_x = x;
+                    road_y = y;
+                    break;
+                }
+            }
+        }
+        if (road_x < 0) {
+            fail("no clear run of land for the D-pad road");
+            return;
+        }
+        center_on_fraction((road_x + 0.5) / CitySession::kWorldW, (road_y + 0.5) / CitySession::kWorldH);
+        render();
+        const int road_tile = std::max(map_.tile_size(), 8);
+        cursor_x_ = static_cast<float>(snapped_map_origin(view_x_, map_ox_, scroll_x_) + (road_x + 0.5) * road_tile);
+        cursor_y_ = static_cast<float>(snapped_map_origin(view_y_, map_oy_, scroll_y_) + (road_y + 0.5) * road_tile);
+        if (hit(cursor_x_, cursor_y_) != kMapId) {
+            fail("the D-pad road cursor is not on the map");
+            return;
+        }
+        {
+            SDL_Event down{};
+            down.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+            down.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+            down.gbutton.down = true;
+            handle_event(down);
+        }
+        if (!pad_dragging_) {
+            fail("A did not start the road drag");
+            return;
+        }
+        auto changed_tiles = [&]() {
+            int n = 0;
+            for (int y = 0; y < CitySession::kWorldH; ++y) {
+                for (int x = 0; x < CitySession::kWorldW; ++x) {
+                    const int now = session_.map_value(x, y) & 0x03ff;
+                    if (now != ui_map_before_[static_cast<std::size_t>(y * CitySession::kWorldW + x)]) {
+                        ++n;
+                    }
+                }
+            }
+            return n;
+        };
+        ui_map_before_.assign(static_cast<std::size_t>(CitySession::kWorldW * CitySession::kWorldH), 0);
+        for (int y = 0; y < CitySession::kWorldH; ++y) {
+            for (int x = 0; x < CitySession::kWorldW; ++x) {
+                ui_map_before_[static_cast<std::size_t>(y * CitySession::kWorldW + x)] = session_.map_value(x, y) & 0x03ff;
+            }
+        }
+        const float cursor_before_x = cursor_x_;
+        int tile_before_x = -1;
+        int tile_before_y = -1;
+        map_tile_at(map_local_x(cursor_x_), map_local_y(cursor_y_), map_.shake_x(), map_.shake_y(), map_.tile_size(),
+                    CitySession::kWorldW, CitySession::kWorldH, tile_before_x, tile_before_y);
+        const auto funds_before_tap = session_.funds();
+        auto follow_drag = [&]() {
+            if (!pad_dragging_) {
+                return;
+            }
+            pointer_x_ = cursor_x_;
+            pointer_y_ = cursor_y_;
+            map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), true);
+        };
+        advance_pad_drag(1, 0, 16);
+        follow_drag();
+        advance_pad_drag(0, 0, 40);
+        follow_drag();
+        const int tapped = changed_tiles();
+        const auto spent = funds_before_tap - session_.funds();
+        if (tapped != 1 || spent != 10) {
+            int tile_after_x = -1;
+            int tile_after_y = -1;
+            map_tile_at(map_local_x(cursor_x_), map_local_y(cursor_y_), map_.shake_x(), map_.shake_y(), map_.tile_size(),
+                        CitySession::kWorldW, CitySession::kWorldH, tile_after_x, tile_after_y);
+            fail("one D-pad tap laid " + std::to_string(tapped) + " tiles and cost $" +
+                 std::to_string(static_cast<long long>(spent)) + " from " + std::to_string(tile_before_x) + "," +
+                 std::to_string(tile_before_y) + " px " + std::to_string(cursor_before_x) + "->" +
+                 std::to_string(cursor_x_) + " to " + std::to_string(tile_after_x) + "," +
+                 std::to_string(tile_after_y) + " want " + std::to_string(road_x) + " tool " +
+                 std::to_string(tool_index_) + " msg " + session_.message());
+            return;
+        }
+        if (session_.message() == "Cannot build here.") {
+            fail("a successful road drag reported Cannot build here");
+            return;
+        }
+        for (int y = 0; y < CitySession::kWorldH; ++y) {
+            for (int x = 0; x < CitySession::kWorldW; ++x) {
+                ui_map_before_[static_cast<std::size_t>(y * CitySession::kWorldW + x)] = session_.map_value(x, y) & 0x03ff;
+            }
+        }
+        advance_pad_drag(1, 0, 16);
+        follow_drag();
+        const int hold_first = changed_tiles();
+        advance_pad_drag(1, 0, 250);
+        follow_drag();
+        const int hold_waiting = changed_tiles();
+        advance_pad_drag(1, 0, 80);
+        follow_drag();
+        const int hold_repeat = changed_tiles();
+        advance_pad_drag(0, 0, 16);
+        if (hold_first != 1 || hold_waiting != 1 || hold_repeat != 2) {
+            fail("D-pad hold repeat was " + std::to_string(hold_first) + "/" + std::to_string(hold_waiting) + "/" +
+                 std::to_string(hold_repeat));
+            return;
+        }
+        {
+            SDL_Event up{};
+            up.type = SDL_EVENT_GAMEPAD_BUTTON_UP;
+            up.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+            up.gbutton.down = false;
+            handle_event(up);
+        }
+        if (pad_dragging_) {
+            fail("the road drag did not release");
+            return;
+        }
+        const int speed_was = 2;
+        set_speed(speed_was);
+        {
+            SDL_Event down{};
+            down.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+            down.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+            down.gbutton.down = true;
+            handle_event(down);
+            SDL_Event up{};
+            up.type = SDL_EVENT_GAMEPAD_BUTTON_UP;
+            up.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+            up.gbutton.down = false;
+            handle_event(up);
+        }
+        if (speed_ != 0) {
+            fail("Y did not pause");
+            return;
+        }
+        {
+            SDL_Event down{};
+            down.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+            down.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+            down.gbutton.down = true;
+            handle_event(down);
+            SDL_Event up{};
+            up.type = SDL_EVENT_GAMEPAD_BUTTON_UP;
+            up.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+            up.gbutton.down = false;
+            handle_event(up);
+        }
+        if (speed_ != speed_was) {
+            fail("Y did not resume the previous speed");
+            return;
+        }
+        set_speed(0);
+        // The road was a control check. The quit test still expects a clean city.
+        session_.set_dirty(false);
         welcome_gate_ = true;
         open_dialog(Dialog::Welcome);
         ui_step_ = 25;

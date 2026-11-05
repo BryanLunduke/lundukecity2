@@ -80,6 +80,7 @@ void Shell::run_review_checks()
         return;
     }
     const int opened_tax = open_tax_;
+    const bool dirty_before = session_.dirty();
     tax_ = opened_tax + 5 > 20 ? 20 : opened_tax + 5;
     session_.set_tax(tax_);
     on_dialog_button(kCancel);
@@ -87,6 +88,32 @@ void Shell::run_review_checks()
         fail("budget cancel kept tax " + std::to_string(session_.tax()) + " opened at " + std::to_string(opened_tax));
         return;
     }
+    if (session_.dirty() != dirty_before) {
+        fail("cancelling Budget changed whether the city is unsaved");
+        return;
+    }
+    files_save_ = true;
+    dialog_ = Dialog::Files;
+    field_a_ = ".cty";
+    field_caret_ = 0;
+    field_anchor_ = 0;
+    focus_id_ = kFieldName;
+    {
+        SDL_Event back{};
+        back.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+        back.gbutton.button = SDL_GAMEPAD_BUTTON_EAST;
+        back.gbutton.down = true;
+        handle_event(back);
+    }
+    if (dialog_ != Dialog::Files || field_a_ != ".cty") {
+        fail("B on a Save name that cannot be deleted closed the dialog");
+        return;
+    }
+    if (focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64)) {
+        fail("B on a Save name that cannot be deleted left the caret trapped");
+        return;
+    }
+    dialog_ = Dialog::None;
 
     // H2: Save from the unsaved prompt on a city with no file must keep the
     // action that was waiting (Quit, New City, Load, ...).
@@ -1032,6 +1059,8 @@ void Shell::run_review_checks()
                 continue;
             }
             finger(SDL_EVENT_FINGER_DOWN, 1, wx, wy);
+            // A plain drag pans. Holding still, then dragging, lays the line.
+            touch_down_ticks_ = SDL_GetTicks() - 400;
             finger(SDL_EVENT_FINGER_MOTION, 1, far_x, far_y);
             if (session_.funds() >= after_prior) {
                 finger(SDL_EVENT_FINGER_UP, 1, far_x, far_y);

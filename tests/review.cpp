@@ -14,6 +14,7 @@
 #include "view_math.hpp"
 #include "text_wrap.hpp"
 #include "sound_player.hpp"
+#include "pad_feel.hpp"
 #include "ui_scale.hpp"
 #include "window_fit.hpp"
 
@@ -456,6 +457,40 @@ int main()
     const ui_scale::StoredSettings unknown = ui_scale::settings_parse("not_a_window=1\nui_scale=0\n");
     if (unknown.has_geometry || unknown.user_scale != 0.0f) {
         return fail("unknown settings keys were not ignored");
+    }
+    pad_feel::RepeatClock clock;
+    pad_feel::repeat_arm(clock);
+    if (pad_feel::repeat_tick(clock, 90) != 0 || pad_feel::repeat_tick(clock, 200) != 0) {
+        return fail("a D-pad hold repeated before the delay");
+    }
+    if (pad_feel::repeat_tick(clock, 20) != 1) {
+        return fail("the first D-pad repeat did not fall after the delay");
+    }
+    if (pad_feel::repeat_tick(clock, pad_feel::kRepeatIntervalMs) != 1) {
+        return fail("D-pad repeat interval drifted");
+    }
+    pad_feel::repeat_clear(clock);
+    if (pad_feel::repeat_tick(clock, 1000) != 0) {
+        return fail("a released D-pad kept repeating");
+    }
+    float sx = 1.0f;
+    float sy = 1.0f;
+    pad_feel::stick_axes(0.10f, 0.0f, sx, sy);
+    if (sx != 0.0f || sy != 0.0f) {
+        return fail("the stick dead zone did not zero a small deflection");
+    }
+    pad_feel::stick_axes(0.12f, 0.12f, sx, sy);
+    if (sx != 0.0f || sy != 0.0f) {
+        return fail("the radial dead zone still answers inside the circle");
+    }
+    float edge_x = 0.0f;
+    float edge_y = 0.0f;
+    pad_feel::stick_axes(0.30f, 0.0f, edge_x, edge_y);
+    float far_x = 0.0f;
+    float far_y = 0.0f;
+    pad_feel::stick_axes(1.0f, 0.0f, far_x, far_y);
+    if (!(edge_x > 0.0f && edge_x < 0.15f && far_x > 0.95f && far_y == 0.0f)) {
+        return fail("the stick curve is not finer near the centre");
     }
     std::cout << "review ok\n";
     return 0;

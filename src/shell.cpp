@@ -15,6 +15,7 @@
 #include "sim_pace.hpp"
 #include "special_buildings.hpp"
 #include "sprite_art.hpp"
+#include "text_edit.hpp"
 #include "text_paint.hpp"
 #include "theme.hpp"
 #include "tile_atlas.hpp"
@@ -485,6 +486,10 @@ void Shell::apply_loaded_settings()
     }
     if (stored.pause_unfocused >= 0) {
         pause_unfocused_ = stored.pause_unfocused != 0;
+    } else if (deck_) {
+        // The Steam overlay and a focus loss should hold the city on a Deck
+        // unless the player has chosen otherwise.
+        pause_unfocused_ = true;
     }
     if (stored.wheel_zoom >= 0) {
         wheel_zooms_ = stored.wheel_zoom != 0;
@@ -1045,11 +1050,13 @@ void Shell::open_gamepad_id(SDL_JoystickID id, bool make_active)
         return;
     }
     pads_.push_back(opened);
+    const bool took_over = pad_ == nullptr;
     if (make_active || pad_ == nullptr) {
         pad_ = opened;
     }
-    if (make_active) {
+    if (make_active || took_over) {
         gamepad_nav_ = true;
+        note_controller_connected();
     }
 }
 
@@ -1209,34 +1216,9 @@ void Shell::loop()
                 zoom_by(-2);
             }
         }
-        if (pad_dragging_ && pad_ != nullptr && dialog_ == Dialog::None && !menu_.open()) {
-            int dx = 0;
-            int dy = 0;
-            if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_LEFT)) {
-                dx -= 1;
-            }
-            if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) {
-                dx += 1;
-            }
-            if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_UP)) {
-                dy -= 1;
-            }
-            if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_DOWN)) {
-                dy += 1;
-            }
-            if (dx != 0 || dy != 0) {
-                const int tick = std::max(1, (ui_test_ && elapsed < 16) ? 16 : elapsed);
-                if (pad_repeat_ms_ <= 0) {
-                    const float tile = static_cast<float>(std::max(map_.tile_size(), 8));
-                    cursor_x_ = static_cast<float>(std::max(0.0, std::min<double>(win_w_ - 1, cursor_x_ + dx * tile)));
-                    cursor_y_ = static_cast<float>(std::max(0.0, std::min<double>(win_h_ - 1, cursor_y_ + dy * tile)));
-                    clamp_gamepad_cursor(static_cast<float>(dx), static_cast<float>(dy));
-                    pad_repeat_ms_ = 70;
-                }
-                pad_repeat_ms_ -= tick;
-            } else {
-                pad_repeat_ms_ = 0;
-            }
+        if (pad_ != nullptr) {
+            const int pad_ms = std::max(1, (ui_test_ && elapsed < 16) ? 16 : elapsed);
+            service_gamepad(pad_ms);
         }
         if (pad_dragging_) {
             pointer_x_ = cursor_x_;
@@ -1653,6 +1635,16 @@ void Shell::loop()
                 open_dialog(Dialog::Controls);
                 gamepad_nav_ = deck_;
             } else if (demo_ == "settings") {
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0 ||
+                        std::strncmp(look, "Spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                }
                 open_dialog(Dialog::Settings);
                 gamepad_nav_ = deck_;
             } else if (demo_ == "querylive") {
@@ -1985,6 +1977,7 @@ void Shell::handle_event(const SDL_Event &event)
             menu_thumb_drag_ = false;
             if (pointer_on_map_) {
                 map_.release();
+                session_.end_tool_stroke();
                 pointer_on_map_ = false;
                 SDL_CaptureMouse(false);
             }
@@ -2131,6 +2124,10 @@ void Shell::handle_event(const SDL_Event &event)
                     controls_scroll_ = 0;
                     break;
                 }
+                if (dialog_ == Dialog::Welcome || focus_is_flat_buttons()) {
+                    move_focus(direction, false);
+                    break;
+                }
                 if (!adjust_focused_slider(direction)) {
                     move_focus(direction);
                 }
@@ -2139,12 +2136,26 @@ void Shell::handle_event(const SDL_Event &event)
                     controls_scroll_ = std::max(0, controls_scroll_ - dp(28));
                     break;
                 }
+                if (dialog_ == Dialog::Welcome) {
+                    move_focus(-1, false);
+                    break;
+                }
+                if (focus_is_flat_buttons()) {
+                    break;
+                }
                 if (!nudge_dialog_up_down(-1)) {
                     move_focus(-1);
                 }
             } else if (accel == AccelKey::Down) {
                 if (dialog_ == Dialog::Controls && controls_scroll_max_ > 0) {
                     controls_scroll_ = std::min(controls_scroll_max_, controls_scroll_ + dp(28));
+                    break;
+                }
+                if (dialog_ == Dialog::Welcome) {
+                    move_focus(1, false);
+                    break;
+                }
+                if (focus_is_flat_buttons()) {
                     break;
                 }
                 if (!nudge_dialog_up_down(1)) {
@@ -2270,7 +2281,8 @@ void Shell::handle_event(const SDL_Event &event)
                 }
                 break;
             }
-            if (active_field() != nullptr) {
+            if (active_field() != nullptr &&
+                (focus_id_ == kFieldName || focus_id_ == kFieldSeed || (focus_id_ >= kOsk && focus_id_ < kOsk + 64))) {
                 if (dialog_ == Dialog::Files && files_save_ && focus_id_ == kFieldName) {
                     on_dialog_button(kSave);
                     break;
@@ -2279,29 +2291,33 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
             special_open_ = false;
-            if (dialog_ == Dialog::None) {
-                if (!menu_.open()) {
-                    menu_.open_first();
-                } else {
-                    menu_.close();
-                }
+            if (dialog_ != Dialog::None) {
+                activate_dialog_start();
+            } else if (!menu_.open()) {
+                menu_.open_first();
+            } else {
+                menu_.close();
             }
             break;
         }
         if (button == SDL_GAMEPAD_BUTTON_EAST || button == SDL_GAMEPAD_BUTTON_BACK) {
-            if (active_field() != nullptr && dialog_ != Dialog::None) {
+            const bool typing = dialog_ != Dialog::None &&
+                                (focus_id_ == kFieldName || focus_id_ == kFieldSeed ||
+                                 (focus_id_ >= kOsk && focus_id_ < kOsk + 64));
+            if (typing) {
                 // The untouched "auto" seed is the default, not something the
                 // player typed. B leaves the land page instead of erasing it.
                 if (dialog_ == Dialog::NewCity && new_page_ > 0 && focus_id_ == kFieldSeed && field_b_ == "auto") {
                     cancel_dialog();
                     break;
                 }
-                // An empty field on page 2 is Back, so the name from page 1
-                // is kept. A letter the player typed is deleted.
-                if (active_field()->empty()) {
-                    cancel_dialog();
-                } else {
+                // B deletes while there is text before the caret. When nothing
+                // can be deleted, B leaves the field. The next B closes.
+                std::string *field = active_field();
+                if (field != nullptr && field_backspace_would_delete(*field, field_caret_, field_anchor_)) {
                     backspace_field();
+                } else {
+                    leave_text_field();
                 }
                 break;
             }
@@ -2348,12 +2364,16 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (button == SDL_GAMEPAD_BUTTON_NORTH) {
-            if (show_osk() && active_field() != nullptr) {
+            if (show_osk() && active_field() != nullptr &&
+                (focus_id_ == kFieldName || focus_id_ == kFieldSeed || (focus_id_ >= kOsk && focus_id_ < kOsk + 64))) {
                 type_text(" ");
             } else if (dialog_ == Dialog::NewCity && new_page_ == 1) {
                 reroll_terrain();
             } else if (dialog_ == Dialog::None && !menu_.open()) {
-                cycle_speed();
+                y_hold_ = true;
+                y_hold_fresh_ = true;
+                y_hold_ms_ = 0;
+                y_hold_fired_ = false;
             }
             break;
         }
@@ -2365,78 +2385,25 @@ void Shell::handle_event(const SDL_Event &event)
             center_on_cursor();
             break;
         }
-        if (button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER && !menu_.open() && dialog_ == Dialog::None) {
-            cycle_tool(-1);
-            break;
-        }
-        if (button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER && !menu_.open() && dialog_ == Dialog::None) {
-            cycle_tool(1);
-            break;
-        }
-        AccelKey dir = AccelKey::None;
-        if (button == SDL_GAMEPAD_BUTTON_DPAD_UP) {
-            dir = AccelKey::Up;
-        } else if (button == SDL_GAMEPAD_BUTTON_DPAD_DOWN) {
-            dir = AccelKey::Down;
-        } else if (button == SDL_GAMEPAD_BUTTON_DPAD_LEFT) {
-            dir = AccelKey::Left;
-        } else if (button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT) {
-            dir = AccelKey::Right;
-        }
-        if (dir == AccelKey::None) {
-            break;
-        }
-        if (pad_dragging_) {
-            break;
-        }
-        if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
-            if (dir == AccelKey::Up || dir == AccelKey::Left) {
-                move_special_cursor(-1);
-            } else {
-                move_special_cursor(1);
-            }
-            break;
-        }
-        if (menu_.open()) {
-            menu_.handle_key(dir, 0, 0);
-        } else if (dialog_ != Dialog::None) {
-            if (dialog_ == Dialog::Controls && (dir == AccelKey::Left || dir == AccelKey::Right)) {
-                controls_page_ = (controls_page_ + (dir == AccelKey::Right ? 1 : 2)) % 3;
-                controls_scroll_ = 0;
+        if (button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER || button == SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) {
+            const int dir = button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER ? -1 : 1;
+            if (!menu_.open() && dialog_ != Dialog::None && adjust_focused_slider(dir, 5)) {
                 break;
             }
-            if (dialog_ == Dialog::Controls && controls_scroll_max_ > 0 &&
-                (dir == AccelKey::Up || dir == AccelKey::Down)) {
-                const int step = dp(28);
-                controls_scroll_ += dir == AccelKey::Up ? -step : step;
-                if (controls_scroll_ < 0) {
-                    controls_scroll_ = 0;
-                }
-                if (controls_scroll_ > controls_scroll_max_) {
-                    controls_scroll_ = controls_scroll_max_;
-                }
-                break;
+            if (!menu_.open() && dialog_ == Dialog::None) {
+                cycle_tool(dir);
             }
-            if ((dir == AccelKey::Left || dir == AccelKey::Right) &&
-                adjust_focused_slider(dir == AccelKey::Left ? -1 : 1)) {
-                break;
+            break;
+        }
+        if (button == SDL_GAMEPAD_BUTTON_DPAD_UP || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN ||
+            button == SDL_GAMEPAD_BUTTON_DPAD_LEFT || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT) {
+            if (!pad_dragging_) {
+                apply_pad_direction(button);
+                nav_repeat_button_ = button;
+                nav_repeat_fresh_ = true;
+                pad_feel::repeat_arm(nav_repeat_);
             }
-            if ((dir == AccelKey::Up && nudge_dialog_up_down(-1)) || (dir == AccelKey::Down && nudge_dialog_up_down(1))) {
-                break;
-            }
-            move_focus(dir == AccelKey::Up || dir == AccelKey::Left ? -1 : 1);
-        } else {
-            const int pan = map_.tile_size() * 3;
-            if (dir == AccelKey::Left) {
-                scroll_x_ -= pan;
-            } else if (dir == AccelKey::Right) {
-                scroll_x_ += pan;
-            } else if (dir == AccelKey::Up) {
-                scroll_y_ -= pan;
-            } else if (dir == AccelKey::Down) {
-                scroll_y_ += pan;
-            }
-            clamp_scroll();
+            break;
         }
         break;
     }
@@ -2446,26 +2413,41 @@ void Shell::handle_event(const SDL_Event &event)
             modal_swallow_pad_ = false;
             release_pad_drag();
         }
+        if (button == nav_repeat_button_) {
+            nav_repeat_button_ = SDL_GAMEPAD_BUTTON_INVALID;
+            pad_feel::repeat_clear(nav_repeat_);
+        }
+        if (button == SDL_GAMEPAD_BUTTON_NORTH) {
+            if (y_hold_ && !y_hold_fired_ && dialog_ == Dialog::None && !menu_.open()) {
+                toggle_pause();
+                note_speed_feedback();
+            }
+            y_hold_ = false;
+            y_hold_fresh_ = false;
+            y_hold_ms_ = 0;
+            y_hold_fired_ = false;
+        }
         break;
     }
     case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
         open_gamepad_id(event.gaxis.which, true);
         const float norm = std::max(-1.0f, std::min(1.0f, event.gaxis.value / 32767.0f));
-        const float dead = std::fabs(norm) < 0.18f ? 0.0f : norm;
         if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX) {
-            stick_x_ = dead;
+            raw_lx_ = norm;
         } else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY) {
-            stick_y_ = dead;
+            raw_ly_ = norm;
         } else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHTX) {
-            pan_x_ = dead;
+            raw_rx_ = norm;
         } else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHTY) {
-            pan_y_ = dead;
+            raw_ry_ = norm;
         } else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER) {
             trig_l_ = std::max(0.0f, norm);
         } else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) {
             trig_r_ = std::max(0.0f, norm);
         }
-        if (dead != 0.0f) {
+        pad_feel::stick_axes(raw_lx_, raw_ly_, stick_x_, stick_y_);
+        pad_feel::stick_axes(raw_rx_, raw_ry_, pan_x_, pan_y_);
+        if (stick_x_ != 0.0f || stick_y_ != 0.0f || pan_x_ != 0.0f || pan_y_ != 0.0f) {
             gamepad_nav_ = true;
         }
         break;
@@ -2524,6 +2506,8 @@ void Shell::handle_event(const SDL_Event &event)
             touch_pending_ = false;
             touch_armed_ = false;
             touch_minimap_ = false;
+            touch_panning_ = false;
+            touch_slider_id_ = 0;
             const float dx = fingers_[0].x - fingers_[1].x;
             const float dy = fingers_[0].y - fingers_[1].y;
             const float dist = std::sqrt(dx * dx + dy * dy);
@@ -2583,6 +2567,7 @@ void Shell::handle_event(const SDL_Event &event)
             pointer_down_ = false;
             if (pointer_on_map_) {
                 map_.release();
+                session_.end_tool_stroke();
                 pointer_on_map_ = false;
             }
         } else if (fingers_.size() == 1) {
@@ -2607,8 +2592,15 @@ void Shell::handle_event(const SDL_Event &event)
                     touch_minimap_ = false;
                     touch_pending_ = true;
                     touch_armed_ = false;
+                    touch_panning_ = false;
+                    touch_slider_id_ = 0;
                     touch_down_x_ = pointer_x_;
                     touch_down_y_ = pointer_y_;
+                    touch_down_ticks_ = SDL_GetTicks();
+                } else if (id >= kSlider && id < kSlider + 8) {
+                    touch_slider_id_ = id;
+                    focus_id_ = id;
+                    on_hotspot(id, pointer_x_, pointer_y_);
                 } else if (list_dialog && id >= kListItem && id < kListItem + 64) {
                     // Selection waits for the lift, so a drag cannot change it.
                     list_touch_row_ = true;
@@ -2620,12 +2612,22 @@ void Shell::handle_event(const SDL_Event &event)
                 if (list_dialog) {
                     list_touch_y_ = y;
                 }
+            } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_slider_id_ != 0) {
+                on_hotspot(touch_slider_id_, pointer_x_, pointer_y_);
+            } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_panning_) {
+                scroll_x_ -= pointer_x_ - touch_pan_x_;
+                scroll_y_ -= pointer_y_ - touch_pan_y_;
+                touch_pan_x_ = pointer_x_;
+                touch_pan_y_ = pointer_y_;
+                clamp_scroll();
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_minimap_) {
                 minimap_.press(pointer_x_ - side_x_, pointer_y_ - mini_y_, side_w_, mini_h_);
             } else if (event.type == SDL_EVENT_FINGER_MOTION &&
                        (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages) &&
                        list_touch_y_ >= 0.0f) {
-                const int rows = static_cast<int>((y - list_touch_y_) / 32.0f);
+                const float row_step =
+                    static_cast<float>(std::max(1, (deck_ || touch_used_) ? std::max(dp(48), 48) : dp(32)));
+                const int rows = static_cast<int>((y - list_touch_y_) / row_step);
                 if (list_dragging_) {
                     // The thumb follows the finger, the same as a mouse drag
                     // on the track. Finger down moves the list down.
@@ -2642,14 +2644,28 @@ void Shell::handle_event(const SDL_Event &event)
                     // else only scrolls; the highlighted city stays put.
                     if ((!list_touch_row_ || list_touch_dragged_) && rows != 0) {
                         scroll_open_list(-rows);
-                        list_touch_y_ += static_cast<float>(rows) * 32.0f;
+                        list_touch_y_ += static_cast<float>(rows) * row_step;
                     }
                 }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_pending_ && !touch_armed_) {
                 const float dx = pointer_x_ - touch_down_x_;
                 const float dy = pointer_y_ - touch_down_y_;
                 if (dx * dx + dy * dy > kTouchArm2) {
-                    arm_touch_tool();
+                    const ToolDef *tool = tool_by_index(tool_index_);
+                    const bool query = tool == nullptr || tool->engine_id == TOOL_QUERY;
+                    const Uint32 held = SDL_GetTicks() - touch_down_ticks_;
+                    // A plain drag pans. Holding still, then dragging, lays tiles.
+                    if (!query && held >= 350) {
+                        arm_touch_tool();
+                    } else {
+                        touch_pending_ = false;
+                        touch_panning_ = true;
+                        scroll_x_ -= pointer_x_ - touch_down_x_;
+                        scroll_y_ -= pointer_y_ - touch_down_y_;
+                        touch_pan_x_ = pointer_x_;
+                        touch_pan_y_ = pointer_y_;
+                        clamp_scroll();
+                    }
                 }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_armed_) {
                 map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
