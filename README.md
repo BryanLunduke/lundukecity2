@@ -66,7 +66,7 @@ Mouse and keyboard work as in Lunduke City.
 
 | Input | Action |
 |---|---|
-| Left button / one-finger tap | Select a tool, or build on the map. Drag paints a line. |
+| Left button / one-finger tap | Select a tool, or build on the map. A touch drag pans. Hold, then drag, to paint a line. |
 | Two-finger drag | Pan the map |
 | Pinch | Zoom |
 | Wheel | Scroll the map. Ctrl+wheel zooms |
@@ -79,22 +79,22 @@ Mouse and keyboard work as in Lunduke City.
 | Alt+letter, F10 | Open a menu. Arrows move. Enter activates. Esc closes |
 | F11 or Alt+Enter | Fullscreen |
 
-Gamepad (Xbox letters, PlayStation symbols when the pad reports them, Steam Deck uses the Xbox set):
+Gamepad (Xbox letters, or PlayStation symbols when the pad reports a PlayStation type or Cross button, including on a Deck). A Deck with an Xbox-style pad uses A/B/X/Y, L1/R1, and the menu glyph:
 
 | Button | Action |
 |---|---|
 | Left stick | Move the cursor |
 | Right stick | Pan |
-| D-pad | Pan the map, or move the highlight in a menu or dialog |
+| D-pad | One step, then it repeats: pan, move a highlight, or adjust a slider |
 | A / Cross | Build, or confirm the highlighted control |
-| B / Circle | Cancel, close a menu or dialog |
+| B / Circle | Cancel, close a menu or dialog. In a text field, delete, then leave the field |
 | X / Square | Query tool |
-| Y / Triangle | Pause / resume |
-| LB / RB | Previous / next tool |
+| Y / Triangle | Pause / resume. Hold to cycle Slow, Medium, and Fast |
+| LB / RB | Previous / next tool. On a slider, a larger step |
 | LT / RT | Zoom out / in |
-| Start | Open or close the menu |
+| Start | Open or close the menu. In a dialog, confirm OK when the dialog has one |
 
-The status line shows the glyphs for the connected pad. A focused control draws an orange ring.
+The status line shows the glyphs for the connected pad. A focused slider draws a dark outer ring and a light or orange inner ring, so it stays visible on the dialog and on the slider fill.
 
 City name and rename fields call `SDL_StartTextInput`. On the Steam Deck that raises the Steam keyboard. A gamepad, a Deck session, or a touchscreen also gets an on-screen key grid in those dialogs.
 

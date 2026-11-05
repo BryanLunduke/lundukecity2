@@ -4,6 +4,8 @@
 
 #include "shell_state.hpp"
 
+#include "pad_glyphs.hpp"
+
 #include "atomic_write.hpp"
 #include "city_seed.hpp"
 #include "file_list.hpp"
@@ -231,6 +233,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {
         focus_id_ = kSlider + 1;
+        budget_was_dirty_ = session_.dirty();
     } else if (dialog == Dialog::Messages) {
         focus_id_ = session_.notices().empty() ? kClose : kListItem;
         list_index_ = 0;
@@ -321,13 +324,9 @@ void Shell::toggle_pause()
 
 void Shell::cycle_speed()
 {
-    if (speed_ <= 0) {
+    // Held Y changes speed only. Pause stays on a tap of Y.
+    if (speed_ < 1 || speed_ >= 3) {
         set_speed(1);
-        return;
-    }
-    if (speed_ >= 3) {
-        paused_from_ = speed_;
-        set_speed(0);
         return;
     }
     set_speed(speed_ + 1);
@@ -568,6 +567,183 @@ void Shell::clamp_gamepad_cursor(float push_x, float push_y)
     cursor_y_ = static_cast<float>(y);
 }
 
+void Shell::apply_pad_direction(SDL_GamepadButton button)
+{
+    AccelKey dir = AccelKey::None;
+    if (button == SDL_GAMEPAD_BUTTON_DPAD_UP) {
+        dir = AccelKey::Up;
+    } else if (button == SDL_GAMEPAD_BUTTON_DPAD_DOWN) {
+        dir = AccelKey::Down;
+    } else if (button == SDL_GAMEPAD_BUTTON_DPAD_LEFT) {
+        dir = AccelKey::Left;
+    } else if (button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT) {
+        dir = AccelKey::Right;
+    }
+    if (dir == AccelKey::None || pad_dragging_) {
+        return;
+    }
+    if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
+        if (dir == AccelKey::Up || dir == AccelKey::Left) {
+            move_special_cursor(-1);
+        } else {
+            move_special_cursor(1);
+        }
+        return;
+    }
+    if (menu_.open()) {
+        menu_.wrap_rows = false;
+        menu_.handle_key(dir, 0, 0);
+        menu_.wrap_rows = true;
+        return;
+    }
+    if (dialog_ != Dialog::None) {
+        if (dialog_ == Dialog::Controls && (dir == AccelKey::Left || dir == AccelKey::Right)) {
+            controls_page_ = (controls_page_ + (dir == AccelKey::Right ? 1 : 2)) % 3;
+            controls_scroll_ = 0;
+            return;
+        }
+        if (dialog_ == Dialog::Controls && controls_scroll_max_ > 0 &&
+            (dir == AccelKey::Up || dir == AccelKey::Down)) {
+            const int step = dp(28);
+            controls_scroll_ += dir == AccelKey::Up ? -step : step;
+            if (controls_scroll_ < 0) {
+                controls_scroll_ = 0;
+            }
+            if (controls_scroll_ > controls_scroll_max_) {
+                controls_scroll_ = controls_scroll_max_;
+            }
+            return;
+        }
+        const int delta = dir == AccelKey::Up || dir == AccelKey::Left ? -1 : 1;
+        if (dialog_ == Dialog::Welcome) {
+            move_focus(delta, false);
+            return;
+        }
+        if (focus_is_flat_buttons()) {
+            if (dir == AccelKey::Up || dir == AccelKey::Down) {
+                return;
+            }
+            move_focus(delta, false);
+            return;
+        }
+        if ((dir == AccelKey::Left || dir == AccelKey::Right) &&
+            adjust_focused_slider(dir == AccelKey::Left ? -1 : 1)) {
+            return;
+        }
+        if ((dir == AccelKey::Up && nudge_dialog_up_down(-1)) || (dir == AccelKey::Down && nudge_dialog_up_down(1))) {
+            return;
+        }
+        move_focus(delta);
+        return;
+    }
+    const int pan = map_.tile_size() * 3;
+    if (dir == AccelKey::Left) {
+        scroll_x_ -= pan;
+    } else if (dir == AccelKey::Right) {
+        scroll_x_ += pan;
+    } else if (dir == AccelKey::Up) {
+        scroll_y_ -= pan;
+    } else if (dir == AccelKey::Down) {
+        scroll_y_ += pan;
+    }
+    clamp_scroll();
+}
+
+void Shell::advance_pad_drag(int dx, int dy, int elapsed_ms)
+{
+    if (!pad_dragging_ || dialog_ != Dialog::None || menu_.open()) {
+        return;
+    }
+    if (elapsed_ms < 0) {
+        elapsed_ms = 0;
+    }
+    int steps = 0;
+    if (dx == 0 && dy == 0) {
+        pad_held_dx_ = 0;
+        pad_held_dy_ = 0;
+        pad_feel::repeat_clear(drag_repeat_);
+    } else if (!drag_repeat_.held || pad_held_dx_ != dx || pad_held_dy_ != dy) {
+        pad_held_dx_ = dx;
+        pad_held_dy_ = dy;
+        pad_feel::repeat_arm(drag_repeat_);
+        steps = 1;
+    } else {
+        steps = pad_feel::repeat_tick(drag_repeat_, elapsed_ms);
+    }
+    if (steps > 0) {
+        const float tile = static_cast<float>(std::max(map_.tile_size(), 8));
+        cursor_x_ = static_cast<float>(std::max(0.0, std::min<double>(win_w_ - 1, cursor_x_ + steps * dx * tile)));
+        cursor_y_ = static_cast<float>(std::max(0.0, std::min<double>(win_h_ - 1, cursor_y_ + steps * dy * tile)));
+        if (cursor_x_ < static_cast<float>(view_x_)) {
+            cursor_x_ = static_cast<float>(view_x_);
+        }
+        if (cursor_y_ < static_cast<float>(view_y_)) {
+            cursor_y_ = static_cast<float>(view_y_);
+        }
+        clamp_gamepad_cursor(static_cast<float>(dx), static_cast<float>(dy));
+    }
+    pad_repeat_ms_ = drag_repeat_.remaining_ms;
+}
+
+void Shell::service_gamepad(int elapsed_ms)
+{
+    if (elapsed_ms < 0) {
+        elapsed_ms = 0;
+    }
+    if (pad_ != nullptr) {
+        SDL_UpdateGamepads();
+    }
+    if (y_hold_fresh_) {
+        // The frame that saw the press may include a long idle wait. That
+        // time is not part of the hold. The up event clears the hold, so this
+        // does not depend on the pad driver repeating the button.
+        y_hold_fresh_ = false;
+    } else if (y_hold_) {
+        y_hold_ms_ += elapsed_ms;
+        if (!y_hold_fired_ && y_hold_ms_ >= pad_feel::kSpeedHoldMs && dialog_ == Dialog::None && !menu_.open()) {
+            cycle_speed();
+            note_speed_feedback();
+            y_hold_fired_ = true;
+        }
+    }
+    if (pad_dragging_ && pad_ != nullptr && dialog_ == Dialog::None && !menu_.open()) {
+        int dx = 0;
+        int dy = 0;
+        if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_LEFT)) {
+            dx -= 1;
+        }
+        if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) {
+            dx += 1;
+        }
+        if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_UP)) {
+            dy -= 1;
+        }
+        if (SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_DPAD_DOWN)) {
+            dy += 1;
+        }
+        advance_pad_drag(dx, dy, elapsed_ms);
+    } else if (!pad_dragging_) {
+        pad_held_dx_ = 0;
+        pad_held_dy_ = 0;
+        pad_feel::repeat_clear(drag_repeat_);
+    }
+    if (!pad_dragging_ && nav_repeat_.held && pad_ != nullptr &&
+        nav_repeat_button_ != SDL_GAMEPAD_BUTTON_INVALID) {
+        if (!SDL_GetGamepadButton(pad_, nav_repeat_button_)) {
+            nav_repeat_button_ = SDL_GAMEPAD_BUTTON_INVALID;
+            pad_feel::repeat_clear(nav_repeat_);
+            nav_repeat_fresh_ = false;
+        } else if (nav_repeat_fresh_) {
+            nav_repeat_fresh_ = false;
+        } else {
+            const int steps = pad_feel::repeat_tick(nav_repeat_, elapsed_ms);
+            for (int i = 0; i < steps; ++i) {
+                apply_pad_direction(nav_repeat_button_);
+            }
+        }
+    }
+}
+
 void Shell::toggle_fullscreen()
 {
     if (window_ == nullptr) {
@@ -632,9 +808,13 @@ void Shell::reset_touch_state()
         pointer_on_map_ = false;
         pointer_down_ = false;
     }
+    session_.end_tool_stroke();
     touch_pending_ = false;
     touch_armed_ = false;
     touch_minimap_ = false;
+    touch_panning_ = false;
+    touch_slider_id_ = 0;
+    slider_drag_ = 0;
     pinch_dist_ = 0;
     list_touch_y_ = -1.0f;
     list_touch_row_ = false;
@@ -1051,6 +1231,12 @@ void Shell::apply_action(Action action)
         open_dialog(Dialog::Rename);
         break;
     case Action::Quit:
+        // A saved city used to leave on one pad press. Ask first. An unsaved
+        // city already gets the save prompt, which is the confirmation.
+        if (gamepad_nav_ && !session_.needs_save_prompt()) {
+            open_dialog(Dialog::QuitConfirm);
+            break;
+        }
         request_with_save(AfterSave::Quit);
         break;
     case Action::AutoBudget:
@@ -1623,6 +1809,7 @@ void Shell::on_dialog_button(int id)
         road_ = open_road_;
         police_ = open_police_;
         fire_ = open_fire_;
+        session_.set_dirty(budget_was_dirty_);
         close_dialog();
         return;
     }
@@ -2265,20 +2452,138 @@ void Shell::autoscroll_menu()
     }
 }
 
-void Shell::move_focus(int delta)
+bool Shell::focus_is_flat_buttons() const
 {
-    if (focus_order_.empty()) {
+    if (dialog_ == Dialog::Welcome || dialog_ == Dialog::None || focus_order_.empty()) {
+        return false;
+    }
+    for (int id : focus_order_) {
+        if (!is_dialog_button(id)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void Shell::leave_text_field()
+{
+    if (dialog_ == Dialog::NewCity && new_page_ > 0) {
+        focus_id_ = kBack;
+        return;
+    }
+    focus_id_ = kCancel;
+}
+
+int Shell::control_px(int design, int floor) const
+{
+    const int px = dp(design);
+    if (deck_ || touch_used_) {
+        return std::max(px, floor);
+    }
+    return px;
+}
+
+void Shell::note_speed_feedback()
+{
+    if (notice_sticky_ || !(gamepad_nav_ || deck_)) {
+        return;
+    }
+    std::string text;
+    if (speed_ <= 0) {
+        text = std::string("Paused. ") + glyph(SDL_GAMEPAD_BUTTON_NORTH) + " resumes";
+    } else if (speed_ == 1) {
+        text = "Speed: Slow";
+    } else if (speed_ >= 3) {
+        text = "Speed: Fast";
+    } else {
+        text = "Speed: Medium";
+    }
+    shown_message_ = text;
+    shown_message_serial_ = session_.message_serial();
+    hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+}
+
+void Shell::note_controller_connected()
+{
+    gamepad_nav_ = true;
+    if (notice_sticky_) {
+        return;
+    }
+    std::string text = "Controller connected";
+    if (speed_ <= 0) {
+        text += ". ";
+        text += glyph(SDL_GAMEPAD_BUTTON_NORTH);
+        text += " resumes";
+    }
+    shown_message_ = text;
+    shown_message_serial_ = session_.message_serial();
+    hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+}
+
+int Shell::dialog_accept_id() const
+{
+    // The affirmative button, not whatever happens to be focused. Dialogs
+    // whose safe default is Cancel have none, so Start does not press it.
+    switch (dialog_) {
+    case Dialog::Budget:
+        return budget_is_tax_ ? kCollect : kOk;
+    case Dialog::Settings:
+        return kOk;
+    case Dialog::NewCity:
+        return new_page_ == 0 ? kNext : kGenerate;
+    case Dialog::Rename:
+        return kRename;
+    case Dialog::Files:
+        return files_save_ ? kSave : (files_.empty() ? 0 : kOk);
+    case Dialog::Welcome:
+        return kWelcomeNew;
+    case Dialog::Scenario:
+        return kPlay;
+    case Dialog::Unsaved:
+        return kSave;
+    case Dialog::Outcome:
+        return kKeep;
+    case Dialog::Recovery:
+        return city_chosen_ ? 0 : kRecover;
+    default:
+        return 0;
+    }
+}
+
+void Shell::activate_dialog_start()
+{
+    const int accept = dialog_accept_id();
+    if (accept == 0) {
+        return;
+    }
+    on_dialog_button(accept);
+}
+
+void Shell::move_focus(int delta, bool wrap)
+{
+    if (focus_order_.empty() || delta == 0) {
         return;
     }
     int index = 0;
+    bool found = false;
     for (int i = 0; i < static_cast<int>(focus_order_.size()); ++i) {
         if (focus_order_[static_cast<std::size_t>(i)] == focus_id_) {
             index = i;
+            found = true;
             break;
         }
     }
-    index = (index + delta + static_cast<int>(focus_order_.size())) % static_cast<int>(focus_order_.size());
-    focus_id_ = focus_order_[static_cast<std::size_t>(index)];
+    if (!found) {
+        index = 0;
+    }
+    const int count = static_cast<int>(focus_order_.size());
+    int next = index + delta;
+    if (wrap) {
+        next = (next + count) % count;
+    } else if (next < 0 || next >= count) {
+        return;
+    }
+    focus_id_ = focus_order_[static_cast<std::size_t>(next)];
     if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
         if (dialog_ == Dialog::Files) {
             list_index_ = list_scroll_ + (focus_id_ - kListItem);
@@ -2514,13 +2819,17 @@ void Shell::activate_focus()
     }
 }
 
-bool Shell::adjust_focused_slider(int direction)
+bool Shell::adjust_focused_slider(int direction, int coarse)
 {
+    if (coarse < 1) {
+        coarse = 1;
+    }
     for (const SliderGeom &slider : sliders_) {
         if (slider.id != focus_id_) {
             continue;
         }
         int step = slider.id == kSlider + 1 ? direction : direction * 5;
+        step *= coarse;
         int current = tax_;
         if (dialog_ == Dialog::Settings) {
             if (slider.id == kSlider + 1) {
@@ -2624,48 +2933,35 @@ void SDLCALL Shell::file_callback(void *userdata, const char *const *filelist, i
 
 const char *Shell::glyph(SDL_GamepadButton button) const
 {
-    bool playstation = false;
-    if (!deck_ && pad_ != nullptr) {
-        const SDL_GamepadType type = SDL_GetGamepadType(pad_);
-        if (type == SDL_GAMEPAD_TYPE_PS3 || type == SDL_GAMEPAD_TYPE_PS4 || type == SDL_GAMEPAD_TYPE_PS5 ||
-            SDL_GetGamepadButtonLabel(pad_, SDL_GAMEPAD_BUTTON_SOUTH) == SDL_GAMEPAD_BUTTON_LABEL_CROSS) {
-            playstation = true;
-        }
+    int type = SDL_GAMEPAD_TYPE_UNKNOWN;
+    int south = SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN;
+    if (pad_ != nullptr) {
+        type = SDL_GetGamepadType(pad_);
+        south = SDL_GetGamepadButtonLabel(pad_, SDL_GAMEPAD_BUTTON_SOUTH);
     }
-    const bool xbox = !deck_ && !playstation;
+    const bool playstation = pad_ != nullptr && pad_is_playstation(type, south);
+    const FaceGlyphs glyphs = face_glyphs(playstation, deck_, type);
     switch (button) {
     case SDL_GAMEPAD_BUTTON_SOUTH:
-        return playstation ? "\u2715" : "A";
+        return glyphs.south;
     case SDL_GAMEPAD_BUTTON_EAST:
-        return playstation ? "\u25CB" : "B";
+        return glyphs.east;
     case SDL_GAMEPAD_BUTTON_WEST:
-        return playstation ? "\u25A1" : "X";
+        return glyphs.west;
     case SDL_GAMEPAD_BUTTON_NORTH:
-        return playstation ? "\u25B3" : "Y";
+        return glyphs.north;
     case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
-        return xbox ? "LB" : "L1";
+        return glyphs.left;
     case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
-        return xbox ? "RB" : "R1";
+        return glyphs.right;
     case SDL_GAMEPAD_BUTTON_START:
-        if (deck_) {
-            return "\u2630";
-        }
-        return playstation ? "Options" : "Start";
+        return glyphs.menu;
     case SDL_GAMEPAD_BUTTON_BACK:
-        if (deck_) {
-            return "View";
-        }
-        if (playstation) {
-            if (pad_ != nullptr && SDL_GetGamepadType(pad_) == SDL_GAMEPAD_TYPE_PS5) {
-                return "Create";
-            }
-            return "Share";
-        }
-        return "Back";
+        return glyphs.view;
     case SDL_GAMEPAD_BUTTON_LEFT_STICK:
-        return xbox ? "LS" : "L3";
+        return glyphs.l3;
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
-        return xbox ? "RS" : "R3";
+        return glyphs.r3;
     default:
         return "";
     }

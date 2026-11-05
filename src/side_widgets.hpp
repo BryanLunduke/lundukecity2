@@ -26,6 +26,10 @@ public:
     void sync();
     bool press(double x, double y, int width, int height);
     void draw(cairo_t *cr, int width, int height);
+    // Pin the city to the top of a tall slot so the space under it can
+    // carry the tool name. Clicks use the same box.
+    void set_pin_top(bool on) { pin_top_ = on; }
+    AspectBox content_box(int width, int height) const { return land_box(width, height); }
 
     std::function<void(double, double)> on_jump;
 
@@ -38,6 +42,7 @@ private:
     cairo_surface_t *pixels_ = nullptr;
     std::vector<int> cached_raw_;
     int look_generation_ = -1;
+    bool pin_top_ = false;
 };
 
 class DemandView {

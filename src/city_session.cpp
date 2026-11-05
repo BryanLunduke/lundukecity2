@@ -463,6 +463,29 @@ void CitySession::mark_dirty()
     }
 }
 
+void CitySession::set_dirty(bool on)
+{
+    dirty_ = on && ready_;
+}
+
+void CitySession::forget_blocked_build()
+{
+    if (message_ != "Cannot build here.") {
+        return;
+    }
+    message_.clear();
+    ++message_serial_;
+    notify();
+}
+
+void CitySession::end_tool_stroke()
+{
+    if (tool_stroke_placed_ > 0) {
+        forget_blocked_build();
+    }
+    tool_stroke_placed_ = 0;
+}
+
 bool CitySession::name_is_usable(const std::string &name)
 {
     return acceptable_city_name(name);
@@ -519,6 +542,11 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
                 (void)take_int();
             }
             const std::string text = message_for_number(number);
+            // Laying the next road tile re-touches the tile this stroke just
+            // placed. That failure is not a new mistake.
+            if (text == "Cannot build here." && tool_stroke_placed_ > 0) {
+                return;
+            }
             post_message(text);
             remember_notice(text, mx, my, has_place);
         }
@@ -1141,11 +1169,13 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
     if (!ready_) {
         return;
     }
+    tool_stroke_placed_ = 0;
     if (engine_tool == kSpecialEngineId) {
         return;
     }
     if (engine_tool == TOOL_BULLDOZER && bulldoze_special_at(&engine_->sim, tile_x, tile_y)) {
         dirty_ = true;
+        tool_stroke_placed_ = 1;
         notify();
         return;
     }
@@ -1153,6 +1183,8 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
                                                     static_cast<short>(tile_x), static_cast<short>(tile_y));
     if (result == TOOLRESULT_OK && engine_tool != TOOL_QUERY) {
         dirty_ = true;
+        tool_stroke_placed_ = 1;
+        forget_blocked_build();
     }
     notify();
 }
@@ -1162,6 +1194,7 @@ bool CitySession::place_special(int index, int tile_x, int tile_y)
     if (!ready_) {
         return false;
     }
+    tool_stroke_placed_ = 0;
     std::string error;
     if (!place_special_building(&engine_->sim, index, tile_x, tile_y, error)) {
         if (!error.empty()) {
@@ -1184,6 +1217,10 @@ void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, i
                                               static_cast<short>(to_x), static_cast<short>(to_y));
     if (placed) {
         dirty_ = true;
+        if (tool_stroke_placed_ < 100000) {
+            ++tool_stroke_placed_;
+        }
+        forget_blocked_build();
     }
     notify();
 }

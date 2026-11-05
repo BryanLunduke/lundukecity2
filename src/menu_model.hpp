@@ -515,6 +515,8 @@ public:
     int recent_count = 0;
     Action activated = Action::None;
     int activated_recent = -1;
+    // Keyboard menus wrap. A pad does not, so Up on New City cannot land on Quit.
+    bool wrap_rows = true;
 
     void close()
     {
@@ -594,7 +596,7 @@ public:
                 }
                 return true;
             }
-            cursor = step(open_menu, cursor, -1);
+            cursor = step(open_menu, cursor, -1, wrap_rows);
             return true;
         }
         if (key == AccelKey::Down) {
@@ -604,7 +606,7 @@ public:
                 }
                 return true;
             }
-            cursor = step(open_menu, cursor, +1);
+            cursor = step(open_menu, cursor, +1, wrap_rows);
             return true;
         }
         if (key == AccelKey::Return) {
@@ -685,12 +687,26 @@ private:
         return 0;
     }
 
-    static int step(int column, int from, int dir)
+    static int step(int column, int from, int dir, bool wrap)
     {
         const int count = menu_table::column_count(column);
         const MenuEntry *items = menu_table::column_items(column);
-        if (count <= 0) {
+        if (count <= 0 || items == nullptr) {
             return 0;
+        }
+        if (!wrap) {
+            int i = from;
+            for (int n = 0; n < count; ++n) {
+                const int next = i + dir;
+                if (next < 0 || next >= count) {
+                    return from;
+                }
+                i = next;
+                if (items[i].kind != ItemKind::Separator) {
+                    return i;
+                }
+            }
+            return from;
         }
         int i = from;
         for (int n = 0; n < count; ++n) {

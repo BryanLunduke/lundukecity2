@@ -613,13 +613,18 @@ void MapView::draw_footprint(cairo_t *cr) const
         cairo_set_line_width(cr, 1.0);
         cairo_stroke(cr);
     } else {
+        // Deck scale (16px and up) gets a dark band and a thicker white edge
+        // so the tile under the cursor reads at arm's length.
+        const bool deck_scale = tile_size_ >= 16;
+        const double halo = deck_scale ? 5.0 : 3.0;
+        const double ink = deck_scale ? 2.5 : 1.5;
         cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
-        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.90);
-        cairo_set_line_width(cr, 3.0);
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.92);
+        cairo_set_line_width(cr, halo);
         cairo_stroke(cr);
-        cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
-        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.95);
-        cairo_set_line_width(cr, 1.5);
+        cairo_rectangle(cr, x + 2.0, y + 2.0, w - 4.0, h - 4.0);
+        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.96);
+        cairo_set_line_width(cr, ink);
         cairo_stroke(cr);
     }
     cairo_restore(cr);

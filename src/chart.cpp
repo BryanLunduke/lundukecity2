@@ -173,7 +173,7 @@ std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale)
 }
 
 void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int width, int height, int enabled_mask,
-                        int pointer_x, std::string *readout)
+                        int pointer_x, std::string *readout, float ui_scale)
 {
     if (readout != nullptr) {
         readout->clear();
@@ -184,10 +184,19 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
     cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_rectangle(cr, 0, 0, width, height);
     cairo_fill(cr);
-    const int left = 108;
+    const float chart_scale = ui_scale > 0.05f ? ui_scale : 1.0f;
+    auto label_px = [&](double design) {
+        double px = design * static_cast<double>(chart_scale);
+        if (px < 12.0) {
+            px = 12.0;
+        }
+        return px;
+    };
+    const int axis_px = static_cast<int>(std::lround(label_px(10)));
+    const int left = std::max(108, axis_px * 8);
     const int right = 12;
-    const int top = 22;
-    const int bottom = 18;
+    const int top = std::max(22, axis_px + 8);
+    const int bottom = std::max(18, axis_px);
     const double plot_w = std::max(1, width - left - right);
     const double plot_h = std::max(1, height - top - bottom);
     const double plot_bottom = top + plot_h;
@@ -272,7 +281,7 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
             labeled = true;
             cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
             cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-            cairo_set_font_size(cr, 10);
+            cairo_set_font_size(cr, label_px(10));
             int enabled = 0;
             for (int mask_i = 0; mask_i < kGraphSeriesCount; ++mask_i) {
                 if ((enabled_mask & (1 << mask_i)) != 0) {
@@ -386,7 +395,7 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
         cairo_clip(cr);
         cairo_set_source_rgb(cr, 0.15, 0.15, 0.15);
         cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-        cairo_set_font_size(cr, 11);
+        cairo_set_font_size(cr, label_px(11));
         std::string shown = hover;
         const double limit = static_cast<double>(width) - 8.0;
         auto fits = [&](const std::string &text) {
@@ -395,7 +404,7 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
             return ext.x_advance <= limit;
         };
         if (!fits(shown)) {
-            cairo_set_font_size(cr, 9);
+            cairo_set_font_size(cr, label_px(9));
         }
         if (!fits(shown)) {
             const std::string dots = "...";
@@ -404,7 +413,7 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
             }
             shown += dots;
         }
-        cairo_move_to(cr, 4, 14);
+        cairo_move_to(cr, 4, label_px(11) + 3.0);
         cairo_show_text(cr, shown.c_str());
         cairo_restore(cr);
     }

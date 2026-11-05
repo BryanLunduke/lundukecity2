@@ -4,6 +4,8 @@
 
 #include "shell_state.hpp"
 
+#include "focus_ring.hpp"
+
 #include "assets.hpp"
 #include "city_glance.hpp"
 #include "city_seed.hpp"
@@ -52,6 +54,22 @@ const char *speed_word(int speed)
     default:
         return "Paused";
     }
+}
+
+void stroke_slider_focus(cairo_t *cr, int look, double x, double y, double w, double h)
+{
+    const SliderFocusRing ring = slider_focus_ring(look);
+    auto apply = [&](Rgb8 colour) {
+        cairo_set_source_rgb(cr, colour.r / 255.0, colour.g / 255.0, colour.b / 255.0);
+    };
+    apply(ring.outer);
+    cairo_set_line_width(cr, 3.5);
+    cairo_rectangle(cr, x, y, w, h);
+    cairo_stroke(cr);
+    apply(ring.inner);
+    cairo_set_line_width(cr, 1.5);
+    cairo_rectangle(cr, x + 1.0, y + 1.0, std::max(1.0, w - 2.0), std::max(1.0, h - 2.0));
+    cairo_stroke(cr);
 }
 
 // A second context on the same image surface, with its own transform.
@@ -353,7 +371,13 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     }
     const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - status_h_ - message_h_ - 6));
     const int label_h = measure_text(cr, menu_font(), "Ag", -1).height;
-    const menu_table::MenuPitch pitch = menu_table::menu_pitch(avail, n_item, n_sep, dp(36), label_h);
+    menu_table::MenuPitch pitch =
+        menu_table::menu_pitch(avail, n_item, n_sep, static_cast<double>(control_px(36, 48)), label_h);
+    if (deck_ || touch_used_) {
+        const double mark = std::min(pitch.row_h - 10.0, std::max(pitch.mark, 28.0));
+        pitch.mark = mark;
+        pitch.mark_dy = std::max(2.0, (pitch.row_h - mark) * 0.5);
+    }
     const double row_h = pitch.row_h;
     const double drop_w = dp(320);
     double content_h = 5;
@@ -542,8 +566,9 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             }
         }
         const double text_y = y + pitch.text_dy;
-        paint_mnemonic(cr, menu_font(), item.label, drop_x + 28, text_y, menu_.alt_shown, theme::kTextR,
-                       theme::kTextG, theme::kTextB);
+        const double text_x = (deck_ || touch_used_) ? drop_x + 12.0 + pitch.mark : drop_x + 28.0;
+        paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, theme::kTextR, theme::kTextG,
+                       theme::kTextB);
         if (item.kind == ItemKind::Submenu) {
             paint_text(cr, menu_font(), ">", drop_x + drop_w - dp(28), text_y, theme::kTextR, theme::kTextG,
                        theme::kTextB, -1);
@@ -627,7 +652,7 @@ void Shell::draw_dialog(cairo_t *cr)
     auto buttons_at = [&](double px, double pw, double by, const std::vector<std::pair<const char *, int>> &buttons,
                           int left_count = 0, int primary_id = -1) {
         const double gap = dp(8);
-        const double bh = dp(36);
+        const double bh = static_cast<double>(control_px(36, 44));
         const int count = static_cast<int>(buttons.size());
         left_count = std::max(0, std::min(left_count, count));
         std::vector<double> widths(static_cast<std::size_t>(count), dp(120));
@@ -1481,62 +1506,74 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::Settings) {
-        const double pitch = dp(64);
-        const double height = dp(40) + margin + pitch * 2 + dp(88) + dp(48) + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, band_h, dp(680), height, margin);
+        const double bh = static_cast<double>(control_px(36, 44));
+        const double switch_w = static_cast<double>(dp(148));
+        const double row_gap = static_cast<double>(dp(8));
+        const double block = static_cast<double>(dp(52));
+        const double rows = block * 2.0 + (bh + row_gap) * 3.0;
+        const double height = dp(40) + margin + rows + dp(8) + bh + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, dp(640), height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         frame_panel(cr, x, y, dw, panel.h, "Settings");
+        const double switch_x = x + dw - margin - switch_w;
         auto slider = [&](int index, const std::string &caption, const std::string &value_text, int value, int min,
-                          int max, double sy) {
-            paint_text(cr, bold_font(), caption, x + margin, sy, theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(dw - 2 * margin - dp(80)));
-            const TextMetrics value_metrics = measure_text(cr, bold_font(), value_text, -1);
-            paint_text(cr, bold_font(), value_text, x + dw - margin - value_metrics.width, sy, theme::kTextR,
-                       theme::kTextG, theme::kTextB, -1);
-            const double bar_y = sy + dp(28);
+                          int max, double sy, bool enabled) {
+            const double label_right = enabled ? dw - 2 * margin - dp(88) : dw - 2 * margin - switch_w - dp(12);
+            paint_text(cr, bold_font(), caption, x + margin, sy, enabled ? theme::kTextR : theme::kDisabledR,
+                       enabled ? theme::kTextG : theme::kDisabledG, enabled ? theme::kTextB : theme::kDisabledB,
+                       static_cast<int>(label_right));
+            if (enabled && !value_text.empty()) {
+                const TextMetrics value_metrics = measure_text(cr, bold_font(), value_text, -1);
+                paint_text(cr, bold_font(), value_text, x + dw - margin - value_metrics.width, sy, theme::kTextR,
+                           theme::kTextG, theme::kTextB, -1);
+            }
+            const double bar_y = sy + dp(24);
             const double sx = x + margin;
             const double sw = dw - 2 * margin;
+            if (!enabled) {
+                fill(cr, sx, bar_y, sw, dp(16), 0.86, 0.86, 0.86);
+                stroke_rect(cr, sx, bar_y, sw, dp(16), theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+                return;
+            }
             fill(cr, sx, bar_y, sw, dp(16), 1, 1, 1);
             const double t = (value - min) / static_cast<double>(std::max(1, max - min));
             fill(cr, sx, bar_y, sw * t, dp(16), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
             const double thumb = dp(14);
             fill(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), 1, 1, 1);
-            stroke_rect(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), theme::chrome_select_r(), theme::chrome_select_g(),
-                        theme::chrome_select_b());
+            stroke_rect(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), theme::chrome_select_r(),
+                        theme::chrome_select_g(), theme::chrome_select_b());
             stroke_rect(cr, sx, bar_y, sw, dp(16), theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
             const int id = kSlider + index;
             push_hot(sx, bar_y - dp(6), sw, dp(28), id);
             push_focus(id);
             next_sliders_.push_back(SliderGeom{id, sx, bar_y - dp(6), sw, static_cast<double>(dp(28)), min, max});
             if (focus_id_ == id) {
-                cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
-                cairo_set_line_width(cr, 2);
-                cairo_rectangle(cr, sx + 1, bar_y - dp(6), sw - 2, dp(32));
-                cairo_stroke(cr);
+                stroke_slider_focus(cr, drawn_look_, sx + 1, bar_y - dp(6), sw - 2, dp(32));
             }
+        };
+        auto switch_row = [&](const char *label, const char *state, int id, double sy) {
+            paint_text(cr, ui_font(), label, x + margin, sy + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(switch_x - x - margin - dp(8)));
+            button(cr, switch_x, sy, switch_w, bh, state, id, focus_id_ == id);
         };
         const bool scale_auto = scale_percent_ <= 0;
         const std::string scale_text = scale_auto ? "Auto" : std::to_string(scale_percent_) + "%";
-        slider(1, "Volume", std::to_string(volume_) + "%", volume_, 0, 100, y + dp(48));
-        if (!scale_auto) {
-            slider(2, "UI scale", scale_text, scale_percent_, 50, 200, y + dp(48) + pitch);
-        } else {
-            paint_text(cr, bold_font(), "UI scale", x + margin, y + dp(48) + pitch, theme::kDisabledR, theme::kDisabledG,
-                       theme::kDisabledB, static_cast<int>(dw - 2 * margin));
-            paint_text(cr, bold_font(), "Auto", x + dw - margin - dp(48), y + dp(48) + pitch, theme::kDisabledR,
-                       theme::kDisabledG, theme::kDisabledB, -1);
-            fill(cr, x + margin, y + dp(48) + pitch + dp(28), dw - 2 * margin, dp(16), 0.86, 0.86, 0.86);
-        }
-        const char *pause_label = pause_unfocused_ ? "Pause when unfocused: On" : "Pause when unfocused: Off";
-        const char *auto_label = scale_auto ? "Scale: Auto" : "Scale: Manual";
-        const char *wheel_label = wheel_zooms_ ? "Mouse wheel: Zoom" : "Mouse wheel: Scroll";
+        double sy = y + dp(48);
+        slider(1, "Volume", std::to_string(volume_) + "%", volume_, 0, 100, sy, true);
+        sy += block;
+        const std::string scale_caption = scale_auto ? "UI scale" : "UI scale  " + scale_text;
+        slider(2, scale_caption, "", scale_auto ? 100 : scale_percent_, 50, 200, sy, !scale_auto);
+        button(cr, switch_x, sy - dp(2), switch_w, bh, scale_auto ? "Auto" : "Manual", kScaleAuto, focus_id_ == kScaleAuto);
+        sy += block;
+        switch_row("Pause when unfocused", pause_unfocused_ ? "On" : "Off", kReset, sy);
+        sy += bh + row_gap;
+        switch_row("Mouse wheel", wheel_zooms_ ? "Zoom" : "Scroll", kWheelZoom, sy);
+        sy += bh + row_gap;
         const bool full = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
-        const char *full_label = full ? "Fullscreen: On" : "Fullscreen: Off";
-        buttons_at(x, dw, y + dp(48) + pitch * 2 + dp(4), {{auto_label, kScaleAuto}, {pause_label, kReset}});
-        buttons_at(x, dw, y + dp(48) + pitch * 2 + dp(48), {{wheel_label, kWheelZoom}, {full_label, kFullscreenBox}});
-        buttons_at(x, dw, y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_OK", kOk}});
+        switch_row("Fullscreen", full ? "On" : "Off", kFullscreenBox, sy);
+        buttons_at(x, dw, y + panel.h - margin - bh, {{"_Cancel", kCancel}, {"_OK", kOk}});
         return;
     }
     if (dialog_ == Dialog::Controls) {
@@ -1601,8 +1638,9 @@ void Shell::draw_dialog(cairo_t *cr)
             fill(cr, track_x, thumb_y, track_w, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         }
         const double footer_y = body_top + view_h + dp(4);
-        paint_text(cr, ui_font(), "Left and right change page.", panel.x + margin, footer_y, theme::kTextR,
-                   theme::kTextG, theme::kTextB, static_cast<int>(panel.w - 2 * margin));
+        const std::string page_line = controls_page_indicator(controls_page_) + "    Left and right change page.";
+        paint_text(cr, ui_font(), page_line, panel.x + margin, footer_y, theme::kTextR, theme::kTextG, theme::kTextB,
+                   static_cast<int>(panel.w - 2 * margin));
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - buttons_h, {{"_Close", kCancel}});
         return;
     }
@@ -1713,10 +1751,7 @@ void Shell::draw_dialog(cairo_t *cr)
             push_focus(id);
             next_sliders_.push_back(SliderGeom{id, sx, bar_y - dp(6), sw, static_cast<double>(dp(28)), min, max});
             if (focus_id_ == id) {
-                cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
-                cairo_set_line_width(cr, 2);
-                cairo_rectangle(cr, sx + 1, bar_y - dp(4), sw - 2, dp(24));
-                cairo_stroke(cr);
+                stroke_slider_focus(cr, drawn_look_, sx + 1, bar_y - dp(4), sw - 2, dp(24));
             }
             cursor += dp(16) + tail;
         };
@@ -1763,7 +1798,7 @@ void Shell::draw_dialog(cairo_t *cr)
             graph_chart_w_ = dw - 2 * margin;
             graph_chart_h_ = chart_h;
             draw_history_chart(live.cr, &session_, graphs_long_, static_cast<int>(dw - 2 * margin),
-                               static_cast<int>(chart_h), graph_mask_, graph_pointer_x_, &graph_readout_);
+                               static_cast<int>(chart_h), graph_mask_, graph_pointer_x_, &graph_readout_, ui_scale_);
         }
         const double col_w = (dw - 2 * margin) / legend_cols;
         for (int i = 0; i < static_cast<int>(legend.size()); ++i) {
@@ -1934,8 +1969,8 @@ void Shell::draw_dialog(cairo_t *cr)
               static_cast<int>(dw - 2 * margin));
         const auto &notes = session_.notices();
         const double list_top = y + dp(72);
-        const double buttons_y = y + dh - margin - dp(36);
-        const int row_px = dp(36);
+        const double buttons_y = y + dh - margin - static_cast<double>(control_px(36, 44));
+        const int row_px = control_px(36, 44);
         const int visible = std::max(1, static_cast<int>((buttons_y - dp(8) - list_top) / row_px));
         files_visible_ = visible;
         const int count = static_cast<int>(notes.size());
@@ -2086,11 +2121,48 @@ void Shell::draw(cairo_t *cr)
     }
     push_hot(side_x_, pal_y_, side_w_, ToolPalette::height_for(cell_, palette_.columns()), kPaletteId);
     if (mini_h_ > 0) {
-        TargetCr live(cr);
-        cairo_translate(live.cr, side_x_, mini_y_);
-        minimap_.sync();
-        minimap_.draw(live.cr, side_w_, mini_h_);
-        push_hot(side_x_, mini_y_, side_w_, mini_h_, kMinimapId);
+        minimap_.set_pin_top(false);
+        const AspectBox probe = minimap_.content_box(side_w_, mini_h_);
+        if (static_cast<double>(mini_h_) - probe.height >= 32.0) {
+            minimap_.set_pin_top(true);
+        }
+        const AspectBox land = minimap_.content_box(side_w_, mini_h_);
+        {
+            TargetCr live(cr);
+            cairo_translate(live.cr, side_x_, mini_y_);
+            minimap_.sync();
+            minimap_.draw(live.cr, side_w_, mini_h_);
+        }
+        push_hot(side_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
+        const double card_top = mini_y_ + land.y + land.height + 4.0;
+        const double card_bottom = static_cast<double>(mini_y_ + mini_h_);
+        if (card_bottom - card_top >= 28.0) {
+            const ToolDef *card_tool = tool_by_index(tool_index_);
+            std::string card_name = card_tool != nullptr ? card_tool->name : "Tool";
+            std::string card_cost;
+            if (card_tool != nullptr && card_tool->engine_id == kSpecialEngineId && special_choice_ >= 0 &&
+                special_choice_ < special_building_count()) {
+                const SpecialBuilding &building = special_building(special_choice_);
+                card_name = building.name;
+                card_cost = "$" + std::to_string(building.cost);
+            } else if (card_tool != nullptr && card_tool->cost > 0) {
+                card_cost = "$" + std::to_string(card_tool->cost);
+            } else {
+                card_cost = "No charge";
+            }
+            fill(cr, side_x_, card_top, side_w_, card_bottom - card_top, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
+            stroke_rect(cr, side_x_, card_top, side_w_, card_bottom - card_top, theme::kMenuFrameR, theme::kMenuFrameG,
+                        theme::kMenuFrameB);
+            paint_text(cr, bold_font(), card_name, side_x_ + 6, card_top + 4, theme::kTextR, theme::kTextG, theme::kTextB,
+                       side_w_ - 12);
+            paint_text(cr, ui_font(), card_cost, side_x_ + 6, card_top + dp(20), theme::kTextR, theme::kTextG, theme::kTextB,
+                       side_w_ - 12);
+            if ((gamepad_nav_ || deck_) && card_bottom - card_top >= 52.0) {
+                const std::string legend = std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " uses";
+                paint_text(cr, ui_font(), legend, side_x_ + 6, card_top + dp(36), theme::kAccelR, theme::kAccelG,
+                           theme::kAccelB, side_w_ - 12);
+            }
+        }
     }
     {
         TargetCr live(cr);
@@ -2179,6 +2251,13 @@ void Shell::draw(cairo_t *cr)
     const bool expired = !notice_sticky_ && (hint_until_.time_since_epoch().count() == 0 || now >= hint_until_);
     const NoticeDecision notice = decide_notice(session_.message_serial(), shown_message_serial_, expired, query_pinned_);
     std::string bar;
+    if (notice.show_notice && session_.message().empty() && !notice_sticky_) {
+        // A stroke that went on to build retracted "Cannot build here."
+        shown_message_serial_ = session_.message_serial();
+        shown_message_.clear();
+        hint_until_ = now;
+        query_pinned_ = false;
+    }
     if (notice_sticky_ && !shown_message_.empty()) {
         bar = shown_message_;
     } else if (notice.show_notice && !session_.message().empty()) {
@@ -2335,15 +2414,21 @@ void Shell::draw(cairo_t *cr)
             hx = snapped_map_origin(view_x_, map_ox_, scroll_x_) + map_.shake_x() + (tx + 0.5) * tile;
             hy = snapped_map_origin(view_y_, map_oy_, scroll_y_) + map_.shake_y() + (ty + 0.5) * tile;
         }
+        auto cross = [&](double width) {
+            cairo_set_line_width(cr, width);
+            cairo_move_to(cr, hx - arm, hy);
+            cairo_line_to(cr, hx + arm, hy);
+            cairo_move_to(cr, hx, hy - arm);
+            cairo_line_to(cr, hx, hy + arm);
+            cairo_stroke(cr);
+            cairo_arc(cr, hx, hy, radius, 0, 6.3);
+            cairo_stroke(cr);
+        };
+        // A dark halo keeps the orange cross visible on Classic dirt.
+        cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+        cross(tile <= kMapTileOverview ? 3.0 : 4.0);
         cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
-        cairo_set_line_width(cr, tile <= kMapTileOverview ? 1.0 : 2.0);
-        cairo_move_to(cr, hx - arm, hy);
-        cairo_line_to(cr, hx + arm, hy);
-        cairo_move_to(cr, hx, hy - arm);
-        cairo_line_to(cr, hx, hy + arm);
-        cairo_stroke(cr);
-        cairo_arc(cr, hx, hy, radius, 0, 6.3);
-        cairo_stroke(cr);
+        cross(tile <= kMapTileOverview ? 1.0 : 2.0);
     }
     // Drop-down last, above the map, palette, dialog, and gamepad cursor.
     draw_menu_dropdown(cr);
@@ -2362,10 +2447,7 @@ std::string Shell::dialog_title_hint() const
         if (field_backspace_would_delete(typed, field_caret_, field_anchor_)) {
             return b + " deletes";
         }
-        if (typed.empty()) {
-            return b + " closes";
-        }
-        return std::string();
+        return b + " back";
     };
     auto with_b = [&](const std::string &lead, const std::string &typed, const std::string &tail) {
         std::string line = lead;
@@ -2397,8 +2479,14 @@ std::string Shell::dialog_title_hint() const
         const std::string &typed = focus_id_ == kFieldSeed ? field_b_ : field_a_;
         return pad ? with_b(a + " types", typed, menu + " confirms") : "Type here    Enter confirms    Esc closes";
     }
+    if (focus_id_ >= kSlider && focus_id_ < kSlider + 8) {
+        const std::string left = glyph(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+        const std::string right = glyph(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        return pad ? "D-pad adjusts    " + left + "/" + right + " step    " + a + " confirms    " + b + " closes"
+                   : "Left and right adjust    Enter confirms    Esc closes";
+    }
     if (dialog_ == Dialog::Messages && session_.notices().empty()) {
-        return pad ? b + " closes" : "Esc closes";
+        return pad ? a + " closes    " + b + " closes" : "Enter closes    Esc closes";
     }
     if (dialog_ == Dialog::Messages) {
         return pad ? a + " jumps    " + b + " closes    D-pad moves" : "Enter jumps    Esc closes";
@@ -2406,16 +2494,19 @@ std::string Shell::dialog_title_hint() const
     if (dialog_ == Dialog::Scenario || dialog_ == Dialog::Files) {
         return pad ? a + " opens    " + b + " closes    D-pad moves" : "Enter opens    Esc closes";
     }
+    if (dialog_ == Dialog::Controls) {
+        return pad ? a + " closes    " + b + " closes    D-pad pages" : "Enter closes    Left and right change page";
+    }
     // Graphs, Evaluation, Query, About, and the one-button notices have
-    // nothing to confirm. Enter dismisses them.
+    // nothing to confirm. Enter dismisses them. B always has a way out.
     const bool closes = dialog_ == Dialog::Graphs || dialog_ == Dialog::Evaluation || dialog_ == Dialog::Query ||
                         dialog_ == Dialog::About || dialog_ == Dialog::Info || dialog_ == Dialog::LoadError ||
-                        dialog_ == Dialog::SaveError || dialog_ == Dialog::Controls || dialog_ == Dialog::HowToPlay;
+                        dialog_ == Dialog::SaveError || dialog_ == Dialog::HowToPlay;
     if (closes) {
-        return pad ? a + " closes" : "Enter closes";
+        return pad ? a + " closes    " + b + " closes" : "Enter closes    Esc closes";
     }
     if (focus_id_ == kCancel) {
-        return pad ? a + " cancels" : "Enter cancels";
+        return pad ? a + " cancels    " + b + " closes" : "Enter cancels    Esc closes";
     }
     if (dialog_ == Dialog::NewCity && new_page_ > 0) {
         return pad ? a + " confirms    " + b + " goes back" : "Enter confirms    Esc goes back";
@@ -2433,7 +2524,7 @@ std::string Shell::context_hint() const
     const std::string right = glyph(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
     const std::string menu = glyph(SDL_GAMEPAD_BUTTON_START);
     if (menu_.open()) {
-        return pad ? a + " chooses    " + b + " closes" : "Enter chooses    Esc closes";
+        return pad ? a + " chooses    " + b + " closes    D-pad moves" : "Enter chooses    Esc closes";
     }
     if (dialog_ != Dialog::None) {
         // Pad players read this in the title bar. Mouse players read it here.
@@ -2452,6 +2543,19 @@ std::string Shell::context_hint() const
                    : std::string(tool_click_phrase(engine)) + "    Esc closes the map";
     }
     if (pad) {
+        const int under = hit(cursor_x_, cursor_y_);
+        if (under == kPaletteId) {
+            return "Tools: " + a + " selects    " + left + "/" + right + " cycle    " + menu + " menu";
+        }
+        if (under == kMinimapId) {
+            return "Minimap: " + a + " jumps    D-pad scrolls    " + menu + " menu";
+        }
+        if (under >= kMenuTitle && under < kMenuTitle + 8) {
+            return a + " opens the menu    " + b + " back";
+        }
+        if (cursor_y_ < static_cast<float>(menu_h_) || cursor_x_ < static_cast<float>(view_x_)) {
+            return "Pointing at the panel. " + a + " uses it    " + menu + " menu";
+        }
         return tool_press_phrase(engine, a.c_str()) + "    " + b + " back    " + left + "/" + right + " tool    " +
                menu + " menu";
     }

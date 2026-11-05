@@ -15,6 +15,7 @@
 #include "tile_atlas.hpp"
 #include "version.hpp"
 #include "ui_scale.hpp"
+#include "tools.hpp"
 
 #include <csignal>
 #include <cstring>
@@ -80,6 +81,7 @@ void Shell::run_review_checks()
         return;
     }
     const int opened_tax = open_tax_;
+    const bool dirty_before = session_.dirty();
     tax_ = opened_tax + 5 > 20 ? 20 : opened_tax + 5;
     session_.set_tax(tax_);
     on_dialog_button(kCancel);
@@ -87,6 +89,124 @@ void Shell::run_review_checks()
         fail("budget cancel kept tax " + std::to_string(session_.tax()) + " opened at " + std::to_string(opened_tax));
         return;
     }
+    if (session_.dirty() != dirty_before) {
+        fail("cancelling Budget changed whether the city is unsaved");
+        return;
+    }
+    files_save_ = true;
+    dialog_ = Dialog::Files;
+    field_a_ = ".cty";
+    field_caret_ = 0;
+    field_anchor_ = 0;
+    focus_id_ = kFieldName;
+    {
+        SDL_Event back{};
+        back.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+        back.gbutton.button = SDL_GAMEPAD_BUTTON_EAST;
+        back.gbutton.down = true;
+        handle_event(back);
+    }
+    if (dialog_ != Dialog::Files || field_a_ != ".cty") {
+        fail("B on a Save name that cannot be deleted closed the dialog");
+        return;
+    }
+    if (focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64)) {
+        fail("B on a Save name that cannot be deleted left the caret trapped");
+        return;
+    }
+    dialog_ = Dialog::None;
+
+    // Extending a road from its last tile must not keep "Cannot build here."
+    {
+        int rx = -1;
+        int ry = -1;
+        for (int y = 2; y < CitySession::kWorldH - 2 && rx < 0; ++y) {
+            for (int x = 2; x < CitySession::kWorldW - 6; ++x) {
+                bool open = true;
+                for (int i = 0; i < 5; ++i) {
+                    if ((session_.map_value(x + i, y) & 0x03ff) != 0) {
+                        open = false;
+                        break;
+                    }
+                }
+                if (open) {
+                    rx = x;
+                    ry = y;
+                    break;
+                }
+            }
+        }
+        if (rx < 0) {
+            fail("no clear land for the road-end drag");
+            return;
+        }
+        const int road = tool_by_index(1)->engine_id;
+        session_.use_tool(road, rx + 3, ry);
+        session_.end_tool_stroke();
+        const auto before = session_.funds();
+        session_.use_tool(road, rx + 3, ry);
+        if (session_.message() != "Cannot build here.") {
+            fail("starting on an existing road did not report the block");
+            return;
+        }
+        session_.drag_tool(road, rx + 3, ry, rx, ry);
+        session_.end_tool_stroke();
+        if (session_.funds() != before - 30) {
+            fail("dragging off the end of a road did not lay three tiles");
+            return;
+        }
+        if (session_.message() == "Cannot build here.") {
+            fail("a road that was built still says Cannot build here");
+            return;
+        }
+        render();
+        if (shown_message_ == "Cannot build here.") {
+            fail("the status line kept Cannot build here after the road was built");
+            return;
+        }
+        session_.use_tool(road, rx + 3, ry);
+        if (session_.message() != "Cannot build here.") {
+            fail("a blocked tile with nothing new built stayed silent");
+            return;
+        }
+        session_.end_tool_stroke();
+    }
+
+    const bool pause_was = pause_unfocused_;
+    open_dialog(Dialog::Settings);
+    focus_id_ = kReset;
+    {
+        SDL_Event start{};
+        start.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+        start.gbutton.button = SDL_GAMEPAD_BUTTON_START;
+        start.gbutton.down = true;
+        handle_event(start);
+    }
+    if (pause_unfocused_ != pause_was) {
+        fail("Start toggled the focused Pause when unfocused switch");
+        return;
+    }
+    if (dialog_ != Dialog::None) {
+        fail("Start did not confirm Settings");
+        return;
+    }
+    open_dialog(Dialog::Graphs);
+    {
+        SDL_Event start{};
+        start.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+        start.gbutton.button = SDL_GAMEPAD_BUTTON_START;
+        start.gbutton.down = true;
+        handle_event(start);
+    }
+    if (dialog_ != Dialog::Graphs) {
+        fail("Start closed a dialog that has no OK");
+        return;
+    }
+    if (dialog_title_hint().find("confirms") != std::string::npos) {
+        fail("a close-only dialog promises Start or A confirms");
+        return;
+    }
+    close_dialog();
 
     // H2: Save from the unsaved prompt on a city with no file must keep the
     // action that was waiting (Quit, New City, Load, ...).
@@ -1032,6 +1152,8 @@ void Shell::run_review_checks()
                 continue;
             }
             finger(SDL_EVENT_FINGER_DOWN, 1, wx, wy);
+            // A plain drag pans. Holding still, then dragging, lays the line.
+            touch_down_ticks_ = SDL_GetTicks() - 400;
             finger(SDL_EVENT_FINGER_MOTION, 1, far_x, far_y);
             if (session_.funds() >= after_prior) {
                 finger(SDL_EVENT_FINGER_UP, 1, far_x, far_y);
