@@ -536,17 +536,28 @@ void Shell::note_background_hold()
             // the preference. The resume below goes through set_speed.
             speed_ = 0;
             session_.set_speed(0);
+            if (unfocused_ && pause_unfocused_ && !notice_sticky_) {
+                shown_message_ = "Paused because the window is not focused.";
+                shown_message_serial_ = session_.message_serial();
+                hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+            }
         }
         return;
     }
     if (!background_held_) {
         return;
     }
+    const bool told = shown_message_ == "Paused because the window is not focused.";
     background_held_ = false;
     const int resume = background_speed_;
     background_speed_ = 0;
     const int keep_speed = pref_speed_;
     set_speed(resume);
+    if (told && resume > 0 && !notice_sticky_) {
+        shown_message_ = "Window focused. Resumed.";
+        shown_message_serial_ = session_.message_serial();
+        hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    }
     // A covered load resumes at the city's speed. That is this session's
     // clock. The preference written to settings.txt stays the player's.
     if (keep_speed >= 0) {

@@ -4,6 +4,8 @@
 
 #include "shell_state.hpp"
 
+#include "pad_glyphs.hpp"
+
 #include "atomic_write.hpp"
 #include "city_seed.hpp"
 #include "file_list.hpp"
@@ -322,13 +324,9 @@ void Shell::toggle_pause()
 
 void Shell::cycle_speed()
 {
-    if (speed_ <= 0) {
+    // Held Y changes speed only. Pause stays on a tap of Y.
+    if (speed_ < 1 || speed_ >= 3) {
         set_speed(1);
-        return;
-    }
-    if (speed_ >= 3) {
-        paused_from_ = speed_;
-        set_speed(0);
         return;
     }
     set_speed(speed_ + 1);
@@ -697,9 +695,10 @@ void Shell::service_gamepad(int elapsed_ms)
     }
     if (y_hold_fresh_) {
         // The frame that saw the press may include a long idle wait. That
-        // time is not part of the hold.
+        // time is not part of the hold. The up event clears the hold, so this
+        // does not depend on the pad driver repeating the button.
         y_hold_fresh_ = false;
-    } else if (y_hold_ && pad_ != nullptr && SDL_GetGamepadButton(pad_, SDL_GAMEPAD_BUTTON_NORTH)) {
+    } else if (y_hold_) {
         y_hold_ms_ += elapsed_ms;
         if (!y_hold_fired_ && y_hold_ms_ >= pad_feel::kSpeedHoldMs && dialog_ == Dialog::None && !menu_.open()) {
             cycle_speed();
@@ -2521,21 +2520,43 @@ void Shell::note_controller_connected()
     hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(3);
 }
 
+int Shell::dialog_accept_id() const
+{
+    // The affirmative button, not whatever happens to be focused. Dialogs
+    // whose safe default is Cancel have none, so Start does not press it.
+    switch (dialog_) {
+    case Dialog::Budget:
+        return budget_is_tax_ ? kCollect : kOk;
+    case Dialog::Settings:
+        return kOk;
+    case Dialog::NewCity:
+        return new_page_ == 0 ? kNext : kGenerate;
+    case Dialog::Rename:
+        return kRename;
+    case Dialog::Files:
+        return files_save_ ? kSave : (files_.empty() ? 0 : kOk);
+    case Dialog::Welcome:
+        return kWelcomeNew;
+    case Dialog::Scenario:
+        return kPlay;
+    case Dialog::Unsaved:
+        return kSave;
+    case Dialog::Outcome:
+        return kKeep;
+    case Dialog::Recovery:
+        return city_chosen_ ? 0 : kRecover;
+    default:
+        return 0;
+    }
+}
+
 void Shell::activate_dialog_start()
 {
-    if (dialog_ == Dialog::Budget) {
-        if (is_dialog_button(focus_id_)) {
-            on_dialog_button(focus_id_);
-            return;
-        }
-        on_dialog_button(budget_is_tax_ ? kCollect : kOk);
+    const int accept = dialog_accept_id();
+    if (accept == 0) {
         return;
     }
-    if (is_dialog_button(focus_id_)) {
-        on_dialog_button(focus_id_);
-        return;
-    }
-    activate_focus();
+    on_dialog_button(accept);
 }
 
 void Shell::move_focus(int delta, bool wrap)
@@ -2912,48 +2933,35 @@ void SDLCALL Shell::file_callback(void *userdata, const char *const *filelist, i
 
 const char *Shell::glyph(SDL_GamepadButton button) const
 {
-    bool playstation = false;
-    if (!deck_ && pad_ != nullptr) {
-        const SDL_GamepadType type = SDL_GetGamepadType(pad_);
-        if (type == SDL_GAMEPAD_TYPE_PS3 || type == SDL_GAMEPAD_TYPE_PS4 || type == SDL_GAMEPAD_TYPE_PS5 ||
-            SDL_GetGamepadButtonLabel(pad_, SDL_GAMEPAD_BUTTON_SOUTH) == SDL_GAMEPAD_BUTTON_LABEL_CROSS) {
-            playstation = true;
-        }
+    int type = SDL_GAMEPAD_TYPE_UNKNOWN;
+    int south = SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN;
+    if (pad_ != nullptr) {
+        type = SDL_GetGamepadType(pad_);
+        south = SDL_GetGamepadButtonLabel(pad_, SDL_GAMEPAD_BUTTON_SOUTH);
     }
-    const bool xbox = !deck_ && !playstation;
+    const bool playstation = pad_ != nullptr && pad_is_playstation(type, south);
+    const FaceGlyphs glyphs = face_glyphs(playstation, deck_, type);
     switch (button) {
     case SDL_GAMEPAD_BUTTON_SOUTH:
-        return playstation ? "\u2715" : "A";
+        return glyphs.south;
     case SDL_GAMEPAD_BUTTON_EAST:
-        return playstation ? "\u25CB" : "B";
+        return glyphs.east;
     case SDL_GAMEPAD_BUTTON_WEST:
-        return playstation ? "\u25A1" : "X";
+        return glyphs.west;
     case SDL_GAMEPAD_BUTTON_NORTH:
-        return playstation ? "\u25B3" : "Y";
+        return glyphs.north;
     case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
-        return xbox ? "LB" : "L1";
+        return glyphs.left;
     case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
-        return xbox ? "RB" : "R1";
+        return glyphs.right;
     case SDL_GAMEPAD_BUTTON_START:
-        if (deck_) {
-            return "\u2630";
-        }
-        return playstation ? "Options" : "Start";
+        return glyphs.menu;
     case SDL_GAMEPAD_BUTTON_BACK:
-        if (deck_) {
-            return "View";
-        }
-        if (playstation) {
-            if (pad_ != nullptr && SDL_GetGamepadType(pad_) == SDL_GAMEPAD_TYPE_PS5) {
-                return "Create";
-            }
-            return "Share";
-        }
-        return "Back";
+        return glyphs.view;
     case SDL_GAMEPAD_BUTTON_LEFT_STICK:
-        return xbox ? "LS" : "L3";
+        return glyphs.l3;
     case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
-        return xbox ? "RS" : "R3";
+        return glyphs.r3;
     default:
         return "";
     }

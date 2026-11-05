@@ -4,6 +4,8 @@
 
 #include "shell_state.hpp"
 
+#include "focus_ring.hpp"
+
 #include "assets.hpp"
 #include "city_glance.hpp"
 #include "city_seed.hpp"
@@ -52,6 +54,22 @@ const char *speed_word(int speed)
     default:
         return "Paused";
     }
+}
+
+void stroke_slider_focus(cairo_t *cr, int look, double x, double y, double w, double h)
+{
+    const SliderFocusRing ring = slider_focus_ring(look);
+    auto apply = [&](Rgb8 colour) {
+        cairo_set_source_rgb(cr, colour.r / 255.0, colour.g / 255.0, colour.b / 255.0);
+    };
+    apply(ring.outer);
+    cairo_set_line_width(cr, 3.5);
+    cairo_rectangle(cr, x, y, w, h);
+    cairo_stroke(cr);
+    apply(ring.inner);
+    cairo_set_line_width(cr, 1.5);
+    cairo_rectangle(cr, x + 1.0, y + 1.0, std::max(1.0, w - 2.0), std::max(1.0, h - 2.0));
+    cairo_stroke(cr);
 }
 
 // A second context on the same image surface, with its own transform.
@@ -1532,15 +1550,7 @@ void Shell::draw_dialog(cairo_t *cr)
             push_focus(id);
             next_sliders_.push_back(SliderGeom{id, sx, bar_y - dp(6), sw, static_cast<double>(dp(28)), min, max});
             if (focus_id_ == id) {
-                if (drawn_look_ == 2) {
-                    cairo_set_source_rgb(cr, 1, 1, 1);
-                    cairo_set_line_width(cr, 3);
-                } else {
-                    cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
-                    cairo_set_line_width(cr, 2);
-                }
-                cairo_rectangle(cr, sx + 1, bar_y - dp(6), sw - 2, dp(32));
-                cairo_stroke(cr);
+                stroke_slider_focus(cr, drawn_look_, sx + 1, bar_y - dp(6), sw - 2, dp(32));
             }
         };
         auto switch_row = [&](const char *label, const char *state, int id, double sy) {
@@ -1741,15 +1751,7 @@ void Shell::draw_dialog(cairo_t *cr)
             push_focus(id);
             next_sliders_.push_back(SliderGeom{id, sx, bar_y - dp(6), sw, static_cast<double>(dp(28)), min, max});
             if (focus_id_ == id) {
-                if (drawn_look_ == 2) {
-                    cairo_set_source_rgb(cr, 1, 1, 1);
-                    cairo_set_line_width(cr, 3);
-                } else {
-                    cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
-                    cairo_set_line_width(cr, 2);
-                }
-                cairo_rectangle(cr, sx + 1, bar_y - dp(4), sw - 2, dp(24));
-                cairo_stroke(cr);
+                stroke_slider_focus(cr, drawn_look_, sx + 1, bar_y - dp(4), sw - 2, dp(24));
             }
             cursor += dp(16) + tail;
         };
@@ -2249,6 +2251,13 @@ void Shell::draw(cairo_t *cr)
     const bool expired = !notice_sticky_ && (hint_until_.time_since_epoch().count() == 0 || now >= hint_until_);
     const NoticeDecision notice = decide_notice(session_.message_serial(), shown_message_serial_, expired, query_pinned_);
     std::string bar;
+    if (notice.show_notice && session_.message().empty() && !notice_sticky_) {
+        // A stroke that went on to build retracted "Cannot build here."
+        shown_message_serial_ = session_.message_serial();
+        shown_message_.clear();
+        hint_until_ = now;
+        query_pinned_ = false;
+    }
     if (notice_sticky_ && !shown_message_.empty()) {
         bar = shown_message_;
     } else if (notice.show_notice && !session_.message().empty()) {

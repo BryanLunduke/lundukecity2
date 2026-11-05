@@ -29,13 +29,17 @@
 #include "tool_palette.hpp"
 #include "tools.hpp"
 #include "ui_scale.hpp"
+#include "focus_ring.hpp"
+#include "pad_glyphs.hpp"
 
 #include <cairo.h>
 
 #include "micropolis.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -517,6 +521,50 @@ int main()
     }
     if (kMaxVoices != 8 || kSoundCooldownMs != 80 || kAudioIdleCloseMs < 1000 || kMaxCityBytes < 27120) {
         return fail(39, "audio or city size limits moved");
+    }
+    {
+        auto channel = [](int component) {
+            const double s = component / 255.0;
+            return s <= 0.04045 ? s / 12.92 : std::pow((s + 0.055) / 1.055, 2.4);
+        };
+        auto luminance = [&](Rgb8 colour) {
+            return 0.2126 * channel(colour.r) + 0.7152 * channel(colour.g) + 0.0722 * channel(colour.b);
+        };
+        auto contrast = [&](Rgb8 a, Rgb8 b) {
+            double left = luminance(a);
+            double right = luminance(b);
+            if (left < right) {
+                std::swap(left, right);
+            }
+            return (left + 0.05) / (right + 0.05);
+        };
+        const Rgb8 body = dialog_body_rgb();
+        for (int look = 0; look < 3; ++look) {
+            const SliderFocusRing ring = slider_focus_ring(look);
+            const Rgb8 fill = slider_fill_rgb(look);
+            const double against_body = std::max(contrast(ring.outer, body), contrast(ring.inner, body));
+            const double against_fill = std::max(contrast(ring.outer, fill), contrast(ring.inner, fill));
+            if (against_body < 3.0 || against_fill < 3.0) {
+                std::fprintf(stderr, "look %d body %.2f fill %.2f\n", look, against_body, against_fill);
+                return fail(44, "the slider focus ring is below 3:1 on the dialog or the fill");
+            }
+        }
+        const SliderFocusRing spooky = slider_focus_ring(2);
+        if (spooky.outer.r > 40 || spooky.outer.g > 40 || spooky.outer.b > 40) {
+            return fail(44, "the Spooky focus ring has no dark outer stroke");
+        }
+        const FaceGlyphs playstation =
+            face_glyphs(pad_is_playstation(SDL_GAMEPAD_TYPE_PS5, SDL_GAMEPAD_BUTTON_LABEL_A), true, SDL_GAMEPAD_TYPE_PS5);
+        const FaceGlyphs by_label =
+            face_glyphs(pad_is_playstation(SDL_GAMEPAD_TYPE_UNKNOWN, SDL_GAMEPAD_BUTTON_LABEL_CROSS), true,
+                        SDL_GAMEPAD_TYPE_UNKNOWN);
+        const FaceGlyphs deck_xbox = face_glyphs(false, true, SDL_GAMEPAD_TYPE_XBOXONE);
+        if (std::strcmp(playstation.south, "A") == 0 || std::strcmp(playstation.menu, "Options") != 0 ||
+            std::strcmp(playstation.left, "L1") != 0 || std::strcmp(playstation.view, "Create") != 0 ||
+            std::strcmp(by_label.south, "A") == 0 || std::strcmp(deck_xbox.south, "A") != 0 ||
+            std::strcmp(deck_xbox.left, "L1") != 0) {
+            return fail(45, "a PlayStation pad on a Deck still uses Xbox face glyphs");
+        }
     }
 
     std::filesystem::remove(city_path);

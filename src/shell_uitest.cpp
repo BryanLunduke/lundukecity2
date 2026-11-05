@@ -163,6 +163,9 @@ void Shell::forget_gamepad(SDL_JoystickID id)
         stick_y_ = 0;
         pan_x_ = 0;
         pan_y_ = 0;
+        y_hold_ = false;
+        y_hold_fresh_ = false;
+        y_hold_fired_ = false;
         raw_lx_ = 0;
         raw_ly_ = 0;
         raw_rx_ = 0;
@@ -1489,6 +1492,31 @@ void Shell::drive_ui_test()
         }
         if (speed_ != speed_was) {
             fail("Y did not resume the previous speed");
+            return;
+        }
+        set_speed(3);
+        {
+            SDL_Event down{};
+            down.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+            down.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+            down.gbutton.down = true;
+            handle_event(down);
+        }
+        service_gamepad(16);
+        service_gamepad(520);
+        if (speed_ != 1) {
+            fail("holding Y from Fast went to speed " + std::to_string(speed_) + " instead of Slow");
+            return;
+        }
+        {
+            SDL_Event up{};
+            up.type = SDL_EVENT_GAMEPAD_BUTTON_UP;
+            up.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+            up.gbutton.down = false;
+            handle_event(up);
+        }
+        if (speed_ != 1) {
+            fail("releasing a held Y changed the speed");
             return;
         }
         set_speed(0);

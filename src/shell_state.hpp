@@ -209,6 +209,7 @@ private:
     void note_speed_feedback();
     void note_controller_connected();
     void activate_dialog_start();
+    int dialog_accept_id() const;
     int control_px(int design, int floor) const;
     // Up/Down on the on-screen keyboard. Returns false when focus is not a key.
     // The bottom row steps out to the control under the keyboard.

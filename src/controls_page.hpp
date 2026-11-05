@@ -157,9 +157,9 @@ inline std::string controls_page_body(int page, bool deck, const ControlsPadName
         body += pad.north;
         body += " pauses and resumes the previous speed. Hold ";
         body += pad.north;
-        body += " to change speed. On the on-screen keyboard it types a space. On the land page it draws new terrain.\n";
+        body += " to cycle slow, medium, and fast. On the on-screen keyboard it types a space. On the land page it draws new terrain.\n";
         body += pad.menu;
-        body += " opens the menu, and confirms the highlighted button in a window. On a field or a keyboard key, ";
+        body += " opens the menu. In a window it confirms OK when that window has one. On a field or a keyboard key, ";
         body += pad.menu;
         body += " confirms that page.\n";
         body += "The left stick moves the cursor. The D-pad moves one step, then repeats while held. It scrolls a list, adjusts a slider, or pans the map.\n";

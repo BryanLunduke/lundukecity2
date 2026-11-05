@@ -468,8 +468,21 @@ void CitySession::set_dirty(bool on)
     dirty_ = on && ready_;
 }
 
+void CitySession::forget_blocked_build()
+{
+    if (message_ != "Cannot build here.") {
+        return;
+    }
+    message_.clear();
+    ++message_serial_;
+    notify();
+}
+
 void CitySession::end_tool_stroke()
 {
+    if (tool_stroke_placed_ > 0) {
+        forget_blocked_build();
+    }
     tool_stroke_placed_ = 0;
 }
 
@@ -1171,6 +1184,7 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
     if (result == TOOLRESULT_OK && engine_tool != TOOL_QUERY) {
         dirty_ = true;
         tool_stroke_placed_ = 1;
+        forget_blocked_build();
     }
     notify();
 }
@@ -1206,6 +1220,7 @@ void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, i
         if (tool_stroke_placed_ < 100000) {
             ++tool_stroke_placed_;
         }
+        forget_blocked_build();
     }
     notify();
 }

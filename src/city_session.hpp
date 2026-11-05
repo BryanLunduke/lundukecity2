@@ -235,6 +235,8 @@ public:
     // A stroke ends when the button lifts. "Cannot build here" during a
     // stroke that already placed a tile is the drag touching its own road.
     void end_tool_stroke();
+    // A stroke that placed a tile must not keep "Cannot build here."
+    void forget_blocked_build();
     bool time_advanced_since_save() const;
     long long city_time() const;
     // Tile the engine asked the view to center on (auto-goto).
