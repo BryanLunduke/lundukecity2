@@ -2507,10 +2507,16 @@ void Shell::draw(cairo_t *cr)
         cairo_clip(live.cr);
         cairo_translate(live.cr, snapped_map_origin(view_x_, map_ox_, scroll_x_),
                         snapped_map_origin(view_y_, map_oy_, scroll_y_));
-        if (gamepad_nav_ && !pad_dragging_ && !map_.dragging() && dialog_ == Dialog::None && !menu_.open()) {
-            // The footprint outlines the target tile before A is pressed.
-            // The motion updates the tile. It does not move the pointer.
-            map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
+        if (!map_.dragging() && dialog_ == Dialog::None && !menu_.open()) {
+            // The footprint follows the pointer before the button goes down,
+            // including while the city is paused. Motion updates the tile
+            // under the cursor. It does not move the pointer.
+            if (gamepad_nav_ && !pad_dragging_) {
+                map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
+            } else if (!gamepad_nav_ && !pointer_down_ && pointer_x_ >= view_x_ &&
+                       pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ && pointer_y_ < view_y_ + view_h_) {
+                map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), false);
+            }
         }
         refresh_place_cue();
         map_.sync();

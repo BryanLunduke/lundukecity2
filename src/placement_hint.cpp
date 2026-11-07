@@ -584,7 +584,17 @@ PlaceForecast finish_forecast(const Attempt &attempt, long long funds)
     } else if (attempt.outcome == Outcome::Caution) {
         forecast.tag = attempt.reason;
     } else {
-        forecast.tag = attempt.reason;
+        forecast.tag = attempt.reason != nullptr ? attempt.reason : "";
+    }
+    // Auto-bulldoze adds a dollar the canned label does not mention.
+    if (attempt.outcome == Outcome::Ok && attempt.cost > 0) {
+        const std::string billed = money(attempt.cost);
+        if (forecast.tag.find('$') != std::string::npos && forecast.tag.find(billed) == std::string::npos) {
+            const auto space = forecast.tag.rfind(' ');
+            if (space != std::string::npos) {
+                forecast.tag = forecast.tag.substr(0, space + 1) + billed;
+            }
+        }
     }
     return forecast;
 }

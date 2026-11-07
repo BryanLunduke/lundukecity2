@@ -940,13 +940,22 @@ void Micropolis::collectTax()
         if (totalPop > 0) {
             /* There are people to tax. */
             cashFlow = (Quad)taxFund - ((Quad)policeFund + (Quad)fireFund + (Quad)roadFund);
-            doBudget();
         } else {
-            /* Nobody lives here. */
+            /* Nobody lives here. Service coverage stays full until they do.
+             * cashFlow stays 0: an empty January is not a 16-bit history sample.
+             */
             roadEffect   = MAX_ROAD_EFFECT;
             policeEffect = MAX_POLICE_STATION_EFFECT;
             fireEffect   = MAX_FIRE_STATION_EFFECT;
         }
+        // Every January waits on the year-end window, including a city with
+        // no residents and a tax of $0. Auto budget still applies at once when
+        // doBudgetNow is called directly; the tax year itself is the cover
+        // the player sees before the sliders.
+        const bool savedAuto = autoBudget;
+        autoBudget = false;
+        doBudget();
+        autoBudget = savedAuto;
     }
 
     // Special buildings do not pay income. The table still has an

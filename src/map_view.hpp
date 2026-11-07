@@ -64,6 +64,7 @@ public:
     // Tile where the current stroke began. Valid while dragging().
     bool stroke_origin(int &tx, int &ty) const;
     void set_cue(const MapCue &cue);
+    const MapCue &cue() const { return cue_; }
 
     void set_tile_size(int pixels);
     void set_shake(int dx, int dy);

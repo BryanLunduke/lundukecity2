@@ -74,6 +74,56 @@ int main()
         return fail("the receipt should shorten the bulldoze sentence");
     }
 
+    {
+        Micropolis sim;
+        sim.generateSomeCity(3);
+        sim.setFunds(50000);
+        sim.autoBulldoze = true;
+        bool bridged = false;
+        for (int y = 1; y < 99 && !bridged; ++y) {
+            for (int x = 1; x < 119 && !bridged; ++x) {
+                const int tile = sim.map[x][y] & LOMASK;
+                if (tile != RIVER && tile != REDGE && tile != CHANNEL) {
+                    continue;
+                }
+                const int near[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                for (int n = 0; n < 4; ++n) {
+                    const int lx = x + near[n][0];
+                    const int ly = y + near[n][1];
+                    if (sim.doTool(TOOL_ROAD, static_cast<short>(lx), static_cast<short>(ly)) != TOOLRESULT_OK) {
+                        continue;
+                    }
+                    auto at = [&](int tx, int ty) { return static_cast<int>(sim.map[tx][ty]); };
+                    const PlaceForecast hint = forecast_tile(TOOL_ROAD, x, y, -1, sim.totalFunds, true, at);
+                    const long before = static_cast<long>(sim.totalFunds);
+                    const ToolResult built = sim.doTool(TOOL_ROAD, static_cast<short>(x), static_cast<short>(y));
+                    const long spent = before - static_cast<long>(sim.totalFunds);
+                    if (built != TOOLRESULT_OK || hint.mark != PlaceMark::Caution || hint.tag != "Water: bridge cost" ||
+                        hint.cost != 50 || spent != 50) {
+                        std::fprintf(stderr, "hint %d '%s' cost %d built %d spent %ld\n", static_cast<int>(hint.mark),
+                                     hint.tag.c_str(), hint.cost, static_cast<int>(built), spent);
+                        return fail("a road touching water did not preview the bridge cost");
+                    }
+                    bridged = true;
+                    break;
+                }
+            }
+        }
+        if (!bridged) {
+            return fail("no shoreline accepted a bridge, so the preview could not be checked");
+        }
+        Micropolis empty;
+        empty.generateSomeCity(9);
+        empty.autoBudget = true;
+        empty.totalPop = 0;
+        empty.setFunds(20000);
+        const long empty_before = static_cast<long>(empty.totalFunds);
+        empty.collectTax();
+        if (!empty.budgetAwaitingAccept || static_cast<long>(empty.totalFunds) != empty_before) {
+            return fail("an empty January did not wait on the year-end window");
+        }
+    }
+
     civic::Ledger ledger;
     const auto first = civic::note_population(ledger, 2000, 1901, 0, true);
     if (first.size() != 1 || first[0] != civic::Town || !ledger.hit[civic::Town].earned) {

@@ -1709,6 +1709,15 @@ bool CitySession::budget_pending() const
     return engine_->sim.budgetAwaitingAccept;
 }
 
+bool CitySession::begin_tax_year()
+{
+    if (!ready_) {
+        return false;
+    }
+    engine_->sim.collectTax();
+    return budget_pending();
+}
+
 void CitySession::discard_pending_budget()
 {
     engine_->sim.budgetAwaitingAccept = false;

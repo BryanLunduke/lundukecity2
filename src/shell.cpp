@@ -313,7 +313,7 @@ int Shell::run(int argc, char **argv)
         demo_ != "crime" && demo_ != "zones" && demo_ != "police" && demo_ != "graphs" && demo_ != "terrain" &&
         demo_ != "controls" && demo_ != "settings" && demo_ != "won" && demo_ != "lost" &&         demo_ != "fire" &&
         demo_ != "saveempty" && demo_ != "savefull" && demo_ != "newname" && demo_ != "about" &&
-        demo_ != "howto" && demo_ != "help") {
+        demo_ != "howto" && demo_ != "help" && demo_ != "yearreview") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -1428,6 +1428,24 @@ void Shell::loop()
                     cursor_x_ = static_cast<float>(view_x_ + view_w_ / 2);
                     cursor_y_ = static_cast<float>(view_y_ + view_h_ / 2);
                 }
+            } else if (demo_ == "yearreview") {
+                speed_ = 0;
+                session_.set_speed(0);
+                session_.begin_tax_year();
+                budget_is_tax_ = true;
+                budget_cover_ = true;
+                tax_pause_hold_ = true;
+                const auto year_book = session_.budget();
+                tax_ = year_book.tax_percent;
+                road_ = year_book.road_percent;
+                police_ = year_book.police_percent;
+                fire_ = year_book.fire_percent;
+                open_tax_ = tax_;
+                open_road_ = road_;
+                open_police_ = police_;
+                open_fire_ = fire_;
+                open_dialog(Dialog::Budget);
+                gamepad_nav_ = false;
             } else if (demo_ == "budget") {
                 const auto book = session_.budget();
                 tax_ = book.tax_percent;
@@ -1942,8 +1960,13 @@ void Shell::handle_event(const SDL_Event &event)
             scroll_x_ = pan_scroll_x_ - dx;
             scroll_y_ = pan_scroll_y_ - dy;
             clamp_scroll();
-        } else if (pointer_on_map_ && dialog_ == Dialog::None && !menu_.open()) {
-            map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), pointer_down_);
+        } else if (dialog_ == Dialog::None && !menu_.open() &&
+                   (pointer_on_map_ || hover_id_ == kMapId)) {
+            // Hover updates the footprint while the button is up, including
+            // when the city is paused. A drag still passes the button state.
+            map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), pointer_down_ && pointer_on_map_);
+        } else if (!pointer_down_ && !map_.dragging() && dialog_ == Dialog::None) {
+            map_.clear_hover();
         } else if (dialog_ == Dialog::Graphs && graph_chart_w_ > 1) {
             if (pointer_x_ >= graph_chart_x_ && pointer_x_ <= graph_chart_x_ + graph_chart_w_ &&
                 pointer_y_ >= graph_chart_y_ && pointer_y_ <= graph_chart_y_ + graph_chart_h_) {

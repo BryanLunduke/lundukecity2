@@ -212,6 +212,9 @@ public:
     // Charge a tax year that was waiting on the budget window. A no-op
     // when nothing is waiting, including a second close.
     void commit_pending_budget();
+    // Run January's tax pass on this city. An empty city still ends the
+    // year waiting on the budget window.
+    bool begin_tax_year();
     // True while a tax year is waiting for the budget window.
     bool budget_pending() const;
     // Drop a tax year without charging it. Used when the city is replaced.
