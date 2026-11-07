@@ -187,6 +187,82 @@ void Shell::clear_pause_notice()
     }
 }
 
+void Shell::begin_scene_fade()
+{
+    if (!motion_fx_ || map_.dragging()) {
+        return;
+    }
+    scene_fade_.start();
+}
+
+void Shell::skip_motion()
+{
+    scene_fade_.skip();
+    panel_settle_ = 0;
+}
+
+std::string Shell::welcome_continue_label() const
+{
+    if (recent_.empty()) {
+        return {};
+    }
+    const std::string &path = recent_.front();
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return {};
+    }
+    std::string base = path;
+    const auto slash = base.find_last_of("/\\");
+    if (slash != std::string::npos) {
+        base = base.substr(slash + 1);
+    }
+    if (base.size() > 4) {
+        const std::string tail = base.substr(base.size() - 4);
+        if (tail == ".cty" || tail == ".CTY") {
+            base.resize(base.size() - 4);
+        }
+    }
+    if (base.empty()) {
+        return {};
+    }
+    return "Continue: " + base;
+}
+
+civic::YearDigest Shell::year_digest() const
+{
+    const auto book = session_.budget();
+    const CitySession::Evaluation report = session_.evaluation();
+    int votes[civic::kProblems] = {};
+    const char *top_name = nullptr;
+    int top_votes = -1;
+    int top_kind = -1;
+    if (!report.no_residents && !report.problems.empty()) {
+        top_name = report.problems[0].name.c_str();
+        top_votes = report.problems[0].votes;
+        top_kind = report.problems[0].kind;
+        for (const CitySession::Problem &problem : report.problems) {
+            if (problem.kind >= 0 && problem.kind < civic::kProblems) {
+                votes[problem.kind] = problem.votes;
+            }
+        }
+    }
+    std::vector<civic::DigestNotice> notes;
+    notes.reserve(session_.notices().size());
+    for (const CitySession::CityNotice &notice : session_.notices()) {
+        civic::DigestNotice one;
+        one.text = notice.text;
+        one.year = notice.year;
+        one.month = notice.month;
+        one.has_place = notice.has_place;
+        one.tile_x = notice.tile_x;
+        one.tile_y = notice.tile_y;
+        notes.push_back(one);
+    }
+    return civic::make_year_digest(book.previous_funds, book.funds, true, book.estimates, report.population,
+                                   session_.ledger(), votes, top_name, top_votes, top_kind, report.score_delta,
+                                   report.deltas_known, session_.city_year(), notes);
+}
+
 void Shell::open_dialog(Dialog dialog, bool prompted)
 {
     reset_touch_state();
@@ -194,6 +270,11 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     special_open_ = false;
     dialog_ = dialog;
     dialog_error_.clear();
+    panel_settle_ = 0;
+    if (motion_fx_ && (dialog == Dialog::Budget || dialog == Dialog::Evaluation || dialog == Dialog::Graphs ||
+                       dialog == Dialog::Messages || dialog == Dialog::Welcome || dialog == Dialog::Scenario)) {
+        panel_settle_ = 2;
+    }
     if (!prompted) {
         arm_modal_grace();
     } else {
@@ -1052,6 +1133,7 @@ void Shell::finish_save(const std::string &path)
 
 void Shell::finish_open(const std::string &path)
 {
+    const bool from_welcome = welcome_gate_;
     reset_touch_state();
     clear_transient_message();
     if (path.empty() || !session_.load_city(path)) {
@@ -1088,6 +1170,9 @@ void Shell::finish_open(const std::string &path)
     }
     remember_recent(path);
     sync_title();
+    if (from_welcome) {
+        begin_scene_fade();
+    }
 }
 
 void Shell::refresh_files()
@@ -1599,6 +1684,13 @@ void Shell::on_dialog_button(int id)
             open_dialog(Dialog::Scenario);
             return;
         }
+        if (id == kWelcomeContinue) {
+            if (!recent_.empty()) {
+                queued_path_ = recent_.front();
+                request_with_save(AfterSave::OpenPath);
+            }
+            return;
+        }
         // Quit, B, and Escape ask first. A second B from New City or the
         // scenario list must not leave the game.
         open_dialog(Dialog::QuitConfirm);
@@ -1731,6 +1823,7 @@ void Shell::on_dialog_button(int id)
             spec.rivers = new_rivers_;
             spec.lakes = new_lakes_;
             spec.trees = new_trees_;
+    const bool from_welcome = welcome_gate_;
     welcome_gate_ = false;
     city_chosen_ = true;
     close_dialog();
@@ -1738,12 +1831,15 @@ void Shell::on_dialog_button(int id)
     ++city_generation_;
     reset_touch_state();
     clear_transient_message();
-    session_.new_city(spec);
+            session_.new_city(spec);
             if (session_.message_serial() == serial) {
                 restore_play_preferences();
             }
             center_on_fraction(0.5, 0.5);
             sync_title();
+            if (from_welcome) {
+                begin_scene_fade();
+            }
         }
         return;
     }
@@ -1766,6 +1862,7 @@ void Shell::on_dialog_button(int id)
                     adopt_loaded_speed(session_.speed());
                     center_on_fraction(0.5, 0.5);
                     sync_title();
+                    begin_scene_fade();
                 }
             }
             return;
@@ -1911,6 +2008,14 @@ void Shell::on_dialog_button(int id)
         if (id == kYearGraphs) {
             tax_pause_hold_ = true;
             open_dialog(Dialog::Graphs);
+            return;
+        }
+        if (id == kYearLocate && budget_cover_ && budget_is_tax_) {
+            const civic::YearDigest digest = year_digest();
+            if (digest.locate) {
+                center_on_fraction((digest.locate_x + 0.5) / CitySession::kWorldW,
+                                   (digest.locate_y + 0.5) / CitySession::kWorldH);
+            }
             return;
         }
         if (id == kReset) {
@@ -2536,7 +2641,7 @@ int Shell::hit(double x, double y) const
 
 void Shell::push_hot(double x, double y, double w, double h, int id)
 {
-    next_hot_.push_back(Hotspot{x, y, w, h, id});
+    next_hot_.push_back(Hotspot{x, y + dialog_hot_dy_, w, h, id});
 }
 
 void Shell::push_focus(int id)
@@ -3467,6 +3572,13 @@ void Shell::refresh_place_cue()
         cue.width = std::max(1, forecast.width);
         cue.height = std::max(1, forecast.height);
         cue.tag = forecast.tag;
+        if (engine == kSpecialEngineId && special >= 0) {
+            const std::string blocked = session_.special_menu_detail(special);
+            if (!blocked.empty() && blocked[0] != '$') {
+                cue.mark = static_cast<int>(PlaceMark::Blocked) + 1;
+                cue.tag = blocked;
+            }
+        }
         if (map_.dragging() && session_.stroke_tiles() > 0 && tile_matches_tool(engine, session_.map_value(hx, hy))) {
             cue.mark = 1;
             if (session_.stroke_tiles() > 1) {

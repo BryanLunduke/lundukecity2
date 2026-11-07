@@ -194,6 +194,12 @@ void Micropolis::commitBudgetPayment()
     fireValue = charge.fireTaken;
     policeValue = charge.policeTaken;
     spend((int)(-charge.posted));
+    // Civic gifts (park, casino) pay with the year, after the tax charge
+    // is fixed, so they do not change how much the departments can take.
+    if (specialIncome > 0) {
+        spend((int)(-specialIncome));
+        specialIncome = 0;
+    }
     updateFundEffects();
 }
 

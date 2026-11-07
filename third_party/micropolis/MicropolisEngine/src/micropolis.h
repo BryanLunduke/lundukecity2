@@ -755,6 +755,14 @@ enum MapTileCharacters {
     SPECIAL_LIBRARY  = 1022,
     SPECIAL_BODY     = 1023,
 
+    // Mayor's House, Casino, and Amusement Park. The map word only has ten
+    // tile bits, and 1019 stays the unknown-tile check. These three numbers
+    // are UNUSED_TRASH3..5: the simulator never places them. doZone ignores
+    // them the same way it ignores the zoo.
+    SPECIAL_MAYOR      = 53,
+    SPECIAL_CASINO     = 54,
+    SPECIAL_AMUSEMENT  = 55,
+
     TILE_COUNT     = 1024,
 
     TILE_INVALID   = -1, ///< Invalid tile (not used in the world map).
@@ -994,6 +1002,7 @@ typedef void (*CallbackFunction)(
 // at the special-building table.
 typedef int (*SpecialIncomeFunction)(const Micropolis *micropolis);
 typedef void (*SpecialLandFunction)(Micropolis *micropolis);
+typedef void (*SpecialCrimeFunction)(Micropolis *micropolis);
 
 
 ////////////////////////////////////////////////////////////////////////
@@ -2810,6 +2819,7 @@ public:
 
     SpecialIncomeFunction specialIncomeFn;
     SpecialLandFunction specialLandFn;
+    SpecialCrimeFunction specialCrimeFn;
 
     /**
      * Special-building income paid the last time taxes were collected.

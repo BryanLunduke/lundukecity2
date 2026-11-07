@@ -74,6 +74,8 @@ enum HotspotId : int {
     kInspectPower = 144,
     kCardDismiss = 145,
     kLedgerNotes = 146,
+    kYearLocate = 147,
+    kWelcomeContinue = 148,
 
     kMenuItem = 1000,
     kRecentItem = 2000,
@@ -91,7 +93,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kLedgerNotes;
+    return id >= kCancel && id <= kWelcomeContinue;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

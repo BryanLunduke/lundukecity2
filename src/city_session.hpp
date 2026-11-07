@@ -174,6 +174,11 @@ public:
     void drag_tool(int engine_tool, int from_x, int from_y, int to_x, int to_y);
     // index is a row in the special-building table. The click is the center tile.
     bool place_special(int index, int tile_x, int tile_y);
+    std::string special_menu_detail(int index) const;
+    std::string special_status_line(int index) const;
+    // Residential census count (not people). The demo uses this so a
+    // Mayor's House can be placed without waiting for growth.
+    void set_census_residents(int residents);
 
     void set_speed(int speed);
     int speed() const;
@@ -299,6 +304,7 @@ public:
     std::string city_name() const;
     std::string funds_text() const;
     std::string date_text() const;
+    int city_year() const;
     std::string message() const;
     // Increases once per engine notice, including a repeat of the same words.
     int message_serial() const { return message_serial_; }

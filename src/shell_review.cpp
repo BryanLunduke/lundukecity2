@@ -2317,6 +2317,35 @@ void Shell::run_review_checks()
         }
         close_dialog();
 
+        welcome_gate_ = true;
+        open_dialog(Dialog::Welcome);
+        render();
+        auto has_hot = [&](int id) {
+            for (const Hotspot &spot : hot_) {
+                if (spot.id == id) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (!has_hot(kWelcomeNew) || !has_hot(kWelcomeLoad) || !has_hot(kWelcomeScenario) || !has_hot(kWelcomeQuit)) {
+            fail("the welcome screen dropped one of the four choices");
+            return;
+        }
+        begin_scene_fade();
+        if (scene_fade_.active()) {
+            fail("a headless review started a dither");
+            return;
+        }
+        SceneFade skipped;
+        skipped.start();
+        skipped.skip();
+        if (skipped.active()) {
+            fail("the dither could not be skipped");
+            return;
+        }
+        close_dialog();
+
         select_tool(1);
         int hx = -1;
         int hy = -1;

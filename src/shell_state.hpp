@@ -14,6 +14,7 @@
 #include "menu_model.hpp"
 #include "overlay_map.hpp"
 #include "redraw.hpp"
+#include "scene_fade.hpp"
 #include "side_widgets.hpp"
 #include "sound_player.hpp"
 #include "tool_palette.hpp"
@@ -113,6 +114,13 @@ private:
     void draw_menu_dropdown(cairo_t *cr);
     void draw_special_menu(cairo_t *cr);
     void draw_dialog(cairo_t *cr);
+    void draw_welcome_vignette(cairo_t *cr);
+    void draw_civic_crest(cairo_t *cr, double x, double y, double side) const;
+    civic::YearDigest year_digest() const;
+    std::string welcome_continue_label() const;
+    void begin_scene_fade();
+    void skip_motion();
+    void paint_scene_fade();
     void draw_osk(cairo_t *cr, double x, double y, double w, double max_h);
 
     void apply_action(Action action);
@@ -517,6 +525,12 @@ private:
     // True from the launch screen until a city is actually started, loaded,
     // or a scenario begins. Cancelling those flows comes back here.
     bool welcome_gate_ = false;
+    // Short dither and panel settle. Off for tests, smoke, and demos so a
+    // screenshot is the settled screen. Click or a key skips either one.
+    bool motion_fx_ = false;
+    SceneFade scene_fade_{};
+    int panel_settle_ = 0;
+    double dialog_hot_dy_ = 0;
     std::string own_recovery_;
     std::string autosave_fingerprint_;
     bool autosave_warned_ = false;

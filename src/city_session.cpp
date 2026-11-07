@@ -427,6 +427,8 @@ CitySession::CitySession()
     };
     engine_->sim.callbackData = this;
     engine_->sim.specialLandFn = boost_special_land_value;
+    engine_->sim.specialCrimeFn = boost_special_crime;
+    engine_->sim.specialIncomeFn = special_annual_income;
     engine_->sim.setEnableSound(sound_enabled_);
 }
 
@@ -435,6 +437,8 @@ CitySession::~CitySession()
     engine_->sim.callbackHook = nullptr;
     engine_->sim.callbackData = nullptr;
     engine_->sim.specialLandFn = nullptr;
+    engine_->sim.specialCrimeFn = nullptr;
+    engine_->sim.specialIncomeFn = nullptr;
     delete engine_;
 }
 
@@ -1295,6 +1299,36 @@ bool CitySession::place_special(int index, int tile_x, int tile_y)
     return true;
 }
 
+std::string CitySession::special_menu_detail(int index) const
+{
+    if (engine_ == nullptr) {
+        return {};
+    }
+    return ::special_menu_detail(&engine_->sim, index);
+}
+
+std::string CitySession::special_status_line(int index) const
+{
+    if (engine_ == nullptr) {
+        return special_status_text(index);
+    }
+    return special_status_text(&engine_->sim, index);
+}
+
+void CitySession::set_census_residents(int residents)
+{
+    if (engine_ == nullptr || residents < 0) {
+        return;
+    }
+    engine_->sim.resPop = residents;
+    engine_->sim.snapResPop = residents;
+    engine_->sim.comPop = 0;
+    engine_->sim.indPop = 0;
+    engine_->sim.snapComPop = 0;
+    engine_->sim.snapIndPop = 0;
+    engine_->sim.censusSnapshotValid = true;
+}
+
 void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, int to_y)
 {
     if (!ready_ || engine_tool == kSpecialEngineId) {
@@ -1597,7 +1631,7 @@ CitySession::BudgetBook CitySession::budget() const
         book.road_spent = static_cast<std::int64_t>(charge.roadTaken);
         book.police_spent = static_cast<std::int64_t>(charge.policeTaken);
         book.fire_spent = static_cast<std::int64_t>(charge.fireTaken);
-        book.cash_flow = static_cast<std::int64_t>(charge.posted);
+        book.cash_flow = static_cast<std::int64_t>(charge.posted) + static_cast<std::int64_t>(sim.specialIncome);
         book.previous_funds = sim.budgetAnchorValid ? static_cast<std::int64_t>(sim.budgetAnchorFunds)
                                                     : static_cast<std::int64_t>(sim.totalFunds);
         book.funds = static_cast<std::int64_t>(sim.totalFunds) + book.cash_flow;
@@ -1970,6 +2004,15 @@ std::string CitySession::date_text() const
     }
     const long year = static_cast<long>(engine_->sim.cityYear);
     return std::string(kMonths[month]) + " " + std::to_string(year > 0 ? year : engine_->sim.startingYear);
+}
+
+int CitySession::city_year() const
+{
+    const long year = static_cast<long>(engine_->sim.cityYear);
+    if (year > 0) {
+        return static_cast<int>(year);
+    }
+    return static_cast<int>(engine_->sim.startingYear);
 }
 
 std::string CitySession::message() const
