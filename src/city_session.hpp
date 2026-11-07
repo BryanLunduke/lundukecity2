@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "civic.hpp"
+
 #include <cstdint>
 #include <cstdarg>
 #include <functional>
@@ -235,6 +237,39 @@ public:
     // A stroke ends when the button lifts. "Cannot build here" during a
     // stroke that already placed a tile is the drag touching its own road.
     void end_tool_stroke();
+    struct PlacementNote {
+        bool ok = false;
+        int tiles = 0;
+        long long spent = 0;
+        std::string reason;
+        int tool = -1;
+        int x = 0;
+        int y = 0;
+    };
+    // One receipt for the stroke that just ended. False when nothing happened.
+    bool take_placement_note(PlacementNote &out);
+    int stroke_tiles() const { return stroke_tiles_; }
+    long long stroke_spent() const { return stroke_spent_; }
+    struct TileInspect {
+        bool valid = false;
+        std::string name;
+        std::string power;
+        std::string access;
+        std::string condition;
+        bool offer_power = false;
+        bool zone = false;
+        int left = 0;
+        int top = 0;
+        int width = 1;
+        int height = 1;
+    };
+    TileInspect inspect_tile(int x, int y) const;
+    const civic::Ledger &ledger() const { return ledger_; }
+    // announce is false while catching a city up, so an old city does not
+    // celebrate milestones it had already reached.
+    std::vector<int> note_civic_month(bool announce);
+    std::vector<int> note_civic_year(std::int64_t cash_flow);
+    void remember_civic_year();
     // A stroke that placed a tile must not keep "Cannot build here."
     void forget_blocked_build();
     bool time_advanced_since_save() const;
@@ -330,6 +365,9 @@ public:
     struct Problem {
         std::string name;
         int votes = 0;
+        // CityVotingProblems ordinal: crime, pollution, housing, taxes,
+        // traffic, unemployment, fire. -1 when the row is not one of those.
+        int kind = -1;
     };
     struct Evaluation {
         int year = 0;
@@ -414,6 +452,21 @@ private:
     int speed_ = 2;
     bool dirty_ = false;
     int tool_stroke_placed_ = 0;
+    long long stroke_spent_ = 0;
+    int stroke_tiles_ = 0;
+    int stroke_tool_ = -1;
+    int stroke_x_ = 0;
+    int stroke_y_ = 0;
+    std::string stroke_reason_;
+    bool placement_waiting_ = false;
+    PlacementNote placement_note_;
+    civic::Ledger ledger_;
+    bool ledger_from_file_ = false;
+    void finish_stroke_attempt(long long before, int tool, int x, int y);
+    void catch_up_ledger(bool announce);
+    bool powered_homes() const;
+    int calendar_year() const;
+    int calendar_month() const;
     // True only after new_city(), until the city is saved, loaded, or a
     // scenario starts. birth_* is the month cityTime shows at that moment
     // (January 1900 for a generated city). Changing speed does not count

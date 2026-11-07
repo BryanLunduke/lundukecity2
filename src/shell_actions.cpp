@@ -16,6 +16,7 @@
 #include "save_path.hpp"
 #include "special_buildings.hpp"
 #include "tile_atlas.hpp"
+#include "placement_hint.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 #include "view_math.hpp"
@@ -79,6 +80,9 @@ bool ends_with_ci(const std::string &text, const char *suffix)
 
 bool Shell::dialog_pauses() const
 {
+    if (tax_pause_hold_) {
+        return true;
+    }
     switch (dialog_) {
     case Dialog::None:
     case Dialog::Graphs:
@@ -86,6 +90,7 @@ bool Shell::dialog_pauses() const
     case Dialog::Overlay:
     case Dialog::Query:
     case Dialog::Messages:
+    case Dialog::Ledger:
         return false;
     case Dialog::Budget:
         return budget_is_tax_;
@@ -101,6 +106,13 @@ void Shell::set_paused_for_dialog()
 
 void Shell::close_dialog()
 {
+    if (tax_pause_hold_ && (dialog_ == Dialog::Evaluation || dialog_ == Dialog::Graphs || dialog_ == Dialog::Ledger)) {
+        dialog_ = Dialog::Budget;
+        hover_id_ = 0;
+        focus_id_ = budget_cover_ ? kYearBudget : (kSlider + 1);
+        set_paused_for_dialog();
+        return;
+    }
     const Dialog closing = dialog_;
     dialog_ = Dialog::None;
     dialog_error_.clear();
@@ -232,8 +244,10 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     } else if (dialog == Dialog::Outcome) {
         focus_id_ = kKeep;
     } else if (dialog == Dialog::Budget) {
-        focus_id_ = kSlider + 1;
+        focus_id_ = budget_cover_ ? kYearBudget : (kSlider + 1);
         budget_was_dirty_ = session_.dirty();
+    } else if (dialog == Dialog::Ledger) {
+        focus_id_ = kClose;
     } else if (dialog == Dialog::Messages) {
         focus_id_ = session_.notices().empty() ? kClose : kListItem;
         list_index_ = 0;
@@ -1431,9 +1445,16 @@ void Shell::apply_action(Action action)
         open_police_ = police_;
         open_fire_ = fire_;
         budget_is_tax_ = session_.budget_pending();
+        budget_cover_ = budget_is_tax_;
+        if (budget_is_tax_) {
+            tax_pause_hold_ = true;
+        }
         open_dialog(Dialog::Budget);
         break;
     }
+    case Action::Ledger:
+        open_dialog(Dialog::Ledger);
+        break;
     case Action::Graphs:
         graphs_long_ = false;
         open_dialog(Dialog::Graphs);
@@ -1871,6 +1892,27 @@ void Shell::on_dialog_button(int id)
         return;
     }
     if (dialog_ == Dialog::Budget) {
+        if (budget_cover_ && budget_is_tax_ && (id == kCancel || id == kBack)) {
+            budget_cover_ = false;
+            focus_id_ = kSlider + 1;
+            return;
+        }
+        if (id == kYearBudget) {
+            budget_cover_ = false;
+            focus_id_ = kSlider + 1;
+            return;
+        }
+        if (id == kYearEval) {
+            tax_pause_hold_ = true;
+            session_.update_evaluation();
+            open_dialog(Dialog::Evaluation);
+            return;
+        }
+        if (id == kYearGraphs) {
+            tax_pause_hold_ = true;
+            open_dialog(Dialog::Graphs);
+            return;
+        }
         if (id == kReset) {
             tax_ = open_tax_;
             road_ = open_road_;
@@ -1884,8 +1926,15 @@ void Shell::on_dialog_button(int id)
             session_.set_road_funding(road_);
             session_.set_police_funding(police_);
             session_.set_fire_funding(fire_);
+            if (budget_is_tax_) {
+                const auto book = session_.budget();
+                queue_milestones(session_.note_civic_year(book.cash_flow));
+                session_.remember_civic_year();
+            }
             session_.finish_budget_edit();
             budget_is_tax_ = false;
+            budget_cover_ = false;
+            tax_pause_hold_ = false;
             close_dialog();
             return;
         }
@@ -1899,8 +1948,13 @@ void Shell::on_dialog_button(int id)
             session_.set_road_funding(road_);
             session_.set_police_funding(police_);
             session_.set_fire_funding(fire_);
+            const auto book = session_.budget();
+            queue_milestones(session_.note_civic_year(book.cash_flow));
+            session_.remember_civic_year();
             session_.finish_budget_edit();
             budget_is_tax_ = false;
+            budget_cover_ = false;
+            tax_pause_hold_ = false;
             close_dialog();
             return;
         }
@@ -2187,6 +2241,64 @@ void Shell::on_hotspot(int id, double x, double y)
                                      : option == 1 ? CitySession::kTerrainOff : CitySession::kTreesWooded;
         }
         focus_id_ = id;
+        return;
+    }
+    if (id >= kEvalProblem && id < kEvalProblem + 4 && dialog_ == Dialog::Evaluation) {
+        const int index = id - kEvalProblem;
+        const CitySession::Evaluation report = session_.evaluation();
+        if (index >= 0 && index < static_cast<int>(report.problems.size()) && report.problems[static_cast<std::size_t>(index)].kind >= 0) {
+            show_problem_on_map(report.problems[static_cast<std::size_t>(index)].kind, false);
+        }
+        return;
+    }
+    if (id >= kEvalWhy && id < kEvalWhy + 4 && dialog_ == Dialog::Evaluation) {
+        eval_why_ = id - kEvalWhy;
+        focus_id_ = id;
+        return;
+    }
+    if (id == kEvalShow && dialog_ == Dialog::None && overlay_return_eval_) {
+        return_from_overlay();
+        return;
+    }
+    if ((id == kEvalShow || id == kEvalAlt) && dialog_ == Dialog::Evaluation && eval_why_ >= 0) {
+        const CitySession::Evaluation report = session_.evaluation();
+        if (eval_why_ < static_cast<int>(report.problems.size())) {
+            const int kind = report.problems[static_cast<std::size_t>(eval_why_)].kind;
+            if (kind >= 0) {
+                show_problem_on_map(kind, id == kEvalAlt);
+            }
+        }
+        return;
+    }
+    if (id == kInspectPower) {
+        const double keep_x = scroll_x_;
+        const double keep_y = scroll_y_;
+        if (dialog_ == Dialog::Query) {
+            close_dialog();
+        }
+        overlay_.set_layer(CitySession::MapLayer::Power);
+        overlay_on_ = true;
+        overlay_.sync();
+        scroll_x_ = keep_x;
+        scroll_y_ = keep_y;
+        overlay_return_eval_ = false;
+        return;
+    }
+    if (id == kInspectDetails && dialog_ == Dialog::None) {
+        int hx = 0;
+        int hy = 0;
+        if (map_.hover_tile(hx, hy)) {
+            session_.use_tool(tool_by_index(kToolCount - 1)->engine_id, hx, hy);
+        }
+        return;
+    }
+    if (id == kCardDismiss) {
+        card_id_ = -1;
+        card_ms_ = 0;
+        return;
+    }
+    if (id == kLedgerNotes && dialog_ == Dialog::Ledger) {
+        milestone_notes_ = !milestone_notes_;
         return;
     }
     if (dialog_ != Dialog::None && is_dialog_button(id)) {
@@ -2776,6 +2888,9 @@ int Shell::dialog_accept_id() const
     // whose safe default is Cancel have none, so Start does not press it.
     switch (dialog_) {
     case Dialog::Budget:
+        if (budget_cover_ && budget_is_tax_) {
+            return kYearBudget;
+        }
         return budget_is_tax_ ? kCollect : kOk;
     case Dialog::Settings:
         return kOk;
@@ -3215,4 +3330,155 @@ const char *Shell::glyph(SDL_GamepadButton button) const
     default:
         return "";
     }
+}
+
+void Shell::absorb_placement_note()
+{
+    CitySession::PlacementNote note;
+    if (!session_.take_placement_note(note)) {
+        return;
+    }
+    const ToolFootprint foot = tool_footprint(note.tool);
+    receipt_on_ = true;
+    receipt_ok_ = note.ok;
+    receipt_left_ = note.x - foot.cursor_to_left;
+    receipt_top_ = note.y - foot.cursor_to_top;
+    receipt_w_ = std::max(1, foot.width);
+    receipt_h_ = std::max(1, foot.height);
+    receipt_age_ = 0;
+    if (note.ok) {
+        receipt_life_ = 280;
+        const std::string amount = civic::dollars(note.spent);
+        if (note.tiles > 1) {
+            receipt_text_ = std::to_string(note.tiles) + " tiles \u00b7 \u2212" + amount;
+        } else {
+            receipt_text_ = "\u2212" + amount;
+        }
+    } else {
+        receipt_life_ = 1400;
+        receipt_text_ = short_build_reason(note.reason);
+        receipt_w_ = 1;
+        receipt_h_ = 1;
+        receipt_left_ = note.x;
+        receipt_top_ = note.y;
+    }
+}
+
+void Shell::queue_milestones(const std::vector<int> &ids)
+{
+    if (!milestone_notes_) {
+        return;
+    }
+    for (int id : ids) {
+        card_queue_.push_back(id);
+    }
+}
+
+void Shell::note_civic_month()
+{
+    queue_milestones(session_.note_civic_month(true));
+}
+
+bool Shell::return_from_overlay()
+{
+    overlay_on_ = false;
+    if (!overlay_return_eval_) {
+        return true;
+    }
+    overlay_return_eval_ = false;
+    session_.update_evaluation();
+    open_dialog(Dialog::Evaluation);
+    return true;
+}
+
+void Shell::show_problem_on_map(int kind, bool alternate)
+{
+    const civic::Advice advice = civic::advice_for(kind);
+    const int layer = alternate ? advice.alt_layer : advice.layer;
+    const double keep_x = scroll_x_;
+    const double keep_y = scroll_y_;
+    if (layer < 0) {
+        if (!alternate && advice.show != nullptr && std::string(advice.show) == "Budget") {
+            if (tax_pause_hold_) {
+                dialog_ = Dialog::Budget;
+                focus_id_ = budget_cover_ ? kYearBudget : (kSlider + 1);
+                return;
+            }
+            apply_action(Action::Budget);
+        }
+        return;
+    }
+    overlay_.set_layer(static_cast<CitySession::MapLayer>(layer));
+    overlay_on_ = true;
+    overlay_.sync();
+    scroll_x_ = keep_x;
+    scroll_y_ = keep_y;
+    overlay_return_eval_ = true;
+    if (dialog_ == Dialog::Evaluation) {
+        if (tax_pause_hold_) {
+            dialog_ = Dialog::None;
+            hover_id_ = 0;
+            set_paused_for_dialog();
+        } else {
+            close_dialog();
+        }
+    }
+}
+
+void Shell::refresh_place_cue()
+{
+    MapCue cue;
+    if (receipt_on_) {
+        cue.receipt = true;
+        cue.receipt_ok = receipt_ok_;
+        cue.rleft = receipt_left_;
+        cue.rtop = receipt_top_;
+        cue.rwidth = receipt_w_;
+        cue.rheight = receipt_h_;
+        cue.receipt_text = receipt_text_;
+    }
+    const ToolDef *tool = tool_by_index(tool_index_);
+    const int engine = tool != nullptr ? tool->engine_id : -1;
+    int hx = 0;
+    int hy = 0;
+    const bool hovering = map_.hover_tile(hx, hy);
+    if (engine == tool_by_index(kToolCount - 1)->engine_id && hovering && dialog_ == Dialog::None && !menu_.open()) {
+        if (hx == dwell_x_ && hy == dwell_y_ && dwell_ms_ >= 280) {
+            const CitySession::TileInspect card = session_.inspect_tile(hx, hy);
+            if (card.zone) {
+                cue.zone = true;
+                cue.zleft = card.left;
+                cue.ztop = card.top;
+                cue.zwidth = card.width;
+                cue.zheight = card.height;
+            }
+        }
+    }
+    const bool placeable = engine >= 0 && engine != tool_by_index(kToolCount - 1)->engine_id;
+    if (placeable && hovering && dialog_ == Dialog::None && !menu_.open()) {
+        const int special = engine == kSpecialEngineId ? special_choice_ : -1;
+        const PlaceForecast forecast =
+            forecast_tile(engine, hx, hy, special, session_.funds(), session_.auto_bulldoze(),
+                          [this](int x, int y) { return session_.map_value(x, y); });
+        cue.active = true;
+        cue.mark = static_cast<int>(forecast.mark) + 1;
+        cue.left = forecast.left;
+        cue.top = forecast.top;
+        cue.width = std::max(1, forecast.width);
+        cue.height = std::max(1, forecast.height);
+        cue.tag = forecast.tag;
+        if (map_.dragging() && session_.stroke_tiles() > 0 && tile_matches_tool(engine, session_.map_value(hx, hy))) {
+            cue.mark = 1;
+            if (session_.stroke_tiles() > 1) {
+                cue.tag = std::to_string(session_.stroke_tiles()) + " tiles \u00b7 " + civic::dollars(session_.stroke_spent());
+            } else {
+                cue.tag = civic::dollars(session_.stroke_spent());
+            }
+        } else if (map_.dragging() && session_.stroke_tiles() > 1 &&
+                   (forecast.mark == PlaceMark::Ready || forecast.mark == PlaceMark::Caution)) {
+            const long long pending = session_.stroke_spent() + forecast.cost;
+            cue.tag = std::to_string(session_.stroke_tiles() + 1) + " tiles \u00b7 " + civic::dollars(pending);
+        }
+    }
+    map_.set_cue(cue);
 }

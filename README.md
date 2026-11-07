@@ -100,7 +100,9 @@ City name and rename fields call `SDL_StartTextInput`. On the Steam Deck that ra
 
 ## Menus
 
-The bar has the same rows as Lunduke City 0.9.5-2: 35 actionable entries (System, Options, Disasters, Windows, Help), plus the hidden zoom accelerators. Dialogs (New City, Budget, Graphs, Evaluation, the six overlays, scenarios, rename, query, About, confirmations) are drawn in the window in Clearlooks-Phenix colours. Tax-year budget, New City, scenarios, rename, About, and the confirmations pause the clock. Graphs, evaluation, overlays, query, and a budget opened from the menu do not.
+The bar has the same rows as Lunduke City 0.9.5-2, plus the maps, messages, and looks added since, and a Milestones row. Dialogs (New City, Budget, Graphs, Evaluation, the map layers, scenarios, rename, query, About, confirmations) are drawn in the window. Classic keeps the Clearlooks-Phenix colours. SVGA and Spooky use flat VGA colours, a one-pixel edge, and a short dialog shadow. Tax-year budget, New City, scenarios, rename, About, and the confirmations pause the clock. Graphs, evaluation, map layers, query, milestones, and a budget opened from the menu do not.
+
+The tool footprint shows whether the tile can be built, what it will cost, and why it cannot. A short note at the tile confirms the money spent. Query keeps a small card on the map; the full report still opens when you click. Evaluation's complaints can explain themselves and open the matching map without moving the view. A tax year opens with a short civic report before the budget sliders. Milestones record the first powered neighborhood, a balanced year, easier traffic, and the census thresholds. They do not lock any building. Auto-goto stays the preference it already was.
 
 Recent cities are stored in `~/.config/lunduke-city-2/recent.txt` (ten paths). That list is not the GTK recent database, so it is not shared with Lunduke City. Load and Save try the SDL file dialog (the desktop portal on Linux, the Win32 dialog on Windows) and fall back to the in-window list, which is also what the Deck and a headless run use.
 

@@ -16,7 +16,11 @@
 #include "tile_atlas.hpp"
 #include "version.hpp"
 #include "ui_scale.hpp"
+#include "placement_hint.hpp"
+#include "theme.hpp"
 #include "tools.hpp"
+
+#include "micropolis.h"
 
 #include <csignal>
 #include <cstring>
@@ -2200,5 +2204,73 @@ void Shell::run_review_checks()
         }
         gamepad_nav_ = false;
         pad_feel::repeat_clear(nav_repeat_);
+    }
+
+    {
+        auto dirt = [](int, int) { return 0; };
+        const PlaceForecast road = forecast_tile(TOOL_ROAD, 3, 3, -1, 20000, true, dirt);
+        if (road.mark != PlaceMark::Ready || road.cost != 10 || road.tag != "Road $10") {
+            fail("the road preview did not say Road $10");
+            return;
+        }
+        auto bridged = [](int x, int y) {
+            if (x == 3 && y == 3) {
+                return static_cast<int>(RIVER);
+            }
+            if (x == 4 && y == 3) {
+                return static_cast<int>(ROADS);
+            }
+            return 0;
+        };
+        const PlaceForecast bridge = forecast_tile(TOOL_ROAD, 3, 3, -1, 20000, true, bridged);
+        if (bridge.mark != PlaceMark::Caution || bridge.tag != "Water: bridge cost" || bridge.cost != 50) {
+            fail("water with a landing did not show the bridge cost");
+            return;
+        }
+        const PlaceForecast poor = forecast_tile(TOOL_ROAD, 3, 3, -1, 10, true, bridged);
+        if (poor.mark != PlaceMark::Short) {
+            fail("a bridge without the funds was not marked short");
+            return;
+        }
+        theme::set_chrome_look(0);
+        if (theme::enhanced_chrome()) {
+            fail("Classic gained the enhanced chrome");
+            return;
+        }
+        theme::set_chrome_look(1);
+        if (!theme::enhanced_chrome() || theme::chrome_select_b() != 170.0 / 255.0) {
+            fail("SVGA chrome is not VGA blue");
+            return;
+        }
+        theme::set_chrome_look(drawn_look_);
+        const civic::Advice crime = civic::advice_for(0);
+        if (crime.layer != static_cast<int>(CitySession::MapLayer::Crime) ||
+            std::string(crime.body).find("does not prove") == std::string::npos) {
+            fail("crime advice lost its map or its uncertainty");
+            return;
+        }
+        const double kept_x = scroll_x_;
+        const double kept_y = scroll_y_;
+        show_problem_on_map(0, false);
+        if (!overlay_on_ || overlay_.layer() != CitySession::MapLayer::Crime || scroll_x_ != kept_x || scroll_y_ != kept_y) {
+            fail("show me moved the map or did not open crime");
+            return;
+        }
+        return_from_overlay();
+        if (overlay_on_ || dialog_ != Dialog::Evaluation) {
+            fail("back from the crime map did not return to evaluation");
+            return;
+        }
+        close_dialog();
+        const CitySession::TileInspect inspected = session_.inspect_tile(2, 2);
+        if (!inspected.valid || inspected.name.empty() || inspected.power.empty()) {
+            fail("the query card had nothing to say");
+            return;
+        }
+        civic::Ledger sample;
+        if (civic::note_population(sample, 2000, 1902, 0, true).size() != 1) {
+            fail("the ledger missed the town milestone");
+            return;
+        }
     }
 }

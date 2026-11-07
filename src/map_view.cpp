@@ -93,6 +93,31 @@ void MapView::clear_hover()
     hover_valid_ = false;
 }
 
+bool MapView::hover_tile(int &tx, int &ty) const
+{
+    if (!hover_valid_) {
+        return false;
+    }
+    tx = hover_x_;
+    ty = hover_y_;
+    return true;
+}
+
+bool MapView::stroke_origin(int &tx, int &ty) const
+{
+    if (!dragging_ || origin_x_ < 0 || origin_y_ < 0) {
+        return false;
+    }
+    tx = origin_x_;
+    ty = origin_y_;
+    return true;
+}
+
+void MapView::set_cue(const MapCue &cue)
+{
+    cue_ = cue;
+}
+
 void MapView::set_tile_size(int pixels)
 {
     tile_size_ = snap_map_tile(pixels);
@@ -472,6 +497,8 @@ bool MapView::press(double x, double y)
     press_local_x_ = x;
     press_local_y_ = y;
     edge_holding_ = false;
+    origin_x_ = tx;
+    origin_y_ = ty;
     last_x_ = tx;
     last_y_ = ty;
     set_hover_tile(tx, ty);
@@ -486,6 +513,8 @@ void MapView::release()
     dragging_ = false;
     drag_moved_ = false;
     edge_holding_ = false;
+    origin_x_ = -1;
+    origin_y_ = -1;
 }
 
 void MapView::motion(double x, double y, bool button_down)
@@ -576,8 +605,175 @@ bool MapView::edge_scroll(double view_x, double view_y, int view_w, int view_h, 
     return dx != 0.0 || dy != 0.0;
 }
 
+namespace {
+
+void vga_rgb(cairo_t *cr, int r, int g, int b)
+{
+    cairo_set_source_rgb(cr, r / 255.0, g / 255.0, b / 255.0);
+}
+
+void corner_arm(cairo_t *cr, double x, double y, double dx, double dy, double len)
+{
+    cairo_move_to(cr, x, y);
+    cairo_line_to(cr, x + dx * len, y);
+    cairo_move_to(cr, x, y);
+    cairo_line_to(cr, x, y + dy * len);
+}
+
+void paint_corners(cairo_t *cr, double x, double y, double w, double h, double len, int kind)
+{
+    // kind 1 solid, 2 cross, 3 hatch, 4 broken. A dark halo sits under the ink.
+    const double inset = 1.0;
+    cairo_set_line_width(cr, 3.0);
+    vga_rgb(cr, 0, 0, 0);
+    auto arms = [&](double shrink) {
+        const double x0 = x + shrink;
+        const double y0 = y + shrink;
+        const double x1 = x + w - shrink;
+        const double y1 = y + h - shrink;
+        const double arm = std::max(2.0, len - shrink);
+        if (kind == 2) {
+            const double s = arm * 0.7;
+            cairo_move_to(cr, x0, y0);
+            cairo_line_to(cr, x0 + s, y0 + s);
+            cairo_move_to(cr, x0 + s, y0);
+            cairo_line_to(cr, x0, y0 + s);
+            cairo_move_to(cr, x1, y0);
+            cairo_line_to(cr, x1 - s, y0 + s);
+            cairo_move_to(cr, x1 - s, y0);
+            cairo_line_to(cr, x1, y0 + s);
+            cairo_move_to(cr, x0, y1);
+            cairo_line_to(cr, x0 + s, y1 - s);
+            cairo_move_to(cr, x0 + s, y1);
+            cairo_line_to(cr, x0, y1 - s);
+            cairo_move_to(cr, x1, y1);
+            cairo_line_to(cr, x1 - s, y1 - s);
+            cairo_move_to(cr, x1 - s, y1);
+            cairo_line_to(cr, x1, y1 - s);
+            return;
+        }
+        if (kind == 3) {
+            const double s = arm;
+            cairo_move_to(cr, x0, y0 + s);
+            cairo_line_to(cr, x0 + s, y0);
+            cairo_move_to(cr, x1, y0 + s);
+            cairo_line_to(cr, x1 - s, y0);
+            cairo_move_to(cr, x0, y1 - s);
+            cairo_line_to(cr, x0 + s, y1);
+            cairo_move_to(cr, x1, y1 - s);
+            cairo_line_to(cr, x1 - s, y1);
+            return;
+        }
+        if (kind == 4) {
+            const double gap = std::max(2.0, arm * 0.45);
+            cairo_move_to(cr, x0, y0 + gap);
+            cairo_line_to(cr, x0, y0 + arm);
+            cairo_move_to(cr, x0 + gap, y0);
+            cairo_line_to(cr, x0 + arm, y0);
+            cairo_move_to(cr, x1, y0 + gap);
+            cairo_line_to(cr, x1, y0 + arm);
+            cairo_move_to(cr, x1 - gap, y0);
+            cairo_line_to(cr, x1 - arm, y0);
+            cairo_move_to(cr, x0, y1 - gap);
+            cairo_line_to(cr, x0, y1 - arm);
+            cairo_move_to(cr, x0 + gap, y1);
+            cairo_line_to(cr, x0 + arm, y1);
+            cairo_move_to(cr, x1, y1 - gap);
+            cairo_line_to(cr, x1, y1 - arm);
+            cairo_move_to(cr, x1 - gap, y1);
+            cairo_line_to(cr, x1 - arm, y1);
+            return;
+        }
+        corner_arm(cr, x0, y0, 1, 1, arm);
+        corner_arm(cr, x1, y0, -1, 1, arm);
+        corner_arm(cr, x0, y1, 1, -1, arm);
+        corner_arm(cr, x1, y1, -1, -1, arm);
+    };
+    arms(0.0);
+    cairo_stroke(cr);
+    cairo_set_line_width(cr, 1.5);
+    if (kind == 5) {
+        vga_rgb(cr, 255, 255, 255);
+    } else if (kind == 1) {
+        vga_rgb(cr, 0, 170, 0);
+    } else if (kind == 2) {
+        vga_rgb(cr, 255, 190, 0);
+    } else if (kind == 4) {
+        vga_rgb(cr, 255, 255, 85);
+    } else {
+        vga_rgb(cr, 170, 0, 0);
+    }
+    arms(inset);
+    cairo_stroke(cr);
+}
+
+void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::string &text, int tile)
+{
+    if (text.empty()) {
+        return;
+    }
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, std::max(11.0, tile * 0.7));
+    cairo_text_extents_t extents;
+    cairo_text_extents(cr, text.c_str(), &extents);
+    const double pad = 3.0;
+    const double tw = extents.width + pad * 2;
+    const double th = extents.height + pad * 2;
+    double tx = w > tw ? x + (w - tw) / 2.0 : x;
+    double ty = y - th - 2.0;
+    if (ty < 0.0) {
+        ty = y + h + 2.0;
+    }
+    vga_rgb(cr, 0, 0, 0);
+    cairo_rectangle(cr, tx + 1.0, ty + 1.0, tw, th);
+    cairo_fill(cr);
+    vga_rgb(cr, 255, 255, 85);
+    cairo_rectangle(cr, tx, ty, tw, th);
+    cairo_fill(cr);
+    vga_rgb(cr, 0, 0, 0);
+    cairo_set_line_width(cr, 1.0);
+    cairo_rectangle(cr, tx + 0.5, ty + 0.5, tw - 1.0, th - 1.0);
+    cairo_stroke(cr);
+    cairo_move_to(cr, tx + pad - extents.x_bearing, ty + pad - extents.y_bearing);
+    cairo_show_text(cr, text.c_str());
+}
+
+} // namespace
+
 void MapView::draw_footprint(cairo_t *cr) const
 {
+    if (cue_.active || cue_.zone || cue_.receipt) {
+        cairo_save(cr);
+        cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+        const double tile = static_cast<double>(std::max(tile_size_, 1));
+        if (cue_.zone && cue_.zwidth > 0 && cue_.zheight > 0) {
+            const double x = cue_.zleft * tile;
+            const double y = cue_.ztop * tile;
+            const double w = cue_.zwidth * tile;
+            const double h = cue_.zheight * tile;
+            paint_corners(cr, x, y, w, h, std::min(8.0, tile * 0.45), 5);
+        }
+        if (cue_.active && cue_.mark >= 1 && cue_.width > 0 && cue_.height > 0) {
+            const double x = cue_.left * tile;
+            const double y = cue_.top * tile;
+            const double w = cue_.width * tile;
+            const double h = cue_.height * tile;
+            paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.55), cue_.mark);
+            paint_tag(cr, x, y, w, h, cue_.tag, tile_size_);
+        }
+        if (cue_.receipt && cue_.rwidth > 0 && cue_.rheight > 0) {
+            const double x = cue_.rleft * tile;
+            const double y = cue_.rtop * tile;
+            const double w = cue_.rwidth * tile;
+            const double h = cue_.rheight * tile;
+            paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.6), cue_.receipt_ok ? 1 : 3);
+            paint_tag(cr, x, y + (cue_.active ? h + 4.0 : 0.0), w, h, cue_.receipt_text, tile_size_);
+        }
+        cairo_restore(cr);
+        if (cue_.active) {
+            return;
+        }
+    }
     if (!hover_valid_) {
         return;
     }

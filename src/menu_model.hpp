@@ -4,8 +4,8 @@
 
 #pragma once
 
-// Menu model for the SDL shell. 51 actionable rows: 8 System, 16 Options,
-// 6 Disasters, 18 Windows, 3 Help. Fullscreen, the zone and coverage
+// Menu model for the SDL shell. 52 actionable rows: 8 System, 16 Options,
+// 6 Disasters, 19 Windows, 3 Help. Fullscreen, the zone and coverage
 // maps, the single-zone and transportation maps, and Messages are the
 // rows past the original 37. The look trio sits at the bottom of Options.
 // Hidden zoom accelerators are extra bindings, not extra rows.
@@ -45,7 +45,7 @@ enum class Action {
     SetPause, Slow, Medium, Fast, TogglePause,
     ZoomIn, ZoomOut,
     Fire, Flood, Tornado, Earthquake, Monster, Meltdown,
-    Budget, Graphs, Evaluation,
+    Budget, Graphs, Evaluation, Ledger,
     Power, Water, Pollution, Crime, LandValue, Traffic,
     About, Settings, Controls, HowToPlay,
     Fullscreen,
@@ -166,6 +166,7 @@ inline constexpr MenuEntry kWindows[] = {
     {"_Fire coverage", nullptr, ItemKind::Check, Action::FireMap, AccelKey::None, 0, 0},
     {"Pop_ulation", nullptr, ItemKind::Check, Action::Population, AccelKey::None, 0, 0},
     {"G_rowth rate", nullptr, ItemKind::Check, Action::Growth, AccelKey::None, 0, 0},
+    {"Milestones", nullptr, ItemKind::Normal, Action::Ledger, AccelKey::None, 0, 0},
     {"_Messages", nullptr, ItemKind::Normal, Action::Messages, AccelKey::None, 0, 0},
 };
 

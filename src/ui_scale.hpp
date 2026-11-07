@@ -280,6 +280,8 @@ struct StoredSettings {
     int wheel_zoom = -1;
     // -1 absent (Classic), 0 Classic, 1 SVGA, 2 Spooky.
     int look = -1;
+    // -1 absent (show milestone notes), 0 off, 1 on.
+    int milestone_notes = -1;
 };
 
 inline std::string settings_text(const StoredSettings &settings)
@@ -308,6 +310,7 @@ inline std::string settings_text(const StoredSettings &settings)
     put("pause_unfocused", settings.pause_unfocused);
     put("wheel_zoom", settings.wheel_zoom);
     put("look", settings.look);
+    put("milestone_notes", settings.milestone_notes);
     return out.str();
 }
 
@@ -415,6 +418,9 @@ inline StoredSettings settings_parse(const std::string &text)
         } else if (key == "look") {
             bool saw = false;
             as_int(settings.look, saw);
+        } else if (key == "milestone_notes") {
+            bool saw = false;
+            as_int(settings.milestone_notes, saw);
         }
     }
     if (saw_w && saw_h && settings.w >= 320 && settings.h >= 240) {

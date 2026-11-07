@@ -442,6 +442,7 @@ void Shell::save_window_settings()
     // The drawn sheet may be Classic because an optional file is missing.
     // That is not the player's choice, so it is not what gets stored.
     stored.look = look_pref_.setting();
+    stored.milestone_notes = milestone_notes_ ? 1 : 0;
     {
         const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
         const bool maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
@@ -495,6 +496,9 @@ void Shell::apply_loaded_settings()
         wheel_zooms_ = stored.wheel_zoom != 0;
     }
     set_look_preference(look_from_setting(stored.look));
+    if (stored.milestone_notes >= 0) {
+        milestone_notes_ = stored.milestone_notes != 0;
+    }
     map_.invalidate_all();
     // These are the global preferences. A city file must not replace them.
     pref_speed_ = speed_;
@@ -1174,6 +1178,49 @@ void Shell::loop()
         if (speed_ > 0 && !dialog_pauses()) {
             blink_drew_ = map_.tick(elapsed);
         }
+        palette_.advance(elapsed);
+        if (hover_id_ != tracked_hover_) {
+            tracked_hover_ = hover_id_;
+            hover_edge_ms_ = 0;
+        } else {
+            hover_edge_ms_ += elapsed;
+            if (hover_edge_ms_ > 200) {
+                hover_edge_ms_ = 200;
+            }
+        }
+        if (receipt_on_) {
+            receipt_age_ += elapsed;
+            if (receipt_age_ >= receipt_life_) {
+                receipt_on_ = false;
+            }
+        }
+        {
+            int hx = 0;
+            int hy = 0;
+            if (map_.hover_tile(hx, hy) && hx == dwell_x_ && hy == dwell_y_) {
+                dwell_ms_ += elapsed;
+                if (dwell_ms_ > 4000) {
+                    dwell_ms_ = 4000;
+                }
+            } else if (map_.hover_tile(hx, hy)) {
+                dwell_x_ = hx;
+                dwell_y_ = hy;
+                dwell_ms_ = 0;
+            }
+        }
+        if (card_id_ >= 0 && dialog_ == Dialog::None && !map_.dragging()) {
+            card_ms_ += elapsed;
+            if (card_ms_ > 3200) {
+                card_id_ = -1;
+                card_ms_ = 0;
+            }
+        }
+        if (card_id_ < 0 && !card_queue_.empty() && dialog_ == Dialog::None && !map_.dragging() && !pointer_down_) {
+            card_id_ = card_queue_.front();
+            card_queue_.erase(card_queue_.begin());
+            card_ms_ = 0;
+        }
+        absorb_placement_note();
         while (sim_acc >= 100) {
             sim_acc -= 100;
             const int bursts = sim_bursts_for_speed(speed_);
@@ -1271,6 +1318,8 @@ void Shell::loop()
                 session_.keep_budget_request();
             } else if (dialog_ == Dialog::None || dialog_ == Dialog::Budget) {
                 budget_is_tax_ = true;
+                budget_cover_ = true;
+                tax_pause_hold_ = true;
                 const auto book = session_.budget();
                 tax_ = book.tax_percent;
                 road_ = book.road_percent;
@@ -1801,6 +1850,7 @@ void Shell::tick_sim(int)
     session_.tick();
     const int month = session_.game_month_index();
     session_.note_evaluation_month(month);
+    note_civic_month();
 }
 
 void Shell::handle_event(const SDL_Event &event)
@@ -2219,7 +2269,7 @@ void Shell::handle_event(const SDL_Event &event)
             }
         }
         if (accel == AccelKey::Escape && dialog_ == Dialog::None && !menu_.open() && !special_open_ && overlay_on_) {
-            overlay_on_ = false;
+            return_from_overlay();
             break;
         }
         if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
@@ -2333,7 +2383,7 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
             if (overlay_on_ && dialog_ == Dialog::None && !menu_.open() && !special_open_) {
-                overlay_on_ = false;
+                return_from_overlay();
                 break;
             }
             if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {

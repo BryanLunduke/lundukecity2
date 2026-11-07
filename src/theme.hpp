@@ -78,56 +78,159 @@ inline int &chrome_look()
 
 inline void set_chrome_look(int look)
 {
-    chrome_look() = look == 2 ? 2 : 0;
+    if (look == 1 || look == 2) {
+        chrome_look() = look;
+        return;
+    }
+    chrome_look() = 0;
 }
 
+// SVGA and Spooky share one flat material. Classic keeps Clearlooks.
+inline bool enhanced_chrome()
+{
+    return chrome_look() == 1 || chrome_look() == 2;
+}
+
+// VGA entries. SVGA stays blue. Spooky stays orange. Classic is unchanged.
 inline double chrome_select_r()
 {
-    return chrome_look() == 2 ? 176.0 / 255.0 : kSelectR;
+    if (chrome_look() == 1) {
+        return 0.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 170.0 / 255.0;
+    }
+    return kSelectR;
 }
 inline double chrome_select_g()
 {
-    return chrome_look() == 2 ? 96.0 / 255.0 : kSelectG;
+    if (chrome_look() == 1) {
+        return 0.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 85.0 / 255.0;
+    }
+    return kSelectG;
 }
 inline double chrome_select_b()
 {
-    return chrome_look() == 2 ? 32.0 / 255.0 : kSelectB;
+    if (chrome_look() == 1) {
+        return 170.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 0.0 / 255.0;
+    }
+    return kSelectB;
 }
 inline double chrome_select_hi_r()
 {
-    return chrome_look() == 2 ? 220.0 / 255.0 : kSelectHiR;
+    if (chrome_look() == 1) {
+        return 85.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 255.0 / 255.0;
+    }
+    return kSelectHiR;
 }
 inline double chrome_select_hi_g()
 {
-    return chrome_look() == 2 ? 156.0 / 255.0 : kSelectHiG;
+    if (chrome_look() == 1) {
+        return 85.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 190.0 / 255.0;
+    }
+    return kSelectHiG;
 }
 inline double chrome_select_hi_b()
 {
-    return chrome_look() == 2 ? 88.0 / 255.0 : kSelectHiB;
+    if (chrome_look() == 1) {
+        return 255.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 0.0 / 255.0;
+    }
+    return kSelectHiB;
 }
 inline double chrome_select_edge_r()
 {
-    return chrome_look() == 2 ? 120.0 / 255.0 : kSelectEdgeR;
+    if (chrome_look() == 1) {
+        return 0.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 113.0 / 255.0;
+    }
+    return kSelectEdgeR;
 }
 inline double chrome_select_edge_g()
 {
-    return chrome_look() == 2 ? 64.0 / 255.0 : kSelectEdgeG;
+    if (chrome_look() == 1) {
+        return 0.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 56.0 / 255.0;
+    }
+    return kSelectEdgeG;
 }
 inline double chrome_select_edge_b()
 {
-    return chrome_look() == 2 ? 24.0 / 255.0 : kSelectEdgeB;
+    if (chrome_look() == 1) {
+        return 113.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 0.0 / 255.0;
+    }
+    return kSelectEdgeB;
 }
 inline double chrome_hover_r()
 {
-    return chrome_look() == 2 ? 236.0 / 255.0 : kHoverR;
+    if (chrome_look() == 1) {
+        return 85.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 255.0 / 255.0;
+    }
+    return kHoverR;
 }
 inline double chrome_hover_g()
 {
-    return chrome_look() == 2 ? 210.0 / 255.0 : kHoverG;
+    if (chrome_look() == 1) {
+        return 85.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 190.0 / 255.0;
+    }
+    return kHoverG;
 }
 inline double chrome_hover_b()
 {
-    return chrome_look() == 2 ? 180.0 / 255.0 : kHoverB;
+    if (chrome_look() == 1) {
+        return 255.0 / 255.0;
+    }
+    if (chrome_look() == 2) {
+        return 0.0 / 255.0;
+    }
+    return kHoverB;
+}
+
+// Flat body, one highlight, one dark edge. All three are VGA table entries.
+inline void chrome_body(double &r, double &g, double &b)
+{
+    r = 182.0 / 255.0;
+    g = 182.0 / 255.0;
+    b = 182.0 / 255.0;
+}
+inline void chrome_highlight(double &r, double &g, double &b)
+{
+    r = 227.0 / 255.0;
+    g = 227.0 / 255.0;
+    b = 227.0 / 255.0;
+}
+inline void chrome_shadow(double &r, double &g, double &b)
+{
+    r = 85.0 / 255.0;
+    g = 85.0 / 255.0;
+    b = 85.0 / 255.0;
 }
 
 // Goal banner and the message line. Classic and SVGA keep the pale tooltip
@@ -139,6 +242,12 @@ inline void banner_fill(double &r, double &g, double &b)
         r = 65.0 / 255.0;
         g = 32.0 / 255.0;
         b = 0.0;
+        return;
+    }
+    if (chrome_look() == 1) {
+        r = 255.0 / 255.0;
+        g = 255.0 / 255.0;
+        b = 85.0 / 255.0;
         return;
     }
     r = kTooltipR;
@@ -154,6 +263,12 @@ inline void banner_ink(double &r, double &g, double &b)
         b = 0.0;
         return;
     }
+    if (chrome_look() == 1) {
+        r = 0.0;
+        g = 0.0;
+        b = 0.0;
+        return;
+    }
     r = kTextR;
     g = kTextG;
     b = kTextB;
@@ -164,6 +279,12 @@ inline void banner_edge(double &r, double &g, double &b)
     if (chrome_look() == 2) {
         r = 170.0 / 255.0;
         g = 85.0 / 255.0;
+        b = 0.0;
+        return;
+    }
+    if (chrome_look() == 1) {
+        r = 113.0 / 255.0;
+        g = 113.0 / 255.0;
         b = 0.0;
         return;
     }
