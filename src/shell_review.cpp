@@ -16,7 +16,11 @@
 #include "tile_atlas.hpp"
 #include "version.hpp"
 #include "ui_scale.hpp"
+#include "placement_hint.hpp"
+#include "theme.hpp"
 #include "tools.hpp"
+
+#include "micropolis.h"
 
 #include <csignal>
 #include <cstring>
@@ -2200,5 +2204,174 @@ void Shell::run_review_checks()
         }
         gamepad_nav_ = false;
         pad_feel::repeat_clear(nav_repeat_);
+    }
+
+    {
+        auto dirt = [](int, int) { return 0; };
+        const PlaceForecast road = forecast_tile(TOOL_ROAD, 3, 3, -1, 20000, true, dirt);
+        if (road.mark != PlaceMark::Ready || road.cost != 10 || road.tag != "Road $10") {
+            fail("the road preview did not say Road $10");
+            return;
+        }
+        auto bridged = [](int x, int y) {
+            if (x == 3 && y == 3) {
+                return static_cast<int>(RIVER);
+            }
+            if (x == 4 && y == 3) {
+                return static_cast<int>(ROADS);
+            }
+            return 0;
+        };
+        const PlaceForecast bridge = forecast_tile(TOOL_ROAD, 3, 3, -1, 20000, true, bridged);
+        if (bridge.mark != PlaceMark::Caution || bridge.tag != "Water: bridge cost" || bridge.cost != 50) {
+            fail("water with a landing did not show the bridge cost");
+            return;
+        }
+        const PlaceForecast poor = forecast_tile(TOOL_ROAD, 3, 3, -1, 10, true, bridged);
+        if (poor.mark != PlaceMark::Short) {
+            fail("a bridge without the funds was not marked short");
+            return;
+        }
+        theme::set_chrome_look(0);
+        if (theme::enhanced_chrome()) {
+            fail("Classic gained the enhanced chrome");
+            return;
+        }
+        theme::set_chrome_look(1);
+        if (!theme::enhanced_chrome() || theme::chrome_select_b() != 170.0 / 255.0) {
+            fail("SVGA chrome is not VGA blue");
+            return;
+        }
+        theme::set_chrome_look(drawn_look_);
+        const civic::Advice crime = civic::advice_for(0);
+        if (crime.layer != static_cast<int>(CitySession::MapLayer::Crime) ||
+            std::string(crime.body).find("does not prove") == std::string::npos) {
+            fail("crime advice lost its map or its uncertainty");
+            return;
+        }
+        const double kept_x = scroll_x_;
+        const double kept_y = scroll_y_;
+        show_problem_on_map(0, false);
+        if (!overlay_on_ || overlay_.layer() != CitySession::MapLayer::Crime || scroll_x_ != kept_x || scroll_y_ != kept_y) {
+            fail("show me moved the map or did not open crime");
+            return;
+        }
+        return_from_overlay();
+        if (overlay_on_ || dialog_ != Dialog::Evaluation) {
+            fail("back from the crime map did not return to evaluation");
+            return;
+        }
+        close_dialog();
+        const CitySession::TileInspect inspected = session_.inspect_tile(2, 2);
+        if (!inspected.valid || inspected.name.empty() || inspected.power.empty()) {
+            fail("the query card had nothing to say");
+            return;
+        }
+        civic::Ledger sample;
+        if (civic::note_population(sample, 2000, 1902, 0, true).size() != 1) {
+            fail("the ledger missed the town milestone");
+            return;
+        }
+    }
+
+    // An empty city still opens the year-end cover. Mouse hover draws the
+    // road footprint, and a road that touches water previews the bridge.
+    {
+        session_.new_city("Empty Year", 21);
+        session_.set_auto_budget(true);
+        session_.set_simulation_paused(false);
+        session_.set_speed(3);
+        speed_ = 3;
+        int guard = 0;
+        while (!session_.budget_pending() && guard < 4000) {
+            session_.tick();
+            ++guard;
+        }
+        if (!session_.budget_pending() || session_.evaluation().population != 0) {
+            fail("an empty city closed a year without a tax-year budget");
+            return;
+        }
+        budget_is_tax_ = true;
+        budget_cover_ = true;
+        tax_pause_hold_ = true;
+        open_dialog(Dialog::Budget);
+        render();
+        if (dialog_ != Dialog::Budget || !budget_cover_ || !budget_is_tax_) {
+            fail("the year-end cover did not open");
+            return;
+        }
+        on_dialog_button(kCancel);
+        if (dialog_ != Dialog::Budget || budget_cover_) {
+            fail("escape on the year-end cover did not open the sliders");
+            return;
+        }
+        on_dialog_button(kCollect);
+        if (dialog_ != Dialog::None || session_.budget_pending()) {
+            fail("collecting the empty year did not close the budget");
+            return;
+        }
+        apply_action(Action::Budget);
+        if (dialog_ != Dialog::Budget || budget_cover_ || budget_is_tax_) {
+            fail("a budget opened from the menu showed the year-end cover");
+            return;
+        }
+        close_dialog();
+
+        select_tool(1);
+        int hx = -1;
+        int hy = -1;
+        for (int y = 2; y < CitySession::kWorldH - 2 && hx < 0; ++y) {
+            for (int x = 2; x < CitySession::kWorldW - 2; ++x) {
+                if ((session_.map_value(x, y) & 0x03ff) == 0) {
+                    hx = x;
+                    hy = y;
+                    break;
+                }
+            }
+        }
+        if (hx < 0) {
+            fail("no dirt for the hover footprint");
+            return;
+        }
+        map_.set_hover_tile(hx, hy);
+        refresh_place_cue();
+        const MapCue &road_cue = map_.cue();
+        if (!road_cue.active || road_cue.mark != 1 || road_cue.tag != "Road $10") {
+            fail("mouse hover did not draw Road $10 on dirt");
+            return;
+        }
+        int wx = -1;
+        int wy = -1;
+        for (int y = 1; y < CitySession::kWorldH - 1 && wx < 0; ++y) {
+            for (int x = 1; x < CitySession::kWorldW - 1 && wx < 0; ++x) {
+                const int tile = session_.map_value(x, y) & 0x03ff;
+                if (tile != RIVER && tile != REDGE && tile != CHANNEL) {
+                    continue;
+                }
+                const int neighbors[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                for (int n = 0; n < 4; ++n) {
+                    const int nx = x + neighbors[n][0];
+                    const int ny = y + neighbors[n][1];
+                    const auto before = session_.funds();
+                    session_.use_tool(TOOL_ROAD, nx, ny);
+                    session_.end_tool_stroke();
+                    if (session_.funds() < before) {
+                        wx = x;
+                        wy = y;
+                        break;
+                    }
+                }
+            }
+        }
+        if (wx < 0) {
+            fail("no shoreline for the bridge preview");
+            return;
+        }
+        map_.set_hover_tile(wx, wy);
+        refresh_place_cue();
+        if (!map_.cue().active || map_.cue().mark != 2 || map_.cue().tag != "Water: bridge cost") {
+            fail("a road touching water did not preview the bridge cost, tag " + map_.cue().tag);
+            return;
+        }
     }
 }

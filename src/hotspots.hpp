@@ -62,6 +62,18 @@ enum HotspotId : int {
     kScaleAuto = 127,
     kWheelZoom = 128,
     kFullscreenBox = 129,
+    // Evaluation complaints, the year-end card, the query card, the ledger.
+    kEvalProblem = 130,
+    kEvalWhy = 134,
+    kEvalShow = 138,
+    kEvalAlt = 139,
+    kYearBudget = 140,
+    kYearEval = 141,
+    kYearGraphs = 142,
+    kInspectDetails = 143,
+    kInspectPower = 144,
+    kCardDismiss = 145,
+    kLedgerNotes = 146,
 
     kMenuItem = 1000,
     kRecentItem = 2000,
@@ -79,7 +91,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kFullscreenBox;
+    return id >= kCancel && id <= kLedgerNotes;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

@@ -59,7 +59,8 @@ enum class Dialog : int {
     HowToPlay,
     Welcome,
     QuitConfirm,
-    Messages
+    Messages,
+    Ledger
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
@@ -235,6 +236,13 @@ private:
     void button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary);
     void label(cairo_t *cr, const char *font, const std::string &text, double x, double y, int wrap);
     void frame_panel(cairo_t *cr, double x, double y, double w, double h, const char *title);
+    void paint_vga_veil(cairo_t *cr);
+    void refresh_place_cue();
+    void absorb_placement_note();
+    void show_problem_on_map(int kind, bool alternate);
+    void queue_milestones(const std::vector<int> &ids);
+    void note_civic_month();
+    bool return_from_overlay();
     const char *glyph(SDL_GamepadButton button) const;
     bool adjust_focused_slider(int direction, int coarse = 1);
     bool nudge_file_list(int delta, bool page, bool force);
@@ -382,6 +390,28 @@ private:
 
     Dialog dialog_ = Dialog::None;
     bool budget_is_tax_ = false;
+    bool budget_cover_ = false;
+    bool tax_pause_hold_ = false;
+    bool overlay_return_eval_ = false;
+    int eval_why_ = -1;
+    int dwell_x_ = -999;
+    int dwell_y_ = -999;
+    int dwell_ms_ = 0;
+    bool milestone_notes_ = true;
+    int card_id_ = -1;
+    int card_ms_ = 0;
+    std::vector<int> card_queue_;
+    int hover_edge_ms_ = 0;
+    int tracked_hover_ = -1;
+    bool receipt_on_ = false;
+    bool receipt_ok_ = false;
+    int receipt_left_ = 0;
+    int receipt_top_ = 0;
+    int receipt_w_ = 1;
+    int receipt_h_ = 1;
+    int receipt_age_ = 0;
+    int receipt_life_ = 280;
+    std::string receipt_text_;
     AfterSave after_save_ = AfterSave::Nothing;
     std::string queued_path_;
     std::vector<std::string> pending_opens_;

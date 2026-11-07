@@ -10,7 +10,33 @@
 
 #include <chrono>
 #include <functional>
+#include <string>
 #include <vector>
+
+// Overlay for the tool under the pointer. The geometry is the tool footprint.
+// mark: 0 hidden, 1 ready (solid corners), 2 caution (crossed corners),
+// 3 blocked (hatch), 4 short of funds (broken corners).
+struct MapCue {
+    bool active = false;
+    int mark = 0;
+    int left = 0;
+    int top = 0;
+    int width = 1;
+    int height = 1;
+    std::string tag;
+    bool zone = false;
+    int zleft = 0;
+    int ztop = 0;
+    int zwidth = 0;
+    int zheight = 0;
+    bool receipt = false;
+    bool receipt_ok = false;
+    int rleft = 0;
+    int rtop = 0;
+    int rwidth = 0;
+    int rheight = 0;
+    std::string receipt_text;
+};
 
 class TileAtlas;
 
@@ -34,6 +60,11 @@ public:
 
     void set_hover_tile(int tx, int ty);
     void clear_hover();
+    bool hover_tile(int &tx, int &ty) const;
+    // Tile where the current stroke began. Valid while dragging().
+    bool stroke_origin(int &tx, int &ty) const;
+    void set_cue(const MapCue &cue);
+    const MapCue &cue() const { return cue_; }
 
     void set_tile_size(int pixels);
     void set_shake(int dx, int dy);
@@ -98,6 +129,9 @@ private:
     bool hover_valid_ = false;
     int hover_x_ = 0;
     int hover_y_ = 0;
+    int origin_x_ = -1;
+    int origin_y_ = -1;
+    MapCue cue_;
     bool blink_on_ = false;
     int blink_ms_ = 0;
     bool atlas_was_loaded_ = false;

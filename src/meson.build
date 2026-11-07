@@ -7,6 +7,7 @@ lunduke_city_src = files(
   'map_view.cpp',
   'messages.cpp',
   'overlay_map.cpp',
+  'placement_hint.cpp',
   'shell.cpp',
   'special_buildings.cpp',
   'shell_actions.cpp',

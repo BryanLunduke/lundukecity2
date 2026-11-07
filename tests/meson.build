@@ -24,6 +24,7 @@ features = executable(
   'features.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
   '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
@@ -54,6 +55,7 @@ if posix_host
     'regressions.cpp',
     '../src/assets.cpp',
     '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
     '../src/special_buildings.cpp',
     '../src/messages.cpp',
     '../src/sound_player.cpp',
@@ -76,6 +78,7 @@ if posix_host
     'round3.cpp',
     '../src/assets.cpp',
     '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
     '../src/special_buildings.cpp',
     '../src/messages.cpp',
     '../src/sound_player.cpp',
@@ -99,6 +102,7 @@ round4 = executable(
   'round4.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
   '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
@@ -119,6 +123,7 @@ round5 = executable(
   'round5.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
   '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
@@ -141,6 +146,7 @@ round6 = executable(
   'round6.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
   '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
@@ -191,6 +197,7 @@ if posix_host
     'argv_open.cpp',
     '../src/assets.cpp',
     '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
     '../src/special_buildings.cpp',
     '../src/messages.cpp',
     '../src/sound_player.cpp',
@@ -230,6 +237,7 @@ round8 = executable(
   'round8.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
   '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
@@ -327,6 +335,7 @@ if posix_host
     'round15.cpp',
     '../src/assets.cpp',
     '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
     '../src/special_buildings.cpp',
     '../src/messages.cpp',
     '../src/sound_player.cpp',
@@ -438,6 +447,7 @@ special_buildings_test = executable(
   'special_buildings.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
   '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
@@ -460,6 +470,7 @@ scenario_preview_test = executable(
   '../src/tile_atlas.cpp',
   '../src/assets.cpp',
   '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
   '../src/special_buildings.cpp',
   '../src/messages.cpp',
   '../src/sound_player.cpp',
@@ -483,6 +494,16 @@ review = executable(
 
 test('review', review)
 
+editorial = executable(
+  'editorial',
+  'editorial.cpp',
+  '../src/placement_hint.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+)
+
+test('editorial', editorial)
+
 # Review fixes that do not need a window. Built on Windows too.
 round16 = executable(
   'round16',
@@ -490,6 +511,7 @@ round16 = executable(
   '../src/assets.cpp',
   '../src/city_glance.cpp',
   '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
   '../src/messages.cpp',
   '../src/overlay_map.cpp',
   '../src/sound_player.cpp',

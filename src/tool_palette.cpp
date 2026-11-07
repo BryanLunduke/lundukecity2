@@ -174,6 +174,7 @@ bool ToolPalette::press(double x, double y)
     if (index < 0) {
         return false;
     }
+    pressed_ = index;
     if (index != selected_) {
         selected_ = index;
         if (on_selected) {
@@ -183,14 +184,46 @@ bool ToolPalette::press(double x, double y)
     return true;
 }
 
+void ToolPalette::clear_pressed()
+{
+    pressed_ = -1;
+}
+
 void ToolPalette::motion(double x, double y)
 {
-    hover_ = index_at(x, y);
+    const int next = index_at(x, y);
+    if (next != hover_) {
+        hover_ = next;
+        hover_ms_ = 0;
+        edge_ms_ = 0;
+    }
 }
 
 void ToolPalette::leave()
 {
     hover_ = -1;
+    hover_ms_ = 0;
+    edge_ms_ = 0;
+}
+
+void ToolPalette::advance(int elapsed_ms)
+{
+    if (elapsed_ms < 0) {
+        elapsed_ms = 0;
+    }
+    if (hover_ < 0) {
+        hover_ms_ = 0;
+        edge_ms_ = 0;
+        return;
+    }
+    hover_ms_ += elapsed_ms;
+    edge_ms_ += elapsed_ms;
+    if (hover_ms_ > 4000) {
+        hover_ms_ = 4000;
+    }
+    if (edge_ms_ > 200) {
+        edge_ms_ = 200;
+    }
 }
 
 cairo_surface_t *tool_icon_named(const char *stem)
@@ -273,32 +306,86 @@ void ToolPalette::draw(cairo_t *cr) const
         const double bs = cell_ - 2;
         const bool pressed = i == selected_;
         const bool hover = i == hover_ && !pressed;
+        const bool down = i == pressed_;
+        const bool focused = i == focus_ && look_ != 0;
 
-        const double light = hover ? 1.0 : 0.96;
-        const double dark = 0.28;
-        const double face_r = pressed ? 1.0 : (hover ? 0.93 : 0.82);
-        const double face_g = pressed ? 0.86 : (hover ? 0.93 : 0.82);
-        const double face_b = pressed ? 0.15 : (hover ? 0.93 : 0.82);
+        if (look_ == 0) {
+            const double light = hover ? 1.0 : 0.96;
+            const double dark = 0.28;
+            const double face_r = pressed ? 1.0 : (hover ? 0.93 : 0.82);
+            const double face_g = pressed ? 0.86 : (hover ? 0.93 : 0.82);
+            const double face_b = pressed ? 0.15 : (hover ? 0.93 : 0.82);
 
-        if (pressed) {
-            box(cr, x, y, bs, bs, dark, dark, dark);
-            box(cr, x + 2, y + bs - 2, bs - 2, 2, light, light, light);
-            box(cr, x + bs - 2, y + 2, 2, bs - 4, light, light, light);
-            box(cr, x + 2, y + 2, bs - 4, bs - 4, face_r, face_g, face_b);
-            cairo_set_source_rgb(cr, 0.05, 0.05, 0.05);
-            cairo_set_line_width(cr, 1);
-            cairo_rectangle(cr, x + 2.5, y + 2.5, bs - 6, bs - 6);
-            cairo_stroke(cr);
+            if (pressed) {
+                box(cr, x, y, bs, bs, dark, dark, dark);
+                box(cr, x + 2, y + bs - 2, bs - 2, 2, light, light, light);
+                box(cr, x + bs - 2, y + 2, 2, bs - 4, light, light, light);
+                box(cr, x + 2, y + 2, bs - 4, bs - 4, face_r, face_g, face_b);
+                cairo_set_source_rgb(cr, 0.05, 0.05, 0.05);
+                cairo_set_line_width(cr, 1);
+                cairo_rectangle(cr, x + 2.5, y + 2.5, bs - 6, bs - 6);
+                cairo_stroke(cr);
+            } else {
+                box(cr, x, y, bs, bs, light, light, light);
+                box(cr, x, y + bs - 2, bs, 2, dark, dark, dark);
+                box(cr, x + bs - 2, y, 2, bs, dark, dark, dark);
+                box(cr, x + 1, y + bs - 3, bs - 3, 1, 0.50, 0.50, 0.50);
+                box(cr, x + bs - 3, y + 1, 1, bs - 3, 0.50, 0.50, 0.50);
+                box(cr, x + 2, y + 2, bs - 5, bs - 5, face_r, face_g, face_b);
+            }
         } else {
-            box(cr, x, y, bs, bs, light, light, light);
-            box(cr, x, y + bs - 2, bs, 2, dark, dark, dark);
-            box(cr, x + bs - 2, y, 2, bs, dark, dark, dark);
-            box(cr, x + 1, y + bs - 3, bs - 3, 1, 0.50, 0.50, 0.50);
-            box(cr, x + bs - 3, y + 1, 1, bs - 3, 0.50, 0.50, 0.50);
-            box(cr, x + 2, y + 2, bs - 5, bs - 5, face_r, face_g, face_b);
+            // Face stays put. Hover brightens the keyline in two steps.
+            const double face_r = pressed ? 255.0 / 255.0 : 203.0 / 255.0;
+            const double face_g = pressed ? 255.0 / 255.0 : 203.0 / 255.0;
+            const double face_b = pressed ? 85.0 / 255.0 : 203.0 / 255.0;
+            const double hi = 227.0 / 255.0;
+            const double lo = 85.0 / 255.0;
+            const bool key_hot = hover || down;
+            const bool key_full = key_hot && edge_ms_ >= 40;
+            double key_r = lo;
+            double key_g = lo;
+            double key_b = lo;
+            if (key_full) {
+                if (look_ == 2) {
+                    key_r = 255.0 / 255.0;
+                    key_g = 190.0 / 255.0;
+                    key_b = 0.0;
+                } else {
+                    key_r = 85.0 / 255.0;
+                    key_g = 85.0 / 255.0;
+                    key_b = 255.0 / 255.0;
+                }
+            } else if (key_hot) {
+                key_r = 170.0 / 255.0;
+                key_g = 170.0 / 255.0;
+                key_b = 170.0 / 255.0;
+            }
+            if (pressed) {
+                box(cr, x, y, bs, bs, lo, lo, lo);
+                box(cr, x + 2, y + bs - 2, bs - 2, 2, hi, hi, hi);
+                box(cr, x + bs - 2, y + 2, 2, bs - 4, hi, hi, hi);
+                box(cr, x + 2, y + 2, bs - 4, bs - 4, face_r, face_g, face_b);
+            } else {
+                box(cr, x, y, bs, bs, hi, hi, hi);
+                box(cr, x, y + bs - 2, bs, 2, lo, lo, lo);
+                box(cr, x + bs - 2, y, 2, bs, lo, lo, lo);
+                box(cr, x + 2, y + 2, bs - 4, bs - 4, face_r, face_g, face_b);
+            }
+            cairo_set_source_rgb(cr, key_r, key_g, key_b);
+            cairo_set_line_width(cr, 1);
+            cairo_rectangle(cr, x + 0.5, y + 0.5, bs - 1, bs - 1);
+            cairo_stroke(cr);
+            if (focused) {
+                cairo_set_source_rgb(cr, 0, 0, 0);
+                cairo_rectangle(cr, x + 0.5, y + 0.5, bs - 1, bs - 1);
+                cairo_stroke(cr);
+                cairo_set_source_rgb(cr, 1, 1, 1);
+                cairo_rectangle(cr, x + 2.5, y + 2.5, bs - 5, bs - 5);
+                cairo_stroke(cr);
+            }
         }
 
-        const double shift = pressed ? 1.0 : 0.0;
+        const double shift = look_ == 0 ? (pressed ? 1.0 : 0.0) : (down ? 1.0 : 0.0);
         cairo_surface_t *icon = (i >= 0 && i < 17) ? tool_icons().image[i] : nullptr;
         // 3px inside the bevel. At the default 48px cell the slot is 40px,
         // which is the authored sprite size, so the icon fills the face.

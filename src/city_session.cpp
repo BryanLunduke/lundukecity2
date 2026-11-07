@@ -11,6 +11,7 @@
 #include "messages.hpp"
 #include "text_edit.hpp"
 #include "scenario_sidecar.hpp"
+#include "placement_hint.hpp"
 #include "special_buildings.hpp"
 
 #include "micropolis.h"
@@ -478,12 +479,59 @@ void CitySession::forget_blocked_build()
     notify();
 }
 
+void CitySession::finish_stroke_attempt(long long before, int tool, int x, int y)
+{
+    if (!ready_ || tool == TOOL_QUERY || tool == kSpecialEngineId) {
+        return;
+    }
+    const long long delta = before - funds();
+    if (delta > 0) {
+        stroke_spent_ += delta;
+    }
+    if (stroke_tiles_ == 0 && tool_stroke_placed_ > 0) {
+        stroke_tiles_ = tool_stroke_placed_;
+    }
+    stroke_tool_ = tool;
+    stroke_x_ = x;
+    stroke_y_ = y;
+    if (tool_stroke_placed_ > 0) {
+        stroke_reason_.clear();
+    } else if (!message_.empty()) {
+        stroke_reason_ = message_;
+    }
+}
+
 void CitySession::end_tool_stroke()
 {
+    if (stroke_tool_ >= 0 && (tool_stroke_placed_ > 0 || !stroke_reason_.empty())) {
+        placement_note_.ok = tool_stroke_placed_ > 0;
+        placement_note_.tiles = stroke_tiles_ > 0 ? stroke_tiles_ : tool_stroke_placed_;
+        placement_note_.spent = static_cast<long long>(stroke_spent_);
+        placement_note_.reason = placement_note_.ok ? std::string() : stroke_reason_;
+        placement_note_.tool = stroke_tool_;
+        placement_note_.x = stroke_x_;
+        placement_note_.y = stroke_y_;
+        placement_waiting_ = true;
+    }
     if (tool_stroke_placed_ > 0) {
         forget_blocked_build();
     }
     tool_stroke_placed_ = 0;
+    stroke_tool_ = -1;
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    stroke_reason_.clear();
+}
+
+bool CitySession::take_placement_note(PlacementNote &out)
+{
+    if (!placement_waiting_) {
+        return false;
+    }
+    out = placement_note_;
+    placement_waiting_ = false;
+    placement_note_ = PlacementNote{};
+    return true;
 }
 
 bool CitySession::name_is_usable(const std::string &name)
@@ -767,6 +815,8 @@ void CitySession::new_city(const NewCitySpec &spec)
     eval_month_pending_ = false;
     clear_notices();
     clear_scenario_clock();
+    ledger_ = civic::Ledger{};
+    ledger_from_file_ = false;
     arm_eval_baseline();
     ready_ = true;
     notify();
@@ -1004,7 +1054,12 @@ bool CitySession::load_city(const std::string &path)
     eval_month_pending_ = false;
     clear_notices();
     clear_scenario_clock();
+    ledger_ = civic::Ledger{};
+    ledger_from_file_ = false;
     read_scenario_sidecar(path);
+    if (!ledger_from_file_) {
+        catch_up_ledger(false);
+    }
     recount_population_from_map();
     refresh_loaded_meters();
     arm_eval_baseline();
@@ -1080,8 +1135,11 @@ bool CitySession::load_scenario(int id)
     eval_month_pending_ = false;
     clear_notices();
     clear_scenario_clock();
+    ledger_ = civic::Ledger{};
+    ledger_from_file_ = false;
     recount_population_from_map();
     refresh_loaded_meters();
+    catch_up_ledger(false);
     arm_eval_baseline();
     post_message(std::string("Playing ") + entry->def.name + ".");
     return true;
@@ -1169,6 +1227,18 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
     if (!ready_) {
         return;
     }
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    stroke_reason_.clear();
+    const long long before = funds();
+    struct Guard {
+        CitySession *self;
+        long long before;
+        int tool;
+        int x;
+        int y;
+        ~Guard() { self->finish_stroke_attempt(before, tool, x, y); }
+    } guard{this, before, engine_tool, tile_x, tile_y};
     tool_stroke_placed_ = 0;
     if (engine_tool == kSpecialEngineId) {
         return;
@@ -1195,13 +1265,31 @@ bool CitySession::place_special(int index, int tile_x, int tile_y)
         return false;
     }
     tool_stroke_placed_ = 0;
+    const long long before = funds();
     std::string error;
     if (!place_special_building(&engine_->sim, index, tile_x, tile_y, error)) {
         if (!error.empty()) {
             post_message(error);
+            placement_note_.ok = false;
+            placement_note_.tiles = 0;
+            placement_note_.spent = 0;
+            placement_note_.reason = error;
+            placement_note_.tool = kSpecialEngineId;
+            placement_note_.x = tile_x;
+            placement_note_.y = tile_y;
+            placement_waiting_ = true;
         }
         return false;
     }
+    placement_note_.ok = true;
+    placement_note_.tiles = 1;
+    const long long spent = before - funds();
+    placement_note_.spent = spent > 0 ? spent : 0;
+    placement_note_.reason.clear();
+    placement_note_.tool = kSpecialEngineId;
+    placement_note_.x = tile_x;
+    placement_note_.y = tile_y;
+    placement_waiting_ = true;
     dirty_ = true;
     notify();
     return true;
@@ -1212,6 +1300,18 @@ void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, i
     if (!ready_ || engine_tool == kSpecialEngineId) {
         return;
     }
+    const long long before = funds();
+    const StrokeForecast predicted =
+        forecast_stroke(engine_tool, from_x, from_y, to_x, to_y, -1, before, auto_bulldoze(),
+                        [this](int x, int y) { return map_value(x, y); });
+    struct Guard {
+        CitySession *self;
+        long long before;
+        int tool;
+        int x;
+        int y;
+        ~Guard() { self->finish_stroke_attempt(before, tool, x, y); }
+    } guard{this, before, engine_tool, to_x, to_y};
     const bool placed = engine_->sim.toolDrag(static_cast<EditingTool>(engine_tool),
                                               static_cast<short>(from_x), static_cast<short>(from_y),
                                               static_cast<short>(to_x), static_cast<short>(to_y));
@@ -1219,6 +1319,12 @@ void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, i
         dirty_ = true;
         if (tool_stroke_placed_ < 100000) {
             ++tool_stroke_placed_;
+        }
+        const long long spent = before - funds();
+        if (predicted.tiles > 0 && spent == static_cast<long long>(predicted.cost)) {
+            stroke_tiles_ += predicted.tiles;
+        } else if (stroke_tiles_ < 100000) {
+            ++stroke_tiles_;
         }
         forget_blocked_build();
     }
@@ -1601,6 +1707,15 @@ void CitySession::commit_pending_budget()
 bool CitySession::budget_pending() const
 {
     return engine_->sim.budgetAwaitingAccept;
+}
+
+bool CitySession::begin_tax_year()
+{
+    if (!ready_) {
+        return false;
+    }
+    engine_->sim.collectTax();
+    return budget_pending();
 }
 
 void CitySession::discard_pending_budget()
@@ -2110,6 +2225,7 @@ CitySession::Evaluation CitySession::evaluation() const
         }
         Problem problem;
         problem.name = kProblems[which];
+        problem.kind = which;
         const int votes = sim.evalPreviewValid ? sim.evalPreviewVotes[which] : sim.problemVotes[which];
         problem.votes = votes;
         if (problem.votes < 0) {
@@ -2123,6 +2239,246 @@ CitySession::Evaluation CitySession::evaluation() const
         report.yes_percent = 0;
     }
     return report;
+}
+
+int CitySession::calendar_year() const
+{
+    const Micropolis &sim = engine_->sim;
+    const int year = static_cast<int>(sim.cityYear > 0 ? sim.cityYear : sim.startingYear);
+    return year > 0 ? year : 1900;
+}
+
+int CitySession::calendar_month() const
+{
+    int month = static_cast<int>(engine_->sim.cityMonth);
+    if (month < 0 || month > 11) {
+        month = 0;
+    }
+    return month;
+}
+
+bool CitySession::powered_homes() const
+{
+    if (!ready_) {
+        return false;
+    }
+    for (int y = 0; y < kWorldH; ++y) {
+        for (int x = 0; x < kWorldW; ++x) {
+            const int raw = map_value(x, y);
+            const int tile = raw & LOMASK;
+            if ((raw & ZONEBIT) == 0 || (raw & PWRBIT) == 0) {
+                continue;
+            }
+            if (tile < RESBASE || tile >= COMBASE) {
+                continue;
+            }
+            if (layer_value(MapLayer::Population, x, y) > 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void CitySession::catch_up_ledger(bool announce)
+{
+    note_civic_month(announce);
+}
+
+std::vector<int> CitySession::note_civic_month(bool announce)
+{
+    std::vector<int> fresh;
+    if (!ready_) {
+        return fresh;
+    }
+    const Evaluation report = evaluation();
+    const int year = calendar_year();
+    const int month = calendar_month();
+    for (int id : civic::note_population(ledger_, report.population, year, month, announce)) {
+        fresh.push_back(id);
+    }
+    for (int id : civic::note_powered(ledger_, powered_homes(), year, month, announce)) {
+        fresh.push_back(id);
+    }
+    return fresh;
+}
+
+std::vector<int> CitySession::note_civic_year(std::int64_t cash_flow)
+{
+    std::vector<int> fresh;
+    if (!ready_) {
+        return fresh;
+    }
+    const int year = calendar_year();
+    const int month = calendar_month();
+    for (int id : civic::note_balanced(ledger_, cash_flow, year, month)) {
+        fresh.push_back(id);
+    }
+    int traffic = -1;
+    for (const Problem &problem : evaluation().problems) {
+        if (problem.kind == 4) {
+            traffic = problem.votes;
+        }
+    }
+    for (int id : civic::note_traffic(ledger_, traffic, year, month)) {
+        fresh.push_back(id);
+    }
+    return fresh;
+}
+
+void CitySession::remember_civic_year()
+{
+    if (!ready_) {
+        return;
+    }
+    int votes[civic::kProblems] = {};
+    const Evaluation report = evaluation();
+    for (const Problem &problem : report.problems) {
+        if (problem.kind >= 0 && problem.kind < civic::kProblems) {
+            votes[problem.kind] = problem.votes;
+        }
+    }
+    civic::remember_year(ledger_, votes, report.population);
+}
+
+CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
+{
+    TileInspect card;
+    if (!ready_ || !Micropolis::testBounds(x, y)) {
+        return card;
+    }
+    card.valid = true;
+    const int raw = map_value(x, y);
+    const int tile = raw & LOMASK;
+    const std::string special = special_query_at(&engine_->sim, x, y);
+    if (!special.empty()) {
+        const auto dash = special.find(" — ");
+        card.name = dash == std::string::npos ? special : special.substr(0, dash);
+    } else if (tile >= RESBASE && tile < COMBASE) {
+        card.name = "Residential";
+    } else if (tile >= COMBASE && tile < INDBASE) {
+        card.name = "Commercial";
+    } else if (tile >= INDBASE && tile < PORTBASE) {
+        card.name = "Industrial";
+    } else if (tile >= PORTBASE && tile < AIRPORTBASE) {
+        card.name = "Seaport";
+    } else if (tile >= AIRPORTBASE && tile < COALBASE) {
+        card.name = "Airport";
+    } else if (tile >= COALBASE && tile < FIRESTBASE) {
+        card.name = "Coal power";
+    } else if (tile >= NUCLEARBASE && tile < INDBASE2) {
+        card.name = "Nuclear power";
+    } else if (tile >= STADIUMBASE && tile < NUCLEARBASE) {
+        card.name = "Stadium";
+    } else if (tile >= FIRESTBASE && tile < POLICESTBASE) {
+        card.name = "Fire dept";
+    } else if (tile >= POLICESTBASE && tile < STADIUMBASE) {
+        card.name = "Police";
+    } else if ((tile >= ROADBASE && tile <= LASTROAD) || tile == HBRIDGE || tile == VBRIDGE) {
+        card.name = "Road";
+    } else if (tile >= RAILBASE && tile <= LASTRAIL) {
+        card.name = "Rail";
+    } else if (tile >= POWERBASE && tile <= LASTPOWER) {
+        card.name = "Power line";
+    } else if (tile >= RIVER && tile <= WATER_HIGH) {
+        card.name = "Water";
+    } else if (tile >= WOODS_LOW && tile <= WOODS5) {
+        card.name = "Park";
+    } else if (tile == DIRT) {
+        card.name = "Clear";
+    } else {
+        card.name = "Land";
+    }
+    const bool zone = (raw & ZONEBIT) != 0 || !special.empty();
+    if (zone && tile != DIRT) {
+        const bool powered = (raw & PWRBIT) != 0;
+        card.power = powered ? "Power: on" : "Power: off";
+        card.offer_power = !powered;
+    } else if ((raw & CONDBIT) != 0) {
+        card.power = "Power: line";
+    } else {
+        card.power = "Power: —";
+    }
+    bool road = false;
+    bool rail = false;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (!Micropolis::testBounds(x + dx, y + dy)) {
+                continue;
+            }
+            const int neighbor = map_value(x + dx, y + dy) & LOMASK;
+            if (neighbor >= ROADBASE && neighbor <= LASTROAD) {
+                road = true;
+            }
+            if (neighbor >= RAILBASE && neighbor <= LASTRAIL) {
+                rail = true;
+            }
+        }
+    }
+    if (road) {
+        card.access = "Road access";
+    } else if (rail) {
+        card.access = "Rail access";
+    } else {
+        card.access = "No direct road";
+    }
+    const int crime = layer_value(MapLayer::Crime, x, y);
+    const int pollution = layer_value(MapLayer::Pollution, x, y);
+    if (card.offer_power) {
+        card.condition = "Unpowered";
+    } else if (crime >= pollution && crime > 0) {
+        card.condition = "Crime " + std::to_string(crime);
+    } else if (pollution > 0) {
+        card.condition = "Pollution " + std::to_string(pollution);
+    } else {
+        card.condition = "Quiet";
+    }
+    int center_x = x;
+    int center_y = y;
+    bool found = (raw & ZONEBIT) != 0;
+    if (!found) {
+        for (int radius = 1; radius <= 4 && !found; ++radius) {
+            for (int dy = -radius; dy <= radius && !found; ++dy) {
+                for (int dx = -radius; dx <= radius; ++dx) {
+                    if (std::abs(dx) != radius && std::abs(dy) != radius) {
+                        continue;
+                    }
+                    if (!Micropolis::testBounds(x + dx, y + dy)) {
+                        continue;
+                    }
+                    const int around = map_value(x + dx, y + dy);
+                    if ((around & ZONEBIT) != 0) {
+                        center_x = x + dx;
+                        center_y = y + dy;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (found) {
+        const int center = map_value(center_x, center_y) & LOMASK;
+        int span = 3;
+        if (center >= AIRPORTBASE && center < COALBASE) {
+            span = 6;
+        } else if ((center >= PORTBASE && center < AIRPORTBASE) || (center >= COALBASE && center < FIRESTBASE) ||
+                   (center >= STADIUMBASE && center < INDBASE2)) {
+            span = 4;
+        }
+        card.zone = true;
+        card.width = span;
+        card.height = span;
+        card.left = center_x - span / 2;
+        card.top = center_y - span / 2;
+        if (card.left < 0) {
+            card.left = 0;
+        }
+        if (card.top < 0) {
+            card.top = 0;
+        }
+    }
+    return card;
 }
 
 std::string CitySession::budget_text() const
@@ -2422,7 +2778,20 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     clock.month = static_cast<int>(sim.cityMonth);
     const long year = static_cast<long>(sim.cityYear);
     clock.year = static_cast<int>(year > 0 ? year : sim.startingYear);
-    return write_text_atomic(scenario_sidecar_path(path), scenario_sidecar_text(clock));
+    std::string text = scenario_sidecar_text(clock);
+    const std::string encoded = civic::encode_ledger(ledger_);
+    if (!encoded.empty()) {
+        const auto brace = text.rfind('}');
+        if (brace != std::string::npos) {
+            text.insert(brace, "  \"milestones\": \"" + encoded + "\"\n");
+            const auto year_line = text.rfind("\"year\"");
+            const auto year_nl = year_line == std::string::npos ? std::string::npos : text.find('\n', year_line);
+            if (year_nl != std::string::npos) {
+                text.insert(year_nl, ",");
+            }
+        }
+    }
+    return write_text_atomic(scenario_sidecar_path(path), text);
 }
 
 void CitySession::read_scenario_sidecar(const std::string &path)
@@ -2441,6 +2810,18 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     std::string text(static_cast<std::size_t>(end), '\0');
     if (end > 0 && !in.read(&text[0], end)) {
         return;
+    }
+    civic::Ledger loaded;
+    const auto milestone_key = text.find("\"milestones\"");
+    if (milestone_key != std::string::npos) {
+        const auto colon = text.find(':', milestone_key);
+        const auto first = colon == std::string::npos ? std::string::npos : text.find('"', colon + 1);
+        const auto second = first == std::string::npos ? std::string::npos : text.find('"', first + 1);
+        if (first != std::string::npos && second != std::string::npos && second > first + 1 &&
+            civic::decode_ledger(text.substr(first + 1, second - first - 1), loaded)) {
+            ledger_ = loaded;
+            ledger_from_file_ = true;
+        }
     }
     ScenarioClock clock;
     if (!scenario_sidecar_parse(text, clock)) {
