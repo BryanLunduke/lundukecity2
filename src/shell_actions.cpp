@@ -258,9 +258,14 @@ civic::YearDigest Shell::year_digest() const
         one.tile_y = notice.tile_y;
         notes.push_back(one);
     }
-    return civic::make_year_digest(book.previous_funds, book.funds, true, book.estimates, report.population,
-                                   session_.ledger(), votes, top_name, top_votes, top_kind, report.score_delta,
-                                   report.deltas_known, session_.city_year(), notes);
+    civic::YearDigest digest = civic::make_year_digest(
+        book.previous_funds, book.funds, true, book.estimates, report.population, session_.ledger(), votes, top_name,
+        top_votes, top_kind, report.score_delta, report.deltas_known, session_.city_year(), notes);
+    digest.ended_year = session_.review_year();
+    digest.opening_funds = book.previous_funds;
+    digest.closing_funds = book.funds;
+    digest.tax_percent = book.tax_percent;
+    return digest;
 }
 
 void Shell::open_dialog(Dialog dialog, bool prompted)

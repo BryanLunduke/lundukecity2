@@ -115,7 +115,7 @@ private:
     void draw_special_menu(cairo_t *cr);
     void draw_dialog(cairo_t *cr);
     void draw_welcome_vignette(cairo_t *cr);
-    void draw_civic_crest(cairo_t *cr, double x, double y, double side) const;
+    void draw_year_cover(cairo_t *cr, double margin, double band_h);
     civic::YearDigest year_digest() const;
     std::string welcome_continue_label() const;
     void begin_scene_fade();

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Original civic landmarks for Lunduke City 2. Not traced from any game.
-# Every colour is an exact VGA mode 13h entry (art/svga/vga_palette.py).
+# Hand-placed civic landmarks and the Welcome cityscape.
+# Original drawings. Every colour is an exact VGA mode 13h entry.
+# Not a recolor of one mesh: each look has its own plan.
 
-import math
 import pathlib
 import struct
 import sys
@@ -14,47 +14,51 @@ from vga_palette import vga_palette_8bit
 
 ROOT = pathlib.Path(__file__).resolve().parent
 ICON = pathlib.Path(__file__).resolve().parents[1] / "tool-icons"
+WELCOME = pathlib.Path(__file__).resolve().parents[1] / "welcome"
 PAL = set(vga_palette_8bit())
 
-# Named VGA entries. Checked against the palette before anything is written.
-C = {
-    "black": (0, 0, 0),
-    "ink": (20, 20, 20),
-    "shadow": (32, 32, 32),
-    "grey": (113, 113, 113),
-    "stone": (182, 182, 182),
-    "paper": (227, 227, 227),
-    "white": (255, 255, 255),
-    "red": (170, 0, 0),
-    "brown": (170, 85, 0),
-    "umber": (113, 56, 0),
-    "tan": (113, 85, 56),
-    "gold": (255, 190, 0),
-    "grass": (0, 170, 0),
-    "lawn": (0, 113, 0),
-    "deep": (0, 65, 0),
-    "moss": (32, 65, 32),
-    "navy": (0, 0, 113),
-    "blue": (0, 0, 170),
-    "slate": (69, 69, 69),
-    "ground": (56, 56, 56),
-    "path": (170, 170, 170),
-}
+# Exact VGA triples.
+K = (20, 20, 20)
+N = (32, 32, 32)
+S = (56, 56, 56)
+G = (113, 113, 113)
+L = (170, 170, 170)
+P = (203, 203, 203)
+W = (227, 227, 227)
+F = (255, 255, 255)
+R = (170, 0, 0)
+D = (113, 0, 0)
+O = (170, 85, 0)
+U = (113, 56, 0)
+T = (113, 85, 56)
+Y = (255, 190, 0)
+E = (0, 170, 0)
+M = (0, 113, 0)
+Z = (0, 65, 0)
+H = (32, 65, 32)
+C = (56, 113, 56)
+B = (0, 0, 170)
+Q = (0, 0, 113)
+A = (0, 0, 65)
+V = (0, 113, 113)
+X = (255, 235, 182)
+J = (255, 219, 182)
+
+for _rgb in (K, N, S, G, L, P, W, F, R, D, O, U, T, Y, E, M, Z, H, C, B, Q, A, V, X, J):
+    if _rgb not in PAL:
+        raise SystemExit(f"off palette {_rgb}")
 
 
-def check_palette():
-    missing = [name for name, rgb in C.items() if rgb not in PAL]
-    if missing:
-        raise SystemExit("not in the VGA palette: " + ", ".join(missing))
-
-
-def blank(size):
-    return [[None] * size for _ in range(size)]
+def new(w, h, fill=None):
+    return [[fill for _ in range(w)] for _ in range(h)]
 
 
 def put(im, x, y, rgb):
-    size = len(im)
-    if 0 <= x < size and 0 <= y < size and rgb is not None:
+    if rgb is None:
+        return
+    h = len(im)
+    w = len(im[0])
+    if 0 <= x < w and 0 <= y < h:
         im[y][x] = rgb
 
 
@@ -64,179 +68,656 @@ def rect(im, x, y, w, h, rgb):
             put(im, xx, yy, rgb)
 
 
-def ground(im, look):
-    size = len(im)
-    if look == "spooky":
-        base, spec = C["ground"], C["moss"]
-    elif look == "svga":
-        base, spec = C["lawn"], C["deep"]
-    else:
-        base, spec = C["grass"], C["lawn"]
-    rect(im, 0, 0, size, size, base)
-    for y in range(0, size, 4):
-        for x in range(0, size, 5):
-            put(im, (x + y) % size, y, spec)
+def hline(im, x, y, w, rgb):
+    rect(im, x, y, w, 1, rgb)
 
 
-def shadow_of(mask, dx, dy, color):
-    size = len(mask)
-    out = blank(size)
-    for y in range(size):
-        for x in range(size):
-            if mask[y][x] is None:
+def vline(im, x, y, h, rgb):
+    rect(im, x, y, 1, h, rgb)
+
+
+def grass(im, a, b, spec):
+    h = len(im)
+    w = len(im[0])
+    rect(im, 0, 0, w, h, a)
+    for y in range(h):
+        for x in range(w):
+            if ((x * 3 + y * 5) % 11) == 0:
+                put(im, x, y, spec)
+            elif ((x + y * 2) % 17) == 0:
+                put(im, x, y, b)
+
+
+def shadow_under(im, mask, dx, dy, rgb):
+    h = len(im)
+    w = len(im[0])
+    for y in range(h):
+        for x in range(w):
+            if not mask[y][x]:
                 continue
             sx, sy = x + dx, y + dy
-            if 0 <= sx < size and 0 <= sy < size:
-                out[sy][sx] = color
-    return out
+            if 0 <= sx < w and 0 <= sy < h and not mask[sy][sx]:
+                # Keep the shadow off the building itself.
+                im[sy][sx] = rgb
 
 
-def stamp(dest, src):
-    size = len(dest)
-    for y in range(size):
-        for x in range(size):
-            if src[y][x] is not None:
-                dest[y][x] = src[y][x]
+def mark(mask, x, y):
+    h = len(mask)
+    w = len(mask[0])
+    if 0 <= x < w and 0 <= y < h:
+        mask[y][x] = True
 
 
-def box3q(im, x, y, w, depth, height, wall, side, roof):
-    """Top-down 3/4 box. The roof is the large face. The east wall steps
-    down-right at 45 degrees. Shadow is applied by the caller."""
-    rect(im, x, y, w, depth, roof)
-    rect(im, x, y + depth, w, height, wall)
-    # East wall: each row is one pixel shorter, a 45-degree outer edge.
-    span = depth + height
+def mark_rect(mask, x, y, w, h):
+    for yy in range(y, y + h):
+        for xx in range(x, x + w):
+            mark(mask, xx, yy)
+
+
+def window(im, x, y, w, h, glass, muntin):
+    rect(im, x, y, w, h, glass)
+    hline(im, x, y + h // 2, w, muntin)
+    vline(im, x + w // 2, y, h, muntin)
+    hline(im, x, y, w, muntin)
+    hline(im, x, y + h - 1, w, muntin)
+    vline(im, x, y, h, muntin)
+    vline(im, x + w - 1, y, h, muntin)
+
+
+def door(im, x, y, w, h, wood, trim):
+    rect(im, x, y, w, h, wood)
+    vline(im, x, y, h, trim)
+    vline(im, x + w - 1, y, h, trim)
+    hline(im, x, y, w, trim)
+    put(im, x + w - 2, y + h // 2, Y)
+
+
+def chimney(im, x, y, h, brick, cap):
+    rect(im, x, y, 3, h, brick)
+    vline(im, x, y, h, K)
+    hline(im, x - 1, y, 5, cap)
+
+
+def tree(im, x, y, leaf, dark, trunk):
+    rect(im, x + 3, y + 8, 2, 6, trunk)
+    vline(im, x + 3, y + 8, 6, U)
+    # Canopy, not a square.
+    rect(im, x + 1, y + 3, 6, 6, leaf)
+    rect(im, x, y + 4, 8, 3, leaf)
+    rect(im, x + 2, y + 1, 4, 3, leaf)
+    put(im, x + 2, y + 3, dark)
+    put(im, x + 5, y + 5, dark)
+    put(im, x + 3, y + 2, F if leaf == E else J)
+
+
+def shrub(im, x, y, leaf, dark):
+    rect(im, x, y + 1, 5, 3, leaf)
+    rect(im, x + 1, y, 3, 2, dark)
+
+
+def path_h(im, x, y, w, a, b):
+    hline(im, x, y, w, a)
+    hline(im, x, y + 1, w, b)
+    hline(im, x, y + 2, w, a)
+    for i in range(0, w, 4):
+        put(im, x + i, y + 1, K)
+
+
+def path_v(im, x, y, h, a, b):
+    vline(im, x, y, h, a)
+    vline(im, x + 1, y, h, b)
+    vline(im, x + 2, y, h, a)
+    for i in range(0, h, 4):
+        put(im, x + 1, y + i, K)
+
+
+def roof_plane(im, x, y, w, d, rgb, shade, shingle=True):
+    rect(im, x, y, w, d, rgb)
+    if shingle:
+        for row in range(2, d, 3):
+            hline(im, x, y + row, w, shade)
+    hline(im, x, y, w, F if rgb != Q else L)
+    hline(im, x, y + d - 1, w, K)
+
+
+def side_wall(im, x, y, span, height, rgb):
+    """East wall. Width grows down the roof, then holds, so the face
+    reads at about 45 degrees instead of a one-pixel edge."""
     for i in range(span):
-        length = max(2, height - (i * height) // max(1, span))
-        tone = side if i < depth else wall
-        rect(im, x + w, y + i, length, 1, tone)
-    # A one-pixel dark eave so the roof reads as a plane, not a front.
-    rect(im, x, y + depth - 1, w, 1, C["ink"])
+        if i < height:
+            length = i + 2
+        else:
+            length = height + 1
+        hline(im, x, y + i, length, rgb)
+        put(im, x + length - 1, y + i, K)
+        if i % 3 == 0:
+            put(im, x, y + i, K)
 
 
-def wheel(im, cx, cy, radius, rim, spoke, cabin):
-    for deg in range(0, 360, 6):
+def front_wall(im, x, y, w, h, rgb, shade):
+    rect(im, x, y, w, h, rgb)
+    vline(im, x, y, h, shade)
+    hline(im, x, y + h - 1, w, K)
+
+
+def estate_block(im, mask, x, y, w, d, h, wall, side, roof, rshade):
+    roof_plane(im, x, y, w, d, roof, rshade)
+    front_wall(im, x, y + d, w, h, wall, G)
+    side_wall(im, x + w, y, d + h, 6, side)
+    mark_rect(mask, x, y, w + 8, d + h)
+    hline(im, x, y + d, w, K)
+
+
+def fountain(im, x, y):
+    rect(im, x, y + 2, 7, 4, B)
+    rect(im, x + 1, y + 3, 5, 2, V)
+    hline(im, x + 1, y + 3, 4, F)
+    vline(im, x + 3, y, 3, L)
+    put(im, x + 3, y, W)
+
+
+def lamp(im, x, y, post, glow):
+    vline(im, x, y + 2, 6, post)
+    put(im, x, y + 1, glow)
+    put(im, x - 1, y + 2, glow)
+    put(im, x + 1, y + 2, glow)
+
+
+def wheel(im, mask, cx, cy, radius, rim, spoke, cabin, squash):
+    import math
+    pts = []
+    for deg in range(0, 360, 4):
         rad = math.radians(deg)
-        # Squash the circle so it sits on the ground plane.
         px = int(round(cx + math.cos(rad) * radius))
-        py = int(round(cy + math.sin(rad) * radius * 0.62))
+        py = int(round(cy + math.sin(rad) * radius * squash))
         put(im, px, py, rim)
         put(im, px, py + 1, rim)
-    for deg in range(0, 360, 45):
+        mark(mask, px, py)
+        pts.append((deg, px, py))
+    for deg in range(0, 360, 30):
         rad = math.radians(deg)
         for t in range(1, radius):
             px = int(round(cx + math.cos(rad) * t))
-            py = int(round(cy + math.sin(rad) * t * 0.62))
+            py = int(round(cy + math.sin(rad) * t * squash))
             put(im, px, py, spoke)
-    for deg in (200, 250, 300, 20, 70):
+            mark(mask, px, py)
+    for deg in (210, 250, 290, 330, 20, 60, 110, 150):
         rad = math.radians(deg)
         px = int(round(cx + math.cos(rad) * (radius - 1)))
-        py = int(round(cy + math.sin(rad) * (radius - 1) * 0.62))
+        py = int(round(cy + math.sin(rad) * (radius - 1) * squash))
         rect(im, px - 1, py, 3, 2, cabin)
+        mark_rect(mask, px - 1, py, 3, 2)
+    # Hub and A-frame legs.
+    rect(im, cx - 1, cy - 1, 3, 3, G)
+    vline(im, cx, cy, 14, G)
+    mark_rect(mask, cx - 1, cy - 1, 3, 16)
 
 
-def mayor(im, look):
-    if look == "spooky":
-        wall, side, roof, door, trim = C["tan"], C["umber"], C["brown"], C["ink"], C["gold"]
-    elif look == "svga":
-        wall, side, roof, door, trim = C["stone"], C["grey"], C["deep"], C["ink"], C["paper"]
-    else:
-        wall, side, roof, door, trim = C["paper"], C["stone"], C["red"], C["ink"], C["white"]
-    box3q(im, 6, 6, 28, 16, 8, wall, side, roof)
-    rect(im, 16, 24, 6, 6, door)
-    rect(im, 10, 10, 5, 4, trim)
-    rect(im, 24, 10, 5, 4, trim)
-    rect(im, 18, 4, 3, 4, C["grey"])
-    rect(im, 14, 30, 12, 2, C["path"])
+def tent(im, mask, x, y, w, h, cloth, stripe):
+    # A peaked tent, roof planes meeting at the top.
+    for i in range(h):
+        inset = i // 2
+        span = w - inset * 2
+        if span < 2:
+            break
+        color = stripe if (i % 3 == 0) else cloth
+        hline(im, x + inset, y + i, span, color)
+        mark(mask, x + inset, y + i)
+        mark(mask, x + inset + span - 1, y + i)
+    rect(im, x + 2, y + h - 4, w - 4, 4, cloth)
+    mark_rect(mask, x + 2, y + h - 4, w - 4, 4)
+    vline(im, x + w // 2, y + h - 4, 4, K)
 
 
-def casino(im, look):
-    if look == "spooky":
-        wall, side, roof, lamp = C["umber"], C["tan"], C["brown"], C["gold"]
-    elif look == "svga":
-        wall, side, roof, lamp = C["slate"], C["grey"], C["navy"], C["gold"]
-    else:
-        wall, side, roof, lamp = C["red"], C["grey"], C["brown"], C["gold"]
-    box3q(im, 4, 6, 32, 16, 8, wall, side, roof)
-    # Marquee sits on the roof plane. Diamonds, not a neon strip.
-    for i, px in enumerate(range(8, 32, 4)):
-        put(im, px, 10, lamp if i % 2 == 0 else C["paper"])
-        put(im, px + 1, 11, lamp if i % 2 else C["paper"])
-    rect(im, 16, 24, 6, 6, C["ink"])
-    rect(im, 8, 12, 4, 3, C["paper"])
-    rect(im, 26, 12, 4, 3, C["paper"])
+def apply_shadow(im, mask, rgb):
+    shadow_under(im, mask, 4, 3, rgb)
 
 
-def amusement(im, look):
-    if look == "spooky":
-        wall, side, roof, rim = C["tan"], C["umber"], C["brown"], C["gold"]
-    elif look == "svga":
-        wall, side, roof, rim = C["stone"], C["grey"], C["red"], C["paper"]
-    else:
-        wall, side, roof, rim = C["paper"], C["path"], C["blue"], C["ink"]
-    box3q(im, 2, 18, 16, 10, 6, wall, side, roof)
-    rect(im, 6, 24, 4, 5, C["ink"])
-    wheel(im, 32, 16, 12, rim, C["grey"], C["red"])
-    rect(im, 31, 22, 2, 12, C["grey"])
+def mayor_classic(im):
+    mask = new(48, 48, False)
+    grass(im, E, M, Z)
+    path_h(im, 0, 40, 22, L, G)
+    path_v(im, 18, 28, 14, L, G)
+    shrub(im, 2, 36, M, Z)
+    shrub(im, 40, 38, M, Z)
+    tree(im, 1, 4, M, Z, U)
+    tree(im, 38, 2, E, M, U)
+    fountain(im, 4, 22)
+    # Wings sit lower than the main roof so the house reads as an estate.
+    estate_block(im, mask, 8, 16, 10, 6, 6, W, L, R, D)
+    estate_block(im, mask, 30, 16, 10, 6, 6, W, L, R, D)
+    estate_block(im, mask, 14, 8, 20, 10, 12, P, G, R, D)
+    chimney(im, 28, 4, 6, T, K)
+    window(im, 18, 12, 5, 4, B, W)
+    window(im, 26, 12, 5, 4, B, W)
+    window(im, 17, 22, 4, 5, B, F)
+    window(im, 27, 22, 4, 5, B, F)
+    door(im, 22, 22, 5, 8, U, O)
+    rect(im, 20, 30, 9, 2, L)
+    hline(im, 8, 44, 32, M)
+    for x in range(8, 40, 4):
+        vline(im, x, 42, 3, U)
+    apply_shadow(im, mask, N)
 
 
-def compose(draw, look, size):
-    im = blank(size)
-    ground(im, look)
-    building = blank(size)
-    draw(building, look)
-    shade = shadow_of(building, 4, 3, C["ink"])
-    # Shadow only on open ground, same down-right direction as the hospital.
-    for y in range(size):
-        for x in range(size):
-            if shade[y][x] is not None and building[y][x] is None:
-                im[y][x] = shade[y][x]
-    stamp(im, building)
-    return im
+def mayor_svga(im):
+    mask = new(48, 48, False)
+    grass(im, M, Z, H)
+    # A drive approaches from the lower left. The house sits to the right
+    # with a civic tower, a different plan from the classic wings.
+    path_h(im, 0, 38, 16, T, U)
+    path_v(im, 12, 26, 14, T, U)
+    rect(im, 16, 34, 28, 6, G)
+    hline(im, 16, 34, 28, L)
+    tree(im, 0, 8, Z, H, U)
+    tree(im, 2, 28, C, Z, U)
+    shrub(im, 40, 30, C, Z)
+    estate_block(im, mask, 18, 14, 22, 8, 10, W, G, Q, A)
+    # Tower on the left of the house.
+    estate_block(im, mask, 10, 6, 10, 8, 16, P, L, B, Q)
+    window(im, 12, 10, 5, 4, Y, K)
+    window(im, 12, 16, 5, 4, B, W)
+    chimney(im, 34, 8, 7, T, K)
+    window(im, 22, 16, 5, 4, B, F)
+    window(im, 30, 16, 5, 4, B, F)
+    window(im, 22, 24, 4, 4, B, F)
+    window(im, 32, 24, 4, 4, B, F)
+    door(im, 26, 24, 5, 8, U, O)
+    rect(im, 24, 32, 9, 2, L)
+    hline(im, 10, 4, 8, Y)
+    vline(im, 14, 2, 4, G)
+    apply_shadow(im, mask, K)
 
 
-def icon_crop(src):
-    # 40px toolbar icon: drop the outer grass margin of the 48px sheet.
-    out = blank(40)
+def mayor_spooky(im):
+    mask = new(48, 48, False)
+    grass(im, S, H, U)
+    rect(im, 4, 40, 40, 4, T)
+    hline(im, 4, 40, 40, U)
+    path_v(im, 22, 30, 12, T, U)
+    # Steep twin gables, brick, warm windows. A residence, not a ruin.
+    tree(im, 1, 6, U, O, K)
+    tree(im, 38, 8, O, U, K)
+    shrub(im, 6, 34, U, O)
+    estate_block(im, mask, 10, 18, 12, 8, 8, O, U, D, K)
+    estate_block(im, mask, 26, 18, 12, 8, 8, O, U, D, K)
+    estate_block(im, mask, 14, 8, 20, 12, 10, T, U, R, D)
+    # Gable peaks above the wings.
+    for i, ox in enumerate((12, 28)):
+        for row in range(6):
+            hline(im, ox + row, 12 + row, 10 - row * 2, D)
+            mark(mask, ox + row, 12 + row)
+    chimney(im, 22, 4, 6, U, K)
+    window(im, 18, 14, 4, 4, Y, K)
+    window(im, 26, 14, 4, 4, Y, K)
+    window(im, 16, 24, 4, 4, Y, U)
+    window(im, 30, 24, 4, 4, Y, U)
+    door(im, 22, 22, 5, 8, K, O)
+    rect(im, 18, 30, 12, 2, L)
+    # Low garden wall.
+    hline(im, 8, 36, 32, T)
+    hline(im, 8, 37, 32, U)
+    vline(im, 8, 34, 4, T)
+    vline(im, 39, 34, 4, T)
+    apply_shadow(im, mask, K)
+
+
+def marquee(im, x, y, n, glow, gap=3):
+    for i in range(n):
+        put(im, x + i * gap, y, glow if i % 2 == 0 else F)
+        put(im, x + i * gap, y + 1, O if i % 2 else Y)
+
+
+def casino_classic(im):
+    mask = new(48, 48, False)
+    grass(im, E, M, Z)
+    # Paved plaza.
+    rect(im, 4, 32, 40, 12, L)
+    for y in range(32, 44, 3):
+        for x in range(4, 44, 4):
+            put(im, x, y, G)
+    rect(im, 16, 30, 16, 3, P)
+    # Main hall plus a lower side salon so it is not one box.
+    estate_block(im, mask, 6, 18, 10, 6, 8, R, D, O, U)
+    estate_block(im, mask, 14, 8, 22, 10, 12, R, D, O, U)
+    # Pediment on the roof plane.
+    for row in range(5):
+        hline(im, 20 + row, 4 + row, 12 - row * 2, Y)
+        mark(mask, 20 + row, 4 + row)
+    marquee(im, 16, 12, 7, Y)
+    hline(im, 15, 14, 20, O)
+    # Columns and entrance.
+    for cx in (16, 30):
+        vline(im, cx, 20, 10, F)
+        vline(im, cx + 1, 20, 10, W)
+        mark(mask, cx, 22)
+    window(im, 20, 18, 4, 4, Y, K)
+    window(im, 26, 18, 4, 4, Y, K)
+    door(im, 22, 22, 6, 8, K, Y)
+    rect(im, 8, 24, 4, 4, B)
+    lamp(im, 8, 34, G, Y)
+    lamp(im, 40, 34, G, Y)
+    shrub(im, 4, 28, M, Z)
+    shrub(im, 38, 28, M, Z)
+    apply_shadow(im, mask, N)
+
+
+def casino_svga(im):
+    mask = new(48, 48, False)
+    grass(im, Z, H, M)
+    rect(im, 2, 34, 44, 12, S)
+    for x in range(2, 46, 3):
+        vline(im, x, 34, 12, G)
+    hline(im, 2, 34, 44, L)
+    # Canopy projects toward the viewer. The hall sits behind it.
+    estate_block(im, mask, 10, 10, 28, 8, 10, G, S, Q, A)
+    estate_block(im, mask, 8, 20, 32, 4, 6, B, Q, O, U)
+    marquee(im, 12, 18, 9, F, 3)
+    hline(im, 10, 20, 28, Y)
+    window(im, 14, 12, 5, 4, V, F)
+    window(im, 22, 12, 5, 4, V, F)
+    window(im, 30, 12, 5, 4, V, F)
+    door(im, 21, 24, 6, 8, K, Y)
+    for cx in (16, 30):
+        vline(im, cx, 24, 8, W)
+    lamp(im, 6, 30, L, Y)
+    lamp(im, 42, 30, L, Y)
+    rect(im, 4, 26, 4, 3, C)
+    rect(im, 40, 26, 4, 3, C)
+    chimney(im, 34, 6, 5, G, K)
+    apply_shadow(im, mask, K)
+
+
+def casino_spooky(im):
+    mask = new(48, 48, False)
+    grass(im, H, S, U)
+    rect(im, 6, 36, 36, 8, T)
+    hline(im, 6, 36, 36, U)
+    path_v(im, 22, 32, 8, O, U)
+    estate_block(im, mask, 8, 14, 32, 10, 10, U, T, D, K)
+    # Arched crown on the roof, gold trim, warm lanterns.
+    for row in range(6):
+        hline(im, 16 + row, 8 + row, 16 - row * 2, O)
+        mark(mask, 16 + row, 8 + row)
+    hline(im, 10, 16, 28, Y)
+    marquee(im, 12, 18, 8, Y, 3)
+    window(im, 12, 20, 5, 5, Y, K)
+    window(im, 31, 20, 5, 5, Y, K)
+    # Arch door.
+    rect(im, 20, 22, 8, 8, K)
+    hline(im, 21, 22, 6, O)
+    hline(im, 22, 21, 4, O)
+    put(im, 26, 26, Y)
+    mark_rect(mask, 20, 21, 8, 9)
+    lamp(im, 10, 32, U, Y)
+    lamp(im, 38, 32, U, Y)
+    shrub(im, 4, 30, U, O)
+    shrub(im, 40, 30, U, O)
+    apply_shadow(im, mask, K)
+
+
+def park_classic(im):
+    mask = new(48, 48, False)
+    grass(im, E, M, Z)
+    path_h(im, 0, 40, 48, L, W)
+    path_v(im, 8, 28, 14, L, W)
+    path_h(im, 8, 28, 28, L, W)
+    tree(im, 0, 2, M, Z, U)
+    tree(im, 36, 30, E, M, U)
+    shrub(im, 2, 34, M, Z)
+    # Ticket booth.
+    estate_block(im, mask, 2, 16, 12, 6, 8, W, L, B, Q)
+    window(im, 5, 20, 5, 4, Y, K)
+    door(im, 6, 24, 4, 5, U, O)
+    # Striped tent behind the wheel.
+    tent(im, mask, 16, 8, 14, 12, R, F)
+    wheel(im, mask, 34, 18, 12, G, K, R, 0.62)
+    # Fence along the bottom path.
+    for x in range(0, 48, 4):
+        vline(im, x, 38, 3, U)
+        put(im, x, 37, O)
+    rect(im, 20, 32, 3, 2, R)
+    rect(im, 24, 33, 3, 2, Y)
+    rect(im, 28, 32, 3, 2, F)
+    apply_shadow(im, mask, N)
+
+
+def park_svga(im):
+    mask = new(48, 48, False)
+    grass(im, M, Z, C)
+    path_h(im, 0, 42, 48, T, U)
+    path_v(im, 30, 24, 20, T, U)
+    path_h(im, 8, 24, 24, T, U)
+    tree(im, 0, 0, Z, H, U)
+    tree(im, 38, 0, C, Z, U)
+    tree(im, 0, 28, M, Z, U)
+    # Wheel is the left hero. A round carousel sits on the right.
+    wheel(im, mask, 16, 16, 13, F, G, R, 0.58)
+    # Carousel roof.
+    for row in range(8):
+        hline(im, 28 + row // 2, 14 + row, 16 - row, R)
+        mark(mask, 28 + row // 2, 14 + row)
+    rect(im, 30, 22, 12, 6, W)
+    mark_rect(mask, 30, 22, 12, 6)
+    vline(im, 32, 22, 6, G)
+    vline(im, 36, 22, 6, G)
+    vline(im, 40, 22, 6, G)
+    estate_block(im, mask, 34, 28, 10, 4, 6, O, U, Y, O)
+    window(im, 36, 30, 4, 3, B, F)
+    for x in range(4, 44, 6):
+        put(im, x, 40, R)
+        put(im, x + 2, 41, Y)
+    apply_shadow(im, mask, K)
+
+
+def park_spooky(im):
+    mask = new(48, 48, False)
+    grass(im, H, S, U)
+    path_h(im, 0, 40, 48, T, O)
+    path_v(im, 14, 26, 16, T, O)
+    # Bare autumn trees and a dusk wheel with warm lamps.
+    rect(im, 4, 10, 2, 12, U)
+    rect(im, 2, 6, 6, 5, O)
+    rect(im, 40, 12, 2, 10, U)
+    rect(im, 38, 8, 6, 5, U)
+    tent(im, mask, 4, 18, 12, 14, O, Y)
+    wheel(im, mask, 32, 16, 13, Y, O, R, 0.6)
+    # A short string of lamps over the path. Gold, not neon.
+    for x in range(6, 40, 5):
+        put(im, x, 36, Y)
+        put(im, x, 37, O)
+    estate_block(im, mask, 18, 28, 10, 4, 6, T, U, D, K)
+    door(im, 21, 30, 4, 5, K, Y)
+    apply_shadow(im, mask, K)
+
+
+def icon_from(sheet):
+    out = new(40, 40, None)
     for y in range(40):
         for x in range(40):
-            out[y][x] = src[y + 4][x + 4]
+            out[y][x] = sheet[y + 4][x + 4]
     return out
 
 
 def write_png(path, im):
-    size = len(im)
+    h = len(im)
+    w = len(im[0])
+
     def chunk(tag, payload):
         body = tag + payload
         return struct.pack(">I", len(payload)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
 
     raw = b""
-    for y in range(size):
+    for y in range(h):
         row = b"\x00"
-        for x in range(size):
+        for x in range(w):
             rgb = im[y][x] or (0, 0, 0)
             if rgb not in PAL:
-                raise SystemExit(f"{path} pixel {x},{y} {rgb} is off-palette")
+                raise SystemExit(f"{path} {x},{y} {rgb} off palette")
             row += bytes((rgb[0], rgb[1], rgb[2], 255))
         raw += row
-    ihdr = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
     png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(png)
 
 
+# 5x7 pixel letters for the Welcome title.
+GLYPH = {
+    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "N": ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+    "K": ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+    "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+    "Y": ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+}
+
+
+def text(im, phrase, x, y, scale, rgb, shade):
+    cursor = x
+    for ch in phrase:
+        if ch == " ":
+            cursor += 4 * scale
+            continue
+        glyph = GLYPH[ch]
+        for row, bits in enumerate(glyph):
+            for col, bit in enumerate(bits):
+                if bit == "1":
+                    rect(im, cursor + col * scale, y + row * scale + 1, scale, scale, shade)
+                    rect(im, cursor + col * scale, y + row * scale, scale, scale, rgb)
+        cursor += (5 + 1) * scale
+
+
+def skyline_box(im, x, y, w, h, wall, roof):
+    rect(im, x, y + 3, w, h - 3, wall)
+    hline(im, x, y + 3, w, K)
+    # Roof plane.
+    hline(im, x + 1, y + 2, w - 1, roof)
+    hline(im, x + 2, y + 1, w - 2, roof)
+    hline(im, x + 2, y, max(2, w // 3), roof)
+    # 45-degree east edge.
+    for i in range(h):
+        put(im, x + w, y + 3 + i, G if wall != U else K)
+    # Windows.
+    for wy in range(y + 6, y + h - 2, 4):
+        for wx in range(x + 2, x + w - 2, 4):
+            put(im, wx, wy, Y if (wx + wy) % 8 == 0 else B)
+            put(im, wx + 1, wy, W)
+
+
+def hill(im, y, rgb, amp, phase):
+    w = len(im[0])
+    h = len(im)
+    for x in range(w):
+        crest = y + int(amp * (0.5 + 0.5 * __import__("math").sin((x + phase) / 18.0)))
+        for yy in range(crest, h):
+            if im[yy][x] == im[y][x] or True:
+                # Only paint sky pixels. Callers pass sky colors to replace.
+                pass
+        # Simpler: paint from crest down until we hit a non-sky later. Here we
+        # just fill a band and let later draws cover it.
+        for yy in range(max(0, crest), h):
+            im[yy][x] = rgb
+
+
+def welcome(look):
+    w, h = 240, 156
+    if look == "classic":
+        sky, sky2, hill_c, water, foam = Q, B, Z, B, V
+        wall, roof, roof2 = W, R, O
+        ground = M
+    elif look == "svga":
+        sky, sky2, hill_c, water, foam = A, Q, Z, Q, V
+        wall, roof, roof2 = P, Q, C
+        ground = Z
+    else:
+        sky, sky2, hill_c, water, foam = A, Q, U, A, Q
+        wall, roof, roof2 = U, D, O
+        ground = H
+    im = new(w, h, sky)
+    rect(im, 0, 0, w, 28, sky)
+    rect(im, 0, 28, w, 18, sky2)
+    # Soft cloud blocks, not a photo sky.
+    if look != "spooky":
+        rect(im, 16, 10, 18, 4, L)
+        rect(im, 150, 8, 22, 3, G if look == "svga" else L)
+    else:
+        rect(im, 20, 8, 30, 3, S)
+    hill(im, 48, hill_c, 8, 0)
+    # Far ridge.
+    if look == "svga":
+        hill(im, 44, H, 6, 20)
+    # Water band.
+    rect(im, 0, 70, w, 22, water)
+    for x in range(0, w, 7):
+        put(im, x + 2, 76, foam)
+        put(im, x + 3, 78, F if look == "classic" else L)
+    # Near bank.
+    rect(im, 0, 90, w, h - 90, ground)
+    for x in range(0, w, 5):
+        put(im, x, 92, Z if look != "spooky" else U)
+    # Bridge.
+    hline(im, 70, 78, 70, L)
+    hline(im, 70, 79, 70, G)
+    for x in range(74, 136, 10):
+        vline(im, x, 80, 6, G)
+    # Skyline, different rhythms per look.
+    if look == "classic":
+        specs = [(18, 96, 14, 28, wall, roof), (36, 88, 16, 36, P, roof2), (56, 100, 12, 24, W, B),
+                 (148, 92, 18, 32, P, roof), (170, 80, 14, 44, W, R), (188, 96, 16, 28, L, O),
+                 (208, 104, 18, 20, W, B)]
+    elif look == "svga":
+        specs = [(24, 100, 12, 24, C, Q), (40, 84, 18, 40, P, B), (62, 96, 14, 28, W, Q),
+                 (150, 78, 16, 46, L, A), (170, 90, 20, 34, P, C), (194, 100, 12, 24, W, O)]
+    else:
+        specs = [(20, 98, 16, 26, U, D), (40, 86, 14, 38, T, R), (58, 102, 12, 22, O, U),
+                 (150, 88, 18, 36, U, D), (172, 78, 12, 46, T, O), (188, 96, 16, 28, U, R),
+                 (208, 104, 14, 20, O, D)]
+    for x, y, bw, bh, wa, ro in specs:
+        skyline_box(im, x, y, bw, bh, wa, ro)
+    # A second, lower row so the bank reads as a city rather than six blocks.
+    extra = [(8, 108, 10, 16), (78, 112, 12, 14), (128, 110, 10, 16), (206, 114, 12, 12)]
+    for x, y, bw, bh in extra:
+        skyline_box(im, x, y, bw, bh, wall, roof2)
+    # Civic hall in the middle, columns, larger than the houses.
+    skyline_box(im, 96, 86, 36, 40, W if look != "spooky" else T, B if look != "spooky" else O)
+    for cx in (100, 108, 124, 128):
+        vline(im, cx, 100, 24, F if look != "spooky" else J)
+    # Foreground trees.
+    for tx in (8, 64, 140, 220):
+        rect(im, tx + 2, 118, 2, 10, U)
+        rect(im, tx, 112, 6, 8, M if look == "classic" else (C if look == "svga" else O))
+    # Title.
+    title = Y if look != "spooky" else J
+    shade = U if look != "spooky" else K
+    text(im, "LUNDUKE", 36, 8, 2, title, shade)
+    text(im, "CITY", 92, 26, 2, title, shade)
+    # Diamond ornament.
+    put(im, 120, 42, title)
+    put(im, 119, 43, title)
+    put(im, 121, 43, title)
+    return im
+
+
 def main():
-    check_palette()
-    sheets = (
-        ("mayor", mayor),
-        ("casino", casino),
-        ("amusement", amusement),
-    )
-    looks = (("classic", ""), ("svga", "-svga"), ("spooky", "-spooky"))
-    for stem, draw in sheets:
-        for look, suffix in looks:
-            image = compose(draw, look, 48)
-            write_png(ROOT / f"{stem}{suffix}.png", image)
-            write_png(ICON / f"{stem}{suffix}.png", icon_crop(image))
+    sheets = {
+        "mayor": (mayor_classic, mayor_svga, mayor_spooky),
+        "casino": (casino_classic, casino_svga, casino_spooky),
+        "amusement": (park_classic, park_svga, park_spooky),
+    }
+    suffixes = ("", "-svga", "-spooky")
+    for stem, draws in sheets.items():
+        for draw, suffix in zip(draws, suffixes):
+            im = new(48, 48, E)
+            draw(im)
+            write_png(ROOT / f"{stem}{suffix}.png", im)
+            write_png(ICON / f"{stem}{suffix}.png", icon_from(im))
+    for look, name in (("classic", "classic.png"), ("svga", "svga.png"), ("spooky", "spooky.png")):
+        write_png(WELCOME / name, welcome(look))
 
 
 if __name__ == "__main__":

@@ -2300,6 +2300,81 @@ int CitySession::calendar_month() const
     return month;
 }
 
+int CitySession::review_year() const
+{
+    if (!ready_ || engine_ == nullptr) {
+        return 1900;
+    }
+    return civic::year_just_ended(calendar_year(), calendar_month(), static_cast<long long>(engine_->sim.cityTime));
+}
+
+CitySession::CensusMix CitySession::census_mix() const
+{
+    CensusMix mix;
+    if (!ready_ || engine_ == nullptr) {
+        return mix;
+    }
+    const Micropolis &sim = engine_->sim;
+    const bool snap = sim.censusSnapshotValid;
+    const long long res = snap ? sim.snapResPop : sim.resPop;
+    const long long com = snap ? sim.snapComPop : sim.comPop;
+    const long long ind = snap ? sim.snapIndPop : sim.indPop;
+    mix.homes = static_cast<int>(res < 0 ? 0 : res);
+    mix.shops = static_cast<int>(com < 0 ? 0 : com * 8);
+    mix.jobs = static_cast<int>(ind < 0 ? 0 : ind * 8);
+    return mix;
+}
+
+void CitySession::prepare_review_demo()
+{
+    if (!ready_ || engine_ == nullptr) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    // The first anniversary. updateDate publishes January of the next year,
+    // so the cover names 1900.
+    sim.cityTime = 48;
+    sim.updateDate();
+    sim.resPop = 80;
+    sim.comPop = 15;
+    sim.indPop = 10;
+    sim.snapResPop = sim.resPop;
+    sim.snapComPop = sim.comPop;
+    sim.snapIndPop = sim.indPop;
+    sim.censusSnapshotValid = true;
+    sim.budgetAnchorFunds = 15200;
+    sim.budgetAnchorValid = true;
+    sim.totalFunds = 18640;
+    sim.cityTax = 7;
+    sim.cityScore = 540;
+    sim.evalPreviewValid = true;
+    sim.evalPreviewYes = 58;
+    sim.evalPreviewAssessed = 0;
+    for (int i = 0; i < PROBNUM; ++i) {
+        sim.evalPreviewVotes[i] = 0;
+    }
+    for (int i = 0; i < CVP_PROBLEM_COMPLAINTS; ++i) {
+        sim.evalPreviewOrder[i] = -1;
+    }
+    sim.evalPreviewVotes[CVP_CRIME] = 34;
+    sim.evalPreviewVotes[CVP_TRAFFIC] = 22;
+    sim.evalPreviewOrder[0] = CVP_CRIME;
+    sim.evalPreviewOrder[1] = CVP_TRAFFIC;
+    civic::award(ledger_, civic::Town, 1900, 2, nullptr);
+    ledger_.have_prior = true;
+    ledger_.prior_population = 1800;
+    for (int i = 0; i < civic::kProblems; ++i) {
+        ledger_.prior_votes[i] = 0;
+    }
+    ledger_.prior_votes[0] = 48;
+    CityNotice notice;
+    notice.text = "The population has reached 2,000.";
+    notice.year = 1900;
+    notice.month = 5;
+    notice.has_place = false;
+    notices_.insert(notices_.begin(), notice);
+}
+
 bool CitySession::powered_homes() const
 {
     if (!ready_) {

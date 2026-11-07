@@ -305,6 +305,17 @@ public:
     std::string funds_text() const;
     std::string date_text() const;
     int city_year() const;
+    // January of a new year reviews the year that just finished.
+    int review_year() const;
+    struct CensusMix {
+        int homes = 0;
+        int shops = 0;
+        int jobs = 0;
+    };
+    CensusMix census_mix() const;
+    // DEMO=yearreview only. Sets the clock to the first January after 1900
+    // and fills the real census, ledger, budget, and poll the cover reads.
+    void prepare_review_demo();
     std::string message() const;
     // Increases once per engine notice, including a repeat of the same words.
     int message_serial() const { return message_serial_; }

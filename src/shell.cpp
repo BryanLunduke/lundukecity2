@@ -1457,6 +1457,7 @@ void Shell::loop()
                 speed_ = 0;
                 session_.set_speed(0);
                 session_.begin_tax_year();
+                session_.prepare_review_demo();
                 budget_is_tax_ = true;
                 budget_cover_ = true;
                 tax_pause_hold_ = true;

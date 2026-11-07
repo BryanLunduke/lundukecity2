@@ -413,7 +413,25 @@ struct YearDigest {
     bool locate = false;
     int locate_x = 0;
     int locate_y = 0;
+    // The calendar year that just finished. January 1901 reviews 1900.
+    int ended_year = 1900;
+    std::int64_t opening_funds = 0;
+    std::int64_t closing_funds = 0;
+    int tax_percent = 0;
 };
+
+// Tax is taken on the tick the clock becomes a new January. Once that
+// January is published, the year under review is the one before it.
+inline int year_just_ended(int calendar_year, int calendar_month, long long city_time)
+{
+    if (calendar_year <= 0) {
+        return 1900;
+    }
+    if (calendar_month == 0 && city_time >= 48) {
+        return calendar_year - 1;
+    }
+    return calendar_year;
+}
 
 inline bool digest_in_year(int note_year, int note_month, int city_year)
 {

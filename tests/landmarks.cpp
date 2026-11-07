@@ -268,6 +268,10 @@ int main()
     if (fade.active()) {
         return fail(29, "the dither outlived 140 ms");
     }
+    if (civic::year_just_ended(1901, 0, 48) != 1900 || civic::year_just_ended(1900, 11, 47) != 1900 ||
+        civic::year_just_ended(1900, 0, 0) != 1900) {
+        return fail(30, "the reviewed year is not the year that just ended");
+    }
 
     std::printf("landmarks ok\n");
     return 0;

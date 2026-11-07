@@ -119,6 +119,14 @@ install_data(
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'special-tiles',
 )
 install_data(
+  [
+    'data/welcome/classic.png',
+    'data/welcome/svga.png',
+    'data/welcome/spooky.png',
+  ],
+  install_dir: get_option('datadir') / 'lunduke-city-2' / 'welcome',
+)
+install_data(
   'NOTICE',
   'COPYING',
   install_dir: get_option('datadir') / 'doc' / 'lunduke-city-2',
