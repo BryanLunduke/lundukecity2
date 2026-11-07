@@ -2348,10 +2348,10 @@ void Shell::run_review_checks()
                 if (tile != RIVER && tile != REDGE && tile != CHANNEL) {
                     continue;
                 }
-                const int near[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                const int neighbors[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
                 for (int n = 0; n < 4; ++n) {
-                    const int nx = x + near[n][0];
-                    const int ny = y + near[n][1];
+                    const int nx = x + neighbors[n][0];
+                    const int ny = y + neighbors[n][1];
                     const auto before = session_.funds();
                     session_.use_tool(TOOL_ROAD, nx, ny);
                     session_.end_tool_stroke();

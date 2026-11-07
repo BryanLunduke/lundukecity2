@@ -86,10 +86,10 @@ int main()
                 if (tile != RIVER && tile != REDGE && tile != CHANNEL) {
                     continue;
                 }
-                const int near[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                const int neighbors[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
                 for (int n = 0; n < 4; ++n) {
-                    const int lx = x + near[n][0];
-                    const int ly = y + near[n][1];
+                    const int lx = x + neighbors[n][0];
+                    const int ly = y + neighbors[n][1];
                     if (sim.doTool(TOOL_ROAD, static_cast<short>(lx), static_cast<short>(ly)) != TOOLRESULT_OK) {
                         continue;
                     }
