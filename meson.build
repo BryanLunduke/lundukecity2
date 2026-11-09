@@ -119,12 +119,16 @@ install_data(
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'special-tiles',
 )
 install_data(
-  [
-    'data/welcome/classic.png',
-    'data/welcome/svga.png',
-    'data/welcome/spooky.png',
-  ],
+  'data/welcome/welcome-bg.png',
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'welcome',
+)
+install_data(
+  [
+    'data/fonts/DejaVuSerif.ttf',
+    'data/fonts/DejaVuSerif-Bold.ttf',
+    'data/fonts/LICENSE-DejaVu',
+  ],
+  install_dir: get_option('datadir') / 'lunduke-city-2' / 'fonts',
 )
 install_data(
   'NOTICE',

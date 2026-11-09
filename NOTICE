@@ -8,7 +8,9 @@ The gtkmm user interface is original to Lunduke City and is also
 GPL-3.0-or-later. The complete GNU GPL version 3 is in the file COPYING.
 
 This tree does not include the upstream Tcl/Tk interface, Python/SWIG
-bindings, DejaVu fonts, or scenario files. Map tiles, sprites, the
+bindings, or scenario files. DejaVu Serif (Year in Review titles) is
+vendored under data/fonts; the Windows package still adds DejaVu Sans
+and Sans Mono from the toolchain. Map tiles, sprites, the
 hexa tile resources, and sounds are vendored separately (see below).
 The additional terms apply to the engine sources, to those assets, and
 to the combined program.
@@ -60,6 +62,15 @@ Comment:
  and the other mobile entities. The hexa files are the original tile
  resources. The wav files are the sound effects.
  These bytes are not modified. See third_party/micropolis-assets/README.md.
+
+Files: data/fonts/*
+Copyright: 2003, Bitstream, Inc.
+           DejaVu changes are in the public domain.
+License: Bitstream-Vera
+Comment:
+ DejaVu Serif and DejaVu Serif Bold, used for Year in Review titles.
+ The permission text is data/fonts/LICENSE-DejaVu.
+ These files are not covered by the GPL additional terms.
 
 License: GPL-3+
  This package is free software; you can redistribute it and/or modify
@@ -117,3 +128,10 @@ License: GPL-3+
  WARRANTIES OR THE LIMITATIONS ON THE APPLICABLE STATUTORY RIGHTS OF A
  CONSUMER, SO SOME OR ALL OF THE ABOVE EXCLUSIONS AND LIMITATIONS MAY
  NOT APPLY TO YOU.
+
+License: Bitstream-Vera
+ The Bitstream Vera / DejaVu permission notice is in data/fonts/LICENSE-DejaVu.
+ The fonts may be reproduced and distributed, including inside a larger
+ program, provided that copyright, trademark, and permission notices stay
+ with the fonts. A copy of the fonts may not be sold by itself. Modified
+ fonts must be renamed so they do not use the words Bitstream or Vera.

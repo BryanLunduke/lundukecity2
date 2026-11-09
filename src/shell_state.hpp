@@ -114,7 +114,7 @@ private:
     void draw_menu_dropdown(cairo_t *cr);
     void draw_special_menu(cairo_t *cr);
     void draw_dialog(cairo_t *cr);
-    void draw_welcome_vignette(cairo_t *cr);
+    void draw_welcome_background(cairo_t *cr);
     void draw_year_cover(cairo_t *cr, double margin, double band_h);
     civic::YearDigest year_digest() const;
     std::string welcome_continue_label() const;

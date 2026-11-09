@@ -7,7 +7,7 @@
 # OUT_DIR/lunduke-city-2/
 #   bin/lunduke-city-2.exe + every DLL it needs (found by walking PE imports)
 #   etc/fonts/fonts.conf    fontconfig setup that only uses share/fonts
-#   share/fonts/            DejaVu Sans / Sans Mono
+#   share/fonts/            DejaVu Sans / Sans Mono / Serif
 #   share/lunduke-city-2/micropolis-assets
 #   share/licenses/         licenses of everything shipped
 # and OUT_DIR/lunduke-city-2-windows-x86_64.zip
@@ -46,11 +46,16 @@ mkdir -p "$root/share/$name/tool-icons"
 cp "$src"/data/tool-icons/*.png "$root/share/$name/tool-icons/"
 mkdir -p "$root/share/$name/special-tiles"
 cp "$src"/data/special-tiles/*.png "$root/share/$name/special-tiles/"
+mkdir -p "$root/share/$name/welcome" "$root/share/$name/fonts"
+cp "$src/data/welcome/welcome-bg.png" "$root/share/$name/welcome/"
+cp "$src/data/fonts/DejaVuSerif.ttf" "$src/data/fonts/DejaVuSerif-Bold.ttf" \
+   "$src/data/fonts/LICENSE-DejaVu" "$root/share/$name/fonts/"
 cp "$here/fonts.conf" "$root/etc/fonts/fonts.conf"
 for f in DejaVuSans.ttf DejaVuSans-Bold.ttf DejaVuSans-Oblique.ttf DejaVuSans-BoldOblique.ttf \
          DejaVuSansMono.ttf DejaVuSansMono-Bold.ttf; do
   cp "$sysroot/share/fonts/TTF/$f" "$root/share/fonts/"
 done
+cp "$src/data/fonts/DejaVuSerif.ttf" "$src/data/fonts/DejaVuSerif-Bold.ttf" "$root/share/fonts/"
 
 cp "$src/COPYING" "$src/NOTICE" "$src/README.md" "$root/share/licenses/$name/"
 # One license directory per MSYS2 package that contributed a shipped file.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Hand-placed civic landmarks and the Welcome cityscape.
+# Hand-placed civic landmarks.
+# The Welcome screen uses data/welcome/welcome-bg.png (editor art), not this script.
 # Original drawings. Every colour is an exact VGA mode 13h entry.
 # Not a recolor of one mesh: each look has its own plan.
 
@@ -14,7 +15,6 @@ from vga_palette import vga_palette_8bit
 
 ROOT = pathlib.Path(__file__).resolve().parent
 ICON = pathlib.Path(__file__).resolve().parents[1] / "tool-icons"
-WELCOME = pathlib.Path(__file__).resolve().parents[1] / "welcome"
 PAL = set(vga_palette_8bit())
 
 # Exact VGA triples.
@@ -561,148 +561,6 @@ def write_png(path, im):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(png)
 
-
-# 5x7 pixel letters for the Welcome title.
-GLYPH = {
-    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
-    "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
-    "N": ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
-    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
-    "K": ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
-    "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
-    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
-    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
-    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
-    "Y": ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
-}
-
-
-def text(im, phrase, x, y, scale, rgb, shade):
-    cursor = x
-    for ch in phrase:
-        if ch == " ":
-            cursor += 4 * scale
-            continue
-        glyph = GLYPH[ch]
-        for row, bits in enumerate(glyph):
-            for col, bit in enumerate(bits):
-                if bit == "1":
-                    rect(im, cursor + col * scale, y + row * scale + 1, scale, scale, shade)
-                    rect(im, cursor + col * scale, y + row * scale, scale, scale, rgb)
-        cursor += (5 + 1) * scale
-
-
-def skyline_box(im, x, y, w, h, wall, roof):
-    rect(im, x, y + 3, w, h - 3, wall)
-    hline(im, x, y + 3, w, K)
-    # Roof plane.
-    hline(im, x + 1, y + 2, w - 1, roof)
-    hline(im, x + 2, y + 1, w - 2, roof)
-    hline(im, x + 2, y, max(2, w // 3), roof)
-    # 45-degree east edge.
-    for i in range(h):
-        put(im, x + w, y + 3 + i, G if wall != U else K)
-    # Windows.
-    for wy in range(y + 6, y + h - 2, 4):
-        for wx in range(x + 2, x + w - 2, 4):
-            put(im, wx, wy, Y if (wx + wy) % 8 == 0 else B)
-            put(im, wx + 1, wy, W)
-
-
-def hill(im, y, rgb, amp, phase):
-    w = len(im[0])
-    h = len(im)
-    for x in range(w):
-        crest = y + int(amp * (0.5 + 0.5 * __import__("math").sin((x + phase) / 18.0)))
-        for yy in range(crest, h):
-            if im[yy][x] == im[y][x] or True:
-                # Only paint sky pixels. Callers pass sky colors to replace.
-                pass
-        # Simpler: paint from crest down until we hit a non-sky later. Here we
-        # just fill a band and let later draws cover it.
-        for yy in range(max(0, crest), h):
-            im[yy][x] = rgb
-
-
-def welcome(look):
-    w, h = 240, 156
-    if look == "classic":
-        sky, sky2, hill_c, water, foam = Q, B, Z, B, V
-        wall, roof, roof2 = W, R, O
-        ground = M
-    elif look == "svga":
-        sky, sky2, hill_c, water, foam = A, Q, Z, Q, V
-        wall, roof, roof2 = P, Q, C
-        ground = Z
-    else:
-        sky, sky2, hill_c, water, foam = A, Q, U, A, Q
-        wall, roof, roof2 = U, D, O
-        ground = H
-    im = new(w, h, sky)
-    rect(im, 0, 0, w, 28, sky)
-    rect(im, 0, 28, w, 18, sky2)
-    # Soft cloud blocks, not a photo sky.
-    if look != "spooky":
-        rect(im, 16, 10, 18, 4, L)
-        rect(im, 150, 8, 22, 3, G if look == "svga" else L)
-    else:
-        rect(im, 20, 8, 30, 3, S)
-    hill(im, 48, hill_c, 8, 0)
-    # Far ridge.
-    if look == "svga":
-        hill(im, 44, H, 6, 20)
-    # Water band.
-    rect(im, 0, 70, w, 22, water)
-    for x in range(0, w, 7):
-        put(im, x + 2, 76, foam)
-        put(im, x + 3, 78, F if look == "classic" else L)
-    # Near bank.
-    rect(im, 0, 90, w, h - 90, ground)
-    for x in range(0, w, 5):
-        put(im, x, 92, Z if look != "spooky" else U)
-    # Bridge.
-    hline(im, 70, 78, 70, L)
-    hline(im, 70, 79, 70, G)
-    for x in range(74, 136, 10):
-        vline(im, x, 80, 6, G)
-    # Skyline, different rhythms per look.
-    if look == "classic":
-        specs = [(18, 96, 14, 28, wall, roof), (36, 88, 16, 36, P, roof2), (56, 100, 12, 24, W, B),
-                 (148, 92, 18, 32, P, roof), (170, 80, 14, 44, W, R), (188, 96, 16, 28, L, O),
-                 (208, 104, 18, 20, W, B)]
-    elif look == "svga":
-        specs = [(24, 100, 12, 24, C, Q), (40, 84, 18, 40, P, B), (62, 96, 14, 28, W, Q),
-                 (150, 78, 16, 46, L, A), (170, 90, 20, 34, P, C), (194, 100, 12, 24, W, O)]
-    else:
-        specs = [(20, 98, 16, 26, U, D), (40, 86, 14, 38, T, R), (58, 102, 12, 22, O, U),
-                 (150, 88, 18, 36, U, D), (172, 78, 12, 46, T, O), (188, 96, 16, 28, U, R),
-                 (208, 104, 14, 20, O, D)]
-    for x, y, bw, bh, wa, ro in specs:
-        skyline_box(im, x, y, bw, bh, wa, ro)
-    # A second, lower row so the bank reads as a city rather than six blocks.
-    extra = [(8, 108, 10, 16), (78, 112, 12, 14), (128, 110, 10, 16), (206, 114, 12, 12)]
-    for x, y, bw, bh in extra:
-        skyline_box(im, x, y, bw, bh, wall, roof2)
-    # Civic hall in the middle, columns, larger than the houses.
-    skyline_box(im, 96, 86, 36, 40, W if look != "spooky" else T, B if look != "spooky" else O)
-    for cx in (100, 108, 124, 128):
-        vline(im, cx, 100, 24, F if look != "spooky" else J)
-    # Foreground trees.
-    for tx in (8, 64, 140, 220):
-        rect(im, tx + 2, 118, 2, 10, U)
-        rect(im, tx, 112, 6, 8, M if look == "classic" else (C if look == "svga" else O))
-    # Title.
-    title = Y if look != "spooky" else J
-    shade = U if look != "spooky" else K
-    text(im, "LUNDUKE", 36, 8, 2, title, shade)
-    text(im, "CITY", 92, 26, 2, title, shade)
-    # Diamond ornament.
-    put(im, 120, 42, title)
-    put(im, 119, 43, title)
-    put(im, 121, 43, title)
-    return im
-
-
 def main():
     sheets = {
         "mayor": (mayor_classic, mayor_svga, mayor_spooky),
@@ -716,8 +574,6 @@ def main():
             draw(im)
             write_png(ROOT / f"{stem}{suffix}.png", im)
             write_png(ICON / f"{stem}{suffix}.png", icon_from(im))
-    for look, name in (("classic", "classic.png"), ("svga", "svga.png"), ("spooky", "spooky.png")):
-        write_png(WELCOME / name, welcome(look))
 
 
 if __name__ == "__main__":

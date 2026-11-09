@@ -442,6 +442,16 @@ tool_icons = executable(
 
 test('tool_icons', tool_icons)
 
+welcome_asset = executable(
+  'welcome_asset',
+  'welcome_asset.cpp',
+  '../src/assets.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [cairo_dep],
+)
+
+test('welcome_asset', welcome_asset)
+
 special_buildings_test = executable(
   'special_buildings',
   'special_buildings.cpp',

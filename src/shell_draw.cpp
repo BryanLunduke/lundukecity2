@@ -804,6 +804,11 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::None) {
         return;
     }
+    // The welcome plate is the whole window. It is painted before the
+    // two-frame settle so the city art itself does not jump.
+    if (dialog_ == Dialog::Welcome) {
+        draw_welcome_background(cr);
+    }
     struct SettleShift {
         Shell *shell;
         cairo_t *cr;
@@ -907,26 +912,38 @@ void Shell::draw_dialog(cairo_t *cr)
     };
     if (dialog_ == Dialog::Welcome) {
         const std::string continued = welcome_continue_label();
-        const double bh = dp(40);
-        const double gap = dp(8);
+        const double bh = dp(34);
+        const double gap = dp(6);
         const int rows = continued.empty() ? 4 : 5;
-        const double plaque_h = dp(18) + rows * bh + (rows - 1) * gap + dp(16);
-        const double plaque_w = std::min(std::max(1.0, view_w_ - static_cast<double>(dp(28))), static_cast<double>(dp(440)));
-        double px = view_x_ + std::max(0.0, (view_w_ - plaque_w) / 2.0);
-        double py = view_y_ + view_h_ - plaque_h - dp(12);
-        if (py < menu_h_ + dp(8)) {
-            py = menu_h_ + dp(8);
+        const double plaque_h = dp(16) + rows * bh + (rows - 1) * gap + dp(14);
+        const double plaque_w = std::min(static_cast<double>(dp(420)), std::max(1.0, win_w_ - static_cast<double>(dp(48))));
+        const double px = std::max(0.0, (win_w_ - plaque_w) / 2.0);
+        double py = win_h_ - plaque_h - dp(22);
+        // The title and the downtown towers live in the upper part of the art.
+        // Keep the choices over the neighborhoods along the bottom.
+        const double lowest_top = win_h_ * 0.56;
+        if (py < lowest_top) {
+            py = std::max(win_h_ * 0.40, win_h_ - plaque_h - dp(8));
         }
-        const double paper_r = 255.0 / 255.0;
-        const double paper_g = 235.0 / 255.0;
-        const double paper_b = 182.0 / 255.0;
-        const double gold_r = 170.0 / 255.0;
-        const double gold_g = 85.0 / 255.0;
-        const double gold_b = 0.0;
-        fill(cr, px + 3, py + 3, plaque_w, plaque_h, 0, 0, 0);
-        fill(cr, px, py, plaque_w, plaque_h, paper_r, paper_g, paper_b);
-        stroke_rect(cr, px, py, plaque_w, plaque_h, gold_r, gold_g, gold_b);
-        stroke_rect(cr, px + 3, py + 3, plaque_w - 6, plaque_h - 6, gold_r, gold_g, gold_b);
+        const double radius = dp(12);
+        auto round_box = [&](double x, double y, double w, double h) {
+            const double rr = std::min(radius, std::min(w, h) / 2.0);
+            cairo_new_path(cr);
+            cairo_arc(cr, x + w - rr, y + rr, rr, -1.5708, 0);
+            cairo_arc(cr, x + w - rr, y + h - rr, rr, 0, 1.5708);
+            cairo_arc(cr, x + rr, y + h - rr, rr, 1.5708, 3.1416);
+            cairo_arc(cr, x + rr, y + rr, rr, 3.1416, 4.7124);
+            cairo_close_path(cr);
+        };
+        round_box(px + dp(3), py + dp(4), plaque_w, plaque_h);
+        cairo_set_source_rgba(cr, 0.05, 0.08, 0.16, 0.40);
+        cairo_fill(cr);
+        round_box(px, py, plaque_w, plaque_h);
+        cairo_set_source_rgba(cr, 0.99, 0.96, 0.88, 0.90);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgba(cr, 0.45, 0.32, 0.10, 0.95);
+        cairo_set_line_width(cr, 2.0);
+        cairo_stroke(cr);
         const double bw = plaque_w - dp(28);
         double by = py + dp(12);
         button(cr, px + dp(14), by, bw, bh, "_Start a New City", kWelcomeNew, focus_id_ == kWelcomeNew);
@@ -2523,9 +2540,6 @@ void Shell::draw(cairo_t *cr)
         }
     }
     cairo_restore(cr);
-    if (dialog_ == Dialog::Welcome) {
-        draw_welcome_vignette(cr);
-    }
     push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
     if (dialog_ == Dialog::None && !menu_.open() && tool_index_ == kToolCount - 1) {
         int hx = 0;
@@ -2962,68 +2976,127 @@ std::string Shell::idle_message() const
 
 namespace {
 
-cairo_surface_t *welcome_plate(int look)
+cairo_surface_t *welcome_art()
 {
-    struct Slot {
-        cairo_surface_t *image = nullptr;
-        bool tried = false;
-    };
-    static Slot slots[3];
-    if (look < 0 || look > 2) {
-        look = 0;
+    static cairo_surface_t *image = nullptr;
+    static bool tried = false;
+    if (tried) {
+        return image;
     }
-    Slot &slot = slots[look];
-    if (slot.tried) {
-        return slot.image;
+    tried = true;
+    const std::string path = ui_data_file("welcome/welcome-bg.png");
+    if (path.empty()) {
+        return nullptr;
     }
-    slot.tried = true;
-    const char *name = look == 2 ? "welcome/spooky.png" : look == 1 ? "welcome/svga.png" : "welcome/classic.png";
-    const std::string path = ui_data_file(name);
-    if (!path.empty()) {
-        cairo_surface_t *image = cairo_image_surface_create_from_png(path.c_str());
-        if (image != nullptr && cairo_surface_status(image) == CAIRO_STATUS_SUCCESS) {
-            slot.image = image;
-        } else if (image != nullptr) {
-            cairo_surface_destroy(image);
-        }
+    cairo_surface_t *loaded = cairo_image_surface_create_from_png(path.c_str());
+    if (loaded != nullptr && cairo_surface_status(loaded) == CAIRO_STATUS_SUCCESS &&
+        cairo_image_surface_get_width(loaded) > 0 && cairo_image_surface_get_height(loaded) > 0) {
+        image = loaded;
+    } else if (loaded != nullptr) {
+        cairo_surface_destroy(loaded);
     }
-    return slot.image;
+    return image;
 }
 
-void px(cairo_t *cr, double x, double y, double s, double r, double g, double b)
+cairo_surface_t *paper_grain()
 {
-    fill(cr, x, y, s, s, r, g, b);
+    static cairo_surface_t *tile = nullptr;
+    if (tile != nullptr) {
+        return tile;
+    }
+    constexpr int side = 96;
+    tile = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, side, side);
+    unsigned char *pixels = cairo_image_surface_get_data(tile);
+    const int stride = cairo_image_surface_get_stride(tile);
+    for (int y = 0; y < side; ++y) {
+        unsigned char *row = pixels + y * stride;
+        for (int x = 0; x < side; ++x) {
+            const unsigned hash = static_cast<unsigned>(x) * 374761393u + static_cast<unsigned>(y) * 668265263u + 0x51u;
+            unsigned char *pix = row + x * 4;
+            pix[0] = pix[1] = pix[2] = pix[3] = 0;
+            if ((hash & 15u) != 0) {
+                continue;
+            }
+            const int alpha = 10 + static_cast<int>((hash >> 8) & 14u);
+            const int tone = 80 + static_cast<int>((hash >> 16) & 30u);
+            pix[0] = static_cast<unsigned char>(tone * alpha / 255);
+            pix[1] = static_cast<unsigned char>((tone - 12) * alpha / 255);
+            pix[2] = static_cast<unsigned char>((tone - 28) * alpha / 255);
+            pix[3] = static_cast<unsigned char>(alpha);
+        }
+    }
+    cairo_surface_mark_dirty(tile);
+    return tile;
+}
+
+void round_rect(cairo_t *cr, double x, double y, double w, double h, double radius)
+{
+    const double rr = std::min(radius, std::min(w, h) / 2.0);
+    cairo_new_path(cr);
+    cairo_arc(cr, x + w - rr, y + rr, rr, -1.5708, 0);
+    cairo_arc(cr, x + w - rr, y + h - rr, rr, 0, 1.5708);
+    cairo_arc(cr, x + rr, y + h - rr, rr, 1.5708, 3.1416);
+    cairo_arc(cr, x + rr, y + rr, rr, 3.1416, 4.7124);
+    cairo_close_path(cr);
+}
+
+void filigree(cairo_t *cr, double x, double y, int corner, double r, double g, double b)
+{
+    cairo_save(cr);
+    cairo_translate(cr, x, y);
+    if (corner == 1 || corner == 3) {
+        cairo_scale(cr, -1, 1);
+    }
+    if (corner >= 2) {
+        cairo_scale(cr, 1, -1);
+    }
+    cairo_scale(cr, 0.72, 0.72);
+    cairo_set_source_rgb(cr, r, g, b);
+    cairo_set_line_width(cr, 1.3);
+    cairo_arc(cr, 11, 11, 8, 3.1416, 4.7124);
+    cairo_stroke(cr);
+    cairo_arc(cr, 18, 7, 3.5, 3.1416, 4.7124);
+    cairo_stroke(cr);
+    cairo_move_to(cr, 3.5, 16);
+    cairo_line_to(cr, 3.5, 3.5);
+    cairo_line_to(cr, 16, 3.5);
+    cairo_stroke(cr);
+    cairo_move_to(cr, 13, 13);
+    cairo_line_to(cr, 17, 17);
+    cairo_line_to(cr, 13, 21);
+    cairo_line_to(cr, 9, 17);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    cairo_restore(cr);
 }
 
 } // namespace
 
-void Shell::draw_welcome_vignette(cairo_t *cr)
+void Shell::draw_welcome_background(cairo_t *cr)
 {
-    if (view_w_ < 8 || view_h_ < 8) {
+    cairo_surface_t *image = welcome_art();
+    if (image == nullptr || win_w_ < 2 || win_h_ < 2) {
+        cairo_set_source_rgb(cr, 0.05, 0.28, 0.72);
+        cairo_paint(cr);
         return;
     }
-    const int look = drawn_look_ < 0 ? 0 : (drawn_look_ > 2 ? 2 : drawn_look_);
-    const double sky_b = look == 2 ? 65.0 / 255.0 : 113.0 / 255.0;
-    fill(cr, view_x_, view_y_, view_w_, view_h_, 0, 0, sky_b);
-    cairo_surface_t *plate = welcome_plate(look);
-    if (plate == nullptr) {
-        return;
-    }
-    const int iw = cairo_image_surface_get_width(plate);
-    const int ih = cairo_image_surface_get_height(plate);
-    if (iw < 1 || ih < 1) {
-        return;
-    }
-    const int scale = std::max(1, std::min(view_w_ / iw, view_h_ / ih));
-    const double dw = iw * scale;
-    const double dh = ih * scale;
-    const double ox = view_x_ + (view_w_ - dw) / 2.0;
-    const double oy = view_y_ + (view_h_ - dh) / 2.0;
+    const double iw = cairo_image_surface_get_width(image);
+    const double ih = cairo_image_surface_get_height(image);
+    const double scale = std::max(static_cast<double>(win_w_) / iw, static_cast<double>(win_h_) / ih);
+    const double drawn_w = iw * scale;
+    const double drawn_h = ih * scale;
+    const double ox = (static_cast<double>(win_w_) - drawn_w) / 2.0;
+    const double extra = drawn_h - static_cast<double>(win_h_);
+    // The window is wider than the art, so the extra height is cropped.
+    // Keep the gold title: take a little off the top and the rest off the bottom.
+    const double oy = extra > 0.0 ? -extra * 0.12 : (static_cast<double>(win_h_) - drawn_h) / 2.0;
     cairo_save(cr);
-    cairo_translate(cr, std::floor(ox), std::floor(oy));
+    cairo_rectangle(cr, 0, 0, win_w_, win_h_);
+    cairo_clip(cr);
+    cairo_translate(cr, ox, oy);
     cairo_scale(cr, scale, scale);
-    cairo_set_source_surface(cr, plate, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_set_source_surface(cr, image, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
     cairo_paint(cr);
     cairo_restore(cr);
 }
@@ -3031,88 +3104,155 @@ void Shell::draw_welcome_vignette(cairo_t *cr)
 void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
 {
     const civic::YearDigest digest = year_digest();
-    const int look = drawn_look_ < 0 ? 0 : (drawn_look_ > 2 ? 2 : drawn_look_);
-    const double navy_r = 0;
-    const double navy_g = 0;
-    const double navy_b = look == 2 ? 65.0 / 255.0 : 113.0 / 255.0;
-    const double gold_r = look == 2 ? 255.0 / 255.0 : 170.0 / 255.0;
-    const double gold_g = look == 2 ? 190.0 / 255.0 : 85.0 / 255.0;
-    const double gold_b = 0;
-    const double paper_r = 255.0 / 255.0;
-    const double paper_g = look == 2 ? 219.0 / 255.0 : 235.0 / 255.0;
-    const double paper_b = 182.0 / 255.0;
-    const double ink_r = 20.0 / 255.0;
-    const double ink_g = 20.0 / 255.0;
-    const double ink_b = 20.0 / 255.0;
-    const bool surplus = digest.closing_funds >= digest.opening_funds;
-    const double good_r = 0;
-    const double good_g = 113.0 / 255.0;
-    const double good_b = 0;
-    const double bad_r = 170.0 / 255.0;
-    const double bad_g = 0;
-    const double bad_b = 0;
+    const double navy_r = 0.02;
+    const double navy_g = 0.08;
+    const double navy_b = 0.32;
+    const double gold_r = 0.72;
+    const double gold_g = 0.55;
+    const double gold_b = 0.18;
+    const double gold_hi_r = 0.91;
+    const double gold_hi_g = 0.78;
+    const double gold_hi_b = 0.46;
+    const double paper_r = 0.976;
+    const double paper_g = 0.922;
+    const double paper_b = 0.808;
+    const double card_r = 0.980;
+    const double card_g = 0.925;
+    const double card_b = 0.812;
+    const double ink_r = 0.16;
+    const double ink_g = 0.07;
+    const double ink_b = 0.03;
+    const double title_r = 0.45;
+    const double title_g = 0.04;
+    const double title_b = 0.02;
+    const double funds_r = 0.10;
+    const double funds_g = 0.31;
+    const double funds_b = 0.04;
+    const double people_r = 0.05;
+    const double people_g = 0.12;
+    const double people_b = 0.41;
+    const double standing_r = 0.33;
+    const double standing_g = 0.13;
+    const double standing_b = 0.34;
+    const double body_r = 0.12;
+    const double body_g = 0.09;
+    const double body_b = 0.06;
 
-    cairo_set_source_rgba(cr, 0, 0, 0, look == 0 ? 0.45 : 0.55);
-    cairo_rectangle(cr, 0, 0, win_w_, win_h_);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.28);
+    cairo_rectangle(cr, 0, menu_h_, win_w_, std::max(0.0, band_h - menu_h_));
     cairo_fill(cr);
     push_hot(0, 0, win_w_, win_h_, 0);
 
-    const double button_h = static_cast<double>(control_px(36, 44));
-    const double want_w = std::min(static_cast<double>(dp(760)), std::max(1.0, win_w_ - 2.0 * margin));
-    const double want_h = std::min(static_cast<double>(dp(520)), std::max(1.0, band_h - 2.0 * margin));
-    const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
-    fill(cr, panel.x + 4, panel.y + 4, panel.w, panel.h, 0, 0, 0);
-    fill(cr, panel.x, panel.y, panel.w, panel.h, navy_r, navy_g, navy_b);
-    stroke_rect(cr, panel.x, panel.y, panel.w, panel.h, gold_r, gold_g, gold_b);
-    const double inset = dp(8);
-    fill(cr, panel.x + inset, panel.y + inset, panel.w - 2 * inset, panel.h - 2 * inset, paper_r, paper_g, paper_b);
-    stroke_rect(cr, panel.x + inset, panel.y + inset, panel.w - 2 * inset, panel.h - 2 * inset, gold_r, gold_g, gold_b);
+    const double top_limit = menu_h_ + dp(6);
+    const double bottom_limit = band_h - dp(6);
+    const double avail_h = std::max(1.0, bottom_limit - top_limit);
+    const double avail_w = std::max(1.0, static_cast<double>(win_w_) - 2.0 * margin);
+    const double panel_w = std::min(static_cast<double>(dp(900)), avail_w);
+    const double panel_h = std::min(static_cast<double>(dp(540)), avail_h);
+    const double panel_x = (static_cast<double>(win_w_) - panel_w) / 2.0;
+    const double panel_y = top_limit + (avail_h - panel_h) / 2.0;
+    const double frame = std::max(6.0, static_cast<double>(dp(8)));
+    const double paper_x = panel_x + frame;
+    const double paper_y = panel_y + frame;
+    const double paper_w = panel_w - 2.0 * frame;
+    const double paper_h = panel_h - 2.0 * frame;
 
-    const double inner_x = panel.x + inset + dp(10);
-    const double inner_w = panel.w - 2 * inset - dp(20);
-    double cursor = panel.y + inset + dp(8);
-    const std::string kicker = "YEAR IN REVIEW";
-    paint_text(cr, bold_font(), kicker, inner_x, cursor, gold_r, gold_g, gold_b, static_cast<int>(inner_w));
-    cursor += dp(16);
-    const std::string year = std::to_string(digest.ended_year);
-    const std::string year_font = ui_scale::scaled_font("Sans Bold", 32, ui_scale_);
-    paint_text(cr, year_font.c_str(), year, inner_x, cursor, ink_r, ink_g, ink_b, static_cast<int>(inner_w * 0.45));
-    const std::string who = session_.city_name().empty() ? std::string("City") : session_.city_name();
+    fill(cr, panel_x, panel_y, panel_w, panel_h, navy_r, navy_g, navy_b);
+    stroke_rect(cr, panel_x + 1.5, panel_y + 1.5, panel_w - 3, panel_h - 3, gold_r, gold_g, gold_b);
+    fill(cr, paper_x, paper_y, paper_w, paper_h, paper_r, paper_g, paper_b);
+    cairo_save(cr);
+    cairo_rectangle(cr, paper_x, paper_y, paper_w, paper_h);
+    cairo_clip(cr);
+    cairo_set_source_surface(cr, paper_grain(), paper_x, paper_y);
+    cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    stroke_rect(cr, paper_x + 0.5, paper_y + 0.5, paper_w - 1, paper_h - 1, gold_r, gold_g, gold_b);
+    stroke_rect(cr, paper_x + 3.5, paper_y + 3.5, paper_w - 7, paper_h - 7, gold_hi_r, gold_hi_g, gold_hi_b);
+    filigree(cr, paper_x + dp(8), paper_y + dp(8), 0, gold_r, gold_g, gold_b);
+    filigree(cr, paper_x + paper_w - dp(8), paper_y + dp(8), 1, gold_r, gold_g, gold_b);
+    filigree(cr, paper_x + dp(8), paper_y + paper_h - dp(8), 2, gold_r, gold_g, gold_b);
+    filigree(cr, paper_x + paper_w - dp(8), paper_y + paper_h - dp(8), 3, gold_r, gold_g, gold_b);
+
+    const std::string serif_kicker = ui_scale::scaled_font("DejaVu Serif Bold", 15, ui_scale_);
+    const std::string serif_year = ui_scale::scaled_font("DejaVu Serif Bold", 40, ui_scale_);
+    const std::string serif_city = ui_scale::scaled_font("DejaVu Serif Bold", 20, ui_scale_);
+    const std::string serif_meta = ui_scale::scaled_font("DejaVu Serif", 14, ui_scale_);
+    const std::string serif_card = ui_scale::scaled_font("DejaVu Serif Bold", 15, ui_scale_);
+
+    const double inner_x = paper_x + dp(34);
+    const double inner_w = std::max(1.0, paper_w - dp(62));
+    const double left_w = std::max(1.0, inner_w * 0.46);
+    const double right_x = inner_x + inner_w * 0.50;
+    const double right_w = std::max(1.0, inner_x + inner_w - right_x);
+    double cursor = paper_y + dp(16);
+    const std::string year_text = std::to_string(digest.ended_year);
+    const std::string who = session_.city_name();
     const CitySession::Evaluation report = session_.evaluation();
-    const std::string pop_line = "Population " + civic::dollars(report.population).substr(1);
-    paint_text(cr, bold_font(), who, inner_x + inner_w * 0.48, cursor, ink_r, ink_g, ink_b,
-               static_cast<int>(inner_w * 0.52));
-    paint_text(cr, ui_font(), pop_line, inner_x + inner_w * 0.48, cursor + dp(22), ink_r, ink_g, ink_b,
-               static_cast<int>(inner_w * 0.52));
-    paint_text(cr, ui_font(), "Tax " + std::to_string(digest.tax_percent) + "%", inner_x + inner_w * 0.48, cursor + dp(40),
-               ink_r, ink_g, ink_b, static_cast<int>(inner_w * 0.52));
-    cursor += dp(58);
+    auto plain_number = [](std::int64_t amount) {
+        std::string with = civic::dollars(amount);
+        if (!with.empty() && with[0] == '$') {
+            with.erase(with.begin());
+        }
+        return with;
+    };
+    const std::string pop_line = "Population " + plain_number(report.population);
+    const std::string tax_line = "Tax " + std::to_string(digest.tax_percent) + "%";
+    const int kicker_h = measure_text(cr, serif_kicker.c_str(), "YEAR IN REVIEW", static_cast<int>(left_w)).height;
+    const int year_h = measure_text(cr, serif_year.c_str(), year_text, static_cast<int>(left_w)).height;
+    const int city_h = measure_text(cr, serif_city.c_str(), who, static_cast<int>(right_w)).height;
+    const int meta_h = std::max(measure_text(cr, serif_meta.c_str(), pop_line, static_cast<int>(right_w)).height,
+                                 measure_text(cr, serif_meta.c_str(), tax_line, static_cast<int>(right_w)).height);
+    paint_text(cr, serif_kicker.c_str(), "YEAR IN REVIEW", inner_x, cursor, title_r, title_g, title_b,
+               static_cast<int>(left_w));
+    paint_text(cr, serif_city.c_str(), who, right_x, cursor, ink_r, ink_g, ink_b, static_cast<int>(right_w));
+    paint_text(cr, serif_year.c_str(), year_text, inner_x, cursor + kicker_h + dp(2), title_r, title_g, title_b,
+               static_cast<int>(left_w));
+    paint_text(cr, serif_meta.c_str(), pop_line, right_x, cursor + city_h + dp(4), ink_r, ink_g, ink_b,
+               static_cast<int>(right_w));
+    paint_text(cr, serif_meta.c_str(), tax_line, right_x, cursor + city_h + dp(4) + meta_h + dp(2), ink_r, ink_g, ink_b,
+               static_cast<int>(right_w));
+    const double header_bottom = cursor + std::max(static_cast<double>(kicker_h + dp(2) + year_h),
+                                                    static_cast<double>(city_h + dp(4) + meta_h + dp(2) + meta_h));
+    cursor = header_bottom + dp(10);
 
     const double gap = dp(8);
-    const double card_w = std::max(1.0, (inner_w - 2 * gap) / 3.0);
-    const double card_h = dp(112);
-    auto card = [&](int index, const std::string &title, const std::string &body, double br, double bg, double bb) {
-        const double x = inner_x + index * (card_w + gap);
-        fill(cr, x, cursor, card_w, card_h, 1, 1, 1);
+    const double button_h = static_cast<double>(control_px(36, 42));
+    const double buttons_top = paper_y + paper_h - button_h - dp(18);
+    const double cards_h = std::max(static_cast<double>(dp(96)), buttons_top - cursor - dp(8));
+    const double top_h = std::max(static_cast<double>(dp(78)), cards_h * 0.42);
+    const double low_h = std::max(static_cast<double>(dp(72)), cards_h - top_h - gap);
+    const double card_w = std::max(1.0, (inner_w - 2.0 * gap) / 3.0);
+
+    auto card_box = [&](double x, double y, double w, double h, const char *title, const std::string &body, double tr,
+                        double tg, double tb) {
+        fill(cr, x, y, w, h, card_r, card_g, card_b);
+        stroke_rect(cr, x + 0.5, y + 0.5, w - 1, h - 1, gold_r, gold_g, gold_b);
         cairo_save(cr);
-        cairo_rectangle(cr, x + 1, cursor + 1, card_w - 2, card_h - 2);
+        cairo_rectangle(cr, x + 1, y + 1, std::max(1.0, w - 2), std::max(1.0, h - 2));
         cairo_clip(cr);
-        px(cr, x + dp(6), cursor + dp(6), dp(4), br, bg, bb);
-        px(cr, x + dp(12), cursor + dp(6), dp(4), br, bg, bb);
-        px(cr, x + dp(6), cursor + dp(12), dp(4), br, bg, bb);
-        paint_text(cr, bold_font(), title, x + dp(20), cursor + dp(4), ink_r, ink_g, ink_b,
-                   static_cast<int>(card_w - dp(26)));
-        paint_text(cr, ui_font(), body, x + dp(6), cursor + dp(24), ink_r, ink_g, ink_b,
-                   static_cast<int>(card_w - dp(12)));
+        const TextMetrics mark = measure_text(cr, serif_card.c_str(), "$", -1);
+        paint_text(cr, serif_card.c_str(), "$", x + dp(8), y + dp(5), tr, tg, tb, -1);
+        const double title_x = x + dp(8) + mark.width + dp(4);
+        const int title_w = static_cast<int>(std::max(1.0, x + w - dp(8) - title_x));
+        paint_text(cr, serif_card.c_str(), title, title_x, y + dp(5), tr, tg, tb, title_w);
+        const int body_w = static_cast<int>(std::max(1.0, w - dp(16)));
+        paint_text(cr, body_font(), body, x + dp(8), y + dp(6) + mark.height + dp(2), body_r, body_g, body_b, body_w);
         cairo_restore(cr);
-        stroke_rect(cr, x, cursor, card_w, card_h, gold_r, gold_g, gold_b);
     };
+
     const std::int64_t delta = digest.closing_funds - digest.opening_funds;
-    const std::string flow = std::string(delta >= 0 ? "Surplus " : "Deficit ") + civic::dollars(delta >= 0 ? delta : -delta);
+    const std::string flow =
+        std::string(delta >= 0 ? "Surplus " : "Deficit ") + civic::dollars(delta >= 0 ? delta : -delta);
     const std::string funds_body = "Open " + civic::dollars(digest.opening_funds) + "\nClose " +
                                    civic::dollars(digest.closing_funds) + "\n" + flow;
-    card(0, "Funds", funds_body, surplus ? good_r : bad_r, surplus ? good_g : bad_g, surplus ? good_b : bad_b);
+    card_box(inner_x, cursor, card_w, top_h, "Funds", funds_body, funds_r, funds_g, funds_b);
+
     std::string people_body = digest.card.population;
+    const auto paren = people_body.rfind(" (");
+    if (paren != std::string::npos) {
+        people_body.replace(paren, 2, "\n(");
+    }
     const CitySession::CensusMix mix = session_.census_mix();
     const int mix_total = mix.homes + mix.shops + mix.jobs;
     if (mix_total > 0) {
@@ -3122,27 +3262,18 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         people_body += "\nR " + std::to_string(homes) + "%   C " + std::to_string(shops) + "%   I " +
                        std::to_string(jobs) + "%";
     }
-    card(1, "People", people_body, 0, 0, 170.0 / 255.0);
+    card_box(inner_x + card_w + gap, cursor, card_w, top_h, "People", people_body, people_r, people_g, people_b);
+
     std::string standing = report.no_residents ? "No residents yet, so there is no poll."
                                                : report.category + ". Score " + std::to_string(report.score) + ".";
     if (!report.no_residents) {
         standing += "\n" + std::to_string(report.yes_percent) + "% in favor.";
     }
-    card(2, "Standing", standing, gold_r, gold_g, gold_b);
-    cursor += card_h + gap;
+    card_box(inner_x + 2.0 * (card_w + gap), cursor, card_w, top_h, "Standing", standing, standing_r, standing_g,
+             standing_b);
+    cursor += top_h + gap;
 
     const double col_w = std::max(1.0, (inner_w - gap) / 2.0);
-    const double buttons_top = panel.y + panel.h - inset - button_h - dp(10);
-    const double lower_h = std::max(static_cast<double>(dp(48)), buttons_top - cursor - dp(8));
-    auto column = [&](double x, const std::string &title, const std::string &body, double mr, double mg, double mb) {
-        fill(cr, x, cursor, col_w, lower_h, 1, 1, 1);
-        stroke_rect(cr, x, cursor, col_w, lower_h, gold_r, gold_g, gold_b);
-        px(cr, x + dp(6), cursor + dp(6), dp(4), mr, mg, mb);
-        paint_text(cr, bold_font(), title, x + dp(16), cursor + dp(4), ink_r, ink_g, ink_b,
-                   static_cast<int>(col_w - dp(22)));
-        paint_text(cr, ui_font(), body, x + dp(6), cursor + dp(22), ink_r, ink_g, ink_b,
-                   static_cast<int>(col_w - dp(12)));
-    };
     std::string highlights;
     int shown = 0;
     for (const civic::DigestLine &event : digest.events) {
@@ -3162,24 +3293,69 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     }
     std::string challenges = digest.card.problem;
     if (!digest.card.intention.empty()) {
-        challenges += "\n";
+        if (!challenges.empty()) {
+            challenges += "\n";
+        }
         challenges += digest.card.intention;
     }
-    column(inner_x, "Highlights", highlights, good_r, good_g, good_b);
-    column(inner_x + col_w + gap, "Challenges", challenges, bad_r, bad_g, bad_b);
+    card_box(inner_x, cursor, col_w, low_h, "Highlights", highlights, funds_r, funds_g, funds_b);
+    card_box(inner_x + col_w + gap, cursor, col_w, low_h, "Challenges", challenges, title_r, title_g, title_b);
 
-    const double bx = inner_x;
+    auto ornate = [&](double x, double y, double w, double h, const char *label, int id, bool primary) {
+        push_hot(x, y, w, h, id);
+        push_focus(id);
+        const bool hot = hover_id_ == id || focus_id_ == id;
+        const bool pressed = hot && pointer_down_ && hover_id_ == id;
+        round_rect(cr, x, y, w, h, dp(5));
+        cairo_pattern_t *shade = cairo_pattern_create_linear(x, y, x, y + h);
+        if (primary) {
+            cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : 0.20, pressed ? 0.32 : 0.42, pressed ? 0.62 : 0.72);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
+        } else {
+            const double lift = hot ? 0.06 : 0.0;
+            cairo_pattern_add_color_stop_rgb(shade, 0, 0.78 + lift, 0.77 + lift, 0.75 + lift);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.58, 0.57, 0.54);
+        }
+        cairo_set_source(cr, shade);
+        cairo_fill_preserve(cr);
+        cairo_pattern_destroy(shade);
+        cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);
+        cairo_set_line_width(cr, std::max(2.0, static_cast<double>(dp(2))));
+        cairo_stroke(cr);
+        round_rect(cr, x + 2.5, y + 2.5, w - 5, h - 5, dp(4));
+        cairo_set_source_rgba(cr, 1, 1, 1, primary ? 0.28 : 0.45);
+        cairo_set_line_width(cr, 1);
+        cairo_stroke(cr);
+        if (focus_id_ == id) {
+            round_rect(cr, x + 4, y + 4, w - 8, h - 8, dp(3));
+            cairo_set_source_rgb(cr, primary ? 1.0 : 0.15, primary ? 1.0 : 0.12, primary ? 1.0 : 0.08);
+            cairo_set_line_width(cr, 1.5);
+            cairo_stroke(cr);
+        }
+        const std::string plain = strip_mnemonic(label);
+        const TextMetrics metrics = measure_text(cr, ui_font(), plain, -1);
+        const double tx = x + (w - metrics.width) / 2.0;
+        const double ty = y + (h - metrics.height) / 2.0;
+        if (primary) {
+            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
+        } else {
+            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, body_r, body_g, body_b);
+        }
+    };
+
     const int count = digest.locate ? 4 : 3;
-    const double bw = std::max(1.0, (inner_w - (count - 1) * gap) / count);
-    double x = bx;
-    button(cr, x, buttons_top, bw, button_h, "_Budget", kYearBudget, focus_id_ == kYearBudget);
-    x += bw + gap;
-    button(cr, x, buttons_top, bw, button_h, "_Evaluation", kYearEval, focus_id_ == kYearEval);
-    x += bw + gap;
-    button(cr, x, buttons_top, bw, button_h, "_Graphs", kYearGraphs, focus_id_ == kYearGraphs);
+    const double side = dp(28);
+    const double row_w = std::max(1.0, inner_w - 2.0 * side);
+    const double bw = std::max(1.0, (row_w - (count - 1) * gap) / count);
+    double bx = inner_x + side;
+    ornate(bx, buttons_top, bw, button_h, "_Budget", kYearBudget, true);
+    bx += bw + gap;
+    ornate(bx, buttons_top, bw, button_h, "_Evaluation", kYearEval, false);
+    bx += bw + gap;
+    ornate(bx, buttons_top, bw, button_h, "_Graphs", kYearGraphs, false);
     if (digest.locate) {
-        x += bw + gap;
-        button(cr, x, buttons_top, bw, button_h, "_Map", kYearLocate, focus_id_ == kYearLocate);
+        bx += bw + gap;
+        ornate(bx, buttons_top, bw, button_h, "_Map", kYearLocate, false);
     }
 }
 

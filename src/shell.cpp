@@ -213,6 +213,8 @@ int run_shell(int argc, char **argv)
 
 int Shell::run(int argc, char **argv)
 {
+    register_bundled_face(ui_data_file("fonts/DejaVuSerif.ttf"));
+    register_bundled_face(ui_data_file("fonts/DejaVuSerif-Bold.ttf"));
     if (const char *smoke = std::getenv("LUNDUKE_CITY2_SMOKE")) {
         smoke_ = smoke[0] != '\0' && smoke[0] != '0';
     }
