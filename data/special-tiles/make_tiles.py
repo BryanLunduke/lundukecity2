@@ -219,8 +219,28 @@ def to_rgba(im):
     return rows
 
 
+# The Classic Zoo, Big Park and Library sheets are hand-kitbashed in the
+# Micropolis Classic palette (3/4 projection, down-right shadow) and checked in
+# as PNGs. The drawers above are the old placeholders; this script no longer
+# writes them, so re-running it keeps the hand-drawn art. big-park-svga.png is
+# a checked-in copy of the old Big Park drawing so the SVGA look is unchanged.
+KEEP_CLASSIC = ("zoo", "big-park", "library")
+
+
+def placeholder_rgba(name):
+    """The old placeholder drawing as raw 48x48 RGBA bytes.
+
+    art/svga/make_atlas.py still locks its SVGA paint check to these, so the
+    SVGA atlas test does not depend on the new Classic art.
+    """
+    draw = {"zoo": zoo, "big-park": big_park, "library": library}[name]
+    return b"".join(to_rgba(outlined(draw)))
+
+
 def main():
     for name, draw in (("zoo", zoo), ("big-park", big_park), ("library", library)):
+        if name in KEEP_CLASSIC:
+            continue
         write_png(ROOT / f"{name}.png", to_rgba(outlined(draw)))
 
 

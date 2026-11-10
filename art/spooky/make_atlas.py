@@ -32,7 +32,9 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 SVGA_PATH = ROOT / "third_party/micropolis-assets/images/micropolisEngine/tiles-svga.png"
 SPOOKY_PATH = SVGA_PATH.with_name("tiles-spooky.png")
-PARK_PATH = ROOT / "data/special-tiles/big-park.png"
+# The Spooky park is painted from the old Big Park drawing, which is kept as
+# big-park-svga.png now that big-park.png is the hand-drawn Classic art.
+PARK_PATH = ROOT / "data/special-tiles/big-park-svga.png"
 SPOOKY_PARK_PATH = ROOT / "data/special-tiles/big-park-spooky.png"
 TILE = 16
 

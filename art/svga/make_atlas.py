@@ -19,6 +19,7 @@ report and previews under DIR (the test passes the build directory).
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 
 # A test run imports this package. Do not leave bytecode in the source tree.
@@ -2228,6 +2229,13 @@ SPECIAL_VGA = {
 }
 
 
+def _special_placeholders():
+    spec = importlib.util.spec_from_file_location("make_tiles", SPECIAL_DIR / "make_tiles.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def paint_special(image: Image.Image) -> Image.Image:
     src = image.convert("RGBA")
     out = Image.new("RGBA", src.size)
@@ -3179,8 +3187,12 @@ def main() -> int:
         failed = True
 
     painted_special: list[tuple[str, Image.Image, Image.Image]] = []
+    # The checked-in Classic zoo/big-park/library sheets are hand-drawn art;
+    # SVGA uses its own *-svga.png sheets, so this paint check keeps using the
+    # old placeholder drawings from make_tiles.py.
+    placeholders = _special_placeholders()
     for name in ("zoo", "big-park", "library"):
-        classic_s = Image.open(SPECIAL_DIR / f"{name}.png").convert("RGBA")
+        classic_s = Image.frombytes("RGBA", (48, 48), placeholders.placeholder_rgba(name))
         svga_s = paint_special(classic_s)
         painted_special.append((name, classic_s, svga_s))
         src_s, dst_s = classic_s.load(), svga_s.load()
