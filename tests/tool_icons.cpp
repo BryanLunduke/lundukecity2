@@ -197,6 +197,42 @@ int main()
         }
         cairo_surface_destroy(surface);
     }
+    const char *kNewIcons[] = {"prison", "marina", "fountain"};
+    const char *kLooks[] = {"", "-svga", "-spooky"};
+    for (const char *name : kNewIcons) {
+        for (const char *look : kLooks) {
+            const std::string file = std::string(name) + look + ".png";
+            cairo_surface_t *surface = load_png(std::string("tool-icons/") + file);
+            if (surface == nullptr || cairo_image_surface_get_width(surface) != 40 ||
+                cairo_image_surface_get_height(surface) != 40) {
+                if (surface != nullptr) {
+                    cairo_surface_destroy(surface);
+                }
+                return fail(std::string("missing special-building icon ") + file);
+            }
+            cairo_surface_destroy(surface);
+        }
+    }
+    struct SheetExpect {
+        const char *name;
+        int size;
+    };
+    const SheetExpect kNewSheets[] = {
+        {"prison", 64}, {"prison-svga", 64}, {"prison-spooky", 64},
+        {"marina", 48}, {"marina-svga", 48}, {"marina-spooky", 48},
+        {"fountain", 16}, {"fountain-svga", 16}, {"fountain-spooky", 16},
+    };
+    for (const SheetExpect &sheet : kNewSheets) {
+        cairo_surface_t *surface = load_png(std::string("special-tiles/") + sheet.name + ".png");
+        if (surface == nullptr || cairo_image_surface_get_width(surface) != sheet.size ||
+            cairo_image_surface_get_height(surface) != sheet.size) {
+            if (surface != nullptr) {
+                cairo_surface_destroy(surface);
+            }
+            return fail(std::string("missing special-building map tile ") + sheet.name);
+        }
+        cairo_surface_destroy(surface);
+    }
     for (const char *name : kMapTiles) {
         cairo_surface_t *surface = load_png(std::string("special-tiles/") + name + ".png");
         if (surface == nullptr || cairo_image_surface_get_width(surface) != 48 ||

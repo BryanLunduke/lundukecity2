@@ -115,12 +115,12 @@ void Micropolis::initWillStuff()
 
 
 /**
- * Reset all maps in the simulator.
- * @note Function is empty
- * @todo What should be done with this empty function?
+ * Reset map-side editor state. The density maps themselves are cleared
+ * by the generator. This drops shoreline tiles remembered under a marina.
  */
 void Micropolis::resetMapState()
 {
+    marinaDock.clear();
 }
 
 

@@ -695,7 +695,9 @@ enum MapTileCharacters {
     SOMETINYEXP    = 864,
     // tile 865 -- 866 ?
     LASTTINYEXP    = 867,
-    // tile 868 -- 882 ?
+    // tile 868 -- 869 still sit in the tiny-explosion auto-bulldoze range.
+    // 870-872 are Prison, Marina, and the placeable Fountain (not the park
+    // animation at FOUNTAIN). tile 873 -- 882 ?
     TINYEXPLAST    = 883,
     // tile 884 -- 915 ?
 
@@ -762,6 +764,14 @@ enum MapTileCharacters {
     SPECIAL_MAYOR      = 53,
     SPECIAL_CASINO     = 54,
     SPECIAL_AMUSEMENT  = 55,
+
+    // Prison, Marina, and the placeable Fountain. These numbers are the
+    // unused gap after LASTTINYEXP. The simulator never places them, and
+    // doZone ignores them the same way it ignores the zoo. FOUNTAIN (840)
+    // stays the park animation.
+    SPECIAL_PRISON     = 870,
+    SPECIAL_MARINA     = 871,
+    SPECIAL_FOUNTAIN   = 872,
 
     TILE_COUNT     = 1024,
 
@@ -2214,6 +2224,18 @@ public:
 
     /** Name read from the trailer. Meaningful when cityNameStored is true. */
     std::string cityNameStoredText;
+
+    /**
+     * Shoreline tiles covered by a marina's south (dock) row.
+     * Bulldoze writes \c tile back. The LCM1 trailer, after LCW1, keeps
+     * the list in the city file. Empty when no dock covers water.
+     */
+    struct MarinaDock {
+        unsigned short x;
+        unsigned short y;
+        unsigned short tile;
+    };
+    std::vector<MarinaDock> marinaDock;
 
     /**
      * LCW1 trailer decoded by loadFileDir and applied by loadFile after

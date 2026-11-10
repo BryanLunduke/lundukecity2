@@ -225,6 +225,8 @@ def to_rgba(im):
 # writes them, so re-running it keeps the hand-drawn art. big-park-svga.png is
 # a checked-in copy of the old Big Park drawing so the SVGA look is unchanged.
 KEEP_CLASSIC = ("zoo", "big-park", "library")
+# Prison, Marina, and Fountain are editor-approved sheets in all three looks.
+HAND_AUTHORED = ("prison", "marina", "fountain")
 
 
 def placeholder_rgba(name):
@@ -239,7 +241,7 @@ def placeholder_rgba(name):
 
 def main():
     for name, draw in (("zoo", zoo), ("big-park", big_park), ("library", library)):
-        if name in KEEP_CLASSIC:
+        if name in KEEP_CLASSIC or name in HAND_AUTHORED:
             continue
         write_png(ROOT / f"{name}.png", to_rgba(outlined(draw)))
 

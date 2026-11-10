@@ -106,6 +106,8 @@ The tool footprint shows whether the tile can be built, what it will cost, and w
 
 Mayor's House, Casino, and Amusement Park are special buildings, $100, 3×3, same placement rules as the zoo. Mayor's House is one per city and can be bought at 2,000 people (it stays visible, locked, before that) and pays nothing. Amusement Park pays $200 a year. Casino pays $300 a year and raises crime in the blocks around it; a police station nearby cuts that crime. Amusement Park and Casino together are limited to three. Zoo, Big Park, and Library still pay nothing and are not capped. Auto-goto stays the preference it already was.
 
+Prison, Marina, and Fountain are special buildings and pay nothing a year. Prison is 4×4 and costs $3,000. It has to touch a road and a power line, lowers nearby land value, and lightly reduces crime while that power and road are still there. Marina is 3×3 and costs $1,000. Its dock row may cover shoreline, and open water has to remain directly south of the building. It raises land value the same way the zoo does. Fountain is one tile, costs $20, and raises land value a little more than a $10 park. The fountain in an ordinary park is still the park animation.
+
 Recent cities are stored in `~/.config/lunduke-city-2/recent.txt` (ten paths). That list is not the GTK recent database, so it is not shared with Lunduke City. Load and Save try the SDL file dialog (the desktop portal on Linux, the Win32 dialog on Windows) and fall back to the in-window list, which is also what the Deck and a headless run use.
 
 There is no D-Bus single instance. A second launch is a second process. Outside opens that arrive while a dialog is up wait until it closes.

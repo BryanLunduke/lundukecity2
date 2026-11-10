@@ -202,13 +202,16 @@ CityGlance city_glance(const std::string &path)
     for (int i = 0; i < 120 * 100; ++i) {
         const int raw = be_short(data.data() + kMap + i * 2);
         const int tile = raw & LOMASK;
-        const bool special_center = tile == SPECIAL_ZOO || tile == SPECIAL_PARK || tile == SPECIAL_LIBRARY;
+        const bool special_center = tile == SPECIAL_ZOO || tile == SPECIAL_PARK || tile == SPECIAL_LIBRARY ||
+                                    tile == SPECIAL_PRISON || tile == SPECIAL_MARINA || tile == SPECIAL_FOUNTAIN;
         const bool special = special_center || tile == SPECIAL_BODY;
         if (tile > CHURCH7LAST && !special) {
             ++unknown;
         }
         if ((raw & ZONEBIT) != 0) {
-            ++centres;
+            if (tile != SPECIAL_FOUNTAIN) {
+                ++centres;
+            }
             if (tile > CHURCH7LAST && !special_center) {
                 ++bad_centres;
             }

@@ -1281,6 +1281,13 @@ bool CitySession::place_special(int index, int tile_x, int tile_y)
             placement_note_.tool = kSpecialEngineId;
             placement_note_.x = tile_x;
             placement_note_.y = tile_y;
+            if (index >= 0 && index < special_building_count()) {
+                const SpecialBuilding &building = special_building(index);
+                placement_note_.width = building.width;
+                placement_note_.height = building.height;
+                placement_note_.anchor_x = building.anchor_x;
+                placement_note_.anchor_y = building.anchor_y;
+            }
             placement_waiting_ = true;
         }
         return false;
@@ -1293,6 +1300,13 @@ bool CitySession::place_special(int index, int tile_x, int tile_y)
     placement_note_.tool = kSpecialEngineId;
     placement_note_.x = tile_x;
     placement_note_.y = tile_y;
+    {
+        const SpecialBuilding &building = special_building(index);
+        placement_note_.width = building.width;
+        placement_note_.height = building.height;
+        placement_note_.anchor_x = building.anchor_x;
+        placement_note_.anchor_y = building.anchor_y;
+    }
     placement_waiting_ = true;
     dirty_ = true;
     notify();
@@ -2577,18 +2591,28 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     }
     if (found) {
         const int center = map_value(center_x, center_y) & LOMASK;
+        const int special = special_index_for_tile(center);
         int span = 3;
-        if (center >= AIRPORTBASE && center < COALBASE) {
-            span = 6;
-        } else if ((center >= PORTBASE && center < AIRPORTBASE) || (center >= COALBASE && center < FIRESTBASE) ||
-                   (center >= STADIUMBASE && center < INDBASE2)) {
-            span = 4;
+        if (special >= 0) {
+            const SpecialBuilding &building = special_building(special);
+            card.zone = true;
+            card.width = building.width;
+            card.height = building.height;
+            card.left = center_x - building.anchor_x;
+            card.top = center_y - building.anchor_y;
+        } else {
+            if (center >= AIRPORTBASE && center < COALBASE) {
+                span = 6;
+            } else if ((center >= PORTBASE && center < AIRPORTBASE) || (center >= COALBASE && center < FIRESTBASE) ||
+                       (center >= STADIUMBASE && center < INDBASE2)) {
+                span = 4;
+            }
+            card.zone = true;
+            card.width = span;
+            card.height = span;
+            card.left = center_x - span / 2;
+            card.top = center_y - span / 2;
         }
-        card.zone = true;
-        card.width = span;
-        card.height = span;
-        card.left = center_x - span / 2;
-        card.top = center_y - span / 2;
         if (card.left < 0) {
             card.left = 0;
         }

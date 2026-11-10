@@ -3451,10 +3451,17 @@ void Shell::absorb_placement_note()
     const ToolFootprint foot = tool_footprint(note.tool);
     receipt_on_ = true;
     receipt_ok_ = note.ok;
-    receipt_left_ = note.x - foot.cursor_to_left;
-    receipt_top_ = note.y - foot.cursor_to_top;
-    receipt_w_ = std::max(1, foot.width);
-    receipt_h_ = std::max(1, foot.height);
+    if (note.width > 0 && note.height > 0) {
+        receipt_left_ = note.x - note.anchor_x;
+        receipt_top_ = note.y - note.anchor_y;
+        receipt_w_ = note.width;
+        receipt_h_ = note.height;
+    } else {
+        receipt_left_ = note.x - foot.cursor_to_left;
+        receipt_top_ = note.y - foot.cursor_to_top;
+        receipt_w_ = std::max(1, foot.width);
+        receipt_h_ = std::max(1, foot.height);
+    }
     receipt_age_ = 0;
     if (note.ok) {
         receipt_life_ = 280;

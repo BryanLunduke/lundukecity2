@@ -264,7 +264,23 @@ def _zoo(size: int, spooky: bool, icon: bool) -> Image.Image:
     return image
 
 
+# Editor-approved Prison, Marina, and Fountain sheets and icons.
+_HAND_AUTHORED = {
+    "prison.png",
+    "prison-svga.png",
+    "prison-spooky.png",
+    "marina.png",
+    "marina-svga.png",
+    "marina-spooky.png",
+    "fountain.png",
+    "fountain-svga.png",
+    "fountain-spooky.png",
+}
+
+
 def _save(image: Image.Image, path: Path) -> None:
+    if path.name in _HAND_AUTHORED and path.parent.name in ("special-tiles", "tool-icons"):
+        raise SystemExit(f"refusing to overwrite editor-approved {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     image.save(path)
 

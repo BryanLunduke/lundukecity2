@@ -730,6 +730,8 @@ def to_rgba(im):
 # Casino and Amusement Park), so this script does not overwrite them.
 # bigpark-svga.png keeps the old Big Park icon for the SVGA and Spooky looks.
 CUT_FROM_SHEET = ("zoo", "bigpark", "library")
+# Prison, Marina, and Fountain icons are cut from the editor-approved sheets.
+HAND_AUTHORED = ("prison", "marina", "fountain")
 
 
 def main():
@@ -737,7 +739,7 @@ def main():
     for name, draw in ICONS:
         im = outlined(draw)
         drawn[name] = im
-        if name in CUT_FROM_SHEET:
+        if name in CUT_FROM_SHEET or name in HAND_AUTHORED:
             continue
         write_png(ROOT / f"{name}.png", SIZE, SIZE, to_rgba(im))
     coal_im = drawn["coal"]
