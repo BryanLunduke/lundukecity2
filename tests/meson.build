@@ -390,11 +390,15 @@ test('svga_look', svga_look)
 
 python = find_program('python3', required: true)
 # Previews and the report go to the build tree. The script must not rewrite
-# the committed sheets or leave bytecode beside the source.
+# the committed sheets or leave bytecode beside the source. Pillow is absent
+# on the CI image; atlas_test.py exits 77 then, and Meson skips the test.
+# A hand run of the atlas script still reports the missing library.
+atlas_test = meson.project_source_root() / 'tests' / 'atlas_test.py'
 test(
   'svga_atlas',
   python,
   args: [
+    atlas_test,
     meson.project_source_root() / 'art' / 'svga' / 'make_atlas.py',
     '--out', meson.project_build_root() / 'svga-atlas',
   ],
@@ -406,6 +410,7 @@ test(
   'spooky_atlas',
   python,
   args: [
+    atlas_test,
     meson.project_source_root() / 'art' / 'spooky' / 'make_atlas.py',
     '--out', meson.project_build_root() / 'spooky-atlas',
   ],
