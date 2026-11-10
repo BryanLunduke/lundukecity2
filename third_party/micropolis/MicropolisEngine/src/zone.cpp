@@ -92,7 +92,8 @@ void Micropolis::doZone(const Position &pos)
 
     // Zoo, big park, library, and the later civic landmarks do not grow.
     if (tile == SPECIAL_ZOO || tile == SPECIAL_PARK || tile == SPECIAL_LIBRARY ||
-        tile == SPECIAL_MAYOR || tile == SPECIAL_CASINO || tile == SPECIAL_AMUSEMENT) {
+        tile == SPECIAL_MAYOR || tile == SPECIAL_CASINO || tile == SPECIAL_AMUSEMENT ||
+        tile == SPECIAL_PRISON || tile == SPECIAL_MARINA || tile == SPECIAL_FOUNTAIN) {
         return;
     }
 

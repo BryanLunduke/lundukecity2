@@ -41,8 +41,8 @@ bool is_rubble(int raw)
 
 int main()
 {
-    if (special_building_count() != 6) {
-        return fail(1, "the table should list the original three and the three landmarks");
+    if (special_building_count() != 9) {
+        return fail(1, "the table should list the original three, the three landmarks, and prison, marina, fountain");
     }
     if (std::string(special_building(0).name) != "Zoo" || special_building(0).cost != 100 ||
         special_building(0).annual_income != 0 || std::string(special_building(1).name) != "Big Park" ||

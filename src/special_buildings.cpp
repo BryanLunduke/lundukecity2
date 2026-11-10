@@ -12,6 +12,10 @@ static_assert(SPECIAL_ZOO == 1020, "zoo center tile");
 static_assert(SPECIAL_PARK == 1021, "big park center tile");
 static_assert(SPECIAL_LIBRARY == 1022, "library center tile");
 static_assert(SPECIAL_BODY == 1023, "special body tile");
+static_assert(SPECIAL_PRISON == 870, "prison center tile");
+static_assert(SPECIAL_MARINA == 871, "marina center tile");
+static_assert(SPECIAL_FOUNTAIN == 872, "placeable fountain tile");
+static_assert(SPECIAL_FOUNTAIN != FOUNTAIN, "park fountain animation stays on tile 840");
 static_assert(kSpecialBodyTile == SPECIAL_BODY, "body tile constant");
 
 namespace {
@@ -21,6 +25,10 @@ namespace {
 // the detailed gift FAQ's prices and the manual's benefits, with casino
 // crime kept local (other guides, not the map-wide +1). Center ids 53-55
 // are the unused trash slots; the map word cannot grow past 1023.
+// Prison, Marina, and Fountain are a later first pass. Their center ids
+// are the unused gap after the tiny explosions. Anchor 1 matches the
+// stadium click (one tile down and right of the top-left). The fountain
+// click is the tile itself, like a park.
 const SpecialBuilding kBuildings[] = {
     {1020, "Zoo", "zoo", "zoo", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
     {1021, "Big Park", "bigpark", "big-park", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
@@ -32,6 +40,13 @@ const SpecialBuilding kBuildings[] = {
      8, 100, 0, 2, 3},
     {55, "Amusement Park", "amusement", "amusement", 100, 200, 3, 3, 6, 96,
      "Sharply raises nearby land value and brings in $200 a year. Best near residential", 0, 0, 0, 2, 3},
+    {SPECIAL_PRISON, "Prison", "prison", "prison", 3000, 0, 4, 4, 6, -48,
+     "Lowers nearby land value and reduces crime a little while it has power and a road", 6, -24, 0, -1, 0, 1, 1, true,
+     true, false},
+    {SPECIAL_MARINA, "Marina", "marina", "marina", 1000, 0, 3, 3, 6, 48,
+     "Raises nearby land value. The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
+    {SPECIAL_FOUNTAIN, "Fountain", "fountain", "fountain", 20, 0, 1, 1, 4, 16, "Raises nearby land value", 0, 0, 0, -1,
+     0, 0, 0, false, false, false},
 };
 
 bool in_bounds(int x, int y)
@@ -45,6 +60,15 @@ int tile_of(const Micropolis *sim, int x, int y)
         return -1;
     }
     return static_cast<int>(sim->map[x][y] & LOMASK);
+}
+
+int sim_word(int x, int y, const void *ctx)
+{
+    const Micropolis *sim = static_cast<const Micropolis *>(ctx);
+    if (sim == nullptr || !in_bounds(x, y)) {
+        return -1;
+    }
+    return static_cast<int>(sim->map[x][y]);
 }
 
 bool is_center_at(const Micropolis *sim, int x, int y, int index)
@@ -90,6 +114,139 @@ bool is_water_tile(int tile)
     return tile >= FLOOD && tile <= LASTFLOOD;
 }
 
+bool water_word(int raw)
+{
+    if (raw < 0) {
+        return false;
+    }
+    return is_water_tile(raw & LOMASK);
+}
+
+// Same acceptance as Micropolis::roadTest: roads and rail, not a bare wire.
+bool road_word(int raw)
+{
+    if (raw < 0) {
+        return false;
+    }
+    const int tile = raw & LOMASK;
+    if (tile < ROADBASE || tile > LASTRAIL) {
+        return false;
+    }
+    if (tile >= POWERBASE && tile < LASTPOWER) {
+        return false;
+    }
+    return true;
+}
+
+bool power_word(int raw)
+{
+    if (raw < 0) {
+        return false;
+    }
+    return (raw & CONDBIT) != 0;
+}
+
+int search_reach()
+{
+    int reach = 1;
+    for (int i = 0; i < special_building_count(); ++i) {
+        const SpecialBuilding &building = kBuildings[i];
+        const int right = building.width - 1 - building.anchor_x;
+        const int down = building.height - 1 - building.anchor_y;
+        if (building.anchor_x > reach) {
+            reach = building.anchor_x;
+        }
+        if (building.anchor_y > reach) {
+            reach = building.anchor_y;
+        }
+        if (right > reach) {
+            reach = right;
+        }
+        if (down > reach) {
+            reach = down;
+        }
+    }
+    return reach;
+}
+
+struct Located {
+    int index = -1;
+    int center_x = 0;
+    int center_y = 0;
+    int left = 0;
+    int top = 0;
+};
+
+bool locate_at(int x, int y, SpecialWordFn word_at, const void *ctx, Located &found)
+{
+    if (word_at == nullptr) {
+        return false;
+    }
+    const int reach = search_reach();
+    int best_dist = 1000;
+    bool hit = false;
+    for (int dy = -reach; dy <= reach; ++dy) {
+        for (int dx = -reach; dx <= reach; ++dx) {
+            const int sx = x + dx;
+            const int sy = y + dy;
+            const int raw = word_at(sx, sy, ctx);
+            if (raw < 0 || (raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int index = special_index_for_tile(raw & LOMASK);
+            if (index < 0) {
+                continue;
+            }
+            const SpecialBuilding &building = kBuildings[index];
+            const int left = sx - building.anchor_x;
+            const int top = sy - building.anchor_y;
+            if (x < left || y < top || x >= left + building.width || y >= top + building.height) {
+                continue;
+            }
+            int adx = dx < 0 ? -dx : dx;
+            int ady = dy < 0 ? -dy : dy;
+            const int dist = adx > ady ? adx : ady;
+            if (hit && dist >= best_dist) {
+                continue;
+            }
+            hit = true;
+            best_dist = dist;
+            found.index = index;
+            found.center_x = sx;
+            found.center_y = sy;
+            found.left = left;
+            found.top = top;
+        }
+    }
+    return hit;
+}
+
+bool ring_has(int left, int top, int width, int height, SpecialWordFn word_at, const void *ctx, bool (*test)(int))
+{
+    for (int y = top - 1; y <= top + height; ++y) {
+        for (int x = left - 1; x <= left + width; ++x) {
+            if (x >= left && x < left + width && y >= top && y < top + height) {
+                continue;
+            }
+            if (test(word_at(x, y, ctx))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool south_water(int left, int top, int width, int height, SpecialWordFn word_at, const void *ctx)
+{
+    const int y = top + height;
+    for (int x = left; x < left + width; ++x) {
+        if (water_word(word_at(x, y, ctx))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool live_center_at(const Micropolis *sim, int x, int y)
 {
     if (!in_bounds(x, y)) {
@@ -113,32 +270,14 @@ bool remnant_tile(int raw)
 
 bool find_center(const Micropolis *sim, int x, int y, int &cx, int &cy, int &index)
 {
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
-            const int sx = x + dx;
-            const int sy = y + dy;
-            if (!in_bounds(sx, sy)) {
-                continue;
-            }
-            const int raw = static_cast<int>(sim->map[sx][sy]);
-            if ((raw & ZONEBIT) == 0) {
-                continue;
-            }
-            const int found = special_index_for_tile(raw & LOMASK);
-            if (found < 0) {
-                continue;
-            }
-            // The clicked tile has to sit inside that building's 3x3.
-            if (x < sx - 1 || x > sx + 1 || y < sy - 1 || y > sy + 1) {
-                continue;
-            }
-            cx = sx;
-            cy = sy;
-            index = found;
-            return true;
-        }
+    Located found;
+    if (!locate_at(x, y, sim_word, sim, found)) {
+        return false;
     }
-    return false;
+    cx = found.center_x;
+    cy = found.center_y;
+    index = found.index;
+    return true;
 }
 
 bool orphan_body(const Micropolis *sim, int x, int y)
@@ -152,73 +291,89 @@ bool orphan_body(const Micropolis *sim, int x, int y)
     return !find_center(sim, x, y, cx, cy, index);
 }
 
-// The 3x3 that still holds the clicked remnant after its centre is gone.
-// A window that contains another building's centre is rejected.
-bool orphan_footprint(const Micropolis *sim, int x, int y, int &left, int &top)
+struct Remnant {
+    int left = 0;
+    int top = 0;
+    int width = 0;
+    int height = 0;
+    int anchor_x = 1;
+    int anchor_y = 1;
+};
+
+// The footprint that still holds the clicked remnant after its centre is gone.
+// A window that contains another building's centre is rejected. Equal body
+// counts keep the smaller window, so a burned 3x3 is not cleared as a 4x4.
+bool orphan_footprint(const Micropolis *sim, int x, int y, Remnant &remnant)
 {
-    int best = -1;
+    int best_bodies = -1;
     int best_center = -1;
-    int best_left = 0;
-    int best_top = 0;
-    for (int cy = y - 1; cy <= y + 1; ++cy) {
-        for (int cx = x - 1; cx <= x + 1; ++cx) {
-            const int l = cx - 1;
-            const int t = cy - 1;
-            if (l < 0 || t < 0 || l + 3 > WORLD_W || t + 3 > WORLD_H) {
-                continue;
-            }
-            if (x < l || x >= l + 3 || y < t || y >= t + 3) {
-                continue;
-            }
-            int bodies = 0;
-            bool foreign = false;
-            for (int dy = 0; dy < 3 && !foreign; ++dy) {
-                for (int dx = 0; dx < 3; ++dx) {
-                    const int sx = l + dx;
-                    const int sy = t + dy;
-                    if (live_center_at(sim, sx, sy)) {
-                        foreign = true;
-                        break;
-                    }
-                    if (tile_of(sim, sx, sy) != kSpecialBodyTile) {
-                        continue;
-                    }
-                    if (!orphan_body(sim, sx, sy)) {
-                        foreign = true;
-                        break;
-                    }
-                    ++bodies;
+    int best_area = 100000;
+    bool hit = false;
+    for (int index = 0; index < special_building_count(); ++index) {
+        const SpecialBuilding &building = kBuildings[index];
+        for (int top = y - (building.height - 1); top <= y; ++top) {
+            for (int left = x - (building.width - 1); left <= x; ++left) {
+                if (left < 0 || top < 0 || left + building.width > WORLD_W || top + building.height > WORLD_H) {
+                    continue;
                 }
-            }
-            if (foreign || bodies < 1) {
-                continue;
-            }
-            const int center_tile = tile_of(sim, cx, cy);
-            int center_score = 0;
-            if ((center_tile >= FIRE && center_tile <= LASTFIRE) || (center_tile >= RUBBLE && center_tile <= LASTRUBBLE) ||
-                special_index_for_tile(center_tile) >= 0) {
-                center_score = 1;
-            }
-            if (bodies > best || (bodies == best && center_score > best_center)) {
-                best = bodies;
+                if (x < left || x >= left + building.width || y < top || y >= top + building.height) {
+                    continue;
+                }
+                int bodies = 0;
+                bool foreign = false;
+                for (int dy = 0; dy < building.height && !foreign; ++dy) {
+                    for (int dx = 0; dx < building.width; ++dx) {
+                        const int sx = left + dx;
+                        const int sy = top + dy;
+                        if (live_center_at(sim, sx, sy)) {
+                            foreign = true;
+                            break;
+                        }
+                        if (tile_of(sim, sx, sy) != kSpecialBodyTile) {
+                            continue;
+                        }
+                        if (!orphan_body(sim, sx, sy)) {
+                            foreign = true;
+                            break;
+                        }
+                        ++bodies;
+                    }
+                }
+                if (foreign || bodies < 1) {
+                    continue;
+                }
+                const int center_tile = tile_of(sim, left + building.anchor_x, top + building.anchor_y);
+                int center_score = 0;
+                if ((center_tile >= FIRE && center_tile <= LASTFIRE) ||
+                    (center_tile >= RUBBLE && center_tile <= LASTRUBBLE) || special_index_for_tile(center_tile) >= 0) {
+                    center_score = 1;
+                }
+                const int area = building.width * building.height;
+                const bool better = bodies > best_bodies || (bodies == best_bodies && center_score > best_center) ||
+                                    (bodies == best_bodies && center_score == best_center && area < best_area);
+                if (!better) {
+                    continue;
+                }
+                hit = true;
+                best_bodies = bodies;
                 best_center = center_score;
-                best_left = l;
-                best_top = t;
+                best_area = area;
+                remnant.left = left;
+                remnant.top = top;
+                remnant.width = building.width;
+                remnant.height = building.height;
+                remnant.anchor_x = building.anchor_x;
+                remnant.anchor_y = building.anchor_y;
             }
         }
     }
-    if (best < 1) {
-        return false;
-    }
-    left = best_left;
-    top = best_top;
-    return true;
+    return hit;
 }
 
-void clear_remnant(Micropolis *sim, int left, int top)
+void clear_remnant(Micropolis *sim, int left, int top, int width, int height)
 {
-    for (int dy = 0; dy < 3; ++dy) {
-        for (int dx = 0; dx < 3; ++dx) {
+    for (int dy = 0; dy < height; ++dy) {
+        for (int dx = 0; dx < width; ++dx) {
             const int x = left + dx;
             const int y = top + dy;
             if (!in_bounds(x, y) || !remnant_tile(static_cast<int>(sim->map[x][y]))) {
@@ -227,6 +382,25 @@ void clear_remnant(Micropolis *sim, int left, int top)
             sim->map[x][y] = static_cast<unsigned short>(RUBBLE | BULLBIT);
         }
     }
+}
+
+bool crime_service_ready(const Micropolis *sim, int index, int center_x, int center_y)
+{
+    const SpecialBuilding &building = kBuildings[index];
+    if (!building.needs_power && !building.needs_road) {
+        return true;
+    }
+    const int left = center_x - building.anchor_x;
+    const int top = center_y - building.anchor_y;
+    if (building.needs_power) {
+        if (!in_bounds(center_x, center_y) || (sim->map[center_x][center_y] & PWRBIT) == 0) {
+            return false;
+        }
+    }
+    if (building.needs_road && !ring_has(left, top, building.width, building.height, sim_word, sim, road_word)) {
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -263,16 +437,60 @@ bool special_building_intact(const Micropolis *sim, int center_x, int center_y)
     if (!is_center_at(sim, center_x, center_y, index)) {
         return false;
     }
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
-            if (dx == 0 && dy == 0) {
+    const SpecialBuilding &building = kBuildings[index];
+    const int left = center_x - building.anchor_x;
+    const int top = center_y - building.anchor_y;
+    if (left < 0 || top < 0 || left + building.width > WORLD_W || top + building.height > WORLD_H) {
+        return false;
+    }
+    for (int dy = 0; dy < building.height; ++dy) {
+        for (int dx = 0; dx < building.width; ++dx) {
+            if (dx == building.anchor_x && dy == building.anchor_y) {
                 continue;
             }
-            if (tile_of(sim, center_x + dx, center_y + dy) != kSpecialBodyTile) {
+            if (tile_of(sim, left + dx, top + dy) != kSpecialBodyTile) {
                 return false;
             }
         }
     }
+    return true;
+}
+
+std::string special_requirement_at(int index, int left, int top, SpecialWordFn word_at, const void *ctx)
+{
+    if (word_at == nullptr || index < 0 || index >= special_building_count()) {
+        return "Cannot build here.";
+    }
+    const SpecialBuilding &building = kBuildings[index];
+    if (building.needs_south_water && !south_water(left, top, building.width, building.height, word_at, ctx)) {
+        return "Needs a shoreline to the south.";
+    }
+    const bool road_ok = !building.needs_road || ring_has(left, top, building.width, building.height, word_at, ctx, road_word);
+    const bool power_ok =
+        !building.needs_power || ring_has(left, top, building.width, building.height, word_at, ctx, power_word);
+    if (!power_ok && !road_ok) {
+        return "Needs power and a road.";
+    }
+    if (!power_ok) {
+        return "Needs power.";
+    }
+    if (!road_ok) {
+        return "Needs a road.";
+    }
+    return {};
+}
+
+bool special_sheet_at(int x, int y, SpecialWordFn word_at, const void *ctx, int &index, int &cell)
+{
+    Located found;
+    if (!locate_at(x, y, word_at, ctx, found)) {
+        return false;
+    }
+    const SpecialBuilding &building = kBuildings[found.index];
+    index = found.index;
+    const int ox = x - found.left;
+    const int oy = y - found.top;
+    cell = oy * building.width + ox;
     return true;
 }
 
@@ -379,6 +597,9 @@ void boost_special_land_value(Micropolis *sim)
                 continue;
             }
             const SpecialBuilding &building = kBuildings[index];
+            if (building.land_bonus == 0 || building.land_radius <= 0) {
+                continue;
+            }
             const int x0 = (x - building.land_radius) / sim->landValueMap.MAP_BLOCKSIZE;
             const int y0 = (y - building.land_radius) / sim->landValueMap.MAP_BLOCKSIZE;
             const int x1 = (x + building.land_radius) / sim->landValueMap.MAP_BLOCKSIZE;
@@ -395,6 +616,9 @@ void boost_special_land_value(Micropolis *sim)
                     int raised = value + building.land_bonus;
                     if (raised > 250) {
                         raised = 250;
+                    }
+                    if (building.land_bonus < 0 && raised < 1) {
+                        raised = 1;
                     }
                     sim->landValueMap.set(bx, by, static_cast<Byte>(raised));
                 }
@@ -419,7 +643,10 @@ void boost_special_crime(Micropolis *sim)
                 continue;
             }
             const SpecialBuilding &building = kBuildings[index];
-            if (building.crime_bonus <= 0 || building.crime_radius <= 0) {
+            if (building.crime_bonus == 0 || building.crime_radius <= 0) {
+                continue;
+            }
+            if (building.crime_bonus < 0 && !crime_service_ready(sim, index, x, y)) {
                 continue;
             }
             const int x0 = (x - building.crime_radius) / block;
@@ -445,13 +672,16 @@ void boost_special_crime(Micropolis *sim)
                     if (dist > building.crime_radius) {
                         continue;
                     }
-                    int coverage = sim->policeStationMap.worldGet(wx, wy);
-                    if (coverage < 0) {
-                        coverage = 0;
-                    }
-                    int add = building.crime_bonus - coverage / 8;
-                    if (add < 0) {
-                        add = 0;
+                    int add = building.crime_bonus;
+                    if (add > 0) {
+                        int coverage = sim->policeStationMap.worldGet(wx, wy);
+                        if (coverage < 0) {
+                            coverage = 0;
+                        }
+                        add = building.crime_bonus - coverage / 8;
+                        if (add < 0) {
+                            add = 0;
+                        }
                     }
                     int current = sim->crimeRateMap.worldGet(wx, wy);
                     if (current < 0) {
@@ -460,6 +690,9 @@ void boost_special_crime(Micropolis *sim)
                     int raised = current + add;
                     if (raised > 250) {
                         raised = 250;
+                    }
+                    if (raised < 0) {
+                        raised = 0;
                     }
                     sim->crimeRateMap.worldSet(wx, wy, static_cast<Byte>(raised));
                 }
@@ -476,8 +709,8 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
         return false;
     }
     const SpecialBuilding &building = kBuildings[index];
-    const int left = tile_x - 1;
-    const int top = tile_y - 1;
+    const int left = tile_x - building.anchor_x;
+    const int top = tile_y - building.anchor_y;
     if (left < 0 || top < 0 || left + building.width > WORLD_W || top + building.height > WORLD_H) {
         error = "That would be off the map.";
         return false;
@@ -509,6 +742,11 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
         error = "Bulldoze that area first.";
         return false;
     }
+    const std::string required = special_requirement_at(index, left, top, sim_word, sim);
+    if (!required.empty()) {
+        error = required;
+        return false;
+    }
     const std::string blocked = special_block_reason(sim, index);
     if (!blocked.empty()) {
         error = blocked;
@@ -520,9 +758,12 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
     }
     for (int dy = 0; dy < building.height; ++dy) {
         for (int dx = 0; dx < building.width; ++dx) {
-            const bool center = dx == 1 && dy == 1;
+            const bool center = dx == building.anchor_x && dy == building.anchor_y;
             const unsigned short tile = static_cast<unsigned short>(center ? building.center_tile : kSpecialBodyTile);
-            const unsigned short bits = static_cast<unsigned short>(BURNBIT | BULLBIT | (center ? ZONEBIT : 0));
+            unsigned short bits = static_cast<unsigned short>(BURNBIT | BULLBIT | (center ? ZONEBIT : 0));
+            if (building.needs_power) {
+                bits = static_cast<unsigned short>(bits | CONDBIT);
+            }
             sim->map[left + dx][top + dy] = static_cast<unsigned short>(tile | bits);
         }
     }
@@ -543,10 +784,13 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y)
         if (sim->totalFunds < 1) {
             return false;
         }
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                const int x = cx + dx;
-                const int y = cy + dy;
+        const SpecialBuilding &building = kBuildings[index];
+        const int left = cx - building.anchor_x;
+        const int top = cy - building.anchor_y;
+        for (int dy = 0; dy < building.height; ++dy) {
+            for (int dx = 0; dx < building.width; ++dx) {
+                const int x = left + dx;
+                const int y = top + dy;
                 if (!in_bounds(x, y)) {
                     continue;
                 }
@@ -557,25 +801,24 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y)
         sim->invalidateMaps();
         return true;
     }
-    // The centre tile can burn away first and leave the other eight standing.
+    // The centre tile can burn away first and leave the other tiles standing.
     // Bulldozing any of those leftovers, or the burned centre, clears the rest.
     const int clicked = tile_of(sim, tile_x, tile_y);
     const bool burned = (clicked >= FIRE && clicked <= LASTFIRE) || (clicked >= RUBBLE && clicked <= LASTRUBBLE);
     if (!orphan_body(sim, tile_x, tile_y) && !burned) {
         return false;
     }
-    int left = 0;
-    int top = 0;
-    if (!orphan_footprint(sim, tile_x, tile_y, left, top)) {
+    Remnant remnant;
+    if (!orphan_footprint(sim, tile_x, tile_y, remnant)) {
         return false;
     }
-    if (burned && (tile_x != left + 1 || tile_y != top + 1)) {
+    if (burned && (tile_x != remnant.left + remnant.anchor_x || tile_y != remnant.top + remnant.anchor_y)) {
         return false;
     }
     if (sim->totalFunds < 1) {
         return false;
     }
-    clear_remnant(sim, left, top);
+    clear_remnant(sim, remnant.left, remnant.top, remnant.width, remnant.height);
     sim->spend(1);
     sim->invalidateMaps();
     return true;

@@ -450,20 +450,37 @@ Attempt lay_building(Scratch &map, int tool, int x, int y, bool auto_bulldoze)
     return attempt;
 }
 
+int scratch_word(int x, int y, const void *ctx)
+{
+    const Scratch *map = static_cast<const Scratch *>(ctx);
+    if (map == nullptr) {
+        return -1;
+    }
+    return map->get(x, y);
+}
+
+bool wet_tile(int tile)
+{
+    return water_tile(tile) || (tile >= FLOOD && tile <= LASTFLOOD);
+}
+
 Attempt lay_special(Scratch &map, int index, int x, int y, bool auto_bulldoze)
 {
-    const int left = x - 1;
-    const int top = y - 1;
     if (index < 0 || index >= special_building_count()) {
         return blocked_at("Cannot build here", x, y, 3, 3);
     }
-    if (left < 0 || top < 0 || left + 3 > kWorldW || top + 3 > kWorldH) {
-        return blocked_at("Off the map", left, top, 3, 3);
+    const SpecialBuilding &building = special_building(index);
+    const int left = x - building.anchor_x;
+    const int top = y - building.anchor_y;
+    const int width = building.width;
+    const int height = building.height;
+    if (left < 0 || top < 0 || left + width > kWorldW || top + height > kWorldH) {
+        return blocked_at("Off the map", left, top, width, height);
     }
     bool water = false;
     bool land = false;
-    for (int dy = 0; dy < 3; ++dy) {
-        for (int dx = 0; dx < 3; ++dx) {
+    for (int dy = 0; dy < height; ++dy) {
+        for (int dx = 0; dx < width; ++dx) {
             const int raw = map.get(left + dx, top + dy);
             const int tile = tile_of(raw);
             if (tile == DIRT) {
@@ -472,7 +489,7 @@ Attempt lay_special(Scratch &map, int index, int x, int y, bool auto_bulldoze)
             if (auto_bulldoze && auto_clearable_word(raw)) {
                 continue;
             }
-            if (water_tile(tile)) {
+            if (wet_tile(tile)) {
                 water = true;
             } else {
                 land = true;
@@ -480,19 +497,34 @@ Attempt lay_special(Scratch &map, int index, int x, int y, bool auto_bulldoze)
         }
     }
     if (water && !land) {
-        return blocked_at("Can't build on water", left, top, 3, 3);
+        return blocked_at("Can't build on water", left, top, width, height);
     }
     if (water || land) {
-        return blocked_at("Bulldoze first", left, top, 3, 3);
+        return blocked_at("Bulldoze first", left, top, width, height);
+    }
+    const std::string required = special_requirement_at(index, left, top, scratch_word, &map);
+    if (!required.empty()) {
+        // Attempt stores a pointer, so the sentence has to be a literal.
+        const char *stable = "Cannot build here";
+        if (required.find("shoreline") != std::string::npos) {
+            stable = "Needs a shoreline to the south.";
+        } else if (required.find("power and a road") != std::string::npos) {
+            stable = "Needs power and a road.";
+        } else if (required.find("power") != std::string::npos) {
+            stable = "Needs power.";
+        } else if (required.find("road") != std::string::npos) {
+            stable = "Needs a road.";
+        }
+        return blocked_at(stable, left, top, width, height);
     }
     Attempt attempt;
     attempt.outcome = Outcome::Ok;
-    attempt.cost = 100;
+    attempt.cost = building.cost;
     attempt.reason = special_name(index);
     attempt.left = left;
     attempt.top = top;
-    attempt.width = 3;
-    attempt.height = 3;
+    attempt.width = width;
+    attempt.height = height;
     return attempt;
 }
 
@@ -573,7 +605,7 @@ PlaceForecast finish_forecast(const Attempt &attempt, long long funds)
     }
     forecast.mark = attempt.outcome == Outcome::Caution ? PlaceMark::Caution : PlaceMark::Ready;
     if (attempt.outcome == Outcome::Ok && attempt.reason != nullptr && std::strchr(attempt.reason, '$') == nullptr &&
-        attempt.width > 1) {
+        attempt.cost > 0) {
         forecast.tag = std::string(attempt.reason) + " " + money(attempt.cost);
     } else if (attempt.outcome == Outcome::Caution) {
         forecast.tag = attempt.reason;

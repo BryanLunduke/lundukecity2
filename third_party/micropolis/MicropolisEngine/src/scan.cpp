@@ -336,7 +336,8 @@ void Micropolis::pollutionTerrainLandValueScan()
 int Micropolis::getPollutionValue(int loc)
 {
     // These ids sit in the old radiation gap. They are civic centres now.
-    if (loc == SPECIAL_MAYOR || loc == SPECIAL_CASINO || loc == SPECIAL_AMUSEMENT) {
+    if (loc == SPECIAL_MAYOR || loc == SPECIAL_CASINO || loc == SPECIAL_AMUSEMENT ||
+        loc == SPECIAL_PRISON || loc == SPECIAL_MARINA || loc == SPECIAL_FOUNTAIN) {
         return 0;
     }
 

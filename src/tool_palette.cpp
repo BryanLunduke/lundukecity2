@@ -234,7 +234,8 @@ cairo_surface_t *tool_icon_named(const char *stem)
         bool tried = false;
     };
     struct Cache {
-        Slot slots[24];
+        // Nine specials times three looks, plus spare slots when the look changes.
+        Slot slots[48];
         ~Cache()
         {
             for (Slot &slot : slots) {

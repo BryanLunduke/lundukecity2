@@ -566,6 +566,9 @@ def write_png(path, im):
 # Micropolis Classic palette (3/4 projection, down-right shadow) and checked
 # in as PNGs, so this script only writes the SVGA and Spooky looks.
 KEEP_CLASSIC_SUFFIXES = ("",)
+# Prison, Marina, and Fountain sheets and icons are editor-approved in all
+# three looks. This script must not rewrite them.
+HAND_AUTHORED = {"prison", "marina", "fountain"}
 
 
 def main():
@@ -576,6 +579,8 @@ def main():
     }
     suffixes = ("", "-svga", "-spooky")
     for stem, draws in sheets.items():
+        if stem in HAND_AUTHORED:
+            continue
         for draw, suffix in zip(draws, suffixes):
             if suffix in KEEP_CLASSIC_SUFFIXES:
                 # The Classic sheets (and their tool icons, cut 4..44 from the

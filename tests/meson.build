@@ -482,6 +482,18 @@ landmarks_test = executable(
 
 test('landmarks', landmarks_test, timeout: 120)
 
+new_specials_test = executable(
+  'new_specials',
+  'new_specials.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  cpp_args: ['-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"'],
+)
+
+test('new_specials', new_specials_test, timeout: 120)
+
 # Thumbnails painted from the scenario files themselves.
 scenario_preview_test = executable(
   'scenario_preview',

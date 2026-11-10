@@ -253,6 +253,12 @@ public:
         int tool = -1;
         int x = 0;
         int y = 0;
+        // Set for a special so the receipt matches that building's footprint.
+        // 0 keeps the generic tool footprint.
+        int width = 0;
+        int height = 0;
+        int anchor_x = 0;
+        int anchor_y = 0;
     };
     // One receipt for the stroke that just ended. False when nothing happened.
     bool take_placement_note(PlacementNote &out);

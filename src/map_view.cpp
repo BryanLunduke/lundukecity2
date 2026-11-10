@@ -227,9 +227,10 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
         bool tried = false;
     };
     struct Cache {
-        Slot slots[8];
-        Slot svga[8];
-        Slot spooky[8];
+        // One slot per special. 16 leaves room past the nine buildings.
+        Slot slots[16];
+        Slot svga[16];
+        Slot spooky[16];
         ~Cache()
         {
             for (Slot &slot : slots) {
@@ -250,7 +251,7 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
         }
     };
     static Cache cache;
-    if (index < 0 || index >= 8 || index >= special_building_count()) {
+    if (index < 0 || index >= 16 || index >= special_building_count()) {
         return nullptr;
     }
     const char *name = special_building(index).map_sprite;
@@ -287,12 +288,21 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
     return slot.image;
 }
 
+int session_word(int x, int y, const void *ctx)
+{
+    const CitySession *session = static_cast<const CitySession *>(ctx);
+    if (session == nullptr) {
+        return -1;
+    }
+    return session->map_value(x, y);
+}
+
 // 0 when this cell is not part of a special building. Otherwise a key that
 // changes when the building identity or the cell inside it changes.
 int special_display_key(const CitySession *session, int x, int y, int &index, int &cell)
 {
     index = -1;
-    cell = 4;
+    cell = 0;
     if (session == nullptr) {
         return 0;
     }
@@ -301,29 +311,10 @@ int special_display_key(const CitySession *session, int x, int y, int &index, in
     if (tile != kSpecialBodyTile && special_index_for_tile(tile) < 0) {
         return 0;
     }
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
-            const int cx = x + dx;
-            const int cy = y + dy;
-            const int neighbor = session->map_value(cx, cy);
-            if ((neighbor & ZONEBIT) == 0) {
-                continue;
-            }
-            const int found = special_index_for_tile(neighbor & LOMASK);
-            if (found < 0) {
-                continue;
-            }
-            if (x < cx - 1 || x > cx + 1 || y < cy - 1 || y > cy + 1) {
-                continue;
-            }
-            index = found;
-            const int ox = x - (cx - 1);
-            const int oy = y - (cy - 1);
-            cell = oy * 3 + ox;
-            return 40000 + found * 16 + cell;
-        }
+    if (!special_sheet_at(x, y, session_word, session, index, cell)) {
+        return 39990;
     }
-    return 39990;
+    return 40000 + index * 32 + cell;
 }
 
 } // namespace
@@ -344,8 +335,11 @@ void MapView::blit_special(int x, int y, int index, int cell)
     };
     bool vga_snap = false;
     cairo_surface_t *sprite = special_sprite(index, vga_snap);
-    const int col = cell % 3;
-    const int row = cell / 3;
+    const int cols = index >= 0 && index < special_building_count() && special_building(index).width > 0
+                         ? special_building(index).width
+                         : 3;
+    const int col = cell % cols;
+    const int row = cell / cols;
     if (sprite == nullptr || col < 0 || row < 0) {
         const std::uint32_t fallback[3] = {
             (255u << 24) | (48u << 16) | (140u << 8) | 40u,
