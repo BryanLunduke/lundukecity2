@@ -335,6 +335,11 @@ void Micropolis::pollutionTerrainLandValueScan()
  */
 int Micropolis::getPollutionValue(int loc)
 {
+    // These ids sit in the old radiation gap. They are civic centres now.
+    if (loc == SPECIAL_MAYOR || loc == SPECIAL_CASINO || loc == SPECIAL_AMUSEMENT) {
+        return 0;
+    }
+
     if (loc < POWERBASE) {
 
         if (loc >= HTRFBASE) {
@@ -448,6 +453,11 @@ void Micropolis::crimeScan()
     }
 
     policeStationEffectMap =  policeStationMap;
+
+    // After the police subtraction, so a station can still cut the bonus.
+    if (specialCrimeFn != NULL) {
+        specialCrimeFn(this);
+    }
 
     newMapFlags[MAP_TYPE_CRIME] = 1;
     newMapFlags[MAP_TYPE_POLICE_RADIUS] = 1;

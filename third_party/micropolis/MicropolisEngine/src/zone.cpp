@@ -90,8 +90,9 @@ void Micropolis::doZone(const Position &pos)
 
     MapTile tile = map[pos.posX][pos.posY] & LOMASK;
 
-    // Zoo, big park, and library do not grow or decline.
-    if (tile == SPECIAL_ZOO || tile == SPECIAL_PARK || tile == SPECIAL_LIBRARY) {
+    // Zoo, big park, library, and the later civic landmarks do not grow.
+    if (tile == SPECIAL_ZOO || tile == SPECIAL_PARK || tile == SPECIAL_LIBRARY ||
+        tile == SPECIAL_MAYOR || tile == SPECIAL_CASINO || tile == SPECIAL_AMUSEMENT) {
         return;
     }
 

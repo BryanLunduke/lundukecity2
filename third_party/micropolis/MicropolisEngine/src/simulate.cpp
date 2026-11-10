@@ -948,6 +948,17 @@ void Micropolis::collectTax()
             policeEffect = MAX_POLICE_STATION_EFFECT;
             fireEffect   = MAX_FIRE_STATION_EFFECT;
         }
+        // Gift income is not tax. Zoo, Big Park, and Library stay at 0.
+        // The money is added when the year is collected, not before the
+        // anchor for "opening funds" is stored.
+        specialIncome = 0;
+        if (specialIncomeFn != NULL) {
+            const int gift = specialIncomeFn(this);
+            if (gift > 0) {
+                specialIncome = gift;
+                cashFlow += gift;
+            }
+        }
         // Every January waits on the year-end window, including a city with
         // no residents and a tax of $0. Auto budget still applies at once when
         // doBudgetNow is called directly; the tax year itself is the cover
@@ -958,9 +969,6 @@ void Micropolis::collectTax()
         autoBudget = savedAuto;
     }
 
-    // Special buildings do not pay income. The table still has an
-    // annual_income column so a later building can define one.
-    specialIncome = 0;
 }
 
 

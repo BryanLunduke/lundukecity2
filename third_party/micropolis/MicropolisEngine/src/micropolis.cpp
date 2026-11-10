@@ -740,6 +740,7 @@ void Micropolis::init()
     callbackHook = NULL;
     specialIncomeFn = NULL;
     specialLandFn = NULL;
+    specialCrimeFn = NULL;
     specialIncome = 0;
 
     // void *callbackData;

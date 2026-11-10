@@ -442,6 +442,16 @@ tool_icons = executable(
 
 test('tool_icons', tool_icons)
 
+welcome_asset = executable(
+  'welcome_asset',
+  'welcome_asset.cpp',
+  '../src/assets.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [cairo_dep],
+)
+
+test('welcome_asset', welcome_asset)
+
 special_buildings_test = executable(
   'special_buildings',
   'special_buildings.cpp',
@@ -461,6 +471,16 @@ special_buildings_test = executable(
 )
 
 test('special_buildings', special_buildings_test, timeout: 120)
+
+landmarks_test = executable(
+  'landmarks',
+  'landmarks.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+)
+
+test('landmarks', landmarks_test, timeout: 120)
 
 # Thumbnails painted from the scenario files themselves.
 scenario_preview_test = executable(
@@ -498,6 +518,7 @@ editorial = executable(
   'editorial',
   'editorial.cpp',
   '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
   include_directories: include_directories('../src'),
   dependencies: [micropolis_dep],
 )

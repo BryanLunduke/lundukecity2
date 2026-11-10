@@ -213,6 +213,8 @@ int run_shell(int argc, char **argv)
 
 int Shell::run(int argc, char **argv)
 {
+    register_bundled_face(ui_data_file("fonts/DejaVuSerif.ttf"));
+    register_bundled_face(ui_data_file("fonts/DejaVuSerif-Bold.ttf"));
     if (const char *smoke = std::getenv("LUNDUKE_CITY2_SMOKE")) {
         smoke_ = smoke[0] != '\0' && smoke[0] != '0';
     }
@@ -292,6 +294,7 @@ int Shell::run(int argc, char **argv)
     // The launch screen is for a player who has not already named a city
     // on the command line, and not for the scripted demo / review runs.
     const bool scripted = smoke_ || ui_test_ || review_ || !demo_.empty();
+    motion_fx_ = !ui_test_ && !review_ && !smoke_ && demo_.empty();
     if (!scripted && !launched_with_file) {
         welcome_gate_ = true;
         // Offer recovery before Welcome. The gate used to keep a dialog
@@ -313,7 +316,8 @@ int Shell::run(int argc, char **argv)
         demo_ != "crime" && demo_ != "zones" && demo_ != "police" && demo_ != "graphs" && demo_ != "terrain" &&
         demo_ != "controls" && demo_ != "settings" && demo_ != "won" && demo_ != "lost" &&         demo_ != "fire" &&
         demo_ != "saveempty" && demo_ != "savefull" && demo_ != "newname" && demo_ != "about" &&
-        demo_ != "howto" && demo_ != "help" && demo_ != "yearreview") {
+        demo_ != "howto" && demo_ != "help" && demo_ != "yearreview" && demo_ != "landmarks" &&
+        demo_ != "transition") {
         int ox = 0;
         int oy = 0;
         if (session_.stamp_neighborhood(ox, oy)) {
@@ -837,7 +841,9 @@ void Shell::demo_place_gifts(bool query_one)
     session_.set_disasters(false);
     session_.set_auto_bulldoze(true);
     set_speed(0);
-    const int want = query_one ? 1 : special_building_count();
+    // The original three. Mayor's House, Casino, and Amusement Park have
+    // their own shot (DEMO=landmarks) because of the town gate and the cap.
+    const int want = query_one ? 1 : 3;
     int placed_x[8] = {};
     int placed_y[8] = {};
     int placed = 0;
@@ -1088,6 +1094,7 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.blink = blink_drew_;
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
+    reasons.motion = scene_fade_.active() || panel_settle_ > 0;
     return reasons;
 }
 
@@ -1139,6 +1146,9 @@ void Shell::loop()
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);
             }
+            if (scene_fade_.active() || panel_settle_ > 0) {
+                timeout = std::min(timeout, 16);
+            }
             if (menu_.open() && menu_edge_dir_ != 0) {
                 timeout = std::min(timeout, 40);
             }
@@ -1166,6 +1176,9 @@ void Shell::loop()
             elapsed = 2000;
         }
         last = now;
+        if (scene_fade_.active()) {
+            scene_fade_.advance(elapsed);
+        }
         // Simulation does not fast-forward through a long idle sleep. The
         // blink clock does, or a paused city would flash late.
         // Keep up to half a second. Fast runs several phases per slice so a
@@ -1421,6 +1434,19 @@ void Shell::loop()
             quitting_ = true;
         }
         if (!demo_.empty() && frame_ == 1) {
+            auto apply_look = [&]() {
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0 ||
+                        std::strncmp(look, "Spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
+            };
             if (demo_ == "menu" || demo_ == "gamepad") {
                 menu_.open_first();
                 gamepad_nav_ = demo_ == "gamepad";
@@ -1429,9 +1455,11 @@ void Shell::loop()
                     cursor_y_ = static_cast<float>(view_y_ + view_h_ / 2);
                 }
             } else if (demo_ == "yearreview") {
+                apply_look();
                 speed_ = 0;
                 session_.set_speed(0);
                 session_.begin_tax_year();
+                session_.prepare_review_demo();
                 budget_is_tax_ = true;
                 budget_cover_ = true;
                 tax_pause_hold_ = true;
@@ -1499,6 +1527,7 @@ void Shell::loop()
                 focus_id_ = kListItem + 2;
                 gamepad_nav_ = deck_;
             } else if (demo_ == "welcome") {
+                apply_look();
                 welcome_gate_ = true;
                 open_dialog(Dialog::Welcome);
             } else if (demo_ == "quit") {
@@ -1546,6 +1575,47 @@ void Shell::loop()
                     map_.invalidate_all();
                 }
                 center_on_fraction(0.07, 0.045);
+            } else if (demo_ == "landmarks") {
+                session_.set_disasters(false);
+                session_.set_auto_bulldoze(true);
+                set_speed(0);
+                session_.set_census_residents(200);
+                if (const char *look = std::getenv("LUNDUKE_CITY2_LOOK")) {
+                    int which = 0;
+                    if (look[0] == '2' || look[0] == 'p' || look[0] == 'P' || std::strncmp(look, "spooky", 6) == 0 ||
+                        std::strncmp(look, "Spooky", 6) == 0) {
+                        which = 2;
+                    } else if (look[0] == 's' || look[0] == 'S' || look[0] == '1') {
+                        which = 1;
+                    }
+                    set_look_preference(look_from_setting(which));
+                    map_.invalidate_all();
+                }
+                int placed = 0;
+                for (int index = 0; index < special_building_count(); ++index) {
+                    const std::string name = special_building(index).name;
+                    if (name != "Mayor's House" && name != "Casino" && name != "Amusement Park") {
+                        continue;
+                    }
+                    if (session_.place_special(index, 8 + placed * 5, 8)) {
+                        ++placed;
+                    }
+                }
+                if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
+                    map_.set_tile_size(std::atoi(zoom));
+                } else {
+                    map_.set_tile_size(48);
+                }
+                center_on_fraction(0.12, 0.1);
+            } else if (demo_ == "transition") {
+                apply_look();
+                set_speed(0);
+                session_.set_speed(0);
+                close_dialog();
+                scene_fade_.start();
+                scene_fade_.hold = true;
+                scene_fade_.step = 1;
+                scene_fade_.elapsed_ms = 50;
             } else if (demo_ == "giftquery") {
                 demo_place_gifts(true);
             } else if (demo_ == "giftbudget") {
@@ -1873,6 +1943,10 @@ void Shell::tick_sim(int)
 
 void Shell::handle_event(const SDL_Event &event)
 {
+    if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+        event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type == SDL_EVENT_FINGER_DOWN) {
+        skip_motion();
+    }
     switch (event.type) {
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
         request_with_save(AfterSave::Quit);

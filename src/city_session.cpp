@@ -427,6 +427,8 @@ CitySession::CitySession()
     };
     engine_->sim.callbackData = this;
     engine_->sim.specialLandFn = boost_special_land_value;
+    engine_->sim.specialCrimeFn = boost_special_crime;
+    engine_->sim.specialIncomeFn = special_annual_income;
     engine_->sim.setEnableSound(sound_enabled_);
 }
 
@@ -435,6 +437,8 @@ CitySession::~CitySession()
     engine_->sim.callbackHook = nullptr;
     engine_->sim.callbackData = nullptr;
     engine_->sim.specialLandFn = nullptr;
+    engine_->sim.specialCrimeFn = nullptr;
+    engine_->sim.specialIncomeFn = nullptr;
     delete engine_;
 }
 
@@ -1295,6 +1299,36 @@ bool CitySession::place_special(int index, int tile_x, int tile_y)
     return true;
 }
 
+std::string CitySession::special_menu_detail(int index) const
+{
+    if (engine_ == nullptr) {
+        return {};
+    }
+    return ::special_menu_detail(&engine_->sim, index);
+}
+
+std::string CitySession::special_status_line(int index) const
+{
+    if (engine_ == nullptr) {
+        return special_status_text(index);
+    }
+    return special_status_text(&engine_->sim, index);
+}
+
+void CitySession::set_census_residents(int residents)
+{
+    if (engine_ == nullptr || residents < 0) {
+        return;
+    }
+    engine_->sim.resPop = residents;
+    engine_->sim.snapResPop = residents;
+    engine_->sim.comPop = 0;
+    engine_->sim.indPop = 0;
+    engine_->sim.snapComPop = 0;
+    engine_->sim.snapIndPop = 0;
+    engine_->sim.censusSnapshotValid = true;
+}
+
 void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, int to_y)
 {
     if (!ready_ || engine_tool == kSpecialEngineId) {
@@ -1597,7 +1631,7 @@ CitySession::BudgetBook CitySession::budget() const
         book.road_spent = static_cast<std::int64_t>(charge.roadTaken);
         book.police_spent = static_cast<std::int64_t>(charge.policeTaken);
         book.fire_spent = static_cast<std::int64_t>(charge.fireTaken);
-        book.cash_flow = static_cast<std::int64_t>(charge.posted);
+        book.cash_flow = static_cast<std::int64_t>(charge.posted) + static_cast<std::int64_t>(sim.specialIncome);
         book.previous_funds = sim.budgetAnchorValid ? static_cast<std::int64_t>(sim.budgetAnchorFunds)
                                                     : static_cast<std::int64_t>(sim.totalFunds);
         book.funds = static_cast<std::int64_t>(sim.totalFunds) + book.cash_flow;
@@ -1972,6 +2006,15 @@ std::string CitySession::date_text() const
     return std::string(kMonths[month]) + " " + std::to_string(year > 0 ? year : engine_->sim.startingYear);
 }
 
+int CitySession::city_year() const
+{
+    const long year = static_cast<long>(engine_->sim.cityYear);
+    if (year > 0) {
+        return static_cast<int>(year);
+    }
+    return static_cast<int>(engine_->sim.startingYear);
+}
+
 std::string CitySession::message() const
 {
     return message_;
@@ -2255,6 +2298,81 @@ int CitySession::calendar_month() const
         month = 0;
     }
     return month;
+}
+
+int CitySession::review_year() const
+{
+    if (!ready_ || engine_ == nullptr) {
+        return 1900;
+    }
+    return civic::year_just_ended(calendar_year(), calendar_month(), static_cast<long long>(engine_->sim.cityTime));
+}
+
+CitySession::CensusMix CitySession::census_mix() const
+{
+    CensusMix mix;
+    if (!ready_ || engine_ == nullptr) {
+        return mix;
+    }
+    const Micropolis &sim = engine_->sim;
+    const bool snap = sim.censusSnapshotValid;
+    const long long res = snap ? sim.snapResPop : sim.resPop;
+    const long long com = snap ? sim.snapComPop : sim.comPop;
+    const long long ind = snap ? sim.snapIndPop : sim.indPop;
+    mix.homes = static_cast<int>(res < 0 ? 0 : res);
+    mix.shops = static_cast<int>(com < 0 ? 0 : com * 8);
+    mix.jobs = static_cast<int>(ind < 0 ? 0 : ind * 8);
+    return mix;
+}
+
+void CitySession::prepare_review_demo()
+{
+    if (!ready_ || engine_ == nullptr) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    // The first anniversary. updateDate publishes January of the next year,
+    // so the cover names 1900.
+    sim.cityTime = 48;
+    sim.updateDate();
+    sim.resPop = 80;
+    sim.comPop = 15;
+    sim.indPop = 10;
+    sim.snapResPop = sim.resPop;
+    sim.snapComPop = sim.comPop;
+    sim.snapIndPop = sim.indPop;
+    sim.censusSnapshotValid = true;
+    sim.budgetAnchorFunds = 15200;
+    sim.budgetAnchorValid = true;
+    sim.totalFunds = 18640;
+    sim.cityTax = 7;
+    sim.cityScore = 540;
+    sim.evalPreviewValid = true;
+    sim.evalPreviewYes = 58;
+    sim.evalPreviewAssessed = 0;
+    for (int i = 0; i < PROBNUM; ++i) {
+        sim.evalPreviewVotes[i] = 0;
+    }
+    for (int i = 0; i < CVP_PROBLEM_COMPLAINTS; ++i) {
+        sim.evalPreviewOrder[i] = -1;
+    }
+    sim.evalPreviewVotes[CVP_CRIME] = 34;
+    sim.evalPreviewVotes[CVP_TRAFFIC] = 22;
+    sim.evalPreviewOrder[0] = CVP_CRIME;
+    sim.evalPreviewOrder[1] = CVP_TRAFFIC;
+    civic::award(ledger_, civic::Town, 1900, 2, nullptr);
+    ledger_.have_prior = true;
+    ledger_.prior_population = 1800;
+    for (int i = 0; i < civic::kProblems; ++i) {
+        ledger_.prior_votes[i] = 0;
+    }
+    ledger_.prior_votes[0] = 48;
+    CityNotice notice;
+    notice.text = "The population has reached 2,000.";
+    notice.year = 1900;
+    notice.month = 5;
+    notice.has_place = false;
+    notices_.insert(notices_.begin(), notice);
 }
 
 bool CitySession::powered_homes() const

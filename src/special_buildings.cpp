@@ -16,15 +16,22 @@ static_assert(kSpecialBodyTile == SPECIAL_BODY, "body tile constant");
 
 namespace {
 
-// Sources for the numbers are written up in the pull request. In short:
-// every gift costs $100 and occupies 3x3 (FatRatKnight's SNES gift FAQ,
-// GameFAQs 68878; the fandom SNES page agrees on the price). All three
-// raise nearby land value. annual_income stays in the table for a later
-// building, and the editor set it to 0 for these three: nothing is paid.
+// City 2 rules, written up in the pull request. Zoo, Big Park, and Library
+// stay at annual_income 0. Mayor's House, Casino, and Amusement Park follow
+// the detailed gift FAQ's prices and the manual's benefits, with casino
+// crime kept local (other guides, not the map-wide +1). Center ids 53-55
+// are the unused trash slots; the map word cannot grow past 1023.
 const SpecialBuilding kBuildings[] = {
     {1020, "Zoo", "zoo", "zoo", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
     {1021, "Big Park", "bigpark", "big-park", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
     {1022, "Library", "library", "library", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
+    {53, "Mayor's House", "mayor", "mayor", 100, 0, 3, 3, 6, 48,
+     "Raises nearby land value. Best near residential", 0, 0, 2000, 1, 1},
+    {54, "Casino", "casino", "casino", 100, 300, 3, 3, 6, 96,
+     "Sharply raises nearby land value, brings in $300 a year, and raises local crime. A police station nearby matters",
+     8, 100, 0, 2, 3},
+    {55, "Amusement Park", "amusement", "amusement", 100, 200, 3, 3, 6, 96,
+     "Sharply raises nearby land value and brings in $200 a year. Best near residential", 0, 0, 0, 2, 3},
 };
 
 bool in_bounds(int x, int y)
@@ -269,6 +276,79 @@ bool special_building_intact(const Micropolis *sim, int center_x, int center_y)
     return true;
 }
 
+static int count_group(const Micropolis *sim, int group)
+{
+    int total = 0;
+    if (sim == nullptr || group < 0) {
+        return 0;
+    }
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const int raw = static_cast<int>(sim->map[x][y]);
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int index = special_index_for_tile(raw & LOMASK);
+            if (index < 0) {
+                continue;
+            }
+            if (kBuildings[index].cap_group == group) {
+                ++total;
+            }
+        }
+    }
+    return total;
+}
+
+int special_population(const Micropolis *sim)
+{
+    if (sim == nullptr) {
+        return 0;
+    }
+    const Quad res = sim->censusSnapshotValid ? sim->snapResPop : sim->resPop;
+    const Quad com = sim->censusSnapshotValid ? sim->snapComPop : sim->comPop;
+    const Quad ind = sim->censusSnapshotValid ? sim->snapIndPop : sim->indPop;
+    const long long people =
+        (static_cast<long long>(res) + (static_cast<long long>(com) + static_cast<long long>(ind)) * 8LL) * 20LL;
+    if (people < 0) {
+        return 0;
+    }
+    if (people > 2000000000LL) {
+        return 2000000000;
+    }
+    return static_cast<int>(people);
+}
+
+std::string special_block_reason(const Micropolis *sim, int index)
+{
+    if (sim == nullptr || index < 0 || index >= special_building_count()) {
+        return "Cannot build here.";
+    }
+    const SpecialBuilding &building = kBuildings[index];
+    if (building.unlock_population > 0 && special_population(sim) < building.unlock_population) {
+        return "Available at 2,000 population (Town)";
+    }
+    if (building.cap_group >= 0 && building.cap_limit > 0 && count_group(sim, building.cap_group) >= building.cap_limit) {
+        if (building.cap_limit == 1) {
+            return "Only one Mayor's House in a city.";
+        }
+        return "Amusement Parks and Casinos are limited to 3.";
+    }
+    return {};
+}
+
+std::string special_menu_detail(const Micropolis *sim, int index)
+{
+    const std::string block = special_block_reason(sim, index);
+    if (!block.empty() && block != "Cannot build here.") {
+        return block;
+    }
+    if (index < 0 || index >= special_building_count()) {
+        return {};
+    }
+    return "$" + std::to_string(kBuildings[index].cost);
+}
+
 int special_annual_income(const Micropolis *sim)
 {
     if (sim == nullptr) {
@@ -323,6 +403,71 @@ void boost_special_land_value(Micropolis *sim)
     }
 }
 
+void boost_special_crime(Micropolis *sim)
+{
+    if (sim == nullptr) {
+        return;
+    }
+    const int block = sim->crimeRateMap.MAP_BLOCKSIZE;
+    if (block < 1) {
+        return;
+    }
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const int index = special_index_for_tile(tile_of(sim, x, y));
+            if (index < 0 || !special_building_intact(sim, x, y)) {
+                continue;
+            }
+            const SpecialBuilding &building = kBuildings[index];
+            if (building.crime_bonus <= 0 || building.crime_radius <= 0) {
+                continue;
+            }
+            const int x0 = (x - building.crime_radius) / block;
+            const int y0 = (y - building.crime_radius) / block;
+            const int x1 = (x + building.crime_radius) / block;
+            const int y1 = (y + building.crime_radius) / block;
+            for (int by = y0; by <= y1; ++by) {
+                for (int bx = x0; bx <= x1; ++bx) {
+                    if (!sim->crimeRateMap.onMap(bx, by)) {
+                        continue;
+                    }
+                    const int wx = bx * block + block / 2;
+                    const int wy = by * block + block / 2;
+                    int dx = wx - x;
+                    int dy = wy - y;
+                    if (dx < 0) {
+                        dx = -dx;
+                    }
+                    if (dy < 0) {
+                        dy = -dy;
+                    }
+                    const int dist = dx > dy ? dx : dy;
+                    if (dist > building.crime_radius) {
+                        continue;
+                    }
+                    int coverage = sim->policeStationMap.worldGet(wx, wy);
+                    if (coverage < 0) {
+                        coverage = 0;
+                    }
+                    int add = building.crime_bonus - coverage / 8;
+                    if (add < 0) {
+                        add = 0;
+                    }
+                    int current = sim->crimeRateMap.worldGet(wx, wy);
+                    if (current < 0) {
+                        current = 0;
+                    }
+                    int raised = current + add;
+                    if (raised > 250) {
+                        raised = 250;
+                    }
+                    sim->crimeRateMap.worldSet(wx, wy, static_cast<Byte>(raised));
+                }
+            }
+        }
+    }
+}
+
 bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, std::string &error)
 {
     error.clear();
@@ -362,6 +507,11 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
     }
     if (blocked_by_water || blocked_by_land) {
         error = "Bulldoze that area first.";
+        return false;
+    }
+    const std::string blocked = special_block_reason(sim, index);
+    if (!blocked.empty()) {
+        error = blocked;
         return false;
     }
     if (sim->totalFunds < building.cost) {
@@ -458,4 +608,15 @@ std::string special_status_text(int index)
     }
     const SpecialBuilding &building = kBuildings[index];
     return std::string(building.name) + ": $" + std::to_string(building.cost);
+}
+
+std::string special_status_text(const Micropolis *sim, int index)
+{
+    std::string text = special_status_text(index);
+    const std::string block = special_block_reason(sim, index);
+    if (!block.empty() && block != "Cannot build here.") {
+        text += ". ";
+        text += block;
+    }
+    return text;
 }

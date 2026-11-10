@@ -10,8 +10,9 @@ class Micropolis;
 
 // Special buildings are one row in this table. Placement, query, income,
 // land value, the dropdown, and the map art all walk the table. A new
-// building needs a free center-tile id (1020-1022 are the ids the classic
-// tileset left unused), a toolbar icon, and a map sprite.
+// building needs a center-tile id the simulator will not grow, a toolbar
+// icon, and a map sprite. 1020-1022 are the classic free ids. Later
+// landmarks reuse unused trash ids 53-55; 1019 stays the unknown-tile check.
 
 struct SpecialBuilding {
     int center_tile = 0;
@@ -32,6 +33,17 @@ struct SpecialBuilding {
     // the formula. 48 inside 6 tiles is that reading.
     int land_bonus = 48;
     const char *effect = "";
+    // 0 means this building does not change the crime map.
+    int crime_radius = 0;
+    // Added on the crime map after police coverage is subtracted.
+    // A station nearby lowers it (coverage / 8 comes off this bonus).
+    int crime_bonus = 0;
+    // 0 means the building can be bought at any population.
+    int unlock_population = 0;
+    // Buildings that share a cap_group count toward cap_limit together.
+    // -1 means no cap.
+    int cap_group = -1;
+    int cap_limit = 0;
 };
 
 // Shared non-center tile. The center tile id says which building it is.
@@ -45,6 +57,17 @@ int special_index_for_tile(int tile);
 
 int special_annual_income(const Micropolis *sim);
 void boost_special_land_value(Micropolis *sim);
+void boost_special_crime(Micropolis *sim);
+
+// The census the status line shows. 0 when sim is null.
+int special_population(const Micropolis *sim);
+
+// Empty when this building may be placed. Otherwise the sentence the
+// menu and the status line show (unlock or cap).
+std::string special_block_reason(const Micropolis *sim, int index);
+
+// Second line of the specials menu: the lock sentence, or "$100".
+std::string special_menu_detail(const Micropolis *sim, int index);
 
 // Click is the center tile, matching the other 3x3 buildings.
 // On failure, error is a short status-bar sentence and the map is unchanged.
@@ -59,6 +82,8 @@ std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y);
 
 // Status line for the selected building, including its cost.
 std::string special_status_text(int index);
+// Same line, plus the unlock or cap sentence when the city cannot buy it.
+std::string special_status_text(const Micropolis *sim, int index);
 
 // True when the 3x3 around a center tile is still the building we placed.
 bool special_building_intact(const Micropolis *sim, int center_x, int center_y);

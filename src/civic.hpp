@@ -391,6 +391,190 @@ inline YearCard make_year_card(std::int64_t opening, std::int64_t closing, bool 
     return card;
 }
 
+struct DigestNotice {
+    std::string text;
+    int year = 1900;
+    int month = 0;
+    bool has_place = false;
+    int tile_x = 0;
+    int tile_y = 0;
+};
+
+struct DigestLine {
+    std::string text;
+    bool has_place = false;
+    int tile_x = 0;
+    int tile_y = 0;
+};
+
+struct YearDigest {
+    YearCard card;
+    std::vector<DigestLine> events;
+    bool locate = false;
+    int locate_x = 0;
+    int locate_y = 0;
+    // The calendar year that just finished. January 1901 reviews 1900.
+    int ended_year = 1900;
+    std::int64_t opening_funds = 0;
+    std::int64_t closing_funds = 0;
+    int tax_percent = 0;
+};
+
+// Tax is taken on the tick the clock becomes a new January. Once that
+// January is published, the year under review is the one before it.
+inline int year_just_ended(int calendar_year, int calendar_month, long long city_time)
+{
+    if (calendar_year <= 0) {
+        return 1900;
+    }
+    if (calendar_month == 0 && city_time >= 48) {
+        return calendar_year - 1;
+    }
+    return calendar_year;
+}
+
+inline bool digest_in_year(int note_year, int note_month, int city_year)
+{
+    if (note_year == city_year - 1) {
+        return true;
+    }
+    return note_year == city_year && note_month == 0;
+}
+
+inline bool digest_routine(const std::string &text)
+{
+    static const char *skip[] = {
+        "Cannot build here.",
+        "Bulldoze that area first.",
+        "Not enough funds to build that.",
+        "That would be off the map.",
+        "Started a new city.",
+        "Loaded a saved city.",
+        "No place to anchor a bridge.",
+        "No place to land a power line.",
+        "Bridge: $50",
+        "Rail bridge: $100",
+        "Underwater wire: $25",
+    };
+    for (const char *one : skip) {
+        if (text == one) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool digest_notable(const std::string &text)
+{
+    static const char *keys[] = {
+        "Fire reported", "monster",    "tornado",  "earthquake", "crashed",    "wrecked",
+        "explosion",     "Flooding",   "meltdown", "Riots",      "Firebombing", "reached",
+        "Scenario won",  "Scenario lost", "Blackouts", "out of funds",
+    };
+    for (const char *key : keys) {
+        if (text.find(key) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline YearDigest make_year_digest(std::int64_t opening, std::int64_t closing, bool when_collected, bool estimated,
+                                   std::int64_t population, const Ledger &ledger, const int votes[kProblems],
+                                   const char *top_name, int top_votes, int top_kind, int score_delta, bool deltas_known,
+                                   int city_year, const std::vector<DigestNotice> &notices)
+{
+    YearDigest digest;
+    digest.card = make_year_card(opening, closing, when_collected, estimated, population, ledger, votes, top_name,
+                                 top_votes, top_kind, score_delta, deltas_known);
+    struct Group {
+        std::string text;
+        int count = 0;
+        bool notable = false;
+        bool has_place = false;
+        int tile_x = 0;
+        int tile_y = 0;
+    };
+    std::vector<Group> groups;
+    auto add_line = [&](const std::string &text, bool notable, bool has_place, int tile_x, int tile_y) {
+        for (Group &group : groups) {
+            if (group.text == text) {
+                ++group.count;
+                if (has_place && !group.has_place) {
+                    group.has_place = true;
+                    group.tile_x = tile_x;
+                    group.tile_y = tile_y;
+                }
+                return;
+            }
+        }
+        Group group;
+        group.text = text;
+        group.count = 1;
+        group.notable = notable;
+        group.has_place = has_place;
+        group.tile_x = tile_x;
+        group.tile_y = tile_y;
+        groups.push_back(group);
+    };
+    for (int id = 0; id < kMilestones; ++id) {
+        const MilestoneHit &hit = ledger.hit[id];
+        if (!hit.earned || !digest_in_year(hit.year, hit.month, city_year)) {
+            continue;
+        }
+        add_line(std::string("Milestone: ") + milestone_title(id) + " (" + milestone_date(hit) + ").", true, false, 0,
+                 0);
+    }
+    for (const DigestNotice &notice : notices) {
+        if (notice.text.empty() || digest_routine(notice.text) || !digest_in_year(notice.year, notice.month, city_year)) {
+            continue;
+        }
+        add_line(notice.text, digest_notable(notice.text), notice.has_place, notice.tile_x, notice.tile_y);
+    }
+    auto emit = [&](const Group &group) {
+        DigestLine line;
+        line.text = group.text;
+        if (group.count > 1) {
+            line.text += " (" + std::to_string(group.count) + " times)";
+        }
+        line.has_place = group.has_place;
+        line.tile_x = group.tile_x;
+        line.tile_y = group.tile_y;
+        if (!digest.locate && group.has_place) {
+            digest.locate = true;
+            digest.locate_x = group.tile_x;
+            digest.locate_y = group.tile_y;
+        }
+        digest.events.push_back(line);
+    };
+    int notables = 0;
+    for (const Group &group : groups) {
+        if (!group.notable || notables >= 3) {
+            continue;
+        }
+        emit(group);
+        ++notables;
+    }
+    const Group *repeat = nullptr;
+    for (const Group &group : groups) {
+        if (group.notable) {
+            continue;
+        }
+        if (repeat == nullptr || group.count > repeat->count) {
+            repeat = &group;
+        }
+    }
+    if (repeat != nullptr && static_cast<int>(digest.events.size()) < 4) {
+        emit(*repeat);
+    }
+    if (digest.events.empty()) {
+        DigestLine quiet;
+        quiet.text = "No disaster or milestone was recorded this year.";
+        digest.events.push_back(quiet);
+    }
+    return digest;
+}
+
 inline std::string encode_ledger(const Ledger &ledger)
 {
     std::string out;

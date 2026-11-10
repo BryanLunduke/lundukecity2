@@ -63,6 +63,21 @@ inline void release_fontconfig()
 #endif
 }
 
+// Year-in-review titles use DejaVu Serif shipped in data/fonts. Register the
+// files before the first layout so Linux and Windows resolve the same face.
+inline void register_bundled_face(const std::string &path)
+{
+#ifdef LUNDUKE_HAS_FONTCONFIG
+    if (path.empty()) {
+        return;
+    }
+    FcConfigAppFontAddFile(nullptr, reinterpret_cast<const FcChar8 *>(path.c_str()));
+    pango_cairo_font_map_set_default(nullptr);
+#else
+    (void)path;
+#endif
+}
+
 // Layouts are reused across frames. A paused city otherwise built thousands
 // of PangoLayouts a second.
 inline PangoLayout *cached_layout(cairo_t *cr, const char *font, const std::string &text, int wrap_width)

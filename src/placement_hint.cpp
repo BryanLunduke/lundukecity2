@@ -387,16 +387,10 @@ BuildingSpec building_spec(int tool)
 
 const char *special_name(int index)
 {
-    switch (index) {
-    case 0:
-        return "Zoo";
-    case 1:
-        return "Big Park";
-    case 2:
-        return "Library";
-    default:
-        return "Special";
+    if (index >= 0 && index < special_building_count()) {
+        return special_building(index).name;
     }
+    return "Special";
 }
 
 Attempt lay_building(Scratch &map, int tool, int x, int y, bool auto_bulldoze)
@@ -460,7 +454,7 @@ Attempt lay_special(Scratch &map, int index, int x, int y, bool auto_bulldoze)
 {
     const int left = x - 1;
     const int top = y - 1;
-    if (index < 0 || index > 2) {
+    if (index < 0 || index >= special_building_count()) {
         return blocked_at("Cannot build here", x, y, 3, 3);
     }
     if (left < 0 || top < 0 || left + 3 > kWorldW || top + 3 > kWorldH) {
@@ -509,7 +503,7 @@ Attempt lay_bulldoze(Scratch &map, int x, int y)
     }
     const int word = map.get(x, y);
     const int tile = tile_of(word);
-    const bool special = tile >= 1020 && tile <= 1023;
+    const bool special = special_index_for_tile(tile) >= 0 || tile == kSpecialBodyTile;
     if ((word & BULLBIT) == 0 && (word & ZONEBIT) == 0 && !special && tile == DIRT) {
         return blocked_at("Cannot build here", x, y);
     }

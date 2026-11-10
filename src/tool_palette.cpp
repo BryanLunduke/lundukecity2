@@ -234,7 +234,7 @@ cairo_surface_t *tool_icon_named(const char *stem)
         bool tried = false;
     };
     struct Cache {
-        Slot slots[16];
+        Slot slots[24];
         ~Cache()
         {
             for (Slot &slot : slots) {

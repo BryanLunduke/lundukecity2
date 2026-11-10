@@ -15,12 +15,14 @@ struct Reasons {
     // a compositor, uncovering the window leaves stale pixels until something
     // else asks for a frame.
     bool exposed = false;
+    // A dither or a two-frame panel settle still has frames to show.
+    bool motion = false;
 };
 
 inline bool needed(const Reasons &reasons)
 {
     return reasons.forced || reasons.sim_running || reasons.quake || reasons.navigating || reasons.blink ||
-           reasons.stamp_changed || reasons.exposed;
+           reasons.stamp_changed || reasons.exposed || reasons.motion;
 }
 
 } // namespace redraw

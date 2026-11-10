@@ -5,6 +5,7 @@
 #include "side_widgets.hpp"
 
 #include "city_session.hpp"
+#include "special_buildings.hpp"
 #include "map_fit.hpp"
 #include "tile_atlas.hpp"
 #include "ui_scale.hpp"
@@ -26,6 +27,15 @@ void fill(cairo_t *cr, double x, double y, double w, double h, double r, double 
 
 void tile_rgb(int raw, double &r, double &g, double &b)
 {
+    const int kind = raw & LOMASK;
+    // Tiles 53-55 are civic centres. The atlas still has the old trash
+    // graphic there. Paint them as a small civic lot instead.
+    if (kind == 53 || kind == 54 || kind == 55) {
+        r = 0.44;
+        g = 0.40;
+        b = 0.28;
+        return;
+    }
     const TileAtlas &atlas = tile_atlas();
     if (atlas.loaded()) {
         atlas.average_color(raw & LOMASK, r, g, b);
