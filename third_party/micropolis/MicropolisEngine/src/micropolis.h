@@ -2226,6 +2226,18 @@ public:
     std::string cityNameStoredText;
 
     /**
+     * Shoreline tiles covered by a marina's south (dock) row.
+     * Bulldoze writes \c tile back. The LCM1 trailer, after LCW1, keeps
+     * the list in the city file. Empty when no dock covers water.
+     */
+    struct MarinaDock {
+        unsigned short x;
+        unsigned short y;
+        unsigned short tile;
+    };
+    std::vector<MarinaDock> marinaDock;
+
+    /**
      * LCW1 trailer decoded by loadFileDir and applied by loadFile after
      * doSimInit. Absent means use the classic miscHist fields. See the
      * layout comment above write_wide_city in fileio.cpp. miscHist[64]

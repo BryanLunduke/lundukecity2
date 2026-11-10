@@ -247,6 +247,67 @@ bool south_water(int left, int top, int width, int height, SpecialWordFn word_at
     return false;
 }
 
+bool remnant_tile(int raw);
+
+// The marina's painted docks are the south row. That row may replace
+// shoreline. The rows above it stay on land.
+bool dock_row(const SpecialBuilding &building, int dy)
+{
+    return building.needs_south_water && building.height > 0 && dy == building.height - 1;
+}
+
+void forget_dock_at(Micropolis *sim, int x, int y)
+{
+    std::vector<Micropolis::MarinaDock> &list = sim->marinaDock;
+    for (std::size_t i = 0; i < list.size();) {
+        if (list[i].x == x && list[i].y == y) {
+            list.erase(list.begin() + static_cast<std::ptrdiff_t>(i));
+        } else {
+            ++i;
+        }
+    }
+}
+
+void remember_dock(Micropolis *sim, int x, int y, unsigned short tile)
+{
+    forget_dock_at(sim, x, y);
+    Micropolis::MarinaDock note;
+    note.x = static_cast<unsigned short>(x);
+    note.y = static_cast<unsigned short>(y);
+    note.tile = tile;
+    sim->marinaDock.push_back(note);
+}
+
+// Puts the shoreline word back and drops the note. False when this cell
+// was land (or was never recorded).
+bool restore_dock(Micropolis *sim, int x, int y)
+{
+    std::vector<Micropolis::MarinaDock> &list = sim->marinaDock;
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        if (list[i].x != x || list[i].y != y) {
+            continue;
+        }
+        sim->map[x][y] = list[i].tile;
+        list.erase(list.begin() + static_cast<std::ptrdiff_t>(i));
+        return true;
+    }
+    return false;
+}
+
+void settle_cell(Micropolis *sim, int x, int y, bool rubble_rest)
+{
+    if (!in_bounds(x, y)) {
+        return;
+    }
+    if (restore_dock(sim, x, y)) {
+        return;
+    }
+    if (!rubble_rest && !remnant_tile(static_cast<int>(sim->map[x][y]))) {
+        return;
+    }
+    sim->map[x][y] = static_cast<unsigned short>(RUBBLE | BULLBIT);
+}
+
 bool live_center_at(const Micropolis *sim, int x, int y)
 {
     if (!in_bounds(x, y)) {
@@ -374,12 +435,7 @@ void clear_remnant(Micropolis *sim, int left, int top, int width, int height)
 {
     for (int dy = 0; dy < height; ++dy) {
         for (int dx = 0; dx < width; ++dx) {
-            const int x = left + dx;
-            const int y = top + dy;
-            if (!in_bounds(x, y) || !remnant_tile(static_cast<int>(sim->map[x][y]))) {
-                continue;
-            }
-            sim->map[x][y] = static_cast<unsigned short>(RUBBLE | BULLBIT);
+            settle_cell(sim, left + dx, top + dy, false);
         }
     }
 }
@@ -724,6 +780,10 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
             if (tile == DIRT) {
                 continue;
             }
+            // Dock art covers shoreline. Water further north is still refused.
+            if (dock_row(building, dy) && is_water_tile(tile)) {
+                continue;
+            }
             if (sim->autoBulldoze && auto_clearable(raw)) {
                 continue;
             }
@@ -758,13 +818,21 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
     }
     for (int dy = 0; dy < building.height; ++dy) {
         for (int dx = 0; dx < building.width; ++dx) {
+            const int x = left + dx;
+            const int y = top + dy;
+            const int raw = static_cast<int>(sim->map[x][y]);
+            const int under = raw & LOMASK;
+            forget_dock_at(sim, x, y);
+            if (dock_row(building, dy) && is_water_tile(under)) {
+                remember_dock(sim, x, y, static_cast<unsigned short>(raw));
+            }
             const bool center = dx == building.anchor_x && dy == building.anchor_y;
             const unsigned short tile = static_cast<unsigned short>(center ? building.center_tile : kSpecialBodyTile);
             unsigned short bits = static_cast<unsigned short>(BURNBIT | BULLBIT | (center ? ZONEBIT : 0));
             if (building.needs_power) {
                 bits = static_cast<unsigned short>(bits | CONDBIT);
             }
-            sim->map[left + dx][top + dy] = static_cast<unsigned short>(tile | bits);
+            sim->map[x][y] = static_cast<unsigned short>(tile | bits);
         }
     }
     sim->spend(building.cost);
@@ -789,12 +857,7 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y)
         const int top = cy - building.anchor_y;
         for (int dy = 0; dy < building.height; ++dy) {
             for (int dx = 0; dx < building.width; ++dx) {
-                const int x = left + dx;
-                const int y = top + dy;
-                if (!in_bounds(x, y)) {
-                    continue;
-                }
-                sim->map[x][y] = static_cast<unsigned short>(RUBBLE | BULLBIT);
+                settle_cell(sim, left + dx, top + dy, true);
             }
         }
         sim->spend(1);

@@ -547,6 +547,38 @@ static Quad clamp_wide(long long value, long long lo, long long hi)
     return (Quad)value;
 }
 
+// How many bytes a version-1 LCW1 trailer occupies, or 0 when these bytes
+// are not that trailer. The marina list, when present, starts immediately
+// after this span.
+static std::size_t wide_city_span(const unsigned char *bytes, std::size_t avail)
+{
+    if (bytes == NULL || avail < 8) {
+        return 0;
+    }
+    if (bytes[0] != kWideCityMagic[0] || bytes[1] != kWideCityMagic[1] ||
+        bytes[2] != kWideCityMagic[2] || bytes[3] != kWideCityMagic[3]) {
+        return 0;
+    }
+    if (read_le_u16(bytes + 4) != 1) {
+        return 0;
+    }
+    const unsigned int flags = read_le_u16(bytes + 6);
+    std::size_t need = 8;
+    if ((flags & kWideFlagFunds) != 0) {
+        need += 8;
+    }
+    if ((flags & kWideFlagCensus) != 0) {
+        need += 24;
+    }
+    if ((flags & kWideFlagReceipt) != 0) {
+        need += 32;
+    }
+    if (avail < need) {
+        return 0;
+    }
+    return need;
+}
+
 static bool read_wide_city(Micropolis *sim, const unsigned char *bytes, std::size_t avail)
 {
     if (bytes == NULL || avail < 8) {
@@ -593,6 +625,104 @@ static bool read_wide_city(Micropolis *sim, const unsigned char *bytes, std::siz
         sim->widePoliceFund = clamp_wide(read_le_i64(cursor + 16), 0, kWideMaxReceipt);
         sim->wideFireFund = clamp_wide(read_le_i64(cursor + 24), 0, kWideMaxReceipt);
         sim->wideReceiptValid = true;
+    }
+    return true;
+}
+
+// Marina dock shoreline, magic "LCM1", appended after LCW1.
+// Little-endian:
+//   char magic[4] = { 'L','C','M','1' }
+//   uint16 version = 1
+//   uint16 count
+//   count times: uint16 x, uint16 y, uint16 map word
+// The map word is the shoreline tile the dock covered. Bulldoze writes it
+// back. A save with no covered shoreline omits the trailer.
+static const char kMarinaDockMagic[4] = {'L', 'C', 'M', '1'};
+
+static bool dock_note_current(const Micropolis *sim, const Micropolis::MarinaDock &note)
+{
+    if (note.x >= WORLD_W || note.y >= WORLD_H) {
+        return false;
+    }
+    const int tile = sim->map[note.x][note.y] & LOMASK;
+    if (tile == SPECIAL_BODY) {
+        return true;
+    }
+    if (tile >= FIRE && tile <= LASTFIRE) {
+        return true;
+    }
+    return tile >= RUBBLE && tile <= LASTRUBBLE;
+}
+
+static bool write_marina_dock(FILE *f, Micropolis *sim)
+{
+    std::vector<Micropolis::MarinaDock> kept;
+    kept.reserve(sim->marinaDock.size());
+    for (const Micropolis::MarinaDock &note : sim->marinaDock) {
+        if (dock_note_current(sim, note)) {
+            kept.push_back(note);
+        }
+    }
+    sim->marinaDock.swap(kept);
+    if (sim->marinaDock.empty()) {
+        return true;
+    }
+    if (sim->marinaDock.size() > 0xffffu) {
+        return false;
+    }
+    unsigned char header[8];
+    header[0] = (unsigned char)kMarinaDockMagic[0];
+    header[1] = (unsigned char)kMarinaDockMagic[1];
+    header[2] = (unsigned char)kMarinaDockMagic[2];
+    header[3] = (unsigned char)kMarinaDockMagic[3];
+    write_le_u16(header + 4, 1);
+    write_le_u16(header + 6, (unsigned int)sim->marinaDock.size());
+    if (fwrite(header, 1, 8, f) != 8) {
+        return false;
+    }
+    for (const Micropolis::MarinaDock &note : sim->marinaDock) {
+        unsigned char row[6];
+        write_le_u16(row, note.x);
+        write_le_u16(row + 2, note.y);
+        write_le_u16(row + 4, note.tile);
+        if (fwrite(row, 1, 6, f) != 6) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool read_marina_dock(Micropolis *sim, const unsigned char *bytes, std::size_t avail)
+{
+    if (bytes == NULL || avail < 8) {
+        return false;
+    }
+    if (bytes[0] != kMarinaDockMagic[0] || bytes[1] != kMarinaDockMagic[1] ||
+        bytes[2] != kMarinaDockMagic[2] || bytes[3] != kMarinaDockMagic[3]) {
+        return false;
+    }
+    if (read_le_u16(bytes + 4) != 1) {
+        return false;
+    }
+    const unsigned int count = read_le_u16(bytes + 6);
+    if (count > (unsigned int)(WORLD_W * WORLD_H)) {
+        return false;
+    }
+    if (avail < 8 + (std::size_t)count * 6) {
+        return false;
+    }
+    sim->marinaDock.clear();
+    const unsigned char *cursor = bytes + 8;
+    for (unsigned int i = 0; i < count; ++i) {
+        Micropolis::MarinaDock note;
+        note.x = (unsigned short)read_le_u16(cursor);
+        note.y = (unsigned short)read_le_u16(cursor + 2);
+        note.tile = (unsigned short)read_le_u16(cursor + 4);
+        cursor += 6;
+        if (note.x >= WORLD_W || note.y >= WORLD_H) {
+            continue;
+        }
+        sim->marinaDock.push_back(note);
     }
     return true;
 }
@@ -728,6 +858,7 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
     std::memcpy(moneyHist, money.data(), money.size() * sizeof(short));
     std::memcpy(miscHist, misc.data(), misc.size() * sizeof(short));
     std::memcpy(&map[0][0], tiles.data(), tiles.size() * sizeof(short));
+    marinaDock.clear();
     sanitizeLoadedZones();
 
     // 27120 is the classic payload. Newer saves append a city-name trailer,
@@ -753,8 +884,16 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
         read_cash_flow_history(this, data.data() + trailer, data.size() - trailer)) {
         trailer += cash_flow_trailer_bytes();
     }
+    std::size_t wide_bytes = 0;
     if (data.size() > trailer) {
-        read_wide_city(this, data.data() + trailer, data.size() - trailer);
+        wide_bytes = wide_city_span(data.data() + trailer, data.size() - trailer);
+        if (wide_bytes > 0) {
+            read_wide_city(this, data.data() + trailer, data.size() - trailer);
+        }
+    }
+    const std::size_t dock_at = trailer + wide_bytes;
+    if (data.size() > dock_at) {
+        read_marina_dock(this, data.data() + dock_at, data.size() - dock_at);
     }
 
     return true;
@@ -1324,7 +1463,8 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
         save_short(((short *)&map[0][0]), WORLD_W * WORLD_H, f) &&
         write_city_name(f, cityName) &&
         write_cash_flow_history(f, this) &&
-        write_wide_city(f, this, funds_for_file);
+        write_wide_city(f, this, funds_for_file) &&
+        write_marina_dock(f, this);
 
     int ioerr = 0;
     if (!result) {

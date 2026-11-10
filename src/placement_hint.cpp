@@ -486,6 +486,10 @@ Attempt lay_special(Scratch &map, int index, int x, int y, bool auto_bulldoze)
             if (tile == DIRT) {
                 continue;
             }
+            // Same dock-row exception as placement. Water above that row blocks.
+            if (building.needs_south_water && dy == height - 1 && wet_tile(tile)) {
+                continue;
+            }
             if (auto_bulldoze && auto_clearable_word(raw)) {
                 continue;
             }

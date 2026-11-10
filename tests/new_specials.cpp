@@ -148,12 +148,16 @@ int main()
         return fail(16, "a marina away from water was accepted");
     }
     shore.map[30][32] = DIRT;
-    shore.map[29][31] = RIVER;
+    // Middle row of the 3x3. The dock row may cover water; this row may not.
+    shore.map[29][30] = RIVER;
     if (place_special_building(&shore, marina, 30, 30, error) || error != "Can't build on water.") {
         std::fprintf(stderr, "on water '%s'\n", error.c_str());
         return fail(17, "a marina standing on water was accepted");
     }
-    shore.map[29][31] = DIRT;
+    if ((shore.map[29][30] & LOMASK) != RIVER) {
+        return fail(17, "a refused marina covered the water");
+    }
+    shore.map[29][30] = DIRT;
     shore.map[30][32] = RIVER;
     if (!place_special_building(&shore, marina, 30, 30, error) || shore.totalFunds != 49000) {
         std::fprintf(stderr, "marina '%s'\n", error.c_str());
@@ -490,6 +494,104 @@ int main()
     }
     if (!lit) {
         return fail(67, "the power grid did not reach the prison");
+    }
+
+    // Dock row may cover shoreline. Open water has to remain south of the
+    // 3x3. Land in that same row stays land, and bulldoze puts each covered
+    // shoreline tile back, including after save and load.
+    Micropolis harbor;
+    arm(harbor, 15);
+    harbor.map[29][31] = REDGE;
+    harbor.map[31][31] = FIRSTRIVEDGE;
+    if (place_special_building(&harbor, marina, 30, 30, error) || error.find("shoreline") == std::string::npos) {
+        std::fprintf(stderr, "only dock '%s'\n", error.c_str());
+        return fail(68, "a marina that covered the only water was accepted");
+    }
+    if ((harbor.map[29][31] & LOMASK) != REDGE || harbor.totalFunds != 50000) {
+        return fail(69, "a refused dock-row marina changed the shoreline");
+    }
+    harbor.map[30][32] = CHANNEL;
+    if (!place_special_building(&harbor, marina, 30, 30, error) || harbor.totalFunds != 49000) {
+        std::fprintf(stderr, "harbor '%s'\n", error.c_str());
+        return fail(70, "a marina whose dock row covers shoreline was refused");
+    }
+    if ((harbor.map[30][30] & LOMASK) != SPECIAL_MARINA || (harbor.map[29][29] & LOMASK) != kSpecialBodyTile ||
+        (harbor.map[29][31] & LOMASK) != kSpecialBodyTile || (harbor.map[30][31] & LOMASK) != kSpecialBodyTile ||
+        (harbor.map[31][31] & LOMASK) != kSpecialBodyTile || (harbor.map[30][32] & LOMASK) != CHANNEL ||
+        !special_building_intact(&harbor, 30, 30)) {
+        return fail(71, "the dock row did not cover the shoreline or it ate the open water");
+    }
+    const std::string harbor_path = "/tmp/lunduke-marina-dock.cty";
+    std::remove(harbor_path.c_str());
+    if (!harbor.saveCityAs(harbor_path.c_str())) {
+        return fail(72, "could not save a marina that covers shoreline");
+    }
+    {
+        FILE *saved = std::fopen(harbor_path.c_str(), "rb");
+        if (saved == nullptr) {
+            return fail(73, "could not read the marina save back");
+        }
+        std::string bytes;
+        char buf[4096];
+        std::size_t n = 0;
+        while ((n = std::fread(buf, 1, sizeof(buf), saved)) > 0) {
+            bytes.append(buf, n);
+        }
+        std::fclose(saved);
+        if (bytes.find("LCM1") == std::string::npos) {
+            return fail(74, "the save did not keep the covered shoreline");
+        }
+    }
+    Micropolis loaded_harbor;
+    if (!loaded_harbor.loadCity(harbor_path.c_str())) {
+        std::fprintf(stderr, "harbor load '%s'\n", loaded_harbor.loadErrorDetail.c_str());
+        return fail(75, "could not load the marina that covers shoreline");
+    }
+    if ((loaded_harbor.map[29][31] & LOMASK) != kSpecialBodyTile ||
+        (loaded_harbor.map[30][32] & LOMASK) != CHANNEL) {
+        return fail(76, "the loaded marina lost its dock or the open water");
+    }
+    const long harbor_funds = static_cast<long>(loaded_harbor.totalFunds);
+    if (!bulldoze_special_at(&loaded_harbor, 30, 31) ||
+        static_cast<long>(loaded_harbor.totalFunds) != harbor_funds - 1) {
+        return fail(77, "bulldozing the loaded marina did not cost $1");
+    }
+    if (loaded_harbor.map[29][31] != REDGE || loaded_harbor.map[31][31] != FIRSTRIVEDGE ||
+        (loaded_harbor.map[30][31] & LOMASK) != RUBBLE || (loaded_harbor.map[29][29] & LOMASK) != RUBBLE ||
+        (loaded_harbor.map[30][32] & LOMASK) != CHANNEL) {
+        std::fprintf(stderr, "restored %u %u mid %u\n", loaded_harbor.map[29][31], loaded_harbor.map[31][31],
+                     loaded_harbor.map[30][31]);
+        return fail(78, "bulldoze did not put the original shoreline back");
+    }
+    if (bulldoze_special_at(&loaded_harbor, 29, 31)) {
+        return fail(79, "a second bulldoze treated the restored shoreline as a marina");
+    }
+    if (loaded_harbor.map[29][31] != REDGE) {
+        return fail(80, "bulldozing the restored shore changed the tile");
+    }
+
+    Micropolis dock_hint;
+    arm(dock_hint, 16);
+    dock_hint.map[29][31] = REDGE;
+    dock_hint.map[30][32] = RIVER;
+    const PlaceForecast dock_ok = forecast_tile(kSpecialEngineId, 30, 30, marina, 50000, true, at(dock_hint));
+    if (dock_ok.mark != PlaceMark::Ready || dock_ok.cost != 1000 || dock_ok.width != 3) {
+        std::fprintf(stderr, "dock hint '%s'\n", dock_ok.tag.c_str());
+        return fail(81, "the hover refused a dock row on shoreline with water beyond");
+    }
+    dock_hint.map[30][32] = DIRT;
+    const PlaceForecast dock_dry = forecast_tile(kSpecialEngineId, 30, 30, marina, 50000, true, at(dock_hint));
+    if (dock_dry.mark != PlaceMark::Blocked || dock_dry.tag.find("shoreline") == std::string::npos) {
+        std::fprintf(stderr, "dock dry '%s'\n", dock_dry.tag.c_str());
+        return fail(82, "the hover allowed a marina that would consume the only water");
+    }
+    dock_hint.map[30][30] = RIVER;
+    dock_hint.map[30][32] = RIVER;
+    const PlaceForecast dock_north = forecast_tile(kSpecialEngineId, 30, 30, marina, 50000, true, at(dock_hint));
+    if (dock_north.mark != PlaceMark::Blocked || dock_north.tag.find("water") == std::string::npos ||
+        dock_north.tag.find("shoreline") != std::string::npos) {
+        std::fprintf(stderr, "dock north '%s'\n", dock_north.tag.c_str());
+        return fail(83, "the hover allowed water under the marina building row");
     }
 
     std::printf("new specials ok\n");

@@ -62,8 +62,8 @@ struct SpecialBuilding {
     // Placement fails unless a conductive tile touches the footprint. The
     // crime reduction waits until the power scan actually powers the center.
     bool needs_power = false;
-    // The south edge of the footprint must touch water. The marina sheet
-    // paints its water on that side.
+    // The south row may cover shoreline. Open water must still sit
+    // immediately south of the footprint. Bulldoze puts that shoreline back.
     bool needs_south_water = false;
 };
 
