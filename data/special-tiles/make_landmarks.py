@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Hand-placed civic landmarks.
 # The Welcome screen uses data/welcome/welcome-bg.png (editor art), not this script.
-# Original drawings. Every colour is an exact VGA mode 13h entry.
+# Original drawings. Every colour this script writes is an exact VGA mode 13h
+# entry (the hand-drawn Classic sheets use the Micropolis Classic palette).
 # Not a recolor of one mesh: each look has its own plan.
 
 import pathlib
@@ -561,6 +562,12 @@ def write_png(path, im):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(png)
 
+# Classic Mayor's House, Casino and Amusement Park are hand-kitbashed in the
+# Micropolis Classic palette (3/4 projection, down-right shadow) and checked
+# in as PNGs, so this script only writes the SVGA and Spooky looks.
+KEEP_CLASSIC_SUFFIXES = ("",)
+
+
 def main():
     sheets = {
         "mayor": (mayor_classic, mayor_svga, mayor_spooky),
@@ -570,6 +577,11 @@ def main():
     suffixes = ("", "-svga", "-spooky")
     for stem, draws in sheets.items():
         for draw, suffix in zip(draws, suffixes):
+            if suffix in KEEP_CLASSIC_SUFFIXES:
+                # The Classic sheets (and their tool icons, cut 4..44 from the
+                # sheet) are hand-drawn art kept in the repo; the *_classic
+                # drawers below are the old placeholders and are not written.
+                continue
             im = new(48, 48, E)
             draw(im)
             write_png(ROOT / f"{stem}{suffix}.png", im)
