@@ -3203,9 +3203,10 @@ def main() -> int:
         failed = True
 
     painted_special: list[tuple[str, Image.Image, Image.Image]] = []
-    # The checked-in Classic zoo/big-park/library sheets are hand-drawn art;
-    # SVGA uses its own *-svga.png sheets, so this paint check keeps using the
-    # old placeholder drawings from make_tiles.py.
+    # The checked-in Classic zoo/big-park/library sheets are hand-drawn art.
+    # The checked-in SVGA sheets are hand-authored as well, so this paint
+    # check keeps using the old placeholder drawings from make_tiles.py.
+    # It does not read or write data/special-tiles/*-svga.png.
     placeholders = _special_placeholders()
     for name in ("zoo", "big-park", "library"):
         classic_s = Image.frombytes("RGBA", (48, 48), placeholders.placeholder_rgba(name))

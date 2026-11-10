@@ -222,8 +222,8 @@ def to_rgba(im):
 # The Classic Zoo, Big Park and Library sheets are hand-kitbashed in the
 # Micropolis Classic palette (3/4 projection, down-right shadow) and checked in
 # as PNGs. The drawers above are the old placeholders; this script no longer
-# writes them, so re-running it keeps the hand-drawn art. big-park-svga.png is
-# a checked-in copy of the old Big Park drawing so the SVGA look is unchanged.
+# writes them, so re-running it keeps the hand-drawn art. The SVGA and Spooky
+# sheets are hand-authored too, and this script does not write them.
 KEEP_CLASSIC = ("zoo", "big-park", "library")
 # Prison, Marina, and Fountain are editor-approved sheets in all three looks.
 HAND_AUTHORED = ("prison", "marina", "fountain")

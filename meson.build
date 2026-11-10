@@ -82,6 +82,7 @@ install_data(
     'data/tool-icons/zoo-spooky.png',
     'data/tool-icons/bigpark.png',
     'data/tool-icons/bigpark-svga.png',
+    'data/tool-icons/bigpark-spooky.png',
     'data/tool-icons/library.png',
     'data/tool-icons/library-svga.png',
     'data/tool-icons/library-spooky.png',

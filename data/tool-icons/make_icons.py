@@ -728,7 +728,8 @@ def to_rgba(im):
 # The Classic Zoo, Big Park and Library icons are cut 4..44 from the
 # hand-drawn Classic sheets in data/special-tiles/ (like the Mayor's House,
 # Casino and Amusement Park), so this script does not overwrite them.
-# bigpark-svga.png keeps the old Big Park icon for the SVGA and Spooky looks.
+# The SVGA and Spooky icons, including bigpark-spooky.png, are cut from the
+# hand-authored sheets and are not written here either.
 CUT_FROM_SHEET = ("zoo", "bigpark", "library")
 # Prison, Marina, and Fountain icons are cut from the editor-approved sheets.
 HAND_AUTHORED = ("prison", "marina", "fountain")

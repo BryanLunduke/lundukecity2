@@ -3,11 +3,10 @@
 # Copyright (C) 2026 The Lunduke City authors
 # See COPYING and NOTICE.
 
-"""SVGA and Spooky library and zoo sprites, plus the picker icons.
+"""Old SVGA and Spooky library and zoo placeholders.
 
-Original drawings. The classic files are not rewritten. The view is the
-city's: a top-down 3/4 with the walls sheared up and to the right, light
-from the upper left, and the hospital's shadow green on the south-east.
+The checked-in sheets and picker icons are hand-authored. This script no
+longer rewrites them. The classic files were never rewritten.
 
     python3 art/svga/special_sprites.py
 """
@@ -285,24 +284,12 @@ def _save(image: Image.Image, path: Path) -> None:
     image.save(path)
 
 
-def main() -> None:
-    colours = [
-        GRASS, GRASS_LIT, GRASS_DARK, DIRT, DIRT_DARK, WALL, WALL_LIT, WALL_SHADE, WALL_DARK,
-        ROOF, ROOF_LIT, ROOF_EDGE, GLASS, GLASS_DARK, DOOR, PAGE, BOOK, INK, SHADOW, FENCE,
-        FENCE_DARK, ANIMAL, ANIMAL_DARK, ANIMAL_LIT, TRUNK, NIGHT_GRASS, NIGHT_LIT, NIGHT_DARK,
-        NIGHT_DIRT, NIGHT_WALL, NIGHT_WALL_LIT, NIGHT_WALL_SHADE, NIGHT_ROOF, NIGHT_ROOF_LIT,
-        NIGHT_GLASS, NIGHT_FENCE, PUMPKIN, PUMPKIN_DARK, (65, 32, 32),
-    ]
-    _check(colours)
-    _save(_library(48, False, False), SPECIAL / "library-svga.png")
-    _save(_library(48, True, False), SPECIAL / "library-spooky.png")
-    _save(_zoo(48, False, False), SPECIAL / "zoo-svga.png")
-    _save(_zoo(48, True, False), SPECIAL / "zoo-spooky.png")
-    _save(_library(40, False, True), ICONS / "library-svga.png")
-    _save(_library(40, True, True), ICONS / "library-spooky.png")
-    _save(_zoo(40, False, True), ICONS / "zoo-svga.png")
-    _save(_zoo(40, True, True), ICONS / "zoo-spooky.png")
-    print("wrote library and zoo sprites")
+def main() -> int:
+    # Library and Zoo SVGA and Spooky sheets and toolbar icons are
+    # hand-authored and checked in. The drawers above are the old
+    # placeholders; re-running this script keeps the committed files.
+    print("kept hand-authored library and zoo SVGA and Spooky sprites")
+    return 0
 
 
 if __name__ == "__main__":
