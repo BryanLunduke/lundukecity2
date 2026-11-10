@@ -5,9 +5,11 @@
 
 """Spooky look. The SVGA atlas, then a night ground, deep blue water, bare woods, and the graveyard.
 
-The committed sheet is checked in place and is not rewritten. Pass --out to
-write the report under another directory (the test does this). Pass --emit
-only when regenerating the committed sheet by hand.
+The committed sheet is checked in place and is not rewritten. The Big Park
+sprite is hand-authored and is not painted from big-park-svga.png. Pass
+--out to write the report under another directory (the test does this).
+Pass --emit only when regenerating the committed atlas by hand. --emit does
+not rewrite data/special-tiles/big-park-spooky.png.
 
     python3 art/spooky/make_atlas.py --out DIR
 """
@@ -32,9 +34,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 SVGA_PATH = ROOT / "third_party/micropolis-assets/images/micropolisEngine/tiles-svga.png"
 SPOOKY_PATH = SVGA_PATH.with_name("tiles-spooky.png")
-# The Spooky park is painted from the old Big Park drawing, which is kept as
-# big-park-svga.png now that big-park.png is the hand-drawn Classic art.
-PARK_PATH = ROOT / "data/special-tiles/big-park-svga.png"
+# Hand-authored Spooky Big Park: the fountain plaza, with four tombstones
+# where the bush and tree clusters were. Not a recolor of big-park-svga.png.
 SPOOKY_PARK_PATH = ROOT / "data/special-tiles/big-park-spooky.png"
 TILE = 16
 
@@ -102,9 +103,10 @@ CHANGED = (
 )
 
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
-# 8px overview, in tile order. The big-park sprite has its own hash.
+# 8px overview, in tile order. PARK_SHA is the hand-authored big-park
+# sprite's RGBA bytes.
 ATLAS_SHA = "c87721b0c12634bbfbe8dd03b37a6d6606168ada2db0fd1886fe8ebf73827988"
-PARK_SHA = "3f0e20d7313a54d8268a938d9c25efc6532611ff7c89c6877e575f442412cc42"
+PARK_SHA = "9fefff85da8edaf60db7eb4c75f6a513612198b4b8194963c414252271dce630"
 
 GRASS = (0, 113, 0)
 LAWN = (0, 170, 0)
@@ -135,8 +137,6 @@ GREY_BASE = (69, 69, 69)
 GREY_NEAR = (81, 81, 81)
 GREY_ACCENT = (97, 97, 97)
 GREY_SET = frozenset({GREY_BASE, GREY_NEAR, GREY_ACCENT})
-TUFT = (0, 65, 0)
-TUFT_LIT = (16, 65, 0)
 FACE = (203, 203, 203)
 FACE_LIT = (227, 227, 227)
 FACE_MID = (182, 182, 182)
@@ -226,36 +226,6 @@ STONE_RAMP = (
     ROOF_LIT,
     (113, 113, 113),
 )
-
-# Big Park, classic sprite to the SVGA VGA entries. Same map as paint_special.
-SPECIAL_VGA = {
-    (40, 132, 48): (0, 113, 0),
-    (92, 184, 68): (0, 170, 0),
-    (18, 78, 28): (0, 65, 0),
-    (168, 208, 72): (56, 113, 0),
-    (132, 78, 36): (113, 56, 0),
-    (84, 48, 22): (65, 16, 0),
-    (176, 124, 64): (113, 85, 56),
-    (206, 170, 96): (113, 113, 56),
-    (112, 114, 122): (113, 113, 113),
-    (72, 78, 88): (69, 69, 69),
-    (176, 176, 182): (182, 182, 182),
-    (52, 52, 58): (56, 56, 56),
-    (28, 28, 32): (32, 32, 32),
-    (96, 148, 220): (125, 158, 255),
-    (36, 72, 168): (0, 0, 170),
-    (18, 36, 96): (0, 0, 65),
-    (48, 112, 176): (0, 85, 113),
-    (140, 196, 224): (125, 223, 255),
-    (196, 40, 34): (113, 56, 56),
-    (120, 22, 20): (65, 32, 32),
-    (236, 96, 64): (113, 81, 81),
-    (236, 184, 32): (255, 255, 85),
-    (255, 226, 120): (255, 255, 125),
-    (248, 246, 240): (255, 255, 255),
-    (214, 210, 200): (203, 203, 203),
-    (228, 228, 232): (227, 227, 227),
-}
 
 def _palette() -> tuple[list[tuple[int, int, int]], set[tuple[int, int, int]]]:
     order: list[tuple[int, int, int]] = []
@@ -861,113 +831,7 @@ def _paint_manors(atlas: Image.Image) -> None:
     _scatter(atlas, 324, fence)
 
 
-def _paint_special_base(image: Image.Image) -> Image.Image:
-    src = image.convert("RGBA")
-    out = Image.new("RGBA", src.size)
-    sp = src.load()
-    dp = out.load()
-    for y in range(src.size[1]):
-        for x in range(src.size[0]):
-            red, green, blue, alpha = sp[x, y]
-            if alpha == 0:
-                dp[x, y] = (0, 0, 0, 0)
-                continue
-            rgb = SPECIAL_VGA.get((red, green, blue))
-            if rgb is None:
-                raise SystemExit(f"no SVGA colour for special pixel {(red, green, blue)} at {(x, y)}")
-            dp[x, y] = (*rgb, alpha)
-    return out
-
-
-_TREE_SRC = {(92, 184, 68), (18, 78, 28), (168, 208, 72)}
-_PATH_SRC = {
-    (84, 48, 22): (56, 56, 56),
-    (132, 78, 36): (97, 97, 97),
-    (206, 170, 96): (113, 113, 113),
-}
-_DUSK = {
-    (0, 170, 0): (0, 113, 0),
-    (56, 113, 0): (32, 65, 0),
-    (0, 65, 0): (0, 65, 0),
-}
-
-
-def _tree_mask(src: Image.Image) -> list[list[bool]]:
-    px = src.load()
-    width, height = src.size
-    seen = [[False] * width for _ in range(height)]
-    mask = [[False] * width for _ in range(height)]
-    for y in range(height):
-        for x in range(width):
-            if seen[y][x] or px[x, y][:3] not in _TREE_SRC:
-                continue
-            stack = [(x, y)]
-            blob: list[tuple[int, int]] = []
-            seen[y][x] = True
-            while stack:
-                cx, cy = stack.pop()
-                blob.append((cx, cy))
-                for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):
-                    nx, ny = cx + dx, cy + dy
-                    if 0 <= nx < width and 0 <= ny < height and not seen[ny][nx] and px[nx, ny][:3] in _TREE_SRC:
-                        seen[ny][nx] = True
-                        stack.append((nx, ny))
-            if len(blob) >= 6:
-                for cx, cy in blob:
-                    mask[cy][cx] = True
-    return mask
-
-
-def _paint_big_park(classic: Image.Image) -> Image.Image:
-    """Grey cemetery lawn, dusk trees, a stone path, and the three slabs."""
-    image = _paint_special_base(classic)
-    src = classic.convert("RGBA")
-    trees = _tree_mask(src)
-    sp = src.load()
-    px = image.load()
-    for y in range(image.size[1]):
-        for x in range(image.size[0]):
-            if sp[x, y][3] == 0:
-                px[x, y] = (0, 0, 0, 0)
-                continue
-            if trees[y][x]:
-                rgb = _DUSK.get(px[x, y][:3], px[x, y][:3])
-                px[x, y] = (*rgb, 255)
-            elif sp[x, y][:3] in _PATH_SRC:
-                px[x, y] = (*_PATH_SRC[sp[x, y][:3]], 255)
-            else:
-                px[x, y] = (*_grey_at(x, y), 255)
-    # A few dead tufts on open grey, off the path and the trees.
-    for tx, ty in ((4, 44), (15, 43), (22, 15), (8, 16)):
-        if px[tx, ty][:3] in GREY_SET:
-            px[tx, ty] = (*(TUFT if (tx + ty) % 2 == 0 else TUFT_LIT), 255)
-            if ty + 1 < 48 and px[tx, ty + 1][:3] in GREY_SET:
-                px[tx, ty + 1] = (*TUFT_LIT, 255)
-    rgb = image.convert("RGB")
-    # The same slab as the park tiles, set apart in the open meadow.
-    for kind, crack, ox, oy in (
-        ("plain", False, 24, 23),
-        ("cross", False, 37, 23),
-        ("lines", False, 22, 36),
-        ("plain", True, 35, 36),
-    ):
-        rows = _stone_rows(kind, crack)
-        op = rgb.load()
-        for dy, row in enumerate(rows):
-            for dx, char in enumerate(row):
-                if _SLAB_INK.get(char) is None:
-                    continue
-                x, y = ox + dx, oy + dy
-                if trees[y][x] or op[x, y] not in GREY_SET:
-                    raise SystemExit(f"tombstone at {(ox, oy)} hits {(x, y)}")
-        _stamp_sprite(rgb, ox, oy, rows, _SLAB_INK)
-        _shadow_sprite(rgb, ox, oy, rows, _SLAB_INK, None)
-    painted = rgb.convert("RGBA")
-    painted.putalpha(image.getchannel("A"))
-    return painted
-
-
-def build() -> tuple[Image.Image, Image.Image]:
+def build() -> Image.Image:
     with Image.open(SVGA_PATH) as opened:
         atlas = opened.convert("RGB")
         atlas.load()
@@ -976,9 +840,7 @@ def build() -> tuple[Image.Image, Image.Image]:
     _paint_houses(atlas)
     _paint_manors(atlas)
     atmosphere.apply(atlas)
-    with Image.open(PARK_PATH) as opened:
-        park = _paint_big_park(opened)
-    return atlas, park
+    return atlas
 
 
 def _digest_atlas(atlas: Image.Image, order: list[tuple[int, int, int]], palette: set[tuple[int, int, int]]) -> tuple[str, int]:
@@ -1013,7 +875,7 @@ def _differing_tiles(svga: Image.Image, spooky: Image.Image) -> list[int]:
 def _check(lines: list[str]):
     failed = False
     order, palette = _palette()
-    atlas, park = build()
+    atlas = build()
     with Image.open(SVGA_PATH) as opened:
         svga = opened.convert("RGB")
         svga.load()
@@ -1070,28 +932,26 @@ def _check(lines: list[str]):
                 f"{committed.size[0]}x{committed.size[1]}, 960 tiles, VGA palette, hash {digest[:12]}"
             )
 
-    park_rgb = park.convert("RGB")
-    pp = park_rgb.load()
-    park_off = sum(1 for y in range(park_rgb.size[1]) for x in range(park_rgb.size[0]) if pp[x, y] not in palette)
-    if park.size != (48, 48) or park_off:
-        lines.append(f"FAIL big park {park.size} off-palette={park_off}")
-        failed = True
-    park_digest = hashlib.sha256(park.tobytes()).hexdigest()
-    if PARK_SHA != "PENDING" and park_digest != PARK_SHA:
-        lines.append(f"FAIL big park changed: {park_digest}")
-        failed = True
-    elif PARK_SHA == "PENDING":
-        lines.append(f"FAIL big park hash is not locked: {park_digest}")
-        failed = True
+    park_digest = ""
     if not SPOOKY_PARK_PATH.is_file():
         lines.append(f"FAIL committed big-park-spooky.png missing: {SPOOKY_PARK_PATH}")
         failed = True
     else:
         with Image.open(SPOOKY_PARK_PATH) as opened:
-            committed_park = opened.convert("RGBA")
-            committed_park.load()
-        if committed_park.tobytes() != park.tobytes():
-            lines.append("FAIL committed big-park-spooky.png does not match the generator")
+            park = opened.convert("RGBA")
+            park.load()
+        park_rgb = park.convert("RGB")
+        pp = park_rgb.load()
+        park_off = sum(1 for y in range(park_rgb.size[1]) for x in range(park_rgb.size[0]) if pp[x, y] not in palette)
+        if park.size != (48, 48) or park_off:
+            lines.append(f"FAIL big park {park.size} off-palette={park_off}")
+            failed = True
+        park_digest = hashlib.sha256(park.tobytes()).hexdigest()
+        if PARK_SHA != "PENDING" and park_digest != PARK_SHA:
+            lines.append(f"FAIL big park changed: {park_digest}")
+            failed = True
+        elif PARK_SHA == "PENDING":
+            lines.append(f"FAIL big park hash is not locked: {park_digest}")
             failed = True
         elif not failed:
             lines.append(f"OK big-park-spooky.png hash {park_digest[:12]}")
@@ -1102,7 +962,7 @@ def _check(lines: list[str]):
         lines.append("FAIL fountain frames no longer animate")
         failed = True
 
-    return not failed, atlas, park, digest, park_digest
+    return not failed, atlas, digest, park_digest
 
 
 # Editor-approved Prison, Marina, and Fountain sheets and toolbar icons.
@@ -1151,12 +1011,10 @@ def main(argv: list[str]) -> int:
         "houses 252 254 256, manor 297-305 (untouched), fence manor 324-332,",
         "asylum 405-413, haunted arena 779-810 and 932-947, big park sprite",
     ]
-    ok, atlas, park, digest, park_digest = _check(lines)
+    ok, atlas, digest, park_digest = _check(lines)
     if emit:
         _save(atlas, SPOOKY_PATH)
-        _save(park, SPOOKY_PARK_PATH)
         lines.append(f"EMIT {SPOOKY_PATH}")
-        lines.append(f"EMIT {SPOOKY_PARK_PATH}")
         lines.append(f"ATLAS_SHA {digest}")
         lines.append(f"PARK_SHA {park_digest}")
     if out is not None:
