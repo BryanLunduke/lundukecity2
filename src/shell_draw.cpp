@@ -3178,7 +3178,7 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     const std::string serif_year = ui_scale::scaled_font("DejaVu Serif Bold", 40, ui_scale_);
     const std::string serif_city = ui_scale::scaled_font("DejaVu Serif Bold", 20, ui_scale_);
     const std::string serif_meta = ui_scale::scaled_font("DejaVu Serif", 14, ui_scale_);
-    const std::string serif_card = ui_scale::scaled_font("DejaVu Serif Bold", 15, ui_scale_);
+    const std::string serif_card = ui_scale::scaled_font("DejaVu Serif Bold", 23, ui_scale_);
 
     const double inner_x = paper_x + dp(34);
     const double inner_w = std::max(1.0, paper_w - dp(62));
@@ -3231,13 +3231,11 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         cairo_save(cr);
         cairo_rectangle(cr, x + 1, y + 1, std::max(1.0, w - 2), std::max(1.0, h - 2));
         cairo_clip(cr);
-        const TextMetrics mark = measure_text(cr, serif_card.c_str(), "$", -1);
-        paint_text(cr, serif_card.c_str(), "$", x + dp(8), y + dp(5), tr, tg, tb, -1);
-        const double title_x = x + dp(8) + mark.width + dp(4);
-        const int title_w = static_cast<int>(std::max(1.0, x + w - dp(8) - title_x));
-        paint_text(cr, serif_card.c_str(), title, title_x, y + dp(5), tr, tg, tb, title_w);
-        const int body_w = static_cast<int>(std::max(1.0, w - dp(16)));
-        paint_text(cr, body_font(), body, x + dp(8), y + dp(6) + mark.height + dp(2), body_r, body_g, body_b, body_w);
+        const int title_w = static_cast<int>(std::max(1.0, w - dp(20)));
+        const int title_h = measure_text(cr, serif_card.c_str(), title, title_w).height;
+        paint_text(cr, serif_card.c_str(), title, x + dp(10), y + dp(6), tr, tg, tb, title_w);
+        const int body_w = static_cast<int>(std::max(1.0, w - dp(20)));
+        paint_text(cr, body_font(), body, x + dp(10), y + dp(6) + title_h + dp(8), body_r, body_g, body_b, body_w);
         cairo_restore(cr);
     };
 
