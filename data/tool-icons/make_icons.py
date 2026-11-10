@@ -725,11 +725,20 @@ def to_rgba(im):
     return rows
 
 
+# The Classic Zoo, Big Park and Library icons are cut 4..44 from the
+# hand-drawn Classic sheets in data/special-tiles/ (like the Mayor's House,
+# Casino and Amusement Park), so this script does not overwrite them.
+# bigpark-svga.png keeps the old Big Park icon for the SVGA and Spooky looks.
+CUT_FROM_SHEET = ("zoo", "bigpark", "library")
+
+
 def main():
     drawn = {}
     for name, draw in ICONS:
         im = outlined(draw)
         drawn[name] = im
+        if name in CUT_FROM_SHEET:
+            continue
         write_png(ROOT / f"{name}.png", SIZE, SIZE, to_rgba(im))
     coal_im = drawn["coal"]
     nuclear_im = drawn["nuclear"]
