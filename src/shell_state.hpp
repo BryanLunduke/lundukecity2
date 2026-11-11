@@ -179,6 +179,7 @@ private:
     // Down is clamped onto the map so the cursor cannot fall into the hint bar.
     void clamp_gamepad_cursor(float push_x, float push_y);
     void toggle_fullscreen();
+    void match_renderer_output();
     void finish_year_and_close(bool jump);
     void toggle_overlay(CitySession::MapLayer layer);
     void reroll_terrain();
@@ -348,6 +349,8 @@ private:
     // Set while fullscreen is being left, so a screen-sized resize is not
     // stored as the windowed rectangle.
     bool restoring_windowed_ = false;
+    // Pixel density of the windowed frame. Fullscreen must not replace it.
+    float windowed_density_ = 1.0f;
     int view_x_ = 0;
     int view_y_ = 0;
     int view_w_ = 1;

@@ -422,6 +422,33 @@ void Shell::run_review_checks()
         fail("headless window should stay 1280x800");
         return;
     }
+    // Leaving fullscreen lays the UI out to the windowed size on that frame.
+    {
+        note_window_geometry();
+        const int remembered_w = normal_w_;
+        const int remembered_h = normal_h_;
+        toggle_fullscreen();
+        toggle_fullscreen();
+        render();
+        if (win_w_ != 1280 || win_h_ != 800 || normal_w_ != remembered_w || normal_h_ != remembered_h) {
+            fail("leaving fullscreen did not lay out at the windowed size");
+            return;
+        }
+        if (view_y_ != menu_h_ || view_y_ + view_h_ > win_h_ || view_x_ + view_w_ > win_w_) {
+            fail("leaving fullscreen left the view outside the window");
+            return;
+        }
+        bool menu_in_window = false;
+        for (const Hotspot &hot : hot_) {
+            if (hot.id == kMenuTitle && hot.y >= 0 && hot.y + hot.h <= menu_h_ && hot.x >= 0 && hot.x + hot.w <= win_w_) {
+                menu_in_window = true;
+            }
+        }
+        if (!menu_in_window) {
+            fail("the menu bar is outside the restored window");
+            return;
+        }
+    }
     if (allow_saved_settings()) {
         fail("review run would persist window settings");
         return;

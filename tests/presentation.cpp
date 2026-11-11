@@ -114,9 +114,16 @@ int main()
     if (dust_speck_y(16, 0, 0) < 2 || dust_speck_y(16, 300, 7) < 2) {
         return fail(26, "bulldoze dust should stay inside the tile, under the tag");
     }
-    const SelectionBand band = selection_band(40, 18);
-    if (band.top > 40.0 || band.top + band.height < 40.0 + 18.0) {
+    const SelectionBand band = selection_band(48, 22, 40, 36);
+    if (band.top > 48.0 || band.top + band.height < 48.0 + 22.0) {
         return fail(27, "the selection highlight does not cover the glyphs");
+    }
+    if (band.top < 42.0 - 0.01 || band.top + band.height > 74.0 + 0.01) {
+        return fail(27, "the selection highlight draws outside the text field");
+    }
+    const SelectionBand tight = selection_band(48, 40, 40, 36);
+    if (tight.top + tight.height > 74.0 + 0.01 || tight.top > 48.0) {
+        return fail(27, "a tall selection still leaves the text field");
     }
     int sx = 0;
     int sy = 0;
@@ -129,6 +136,22 @@ int main()
     }
     if (ui_scale::stored_window_maximized(true, true, false)) {
         return fail(29, "fullscreen was stored as a maximized window");
+    }
+    const LayoutPixels leaving = layout_pixels_leaving_fullscreen(true, 1920, 1080, 1523, 825, 1.0f);
+    const LayoutPixels settled = layout_pixels_leaving_fullscreen(true, 1523, 825, 1523, 825, 1.0f);
+    const LayoutPixels ordinary = layout_pixels_leaving_fullscreen(false, 1920, 1080, 1523, 825, 1.0f);
+    if (leaving.w != 1523 || leaving.h != 825 || settled.w != 1523 || settled.h != 825 || ordinary.w != 1920 ||
+        ordinary.h != 1080) {
+        return fail(35, "leaving fullscreen did not lay out at the windowed size");
+    }
+    const LayoutPoint hit = window_point_to_layout(12, 4, true, 1523, 825, 1920, 1080, 1523, 825, 1.0f);
+    if (std::fabs(hit.x - 12.0) > 0.01 || std::fabs(hit.y - 4.0) > 0.01) {
+        return fail(35, "a click after leaving fullscreen was scaled to the screen");
+    }
+    const double thumb_end = slider_thumb_x(10, 200, 12, 1.0);
+    const double thumb_start = slider_thumb_x(10, 200, 12, 0.0);
+    if (thumb_start < 10.0 || thumb_end + 12.0 > 210.01 || thumb_end < 10.0) {
+        return fail(36, "the slider thumb hangs past the track");
     }
     if (zoom_menu_label(16) != "Zoom 100%" || zoom_percent_for_tile(32) != 200 || zoom_percent_for_tile(8) != 50) {
         return fail(30, "the menu zoom label is not the atlas step as a percent");

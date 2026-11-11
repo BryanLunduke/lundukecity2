@@ -698,6 +698,16 @@ void Shell::note_window_geometry()
     int y = 0;
     SDL_GetWindowSize(window_, &ww, &hh);
     SDL_GetWindowPosition(window_, &x, &y);
+    int pixel_w = 0;
+    int pixel_h = 0;
+    SDL_GetWindowSizeInPixels(window_, &pixel_w, &pixel_h);
+    // A screen-sized drawable during the restore must not change the density.
+    if (!restoring_windowed_ && ww >= 320 && pixel_w >= 320) {
+        windowed_density_ = static_cast<float>(pixel_w) / static_cast<float>(ww);
+        if (!(windowed_density_ > 0.0f)) {
+            windowed_density_ = 1.0f;
+        }
+    }
     if (restoring_windowed_) {
         // The window manager may report the fullscreen size for one event
         // after leaving fullscreen. Keep the windowed rectangle.
@@ -2033,8 +2043,10 @@ void Shell::handle_event(const SDL_Event &event)
         int ph = 1;
         SDL_GetWindowSize(window_, &ww, &wh);
         SDL_GetWindowSizeInPixels(window_, &pw, &ph);
-        pointer_x_ = event.motion.x * (pw / static_cast<double>(std::max(ww, 1)));
-        pointer_y_ = event.motion.y * (ph / static_cast<double>(std::max(wh, 1)));
+        const LayoutPoint motion_point = window_point_to_layout(event.motion.x, event.motion.y, restoring_windowed_, ww, wh,
+                                                                pw, ph, normal_w_, normal_h_, windowed_density_);
+        pointer_x_ = motion_point.x;
+        pointer_y_ = motion_point.y;
         hover_id_ = hit(pointer_x_, pointer_y_);
         // Nothing is held. A scrollbar drag left over from a touch must not
         // follow the pointer.
@@ -2100,8 +2112,10 @@ void Shell::handle_event(const SDL_Event &event)
         int ph = 1;
         SDL_GetWindowSize(window_, &ww, &wh);
         SDL_GetWindowSizeInPixels(window_, &pw, &ph);
-        pointer_x_ = event.button.x * (pw / static_cast<double>(std::max(ww, 1)));
-        pointer_y_ = event.button.y * (ph / static_cast<double>(std::max(wh, 1)));
+        const LayoutPoint button_point = window_point_to_layout(event.button.x, event.button.y, restoring_windowed_, ww, wh,
+                                                                pw, ph, normal_w_, normal_h_, windowed_density_);
+        pointer_x_ = button_point.x;
+        pointer_y_ = button_point.y;
         if (event.button.button == SDL_BUTTON_MIDDLE || event.button.button == SDL_BUTTON_RIGHT) {
             if (dialog_ != Dialog::None || menu_.open()) {
                 break;
@@ -2185,8 +2199,11 @@ void Shell::handle_event(const SDL_Event &event)
         int ph = 1;
         SDL_GetWindowSize(window_, &ww, &wh);
         SDL_GetWindowSizeInPixels(window_, &pw, &ph);
-        const double pixel_x = event.wheel.mouse_x * (pw / static_cast<double>(std::max(ww, 1)));
-        const double pixel_y = event.wheel.mouse_y * (ph / static_cast<double>(std::max(wh, 1)));
+        const LayoutPoint wheel_point =
+            window_point_to_layout(event.wheel.mouse_x, event.wheel.mouse_y, restoring_windowed_, ww, wh, pw, ph,
+                                   normal_w_, normal_h_, windowed_density_);
+        const double pixel_x = wheel_point.x;
+        const double pixel_y = wheel_point.y;
         // Trackpads report fractions of a notch. A list used to jump a whole
         // row, and a zoom used to jump a whole step, on every event.
         wheel_acc_y_ += event.wheel.y;

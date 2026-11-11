@@ -113,7 +113,20 @@ void Shell::layout()
         return;
     }
     refresh_ui_scale();
-    SDL_GetWindowSizeInPixels(window_, &win_w_, &win_h_);
+    int frame_w = 0;
+    int frame_h = 0;
+    int pixel_w = 0;
+    int pixel_h = 0;
+    SDL_GetWindowSize(window_, &frame_w, &frame_h);
+    SDL_GetWindowSizeInPixels(window_, &pixel_w, &pixel_h);
+    const LayoutPixels laid = layout_pixels_leaving_fullscreen(restoring_windowed_, pixel_w, pixel_h, normal_w_, normal_h_,
+                                                              windowed_density_);
+    if (restoring_windowed_ && std::abs(pixel_w - laid.w) <= 48 && std::abs(pixel_h - laid.h) <= 48 &&
+        std::abs(frame_w - normal_w_) <= 48 && std::abs(frame_h - normal_h_) <= 48) {
+        restoring_windowed_ = false;
+    }
+    win_w_ = laid.w;
+    win_h_ = laid.h;
     const float fitted = ui_scale::clamp_ui_scale(ui_scale_, win_w_, win_h_);
     if (std::fabs(fitted - ui_scale_) > 0.001f) {
         ui_scale_ = fitted;
@@ -1008,7 +1021,8 @@ void Shell::draw_dialog(cairo_t *cr)
                                           theme::kTextG, theme::kTextB);
         return std::max(label_h, value_h);
     };
-    auto paint_caret = [&](double tx, double ty, double th, const std::string &text, bool focused) {
+    auto paint_caret = [&](double tx, double ty, double th, const std::string &text, bool focused, double box_x,
+                           double box_y, double box_w, double box_h) {
         if (!focused) {
             return;
         }
@@ -1019,10 +1033,16 @@ void Shell::draw_dialog(cairo_t *cr)
             const int x0 = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(from)), -1).width;
             const int x1 = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(to)), -1).width;
             const int line_h = measure_text(cr, body_font(), text.empty() ? std::string(" ") : text, -1).height;
-            const SelectionBand band = selection_band(ty, std::max(static_cast<double>(line_h), th));
+            const SelectionBand band = selection_band(ty, std::max(static_cast<double>(line_h), th), box_y, box_h);
+            cairo_save(cr);
+            if (box_w > 4.0 && box_h > 4.0) {
+                cairo_rectangle(cr, box_x + 2.0, box_y + 2.0, box_w - 4.0, box_h - 4.0);
+                cairo_clip(cr);
+            }
             cairo_set_source_rgba(cr, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b(), 0.55);
             cairo_rectangle(cr, tx + x0, band.top, std::max(2, x1 - x0), band.height);
             cairo_fill(cr);
+            cairo_restore(cr);
         }
         const int cx = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(field_caret_)), -1).width;
         const bool blink_on = (static_cast<int>(SDL_GetTicks() / 500) % 2) == 0;
@@ -1224,7 +1244,8 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, body_font(), field_a_.empty() ? " " : field_a_, x + margin + dp(8), field_y + dp(8),
                        theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(16)));
             const bool name_editing = focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64);
-            paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, name_editing);
+            paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, name_editing, x + margin, field_y,
+                        dw - 2 * margin, dp(36));
             double below = field_y + dp(36);
             if (!dialog_error_.empty()) {
                 paint_text(cr, ui_font(), dialog_error_, x + margin, below + dp(4), 0.6, 0.1, 0.1,
@@ -1295,7 +1316,8 @@ void Shell::draw_dialog(cairo_t *cr)
                 }
                 paint_text(cr, body_font(), field_b_, seed_x + inset - shift, seed_y + dp(6), theme::kTextR, theme::kTextG,
                            theme::kTextB, -1);
-                paint_caret(seed_x + inset - shift, seed_y + dp(6), dp(18), field_b_, focus_id_ == kFieldSeed);
+                paint_caret(seed_x + inset - shift, seed_y + dp(6), dp(18), field_b_, focus_id_ == kFieldSeed, seed_x,
+                            seed_y, seed_w, dp(32));
                 cairo_restore(cr);
             }
             const int preview_seed = preview_seed_from_field(field_b_);
@@ -1523,7 +1545,8 @@ void Shell::draw_dialog(cairo_t *cr)
         paint_text(cr, body_font(), field_a_, x + margin + dp(8), field_y + dp(8), theme::kTextR, theme::kTextG,
                    theme::kTextB, static_cast<int>(dw - 2 * margin - dp(16)));
         const bool rename_editing = focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64);
-        paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, rename_editing);
+        paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, rename_editing, x + margin, field_y,
+                    dw - 2 * margin, dp(36));
         double below = field_y + dp(36);
         if (!dialog_error_.empty()) {
             paint_text(cr, ui_font(), dialog_error_, x + margin, below + dp(4), 0.6, 0.1, 0.1,
@@ -1790,7 +1813,7 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, body_font(), field_a_, x + 24, name_y + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 48));
             const bool save_editing = focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64);
-            paint_caret(x + 24, name_y + dp(8), dp(18), field_a_, save_editing);
+            paint_caret(x + 24, name_y + dp(8), dp(18), field_a_, save_editing, x + 16, name_y, dw - 32, name_h);
         }
         if (!dialog_error_.empty()) {
             paint_text(cr, ui_font(), dialog_error_, x + 16, error_y, 0.6, 0.1, 0.1, static_cast<int>(dw - 32));
@@ -1881,8 +1904,9 @@ void Shell::draw_dialog(cairo_t *cr)
             fill(cr, sx, bar_y, sw * t, bar_h, 0.20, 0.42, 0.72);
             const double thumb = dp(12);
             const double thumb_y = bar_y - dp(3);
-            fill(cr, sx + sw * t - thumb / 2.0, thumb_y, thumb, bar_h + dp(6), 0.98, 0.94, 0.84);
-            stroke_rect(cr, sx + sw * t - thumb / 2.0, thumb_y, thumb, bar_h + dp(6), 0.72, 0.55, 0.18);
+            const double thumb_x = slider_thumb_x(sx, sw, thumb, t);
+            fill(cr, thumb_x, thumb_y, thumb, bar_h + dp(6), 0.98, 0.94, 0.84);
+            stroke_rect(cr, thumb_x, thumb_y, thumb, bar_h + dp(6), 0.72, 0.55, 0.18);
             stroke_rect(cr, sx, bar_y, sw, bar_h, 0.72, 0.55, 0.18);
             const int id = kSlider + index;
             push_hot(sx, bar_y - dp(4), sw, bar_h + dp(8), id);
@@ -2098,8 +2122,9 @@ void Shell::draw_dialog(cairo_t *cr)
             const double t = (value - min) / static_cast<double>(std::max(1, max - min));
             fill(cr, sx, bar_y, sw * t, dp(16), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
             const double thumb = dp(14);
-            fill(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), 1, 1, 1);
-            stroke_rect(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), theme::chrome_select_r(), theme::chrome_select_g(),
+            const double thumb_x = slider_thumb_x(sx, sw, thumb, t);
+            fill(cr, thumb_x, bar_y - dp(4), thumb, dp(24), 1, 1, 1);
+            stroke_rect(cr, thumb_x, bar_y - dp(4), thumb, dp(24), theme::chrome_select_r(), theme::chrome_select_g(),
                         theme::chrome_select_b());
             stroke_rect(cr, sx, bar_y, sw, dp(16), theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
             const int id = kSlider + index;
@@ -2353,24 +2378,14 @@ void Shell::draw_dialog(cairo_t *cr)
                     const double why_w = dp(64);
                     push_hot(right_x, right_y, std::max(1.0, live_col - why_w - 4), problem_row, id);
                     push_focus(id);
-                    push_hot(right_x + live_col - why_w, right_y, why_w, problem_row, kEvalWhy + i);
-                    push_focus(kEvalWhy + i);
                     if (focus_id_ == id || hover_id_ == id) {
                         stroke_rect(cr, right_x, right_y, live_col - why_w - 4, problem_row - 2, theme::chrome_select_r(),
                                     theme::chrome_select_g(), theme::chrome_select_b());
                     }
                     place_line(body_font(), line, right_x + 4, right_y + 2, live_col - why_w - 8, theme::kTextR,
                                theme::kTextG, theme::kTextB);
-                    const bool why_hot = focus_id_ == kEvalWhy + i || hover_id_ == kEvalWhy + i || eval_why_ == i;
-                    if (why_hot) {
-                        fill(cr, right_x + live_col - why_w, right_y, why_w, problem_row - 2, theme::chrome_select_r(),
-                             theme::chrome_select_g(), theme::chrome_select_b());
-                    } else {
-                        stroke_rect(cr, right_x + live_col - why_w, right_y, why_w, problem_row - 2, theme::kButtonEdgeR,
-                                    theme::kButtonEdgeG, theme::kButtonEdgeB);
-                    }
-                    paint_text(cr, ui_font(), "Why?", right_x + live_col - why_w + 8, right_y + 3, why_hot ? 1 : theme::kTextR,
-                               why_hot ? 1 : theme::kTextG, why_hot ? 1 : theme::kTextB, static_cast<int>(why_w - 8));
+                    button(cr, right_x + live_col - why_w, right_y, why_w, std::max(1.0, problem_row - 2), "Why?",
+                           kEvalWhy + i, eval_why_ == i);
                     right_y += problem_row + gap;
                 }
             } else {

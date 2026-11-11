@@ -1076,6 +1076,34 @@ void Shell::service_gamepad(int elapsed_ms)
     }
 }
 
+void Shell::match_renderer_output()
+{
+    if (renderer_ == nullptr || window_ == nullptr || win_w_ < 1 || win_h_ < 1) {
+        return;
+    }
+    int output_w = 0;
+    int output_h = 0;
+    if (!SDL_GetRenderOutputSize(renderer_, &output_w, &output_h)) {
+        return;
+    }
+    if (output_w == win_w_ && output_h == win_h_) {
+        return;
+    }
+    if (texture_ != nullptr) {
+        SDL_DestroyTexture(texture_);
+        texture_ = nullptr;
+        tex_w_ = 0;
+        tex_h_ = 0;
+    }
+    SDL_Renderer *replacement = SDL_CreateRenderer(window_, nullptr);
+    if (replacement == nullptr) {
+        return;
+    }
+    SDL_DestroyRenderer(renderer_);
+    renderer_ = replacement;
+    SDL_SetRenderVSync(renderer_, 1);
+}
+
 void Shell::toggle_fullscreen()
 {
     if (window_ == nullptr) {
@@ -1085,16 +1113,27 @@ void Shell::toggle_fullscreen()
     if (!full) {
         note_window_geometry();
         SDL_SetWindowFullscreen(window_, true);
-    } else {
-        restoring_windowed_ = normal_valid_;
-        SDL_SetWindowFullscreen(window_, false);
-        if (normal_valid_ && normal_w_ >= 320 && normal_h_ >= 240) {
-            SDL_SetWindowSize(window_, normal_w_, normal_h_);
-            SDL_SetWindowPosition(window_, normal_x_, normal_y_);
-        }
+        SDL_SyncWindow(window_);
+        layout();
+        save_window_settings();
+        return;
     }
+    restoring_windowed_ = normal_valid_;
+    SDL_SetWindowFullscreen(window_, false);
+    // The resize is ignored while the fullscreen flag is still set. Wait
+    // until it clears, then put the windowed rectangle back so the drawable
+    // and the layout leave the screen size on this frame.
     SDL_SyncWindow(window_);
+    for (int attempt = 0; attempt < 3 && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0; ++attempt) {
+        SDL_SyncWindow(window_);
+    }
+    if (normal_valid_ && normal_w_ >= 320 && normal_h_ >= 240) {
+        SDL_SetWindowSize(window_, normal_w_, normal_h_);
+        SDL_SetWindowPosition(window_, normal_x_, normal_y_);
+        SDL_SyncWindow(window_);
+    }
     layout();
+    match_renderer_output();
     save_window_settings();
 }
 

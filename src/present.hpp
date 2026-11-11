@@ -9,6 +9,8 @@
 // is a few hundred milliseconds. These smaller beats stay shorter than that.
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <string>
 
 inline double glide_ease(double t)
@@ -129,20 +131,113 @@ struct YearStamp {
     }
 };
 
-// The selection wash must cover the glyphs, including the baseline.
+// The selection wash must cover the glyphs, including the baseline, and it
+// must stay inside the text field. box_top/box_h are the field rectangle.
 struct SelectionBand {
     double top = 0;
     double height = 0;
 };
 
-inline SelectionBand selection_band(double text_top, double line_h)
+inline SelectionBand selection_band(double text_top, double line_h, double box_top, double box_h)
 {
+    const double glyph_h = std::max(1.0, line_h);
     const double above = 1.0;
-    const double below = line_h > 0.0 ? std::max(3.0, line_h * 0.25) : 3.0;
+    const double below = std::max(2.0, glyph_h * 0.2);
+    double top = text_top - above;
+    double bottom = text_top + glyph_h + below;
+    if (box_h > 4.0) {
+        const double limit_top = box_top + 2.0;
+        const double limit_bottom = box_top + box_h - 2.0;
+        if (top < limit_top) {
+            top = limit_top;
+        }
+        if (bottom > limit_bottom) {
+            bottom = limit_bottom;
+        }
+        // Keep the ink covered when the field has room for the whole line.
+        if (text_top >= limit_top && text_top + glyph_h <= limit_bottom) {
+            if (top > text_top) {
+                top = text_top;
+            }
+            if (bottom < text_top + glyph_h) {
+                bottom = text_top + glyph_h;
+            }
+        }
+    }
+    if (bottom < top + 1.0) {
+        bottom = top + 1.0;
+    }
     SelectionBand band;
-    band.top = text_top - above;
-    band.height = std::max(1.0, line_h) + above + below;
+    band.top = top;
+    band.height = bottom - top;
     return band;
+}
+
+// Pixel size used for layout. While fullscreen is being left, the drawable
+// can still report the screen. The layout follows the restored window until
+// the drawable agrees with it.
+struct LayoutPixels {
+    int w = 1;
+    int h = 1;
+};
+
+inline LayoutPixels layout_pixels_leaving_fullscreen(bool restoring, int live_w, int live_h, int restored_w,
+                                                    int restored_h, float density)
+{
+    LayoutPixels out;
+    out.w = std::max(1, live_w);
+    out.h = std::max(1, live_h);
+    if (!restoring || restored_w < 320 || restored_h < 240) {
+        return out;
+    }
+    if (!(density > 0.0f)) {
+        density = 1.0f;
+    }
+    const int want_w = std::max(1, static_cast<int>(std::lround(static_cast<double>(restored_w) * density)));
+    const int want_h = std::max(1, static_cast<int>(std::lround(static_cast<double>(restored_h) * density)));
+    if (std::abs(live_w - want_w) <= 48 && std::abs(live_h - want_h) <= 48) {
+        return out;
+    }
+    out.w = want_w;
+    out.h = want_h;
+    return out;
+}
+
+struct LayoutPoint {
+    double x = 0;
+    double y = 0;
+};
+
+// Map a window-coordinate point into the layout. After leaving fullscreen the
+// point stays in the restored window, even if the drawable is still the screen.
+inline LayoutPoint window_point_to_layout(double x, double y, bool restoring, int window_w, int window_h, int pixel_w,
+                                         int pixel_h, int restored_w, int restored_h, float density)
+{
+    const LayoutPixels laid =
+        layout_pixels_leaving_fullscreen(restoring, pixel_w, pixel_h, restored_w, restored_h, density);
+    LayoutPoint point;
+    point.x = x * static_cast<double>(laid.w) / static_cast<double>(std::max(window_w, 1));
+    point.y = y * static_cast<double>(laid.h) / static_cast<double>(std::max(window_h, 1));
+    return point;
+}
+
+// The thumb stays on the track at both ends. At 100% it used to hang past
+// the right end by half its width.
+inline double slider_thumb_x(double track_x, double track_w, double thumb_w, double t)
+{
+    if (t < 0.0) {
+        t = 0.0;
+    }
+    if (t > 1.0) {
+        t = 1.0;
+    }
+    if (thumb_w < 1.0) {
+        thumb_w = 1.0;
+    }
+    if (track_w < thumb_w) {
+        thumb_w = std::max(1.0, track_w);
+    }
+    return track_x + (std::max(0.0, track_w - thumb_w)) * t;
 }
 
 // Settings rows. The value and the slider sit under the caption, and the
