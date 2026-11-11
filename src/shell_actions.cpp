@@ -14,12 +14,16 @@
 #include "text_edit.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
+#include "messages.hpp"
+#include "present.hpp"
 #include "special_buildings.hpp"
 #include "tile_atlas.hpp"
 #include "placement_hint.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 #include "view_math.hpp"
+
+#include "micropolis.h"
 
 #include <SDL3/SDL.h>
 
@@ -199,6 +203,124 @@ void Shell::skip_motion()
 {
     scene_fade_.skip();
     panel_settle_ = 0;
+    event_pan_on_ = false;
+    marker_on_ = false;
+    puff_on_ = false;
+    pop_on_ = false;
+    flash_on_ = false;
+    year_stamp_.elapsed_ms = -1;
+}
+
+void Shell::begin_event_pan(int tile_x, int tile_y)
+{
+    marker_tx_ = tile_x;
+    marker_ty_ = tile_y;
+    const double fx = (static_cast<double>(tile_x) + 0.5) / CitySession::kWorldW;
+    const double fy = (static_cast<double>(tile_y) + 0.5) / CitySession::kWorldH;
+    if (!motion_fx_) {
+        center_on_fraction(fx, fy);
+        event_pan_on_ = false;
+        marker_on_ = false;
+        return;
+    }
+    const double ax = view_x_ + view_w_ * 0.5;
+    const double ay = view_y_ + view_h_ * 0.5;
+    double target_x = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox(view_w_, map_.pixel_width()), map_.pixel_width());
+    double target_y = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
+    const double max_x = std::max(0.0, static_cast<double>(map_.pixel_width() - view_w_));
+    const double max_y = std::max(0.0, static_cast<double>(map_.pixel_height() - view_h_));
+    target_x = std::max(0.0, std::min(max_x, target_x));
+    target_y = std::max(0.0, std::min(max_y, target_y));
+    marker_on_ = true;
+    marker_ms_ = 0;
+    const double dx = target_x - scroll_x_;
+    const double dy = target_y - scroll_y_;
+    if (dx * dx + dy * dy < 64.0) {
+        center_on_fraction(fx, fy);
+        event_pan_on_ = false;
+        return;
+    }
+    event_from_x_ = scroll_x_;
+    event_from_y_ = scroll_y_;
+    event_to_x_ = target_x;
+    event_to_y_ = target_y;
+    event_written_x_ = scroll_x_;
+    event_written_y_ = scroll_y_;
+    event_pan_ms_ = 0;
+    event_pan_on_ = true;
+    marker_ms_ = -kGlideMs;
+}
+
+void Shell::advance_presentation(int elapsed_ms)
+{
+    if (elapsed_ms < 0) {
+        elapsed_ms = 0;
+    }
+    if (event_pan_on_) {
+        if (std::fabs(scroll_x_ - event_written_x_) > 0.75 || std::fabs(scroll_y_ - event_written_y_) > 0.75) {
+            event_pan_on_ = false;
+        } else {
+            event_pan_ms_ += elapsed_ms;
+            const double t = static_cast<double>(event_pan_ms_) / static_cast<double>(kGlideMs);
+            scroll_x_ = glide_mix(event_from_x_, event_to_x_, t);
+            scroll_y_ = glide_mix(event_from_y_, event_to_y_, t);
+            clamp_scroll();
+            event_written_x_ = scroll_x_;
+            event_written_y_ = scroll_y_;
+            if (event_pan_ms_ >= kGlideMs) {
+                event_pan_on_ = false;
+            }
+        }
+    }
+    if (marker_on_) {
+        marker_ms_ += elapsed_ms;
+        if (marker_ms_ >= kMarkerMs) {
+            marker_on_ = false;
+        }
+    }
+    const std::string date = session_.date_text();
+    const int month = date.compare(0, 3, "Jan") == 0 ? 0 : 1;
+    if (motion_fx_ || !year_stamp_.armed) {
+        year_stamp_.observe(session_.city_year(), month);
+    }
+    year_stamp_.advance(elapsed_ms);
+    if (puff_on_) {
+        puff_ms_ += elapsed_ms;
+        if (puff_ms_ >= 220) {
+            puff_on_ = false;
+        }
+    }
+    if (pop_on_) {
+        pop_ms_ += elapsed_ms;
+        if (pop_ms_ >= 180) {
+            pop_on_ = false;
+        }
+    }
+    if (flash_on_) {
+        flash_ms_ += elapsed_ms;
+        if (flash_ms_ >= 180) {
+            flash_on_ = false;
+        }
+    }
+}
+
+void Shell::note_disaster_fx()
+{
+    const std::string text = session_.message();
+    if (text == disaster_seen_) {
+        return;
+    }
+    disaster_seen_ = text;
+    if (!motion_fx_ || !notice_is_disaster(text)) {
+        return;
+    }
+    flash_on_ = true;
+    flash_ms_ = 0;
+    if (notice_shakes(text) && quake_strength_ <= 0) {
+        quake_strength_ = 240;
+        quake_started_ = std::chrono::steady_clock::now();
+        quake_until_ = quake_started_ + std::chrono::milliseconds(220);
+    }
 }
 
 std::string Shell::welcome_continue_label() const
@@ -277,7 +399,8 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     dialog_error_.clear();
     panel_settle_ = 0;
     if (motion_fx_ && (dialog == Dialog::Budget || dialog == Dialog::Evaluation || dialog == Dialog::Graphs ||
-                       dialog == Dialog::Messages || dialog == Dialog::Welcome || dialog == Dialog::Scenario)) {
+                       dialog == Dialog::Messages || dialog == Dialog::Welcome || dialog == Dialog::Scenario ||
+                       dialog == Dialog::Query || dialog == Dialog::Disaster)) {
         panel_settle_ = 2;
     }
     if (!prompted) {
@@ -3451,6 +3574,21 @@ void Shell::absorb_placement_note()
     const ToolFootprint foot = tool_footprint(note.tool);
     receipt_on_ = true;
     receipt_ok_ = note.ok;
+    if (motion_fx_ && note.ok) {
+        if (note.tool == TOOL_BULLDOZER) {
+            puff_on_ = true;
+            puff_ms_ = 0;
+            puff_tx_ = note.x;
+            puff_ty_ = note.y;
+        } else {
+            pop_on_ = true;
+            pop_ms_ = 0;
+            pop_tx_ = note.width > 0 ? note.x - note.anchor_x : note.x;
+            pop_ty_ = note.height > 0 ? note.y - note.anchor_y : note.y;
+            pop_tw_ = note.width > 0 ? note.width : 1;
+            pop_th_ = note.height > 0 ? note.height : 1;
+        }
+    }
     if (note.width > 0 && note.height > 0) {
         receipt_left_ = note.x - note.anchor_x;
         receipt_top_ = note.y - note.anchor_y;
@@ -3542,6 +3680,15 @@ void Shell::show_problem_on_map(int kind, bool alternate)
     }
 }
 
+int shell_map_word(int x, int y, const void *ctx)
+{
+    const CitySession *session = static_cast<const CitySession *>(ctx);
+    if (session == nullptr) {
+        return -1;
+    }
+    return session->map_value(x, y);
+}
+
 void Shell::refresh_place_cue()
 {
     MapCue cue;
@@ -3571,7 +3718,8 @@ void Shell::refresh_place_cue()
             }
         }
     }
-    const bool placeable = engine >= 0 && engine != tool_by_index(kToolCount - 1)->engine_id;
+    const int query_id = tool_by_index(kToolCount - 1)->engine_id;
+    const bool placeable = engine != query_id && (engine >= 0 || engine == kSpecialEngineId);
     if (placeable && hovering && dialog_ == Dialog::None && !menu_.open()) {
         const int special = engine == kSpecialEngineId ? special_choice_ : -1;
         const PlaceForecast forecast =
@@ -3585,10 +3733,26 @@ void Shell::refresh_place_cue()
         cue.height = std::max(1, forecast.height);
         cue.tag = forecast.tag;
         if (engine == kSpecialEngineId && special >= 0) {
+            cue.sprite = special;
             const std::string blocked = session_.special_menu_detail(special);
             if (!blocked.empty() && blocked[0] != '$') {
                 cue.mark = static_cast<int>(PlaceMark::Blocked) + 1;
                 cue.tag = blocked;
+            }
+        }
+        if (engine == TOOL_BULLDOZER && forecast.mark == PlaceMark::Ready) {
+            int index = -1;
+            int cell = 0;
+            if (special_sheet_at(hx, hy, shell_map_word, &session_, index, cell) && index >= 0) {
+                const SpecialBuilding &building = special_building(index);
+                const int columns = std::max(1, building.width);
+                const int ox = cell % columns;
+                const int oy = cell / columns;
+                cue.left = hx - ox;
+                cue.top = hy - oy;
+                cue.width = building.width;
+                cue.height = building.height;
+                cue.outline = true;
             }
         }
         if (map_.dragging() && session_.stroke_tiles() > 0 && tile_matches_tool(engine, session_.map_value(hx, hy))) {

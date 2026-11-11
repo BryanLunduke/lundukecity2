@@ -14,6 +14,7 @@
 #include "menu_model.hpp"
 #include "overlay_map.hpp"
 #include "redraw.hpp"
+#include "present.hpp"
 #include "scene_fade.hpp"
 #include "side_widgets.hpp"
 #include "sound_player.hpp"
@@ -120,6 +121,9 @@ private:
     std::string welcome_continue_label() const;
     void begin_scene_fade();
     void skip_motion();
+    void begin_event_pan(int tile_x, int tile_y);
+    void advance_presentation(int elapsed_ms);
+    void note_disaster_fx();
     void paint_scene_fade();
     void draw_osk(cairo_t *cr, double x, double y, double w, double max_h);
 
@@ -528,8 +532,38 @@ private:
     // Short dither and panel settle. Off for tests, smoke, and demos so a
     // screenshot is the settled screen. Click or a key skips either one.
     bool motion_fx_ = false;
+    bool look_live_ = false;
     SceneFade scene_fade_{};
     int panel_settle_ = 0;
+    bool event_pan_on_ = false;
+    double event_from_x_ = 0;
+    double event_from_y_ = 0;
+    double event_to_x_ = 0;
+    double event_to_y_ = 0;
+    double event_written_x_ = 0;
+    double event_written_y_ = 0;
+    int event_pan_ms_ = 0;
+    bool marker_on_ = false;
+    int marker_tx_ = 0;
+    int marker_ty_ = 0;
+    int marker_ms_ = -1;
+    YearStamp year_stamp_{};
+    bool puff_on_ = false;
+    int puff_ms_ = 0;
+    int puff_tx_ = 0;
+    int puff_ty_ = 0;
+    bool pop_on_ = false;
+    int pop_ms_ = 0;
+    int pop_tx_ = 0;
+    int pop_ty_ = 0;
+    int pop_tw_ = 1;
+    int pop_th_ = 1;
+    bool flash_on_ = false;
+    int flash_ms_ = 0;
+    std::string disaster_seen_;
+    bool inspect_card_shown_ = false;
+    double inspect_card_w_ = 0;
+    double inspect_card_h_ = 0;
     double dialog_hot_dy_ = 0;
     std::string own_recovery_;
     std::string autosave_fingerprint_;

@@ -9,6 +9,8 @@
 #include "graph_legend.hpp"
 #include "graph_palette.hpp"
 #include "history_span.hpp"
+#include "present.hpp"
+#include "theme.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -47,7 +49,7 @@ std::int64_t population_at(const CitySession &session, CitySession::HistoryScale
     return static_cast<std::int64_t>(residential + commercial + industrial) * kHistoryPeoplePerSample;
 }
 
-void fill_series(SeriesSpec out[kGraphSeriesCount])
+void fill_series(SeriesSpec out[kGraphSeriesCount], bool night)
 {
     const GraphLegendKind kinds[kGraphSeriesCount] = {
         GraphLegendKind::Population, GraphLegendKind::People, GraphLegendKind::People, GraphLegendKind::People,
@@ -62,9 +64,9 @@ void fill_series(SeriesSpec out[kGraphSeriesCount])
     for (int i = 0; i < kGraphSeriesCount; ++i) {
         const GraphSeriesStyle &style = kGraphSeries[i];
         out[i] = SeriesSpec{style.name,
-                            graph_channel(style.light_r),
-                            graph_channel(style.light_g),
-                            graph_channel(style.light_b),
+                            graph_channel(night ? style.dark_r : style.light_r),
+                            graph_channel(night ? style.dark_g : style.light_g),
+                            graph_channel(night ? style.dark_b : style.light_b),
                             style.dash_on,
                             style.dash_off,
                             i == 0,
@@ -132,7 +134,7 @@ std::string chart_funds_line(CitySession *session)
 std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale)
 {
     SeriesSpec specs[kGraphSeriesCount];
-    fill_series(specs);
+    fill_series(specs, chart_plate(theme::chrome_look()).night);
     const auto scale = long_scale ? CitySession::HistoryScale::Long : CitySession::HistoryScale::Short;
     std::vector<ChartLegend> out;
     const std::int64_t census = session != nullptr ? session->evaluation().population : 0;
@@ -181,7 +183,8 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
     if (width < 20 || height < 20) {
         return;
     }
-    cairo_set_source_rgb(cr, 1, 1, 1);
+    const ChartPlate plate = chart_plate(theme::chrome_look());
+    cairo_set_source_rgb(cr, plate.paper_r, plate.paper_g, plate.paper_b);
     cairo_rectangle(cr, 0, 0, width, height);
     cairo_fill(cr);
     const float chart_scale = ui_scale > 0.05f ? ui_scale : 1.0f;
@@ -193,8 +196,14 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
         return px;
     };
     const int axis_px = static_cast<int>(std::lround(label_px(10)));
-    const int left = std::max(108, axis_px * 8);
-    const int right = 12;
+    int enabled_count = 0;
+    for (int mask_i = 0; mask_i < kGraphSeriesCount; ++mask_i) {
+        if ((enabled_mask & (1 << mask_i)) != 0) {
+            ++enabled_count;
+        }
+    }
+    const int left = enabled_count <= 1 ? std::max(72, axis_px * 7) : std::max(44, axis_px * 4);
+    const int right = 8;
     const int top = std::max(22, axis_px + 8);
     const int bottom = std::max(18, axis_px);
     const double plot_w = std::max(1, width - left - right);
@@ -208,16 +217,17 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
             // another history line. The legend names it.
             const double dash[2] = {4.0, 3.0};
             cairo_set_dash(cr, dash, 2, 0.0);
-            cairo_set_source_rgba(cr, 0.15, 0.15, 0.15, 0.55);
+            cairo_set_source_rgba(cr, plate.grid_r, plate.grid_g, plate.grid_b, 0.7);
         } else {
             cairo_set_dash(cr, nullptr, 0, 0.0);
-            cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
+            cairo_set_source_rgba(cr, plate.grid_r, plate.grid_g, plate.grid_b, 0.35);
         }
         cairo_move_to(cr, left, y);
         cairo_line_to(cr, left + plot_w, y);
         cairo_stroke(cr);
     }
     cairo_set_dash(cr, nullptr, 0, 0.0);
+    cairo_set_source_rgb(cr, plate.ink_r, plate.ink_g, plate.ink_b);
     cairo_move_to(cr, left, top);
     cairo_line_to(cr, left, plot_bottom);
     cairo_line_to(cr, left + plot_w, plot_bottom);
@@ -227,7 +237,7 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
     }
     const auto scale = long_scale ? CitySession::HistoryScale::Long : CitySession::HistoryScale::Short;
     SeriesSpec series[kGraphSeriesCount];
-    fill_series(series);
+    fill_series(series, plate.night);
     const int n = CitySession::kHistoryPoints;
     bool labeled = false;
     int hover_index = -1;
@@ -266,20 +276,10 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
             max_v = 1;
         }
         const bool flat = max_v <= min_v;
-        if (flat) {
-            max_v = min_v + 1.0;
-        } else if (min_v > 0.0) {
-            // A narrow range used to pin every trough on the axis. Leave a
-            // gap under the lowest real sample. A sample of zero still sits
-            // on the axis, because that reading is zero.
-            const double span = max_v - min_v;
-            const double lifted = min_v - span * 0.2;
-            min_v = lifted > 0.0 ? lifted : 0.0;
-            max_v += span * 0.05;
-        }
+        chart_headroom(min_v, max_v);
         if (!labeled) {
             labeled = true;
-            cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
+            cairo_set_source_rgb(cr, plate.ink_r, plate.ink_g, plate.ink_b);
             cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
             cairo_set_font_size(cr, label_px(10));
             int enabled = 0;
@@ -324,6 +324,13 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
         int kept = 0;
         double only_y = top + plot_h / 2.0;
         bool drawing = false;
+        int oldest_kept = 0;
+        for (int scan = n - 1; scan >= 0; --scan) {
+            if (!history_point_skipped(samples, n, scan)) {
+                oldest_kept = scan;
+                break;
+            }
+        }
         for (int i = 0; i < n; ++i) {
             const int index = (n - 1) - i;
             if (history_point_skipped(samples, n, index)) {
@@ -331,7 +338,7 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
                 continue;
             }
             const double value = samples[index];
-            const double x = left + (n == 1 ? 0 : (plot_w * i) / (n - 1));
+            const double x = history_plot_x(index, oldest_kept, left, plot_w);
             const double y = flat ? (top + plot_h / 2.0)
                                   : (plot_bottom - ((value - min_v) / (max_v - min_v)) * plot_h);
             only_y = y;
@@ -393,7 +400,7 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
         const double band = static_cast<double>(top - 1);
         cairo_rectangle(cr, 0, 0, width, band);
         cairo_clip(cr);
-        cairo_set_source_rgb(cr, 0.15, 0.15, 0.15);
+        cairo_set_source_rgb(cr, plate.ink_r, plate.ink_g, plate.ink_b);
         cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
         cairo_set_font_size(cr, label_px(11));
         std::string shown = hover;

@@ -24,6 +24,10 @@ struct MapCue {
     int width = 1;
     int height = 1;
     std::string tag;
+    // Special-building sheet to ghost in the footprint. -1 draws corners only.
+    int sprite = -1;
+    // Full rectangle, used when the bulldozer is over a multi-tile special.
+    bool outline = false;
     bool zone = false;
     int zleft = 0;
     int ztop = 0;

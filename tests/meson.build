@@ -610,6 +610,32 @@ test(
 
 # Headless SDL: start, load Dullsville, tick, draw a frame, cycle a tool
 # from a virtual gamepad, accept a synthetic tap.
+presentation = executable(
+  'presentation',
+  'presentation.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/tools.cpp',
+  '../src/tile_atlas.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep, cairo_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'presentation',
+  presentation,
+  env: ['SDL_AUDIODRIVER=dummy', 'SDL_AUDIO_DRIVER=dummy'],
+  timeout: 120,
+)
+
 test(
   'sdl_smoke',
   lunduke_city_exe,

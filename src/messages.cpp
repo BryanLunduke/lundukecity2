@@ -125,6 +125,68 @@ const char *band(int value, int origin, const char *low, const char *mid, const 
 
 } // namespace
 
+namespace {
+
+bool listed(const std::string &text, const char *const *rows, int count)
+{
+    for (int i = 0; i < count; ++i) {
+        if (text == rows[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const char *kDisasters[] = {
+    "Fire reported.",
+    "A monster has been sighted.",
+    "A tornado has been reported.",
+    "An earthquake has been reported.",
+    "A plane has crashed.",
+    "A ship has wrecked.",
+    "A train has crashed.",
+    "A helicopter has crashed.",
+    "Firebombing reported.",
+    "An explosion has been detected.",
+    "Flooding reported.",
+    "A nuclear meltdown has occurred.",
+    "Riots reported.",
+};
+
+} // namespace
+
+bool notice_is_disaster(const std::string &text)
+{
+    return listed(text, kDisasters, static_cast<int>(sizeof(kDisasters) / sizeof(kDisasters[0])));
+}
+
+bool notice_shakes(const std::string &text)
+{
+    return text == "An earthquake has been reported." || text == "An explosion has been detected.";
+}
+
+int notice_mark(const std::string &text)
+{
+    if (notice_is_disaster(text)) {
+        return 1;
+    }
+    if (text.find("fund") != std::string::npos || text.find("tax") != std::string::npos ||
+        text.find("Tax") != std::string::npos || text.find("$") != std::string::npos) {
+        return 2;
+    }
+    if (text.find("opulation") != std::string::npos) {
+        return 3;
+    }
+    if (text.find("ower") != std::string::npos || text.find("lackout") != std::string::npos) {
+        return 4;
+    }
+    if (text.find("road") != std::string::npos || text.find("Rail") != std::string::npos ||
+        text.find("raffic") != std::string::npos) {
+        return 5;
+    }
+    return 0;
+}
+
 std::string message_for_number(int number)
 {
     const int count = static_cast<int>(sizeof(kMessages) / sizeof(kMessages[0]));

@@ -517,10 +517,16 @@ void Shell::apply_loaded_settings()
 void Shell::set_look_preference(Look look)
 {
     const int which = look_to_setting(look);
+    const int before = drawn_look_;
     look_pref_.look = which;
     tile_atlas().set_look(which);
     drawn_look_ = tile_atlas().look();
     theme::set_chrome_look(drawn_look_);
+    if (look_change_fades(look_live_, before, drawn_look_)) {
+        map_.invalidate_all();
+        begin_scene_fade();
+    }
+    look_live_ = true;
 }
 
 void Shell::clear_transient_message()
@@ -1094,7 +1100,8 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.blink = blink_drew_;
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
-    reasons.motion = scene_fade_.active() || panel_settle_ > 0;
+    reasons.motion = scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
+                     puff_on_ || pop_on_ || flash_on_;
     return reasons;
 }
 
@@ -1146,7 +1153,8 @@ void Shell::loop()
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);
             }
-            if (scene_fade_.active() || panel_settle_ > 0) {
+            if (scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
+                puff_on_ || pop_on_ || flash_on_) {
                 timeout = std::min(timeout, 16);
             }
             if (menu_.open() && menu_edge_dir_ != 0) {
@@ -1363,7 +1371,7 @@ void Shell::loop()
         int gx = 0;
         int gy = 0;
         if (session_.take_view_target(gx, gy) && session_.auto_goto()) {
-            center_on_fraction((gx + 0.5) / CitySession::kWorldW, (gy + 0.5) / CitySession::kWorldH);
+            begin_event_pan(gx, gy);
         }
         if (const int strength = session_.take_earthquake()) {
             quake_strength_ = strength;
@@ -1372,6 +1380,8 @@ void Shell::loop()
             quake_until_ = quake_started_ + std::chrono::milliseconds(milliseconds);
         }
         note_message();
+        note_disaster_fx();
+        advance_presentation(elapsed);
         if (session_.query_serial() != shown_query_serial_) {
             shown_query_serial_ = session_.query_serial();
             const std::string text = session_.message();

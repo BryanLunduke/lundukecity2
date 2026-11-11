@@ -141,26 +141,49 @@ inline BudgetCopy budget_copy(const CitySession::BudgetBook &book, bool tax_year
     return copy;
 }
 
+inline void sentence_case_line(std::string &line)
+{
+    for (char &ch : line) {
+        if (ch == ' ' || ch == '\t') {
+            continue;
+        }
+        if (ch >= 'a' && ch <= 'z') {
+            ch = static_cast<char>(ch - 'a' + 'A');
+        }
+        break;
+    }
+}
+
 // The query message uses an em dash (" — ", five UTF-8 bytes) and commas as
 // line breaks. Comparing three bytes leaves the dash on the first line.
+// Each line starts with a capital so "population 120" reads as a sentence.
 inline std::string query_body(const std::string &text)
 {
     const std::string dash = " — ";
     std::string body;
+    std::string line;
+    auto flush = [&]() {
+        sentence_case_line(line);
+        body += line;
+        line.clear();
+    };
     for (std::size_t i = 0; i < text.size();) {
         if (text.compare(i, dash.size(), dash) == 0) {
+            flush();
             body.push_back('\n');
             i += dash.size();
             continue;
         }
         if (text.compare(i, 2, ", ") == 0) {
+            flush();
             body.push_back('\n');
             i += 2;
             continue;
         }
-        body.push_back(text[i]);
+        line.push_back(text[i]);
         ++i;
     }
+    flush();
     return body;
 }
 
