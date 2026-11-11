@@ -6,6 +6,7 @@
 
 #include "assets.hpp"
 #include "map_fit.hpp"
+#include "present.hpp"
 #include "special_buildings.hpp"
 
 #include "sprite_art.hpp"
@@ -111,6 +112,39 @@ bool MapView::stroke_origin(int &tx, int &ty) const
     tx = origin_x_;
     ty = origin_y_;
     return true;
+}
+
+void MapView::set_dust(bool on, int elapsed_ms, int tile_x, int tile_y)
+{
+    dust_on_ = on;
+    dust_ms_ = elapsed_ms;
+    dust_tx_ = tile_x;
+    dust_ty_ = tile_y;
+}
+
+void MapView::draw_dust(cairo_t *cr) const
+{
+    if (!dust_on_) {
+        return;
+    }
+    const int tile = std::max(tile_size_, 1);
+    const double origin_x = static_cast<double>(dust_tx_) * tile;
+    const double origin_y = static_cast<double>(dust_ty_) * tile;
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    for (int i = 0; i < 10; ++i) {
+        const int local_y = dust_speck_y(tile, dust_ms_, i);
+        const int local_x = tile / 5 + (i * 3) % std::max(1, tile - 6);
+        const int size = (i % 3 == 0) ? 4 : 3;
+        if (i % 2 == 0) {
+            cairo_set_source_rgb(cr, 1.0, 0.86, 0.55);
+        } else {
+            cairo_set_source_rgb(cr, 0.72, 0.55, 0.28);
+        }
+        cairo_rectangle(cr, origin_x + local_x, origin_y + local_y, size, size);
+        cairo_fill(cr);
+    }
+    cairo_restore(cr);
 }
 
 void MapView::set_cue(const MapCue &cue)
@@ -413,12 +447,18 @@ void MapView::sync()
             int special_cell = 0;
             const int special_key = special_display_key(session_, x, y, special_index, special_cell);
             if (special_key != 0) {
-                if (cached_raw_[index] == raw && cached_shown_[index] == special_key) {
+                const bool bolt = special_center_needs_bolt(raw, special_index, special_cell, blink_on_);
+                const int shown_key = bolt ? special_key + 50000 : special_key;
+                if (cached_raw_[index] == raw && cached_shown_[index] == shown_key) {
                     continue;
                 }
-                blit_special(x, y, special_index, special_cell);
+                if (bolt && atlas.loaded() && LIGHTNINGBOLT < atlas.count()) {
+                    blit_tile(x, y, LIGHTNINGBOLT, atlas);
+                } else {
+                    blit_special(x, y, special_index, special_cell);
+                }
                 cached_raw_[index] = raw;
-                cached_shown_[index] = special_key;
+                cached_shown_[index] = shown_key;
                 ++dirty;
                 continue;
             }
@@ -713,6 +753,63 @@ void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::s
     cairo_show_text(cr, text.c_str());
 }
 
+bool bayer_keep(int x, int y)
+{
+    static const int bayer[4][4] = {
+        {0, 8, 2, 10},
+        {12, 4, 14, 6},
+        {3, 11, 1, 9},
+        {15, 7, 13, 5},
+    };
+    return bayer[y & 3][x & 3] < 8;
+}
+
+void paint_special_ghost(cairo_t *cr, int index, double x, double y, double w, double h, bool blocked)
+{
+    if (index < 0 || w < 2.0 || h < 2.0) {
+        return;
+    }
+    bool vga_snap = false;
+    cairo_surface_t *sprite = special_sprite(index, vga_snap);
+    if (sprite == nullptr) {
+        return;
+    }
+    cairo_surface_flush(sprite);
+    const int sw = cairo_image_surface_get_width(sprite);
+    const int sh = cairo_image_surface_get_height(sprite);
+    const int stride = cairo_image_surface_get_stride(sprite);
+    const unsigned char *src = cairo_image_surface_get_data(sprite);
+    if (src == nullptr || sw < 1 || sh < 1) {
+        return;
+    }
+    const int pixels_w = std::max(1, static_cast<int>(w));
+    const int pixels_h = std::max(1, static_cast<int>(h));
+    for (int py = 0; py < pixels_h; ++py) {
+        for (int px = 0; px < pixels_w; ++px) {
+            if (!bayer_keep(px, py)) {
+                continue;
+            }
+            const int sx = std::min(sw - 1, px * sw / pixels_w);
+            const int sy = std::min(sh - 1, py * sh / pixels_h);
+            const unsigned char *p = src + sy * stride + sx * 4;
+            if (p[3] < 16) {
+                continue;
+            }
+            int red = p[2];
+            int green = p[1];
+            int blue = p[0];
+            if (blocked) {
+                red = (red + 170) / 2;
+                green = green / 3;
+                blue = blue / 3;
+            }
+            cairo_set_source_rgb(cr, red / 255.0, green / 255.0, blue / 255.0);
+            cairo_rectangle(cr, x + px, y + py, 1.0, 1.0);
+            cairo_fill(cr);
+        }
+    }
+}
+
 } // namespace
 
 void MapView::draw_footprint(cairo_t *cr) const
@@ -733,6 +830,19 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double y = cue_.top * tile;
             const double w = cue_.width * tile;
             const double h = cue_.height * tile;
+            if (cue_.sprite >= 0) {
+                paint_special_ghost(cr, cue_.sprite, x, y, w, h, cue_.mark >= 3);
+            }
+            if (cue_.outline) {
+                cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
+                cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+                cairo_set_line_width(cr, 3.0);
+                cairo_stroke(cr);
+                cairo_rectangle(cr, x + 2.0, y + 2.0, w - 4.0, h - 4.0);
+                cairo_set_source_rgb(cr, 1.0, 1.0, 0.33);
+                cairo_set_line_width(cr, 1.0);
+                cairo_stroke(cr);
+            }
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.55), cue_.mark);
             paint_tag(cr, x, y, w, h, cue_.tag, tile_size_);
         }
@@ -840,6 +950,7 @@ void MapView::draw(cairo_t *cr)
         }
     }
     cairo_restore(cr);
+    draw_dust(cr);
     draw_footprint(cr);
     cairo_restore(cr);
 }

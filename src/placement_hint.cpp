@@ -37,26 +37,7 @@ bool tally_tile(int tile)
 
 bool auto_clearable_word(int raw)
 {
-    const int tile = tile_of(raw);
-    if (tile == DIRT) {
-        return true;
-    }
-    if (tile >= RIVER && tile <= WATER_HIGH) {
-        return false;
-    }
-    if (tile >= FLOOD && tile <= RADTILE) {
-        return false;
-    }
-    if (tile >= FIRE && tile <= LASTFIRE) {
-        return false;
-    }
-    if ((raw & ZONEBIT) != 0) {
-        return false;
-    }
-    if (tile >= ROADBASE) {
-        return false;
-    }
-    return (raw & BULLBIT) != 0;
+    return special_auto_clearable(raw);
 }
 
 bool water_tile(int tile)
@@ -544,11 +525,16 @@ Attempt lay_bulldoze(Scratch &map, int x, int y)
     const int word = map.get(x, y);
     const int tile = tile_of(word);
     const bool special = special_index_for_tile(tile) >= 0 || tile == kSpecialBodyTile;
-    if ((word & BULLBIT) == 0 && (word & ZONEBIT) == 0 && !special && tile == DIRT) {
-        return blocked_at("Cannot build here", x, y);
-    }
     if ((word & BULLBIT) == 0 && (word & ZONEBIT) == 0 && !special) {
-        return blocked_at("Cannot build here", x, y);
+        const char *why = "Cannot clear this";
+        if (tile == DIRT) {
+            why = "Nothing to clear";
+        } else if (tile >= FIRE && tile <= LASTFIRE) {
+            why = "Cannot clear fire";
+        } else if (tile >= FLOOD && tile <= LASTFLOOD) {
+            why = "Cannot clear flood";
+        }
+        return blocked_at(why, x, y);
     }
     Attempt attempt;
     attempt.outcome = Outcome::Ok;

@@ -4,6 +4,22 @@
 
 #pragma once
 
+#include <string>
+
+// The 16 px atlas step is 100%. Overview (8) is 50%, and 32 px is 200%.
+inline int zoom_percent_for_tile(int tile_px)
+{
+    if (tile_px < 1) {
+        tile_px = 16;
+    }
+    return tile_px * 100 / 16;
+}
+
+inline std::string zoom_menu_label(int tile_px)
+{
+    return "Zoom " + std::to_string(zoom_percent_for_tile(tile_px)) + "%";
+}
+
 // Keyboard zoom. Control plus the +/= key zooms in without Shift.
 // The unshifted keysym on that key is GDK_KEY_equal (0x03d). The shifted
 // keysym is GDK_KEY_plus (0x02b), and the keypad is GDK_KEY_KP_Add.

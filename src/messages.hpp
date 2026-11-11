@@ -16,3 +16,11 @@ std::string message_for_number(int number);
 // land value 5–8, crime 9–12, pollution 13–16, growth 17–20).
 std::string zone_status_text(int tile_category, int population, int land_value,
                              int crime, int pollution, int growth);
+
+// Disaster notices get a stronger bar and a red edge flash. Earthquake and
+// explosion also shake. Routine demands ("More roads needed") do not.
+bool notice_is_disaster(const std::string &text);
+bool notice_shakes(const std::string &text);
+
+// 0 general, 1 disaster, 2 money, 3 people, 4 power, 5 road. Message-list marks.
+int notice_mark(const std::string &text);

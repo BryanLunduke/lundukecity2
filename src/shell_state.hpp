@@ -14,6 +14,7 @@
 #include "menu_model.hpp"
 #include "overlay_map.hpp"
 #include "redraw.hpp"
+#include "present.hpp"
 #include "scene_fade.hpp"
 #include "side_widgets.hpp"
 #include "sound_player.hpp"
@@ -120,6 +121,10 @@ private:
     std::string welcome_continue_label() const;
     void begin_scene_fade();
     void skip_motion();
+    void begin_event_pan(int tile_x, int tile_y);
+    void note_year_stamp();
+    void advance_presentation(int elapsed_ms);
+    void note_disaster_fx();
     void paint_scene_fade();
     void draw_osk(cairo_t *cr, double x, double y, double w, double max_h);
 
@@ -174,6 +179,10 @@ private:
     // Down is clamped onto the map so the cursor cannot fall into the hint bar.
     void clamp_gamepad_cursor(float push_x, float push_y);
     void toggle_fullscreen();
+    void settle_windowed_frame();
+    bool windowed_frame_current() const;
+    void match_renderer_output();
+    void finish_year_and_close(bool jump);
     void toggle_overlay(CitySession::MapLayer layer);
     void reroll_terrain();
     void jump_notice(int index);
@@ -338,6 +347,14 @@ private:
     int normal_w_ = 1280;
     int normal_h_ = 800;
     bool normal_valid_ = false;
+    bool windowed_maximized_ = false;
+    // Set while fullscreen is being left, so a screen-sized resize is not
+    // stored as the windowed rectangle.
+    bool restoring_windowed_ = false;
+    // Pixel density of the windowed frame. Fullscreen must not replace it.
+    float windowed_density_ = 1.0f;
+    int windowed_settle_tries_ = 0;
+    int fullscreen_hold_frames_ = 0;
     int view_x_ = 0;
     int view_y_ = 0;
     int view_w_ = 1;
@@ -528,8 +545,38 @@ private:
     // Short dither and panel settle. Off for tests, smoke, and demos so a
     // screenshot is the settled screen. Click or a key skips either one.
     bool motion_fx_ = false;
+    bool look_live_ = false;
     SceneFade scene_fade_{};
     int panel_settle_ = 0;
+    bool event_pan_on_ = false;
+    double event_from_x_ = 0;
+    double event_from_y_ = 0;
+    double event_to_x_ = 0;
+    double event_to_y_ = 0;
+    double event_written_x_ = 0;
+    double event_written_y_ = 0;
+    int event_pan_ms_ = 0;
+    bool marker_on_ = false;
+    int marker_tx_ = 0;
+    int marker_ty_ = 0;
+    int marker_ms_ = -1;
+    YearStamp year_stamp_{};
+    bool puff_on_ = false;
+    int puff_ms_ = 0;
+    int puff_tx_ = 0;
+    int puff_ty_ = 0;
+    bool pop_on_ = false;
+    int pop_ms_ = 0;
+    int pop_tx_ = 0;
+    int pop_ty_ = 0;
+    int pop_tw_ = 1;
+    int pop_th_ = 1;
+    bool flash_on_ = false;
+    int flash_ms_ = 0;
+    std::string disaster_seen_;
+    bool inspect_card_shown_ = false;
+    double inspect_card_w_ = 0;
+    double inspect_card_h_ = 0;
     double dialog_hot_dy_ = 0;
     std::string own_recovery_;
     std::string autosave_fingerprint_;
@@ -604,6 +651,9 @@ private:
     bool osk_shift_ = false;
     bool ui_test_ = false;
     bool review_ = false;
+    // How many pixels a year-card box was shorter than its text. Zero means
+    // every measured line was given a box tall enough to hold it.
+    double year_box_shortfall_ = 0;
     int ui_step_ = 0;
     int ui_column_ = 0;
     int ui_drag_frames_ = 0;

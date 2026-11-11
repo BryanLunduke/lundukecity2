@@ -117,5 +117,14 @@ using SpecialWordFn = int (*)(int x, int y, const void *ctx);
 // rules. The site-clear checks stay with the caller.
 std::string special_requirement_at(int index, int left, int top, SpecialWordFn word_at, const void *ctx);
 
+// Trees, rubble, and a park with the bulldoze bit. Roads, zones, water,
+// fire, and the animated park fountain stay until the player clears them.
+// Placement and the ghost preview both use this, so they cannot disagree.
+bool special_auto_clearable(int raw);
+
+// The lightning bolt replaces an unpowered special's centre tile while the
+// zone blink is on. Body tiles and a powered centre stay on the sheet.
+bool special_center_needs_bolt(int raw, int index, int cell, bool blink_on);
+
 // True when (x, y) is inside a special. cell is the row-major sheet index.
 bool special_sheet_at(int x, int y, SpecialWordFn word_at, const void *ctx, int &index, int &cell);

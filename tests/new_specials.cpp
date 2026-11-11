@@ -136,7 +136,7 @@ int main()
         return fail(14, "the prison did not stay intact or it pays a yearly bill");
     }
     const std::string prison_query = special_query_at(&bare, 22, 22);
-    if (prison_query.find("Prison") == std::string::npos || prison_query.find("$3000") == std::string::npos) {
+    if (prison_query.find("Prison") == std::string::npos || prison_query.find("$3,000") == std::string::npos) {
         std::fprintf(stderr, "query '%s'\n", prison_query.c_str());
         return fail(15, "query did not name the prison");
     }
@@ -168,7 +168,7 @@ int main()
         return fail(19, "the marina footprint covered the water or lost its center");
     }
     const std::string marina_query = special_query_at(&shore, 31, 29);
-    if (marina_query.find("Marina") == std::string::npos || marina_query.find("$1000") == std::string::npos) {
+    if (marina_query.find("Marina") == std::string::npos || marina_query.find("$1,000") == std::string::npos) {
         return fail(20, "query did not name the marina");
     }
 

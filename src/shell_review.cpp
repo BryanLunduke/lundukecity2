@@ -422,6 +422,33 @@ void Shell::run_review_checks()
         fail("headless window should stay 1280x800");
         return;
     }
+    // Leaving fullscreen lays the UI out to the windowed size on that frame.
+    {
+        note_window_geometry();
+        const int remembered_w = normal_w_;
+        const int remembered_h = normal_h_;
+        toggle_fullscreen();
+        toggle_fullscreen();
+        render();
+        if (win_w_ != 1280 || win_h_ != 800 || normal_w_ != remembered_w || normal_h_ != remembered_h) {
+            fail("leaving fullscreen did not lay out at the windowed size");
+            return;
+        }
+        if (view_y_ != menu_h_ || view_y_ + view_h_ > win_h_ || view_x_ + view_w_ > win_w_) {
+            fail("leaving fullscreen left the view outside the window");
+            return;
+        }
+        bool menu_in_window = false;
+        for (const Hotspot &hot : hot_) {
+            if (hot.id == kMenuTitle && hot.y >= 0 && hot.y + hot.h <= menu_h_ && hot.x >= 0 && hot.x + hot.w <= win_w_) {
+                menu_in_window = true;
+            }
+        }
+        if (!menu_in_window) {
+            fail("the menu bar is outside the restored window");
+            return;
+        }
+    }
     if (allow_saved_settings()) {
         fail("review run would persist window settings");
         return;
@@ -1218,6 +1245,23 @@ void Shell::run_review_checks()
         fail("could not load a city after the touch session");
         return;
     }
+    if (!session_.needs_save_prompt()) {
+        fail("a scenario with no save file quit without asking");
+        return;
+    }
+    const bool welcome_was = welcome_gate_;
+    welcome_gate_ = false;
+    request_with_save(AfterSave::Quit);
+    if (dialog_ != Dialog::Unsaved || after_save_ != AfterSave::Quit) {
+        fail("quitting a scenario did not ask to save");
+        return;
+    }
+    on_dialog_button(kCancel);
+    welcome_gate_ = welcome_was;
+    if (quitting_ || dialog_ != Dialog::None) {
+        fail("cancel on the scenario save prompt did not stay in the city");
+        return;
+    }
     render();
     const auto loaded_funds = session_.funds();
     const auto loaded_map = stamp();
@@ -1669,6 +1713,21 @@ void Shell::run_review_checks()
                 if (!row_visible(column, first)) {
                     fail("the first row of menu " + std::to_string(column) + " is hidden at " +
                          std::to_string(size[0]) + "x" + std::to_string(size[1]));
+                    menu_.close();
+                    SDL_SetWindowSize(window_, saved_w, saved_h);
+                    render();
+                    return;
+                }
+                if (menu_h_ + menu_drop_h_ > static_cast<double>(win_h_) + 1.0) {
+                    fail("menu " + std::to_string(column) + " runs off the window at " + std::to_string(size[0]) +
+                         "x" + std::to_string(size[1]));
+                    menu_.close();
+                    SDL_SetWindowSize(window_, saved_w, saved_h);
+                    render();
+                    return;
+                }
+                if (column == 1 && size[0] == 1024 && size[1] == 640 && !row_visible(column, last)) {
+                    fail("Spooky Look is off the Options menu at 1024x640");
                     menu_.close();
                     SDL_SetWindowSize(window_, saved_w, saved_h);
                     render();
@@ -2300,11 +2359,82 @@ void Shell::run_review_checks()
             fail("the year-end cover did not open");
             return;
         }
-        on_dialog_button(kCancel);
-        if (dialog_ != Dialog::Budget || budget_cover_) {
-            fail("escape on the year-end cover did not open the sliders");
+        bool saw_close = false;
+        for (const Hotspot &spot : hot_) {
+            if (spot.id == kClose) {
+                saw_close = true;
+            }
+        }
+        if (!saw_close) {
+            fail("the year-end cover has no Close button");
             return;
         }
+        double button_top = -1;
+        double button_bottom = -1;
+        for (const Hotspot &spot : hot_) {
+            if (spot.id == kClose) {
+                button_top = spot.y;
+                button_bottom = spot.y + spot.h;
+            }
+        }
+        const double status_top = static_cast<double>(win_h_ - status_h_ - message_h_);
+        // An empty year is short. The row follows that text, and it stays
+        // above the status bar. A panel pinned near 720 px put the row much
+        // lower on this 800 px window.
+        if (button_top < 0 || button_bottom >= status_top - 8.0 || button_top > static_cast<double>(win_h_) * 0.72) {
+            fail("the year card clipped the buttons or left a tall empty band (button at " +
+                 std::to_string(static_cast<int>(button_top)) + ")");
+            return;
+        }
+        {
+            const int saved_w = win_w_;
+            const int saved_h = win_h_;
+            SDL_SetWindowSize(window_, 1024, 640);
+            render();
+            double short_top = -1;
+            double short_bottom = -1;
+            for (const Hotspot &spot : hot_) {
+                if (spot.id == kClose) {
+                    short_top = spot.y;
+                    short_bottom = spot.y + spot.h;
+                }
+            }
+            const double above_status = static_cast<double>(win_h_ - status_h_);
+            if (win_w_ != 1024 || win_h_ != 640 || year_box_shortfall_ > 0.5 || short_top < menu_h_ ||
+                short_bottom > above_status - 1.0) {
+                fail("the year card dropped a line or left the window at 1024x640 (shortfall " +
+                     std::to_string(static_cast<int>(year_box_shortfall_)) + ")");
+                SDL_SetWindowSize(window_, saved_w, saved_h);
+                render();
+                return;
+            }
+            SDL_SetWindowSize(window_, saved_w, saved_h);
+            render();
+        }
+        if (year_digest().locate) {
+            const int tile_x = year_digest().locate_x;
+            const int tile_y = year_digest().locate_y;
+            marker_on_ = false;
+            on_dialog_button(kYearLocate);
+            if (!marker_on_ || marker_tx_ != tile_x || marker_ty_ != tile_y || dialog_ != Dialog::None) {
+                fail("Map did not mark the highlight and close the year");
+                return;
+            }
+            budget_is_tax_ = true;
+            budget_cover_ = true;
+            tax_pause_hold_ = true;
+            open_dialog(Dialog::Budget);
+        }
+        on_dialog_button(kCancel);
+        if (dialog_ != Dialog::None || budget_cover_ || session_.budget_pending()) {
+            fail("escape on the year-end cover did not dismiss the year");
+            return;
+        }
+        session_.begin_tax_year();
+        budget_is_tax_ = true;
+        budget_cover_ = true;
+        tax_pause_hold_ = true;
+        open_dialog(Dialog::Budget);
         on_dialog_button(kCollect);
         if (dialog_ != Dialog::None || session_.budget_pending()) {
             fail("collecting the empty year did not close the budget");

@@ -4,9 +4,47 @@
 
 #include "special_buildings.hpp"
 
+#include "graph_legend.hpp"
 #include "micropolis.h"
 
 #include <string>
+
+bool special_auto_clearable(int raw)
+{
+    const int tile = raw & LOMASK;
+    if (tile == DIRT) {
+        return true;
+    }
+    if (tile >= RIVER && tile <= WATER_HIGH) {
+        return false;
+    }
+    if (tile >= FLOOD && tile <= RADTILE) {
+        return false;
+    }
+    if (tile >= FIRE && tile <= LASTFIRE) {
+        return false;
+    }
+    if ((raw & ZONEBIT) != 0) {
+        return false;
+    }
+    if (tile >= ROADBASE) {
+        return false;
+    }
+    return (raw & BULLBIT) != 0;
+}
+
+bool special_center_needs_bolt(int raw, int index, int cell, bool blink_on)
+{
+    if (!blink_on || index < 0 || index >= special_building_count()) {
+        return false;
+    }
+    if ((raw & ZONEBIT) == 0 || (raw & PWRBIT) != 0) {
+        return false;
+    }
+    const SpecialBuilding &building = special_building(index);
+    const int center = building.anchor_y * building.width + building.anchor_x;
+    return cell == center;
+}
 
 static_assert(SPECIAL_ZOO == 1020, "zoo center tile");
 static_assert(SPECIAL_PARK == 1021, "big park center tile");
@@ -78,32 +116,6 @@ bool is_center_at(const Micropolis *sim, int x, int y, int index)
     }
     const int raw = in_bounds(x, y) ? static_cast<int>(sim->map[x][y]) : 0;
     return (raw & ZONEBIT) != 0 && (raw & LOMASK) == kBuildings[index].center_tile;
-}
-
-// Trees, rubble, and other small bulldozable land. Roads, zones, water,
-// fire, and radiation stay put until the player bulldozes them on purpose.
-bool auto_clearable(int raw)
-{
-    const int tile = raw & LOMASK;
-    if (tile == DIRT) {
-        return true;
-    }
-    if (tile >= RIVER && tile <= WATER_HIGH) {
-        return false;
-    }
-    if (tile >= FLOOD && tile <= RADTILE) {
-        return false;
-    }
-    if (tile >= FIRE && tile <= LASTFIRE) {
-        return false;
-    }
-    if ((raw & ZONEBIT) != 0) {
-        return false;
-    }
-    if (tile >= ROADBASE) {
-        return false;
-    }
-    return (raw & BULLBIT) != 0;
 }
 
 bool is_water_tile(int tile)
@@ -745,7 +757,7 @@ std::string special_menu_detail(const Micropolis *sim, int index)
     if (index < 0 || index >= special_building_count()) {
         return {};
     }
-    return "$" + std::to_string(kBuildings[index].cost);
+    return graph_money(kBuildings[index].cost);
 }
 
 int special_annual_income(const Micropolis *sim)
@@ -909,7 +921,7 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
             if (dock_row(building, dy) && is_water_tile(tile)) {
                 continue;
             }
-            if (sim->autoBulldoze && auto_clearable(raw)) {
+            if (sim->autoBulldoze && special_auto_clearable(raw)) {
                 continue;
             }
             if (is_water_tile(tile)) {
@@ -1028,8 +1040,8 @@ std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y)
     if (!special_building_intact(sim, cx, cy)) {
         text += ". Damaged";
     }
-    text += ". Cost $";
-    text += std::to_string(building.cost);
+    text += ". Cost ";
+    text += graph_money(building.cost);
     return text;
 }
 
@@ -1039,7 +1051,7 @@ std::string special_status_text(int index)
         return "Special buildings";
     }
     const SpecialBuilding &building = kBuildings[index];
-    return std::string(building.name) + ": $" + std::to_string(building.cost);
+    return std::string(building.name) + ": " + graph_money(building.cost);
 }
 
 std::string special_status_text(const Micropolis *sim, int index)

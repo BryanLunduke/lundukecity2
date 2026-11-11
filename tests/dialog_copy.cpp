@@ -152,7 +152,9 @@ int main()
     const std::string body = query_body("Residential zone — population 120, land value 40, powered");
     expect(body.find(" — ") == std::string::npos, "em dash stayed on the first line: " + body);
     expect(body.find("Residential zone\n") == 0, "heading split: " + body);
-    expect(body.find("\npopulation 120\n") != std::string::npos, "comma split: " + body);
+    expect(body.find("\nPopulation 120\n") != std::string::npos, "comma split: " + body);
+    expect(body.find("Land value 40") != std::string::npos, "sentence case land value: " + body);
+    expect(body.find("Powered") != std::string::npos, "sentence case powered: " + body);
 
     if (fails != 0) {
         std::cerr << fails << " dialog copy checks failed\n";

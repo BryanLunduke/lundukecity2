@@ -7,6 +7,8 @@
 // Civic ledger, evaluation advice, and the year-end card. Recognition only:
 // nothing here changes prices, coverage, or which buildings can be bought.
 
+#include "graph_legend.hpp"
+
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -349,7 +351,7 @@ inline YearCard make_year_card(std::int64_t opening, std::int64_t closing, bool 
         card.population = "Population: " + plain(population) + ". No earlier January is stored.";
     } else {
         const std::int64_t delta = population - ledger.prior_population;
-        std::string change = std::to_string(delta);
+        std::string change = grouped_number(delta);
         if (delta > 0) {
             change = "+" + change;
         }

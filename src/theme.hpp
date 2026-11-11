@@ -85,6 +85,27 @@ inline void set_chrome_look(int look)
     chrome_look() = 0;
 }
 
+// Secondary lines. Spooky's panel is VGA gray, so a mid gray disappears.
+// These stay dark on every panel, including the gray Spooky body.
+inline void reading_ink(double &r, double &g, double &b)
+{
+    if (chrome_look() == 2) {
+        r = 32.0 / 255.0;
+        g = 20.0 / 255.0;
+        b = 8.0 / 255.0;
+        return;
+    }
+    if (chrome_look() == 1) {
+        r = 12.0 / 255.0;
+        g = 20.0 / 255.0;
+        b = 64.0 / 255.0;
+        return;
+    }
+    r = 0.22;
+    g = 0.15;
+    b = 0.06;
+}
+
 // SVGA and Spooky share one flat material. Classic keeps Clearlooks.
 inline bool enhanced_chrome()
 {

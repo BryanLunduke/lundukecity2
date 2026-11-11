@@ -266,7 +266,7 @@ int main()
     fade.start();
     fade.advance(SceneFade::kTotalMs);
     if (fade.active()) {
-        return fail(29, "the dither outlived 140 ms");
+        return fail(29, "the dither outlived its duration");
     }
     if (civic::year_just_ended(1901, 0, 48) != 1900 || civic::year_just_ended(1900, 11, 47) != 1900 ||
         civic::year_just_ended(1900, 0, 0) != 1900) {

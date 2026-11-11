@@ -1830,6 +1830,13 @@ bool CitySession::needs_save_prompt() const
     if (dirty_ || budget_pending()) {
         return true;
     }
+    // A scenario has no save file until the player writes one. Quitting
+    // throws that session away, so it asks even before the first edit.
+    // A generated city that was never touched, and a saved file that has
+    // not changed since it was loaded, do not.
+    if (ready_ && !fresh_generated_ && save_path_.empty() && engine_ != nullptr && engine_->sim.scoreType != SC_NONE) {
+        return true;
+    }
     if (!time_advanced_since_save()) {
         return false;
     }
@@ -2533,32 +2540,13 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     }
     bool road = false;
     bool rail = false;
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
-            if (!Micropolis::testBounds(x + dx, y + dy)) {
-                continue;
-            }
-            const int neighbor = map_value(x + dx, y + dy) & LOMASK;
-            if (neighbor >= ROADBASE && neighbor <= LASTROAD) {
-                road = true;
-            }
-            if (neighbor >= RAILBASE && neighbor <= LASTRAIL) {
-                rail = true;
-            }
-        }
-    }
-    if (road) {
-        card.access = "Road access";
-    } else if (rail) {
-        card.access = "Rail access";
-    } else {
-        card.access = "No direct road";
-    }
+    // Filled in after the footprint is known. A 4x4 prison's road can sit
+    // on an edge the hovered tile does not touch.
     const int crime = layer_value(MapLayer::Crime, x, y);
     const int pollution = layer_value(MapLayer::Pollution, x, y);
-    if (card.offer_power) {
-        card.condition = "Unpowered";
-    } else if (crime >= pollution && crime > 0) {
+    // "Power: off" already says the zone is unpowered. The condition line
+    // keeps crime or pollution so the card does not repeat itself.
+    if (crime >= pollution && crime > 0) {
         card.condition = "Crime " + std::to_string(crime);
     } else if (pollution > 0) {
         card.condition = "Pollution " + std::to_string(pollution);
@@ -2619,6 +2607,43 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
         if (card.top < 0) {
             card.top = 0;
         }
+    }
+    auto touch = [&](int tx, int ty) {
+        if (!Micropolis::testBounds(tx, ty)) {
+            return;
+        }
+        const int neighbor = map_value(tx, ty) & LOMASK;
+        if (neighbor >= ROADBASE && neighbor <= LASTROAD) {
+            road = true;
+        }
+        if (neighbor >= RAILBASE && neighbor <= LASTRAIL) {
+            rail = true;
+        }
+    };
+    if (card.zone && card.width > 0 && card.height > 0) {
+        const int right = card.left + card.width;
+        const int bottom = card.top + card.height;
+        for (int ty = card.top - 1; ty <= bottom; ++ty) {
+            for (int tx = card.left - 1; tx <= right; ++tx) {
+                if (tx >= card.left && tx < right && ty >= card.top && ty < bottom) {
+                    continue;
+                }
+                touch(tx, ty);
+            }
+        }
+    } else {
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                touch(x + dx, y + dy);
+            }
+        }
+    }
+    if (road) {
+        card.access = "Road access";
+    } else if (rail) {
+        card.access = "Rail access";
+    } else {
+        card.access = "No direct road";
     }
     return card;
 }

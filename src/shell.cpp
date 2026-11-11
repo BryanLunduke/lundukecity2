@@ -449,7 +449,9 @@ void Shell::save_window_settings()
     stored.milestone_notes = milestone_notes_ ? 1 : 0;
     {
         const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
-        const bool maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
+        const bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+        const bool maximized =
+            ui_scale::stored_window_maximized(fullscreen, (flags & SDL_WINDOW_MAXIMIZED) != 0, windowed_maximized_);
         ui_scale::keep_desktop_geometry(stored, loaded_, deck_, normal_valid_, normal_x_, normal_y_, normal_w_, normal_h_,
                                         deck_ ? loaded_.maximized : maximized);
     }
@@ -517,10 +519,16 @@ void Shell::apply_loaded_settings()
 void Shell::set_look_preference(Look look)
 {
     const int which = look_to_setting(look);
+    const int before = drawn_look_;
     look_pref_.look = which;
     tile_atlas().set_look(which);
     drawn_look_ = tile_atlas().look();
     theme::set_chrome_look(drawn_look_);
+    if (look_change_fades(look_live_, before, drawn_look_)) {
+        map_.invalidate_all();
+        begin_scene_fade();
+    }
+    look_live_ = true;
 }
 
 void Shell::clear_transient_message()
@@ -676,7 +684,12 @@ void Shell::note_window_geometry()
         return;
     }
     const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
-    if ((flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED)) != 0) {
+    const bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+    const bool maximized = (flags & SDL_WINDOW_MAXIMIZED) != 0;
+    if (!fullscreen) {
+        windowed_maximized_ = maximized;
+    }
+    if (fullscreen || maximized) {
         return;
     }
     int ww = 0;
@@ -685,11 +698,38 @@ void Shell::note_window_geometry()
     int y = 0;
     SDL_GetWindowSize(window_, &ww, &hh);
     SDL_GetWindowPosition(window_, &x, &y);
-    if (ww > 0 && hh > 0) {
-        normal_w_ = ww;
-        normal_h_ = hh;
-        normal_x_ = x;
-        normal_y_ = y;
+    int pixel_w = 0;
+    int pixel_h = 0;
+    SDL_GetWindowSizeInPixels(window_, &pixel_w, &pixel_h);
+    // A screen-sized drawable during the restore must not change the density.
+    if (!restoring_windowed_ && ww >= 320 && pixel_w >= 320) {
+        windowed_density_ = static_cast<float>(pixel_w) / static_cast<float>(ww);
+        if (!(windowed_density_ > 0.0f)) {
+            windowed_density_ = 1.0f;
+        }
+    }
+    if (restoring_windowed_) {
+        // The window manager may report the fullscreen size, or the screen
+        // origin, for one event after leaving fullscreen. Keep the windowed
+        // rectangle, including where it was.
+        if (std::abs(ww - normal_w_) > 48 || std::abs(hh - normal_h_) > 48 ||
+            fullscreen_exit_position_is_spurious(x, y, normal_x_, normal_y_)) {
+            return;
+        }
+        restoring_windowed_ = false;
+    }
+    int keep_x = normal_x_;
+    int keep_y = normal_y_;
+    int keep_w = normal_w_;
+    int keep_h = normal_h_;
+    bool valid = false;
+    ui_scale::choose_stored_window(false, normal_valid_, normal_x_, normal_y_, normal_w_, normal_h_, x, y, ww, hh, keep_x,
+                                   keep_y, keep_w, keep_h, valid);
+    if (valid) {
+        normal_x_ = keep_x;
+        normal_y_ = keep_y;
+        normal_w_ = keep_w;
+        normal_h_ = keep_h;
         normal_valid_ = true;
     }
 }
@@ -1094,7 +1134,8 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.blink = blink_drew_;
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
-    reasons.motion = scene_fade_.active() || panel_settle_ > 0;
+    reasons.motion = scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
+                     puff_on_ || pop_on_ || flash_on_;
     return reasons;
 }
 
@@ -1146,7 +1187,8 @@ void Shell::loop()
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);
             }
-            if (scene_fade_.active() || panel_settle_ > 0) {
+            if (scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
+                puff_on_ || pop_on_ || flash_on_) {
                 timeout = std::min(timeout, 16);
             }
             if (menu_.open() && menu_edge_dir_ != 0) {
@@ -1326,8 +1368,12 @@ void Shell::loop()
                 sound_.play(name);
             }
         }
+        note_year_stamp();
         if (session_.take_budget_request()) {
-            if (dialog_pauses() && dialog_ != Dialog::Budget) {
+            // Let "Jan 19xx" stay on the map before the year-in-review card.
+            if (motion_fx_ && year_stamp_.visible() && year_stamp_.elapsed_ms < kYearStampHold) {
+                session_.keep_budget_request();
+            } else if (dialog_pauses() && dialog_ != Dialog::Budget) {
                 session_.keep_budget_request();
             } else if (dialog_ == Dialog::None || dialog_ == Dialog::Budget) {
                 budget_is_tax_ = true;
@@ -1363,7 +1409,7 @@ void Shell::loop()
         int gx = 0;
         int gy = 0;
         if (session_.take_view_target(gx, gy) && session_.auto_goto()) {
-            center_on_fraction((gx + 0.5) / CitySession::kWorldW, (gy + 0.5) / CitySession::kWorldH);
+            begin_event_pan(gx, gy);
         }
         if (const int strength = session_.take_earthquake()) {
             quake_strength_ = strength;
@@ -1372,6 +1418,8 @@ void Shell::loop()
             quake_until_ = quake_started_ + std::chrono::milliseconds(milliseconds);
         }
         note_message();
+        note_disaster_fx();
+        advance_presentation(elapsed);
         if (session_.query_serial() != shown_query_serial_) {
             shown_query_serial_ = session_.query_serial();
             const std::string text = session_.message();
@@ -1997,8 +2045,10 @@ void Shell::handle_event(const SDL_Event &event)
         int ph = 1;
         SDL_GetWindowSize(window_, &ww, &wh);
         SDL_GetWindowSizeInPixels(window_, &pw, &ph);
-        pointer_x_ = event.motion.x * (pw / static_cast<double>(std::max(ww, 1)));
-        pointer_y_ = event.motion.y * (ph / static_cast<double>(std::max(wh, 1)));
+        const LayoutPoint motion_point = window_point_to_layout(event.motion.x, event.motion.y, restoring_windowed_, ww, wh,
+                                                                pw, ph, normal_w_, normal_h_, windowed_density_);
+        pointer_x_ = motion_point.x;
+        pointer_y_ = motion_point.y;
         hover_id_ = hit(pointer_x_, pointer_y_);
         // Nothing is held. A scrollbar drag left over from a touch must not
         // follow the pointer.
@@ -2064,8 +2114,10 @@ void Shell::handle_event(const SDL_Event &event)
         int ph = 1;
         SDL_GetWindowSize(window_, &ww, &wh);
         SDL_GetWindowSizeInPixels(window_, &pw, &ph);
-        pointer_x_ = event.button.x * (pw / static_cast<double>(std::max(ww, 1)));
-        pointer_y_ = event.button.y * (ph / static_cast<double>(std::max(wh, 1)));
+        const LayoutPoint button_point = window_point_to_layout(event.button.x, event.button.y, restoring_windowed_, ww, wh,
+                                                                pw, ph, normal_w_, normal_h_, windowed_density_);
+        pointer_x_ = button_point.x;
+        pointer_y_ = button_point.y;
         if (event.button.button == SDL_BUTTON_MIDDLE || event.button.button == SDL_BUTTON_RIGHT) {
             if (dialog_ != Dialog::None || menu_.open()) {
                 break;
@@ -2149,8 +2201,11 @@ void Shell::handle_event(const SDL_Event &event)
         int ph = 1;
         SDL_GetWindowSize(window_, &ww, &wh);
         SDL_GetWindowSizeInPixels(window_, &pw, &ph);
-        const double pixel_x = event.wheel.mouse_x * (pw / static_cast<double>(std::max(ww, 1)));
-        const double pixel_y = event.wheel.mouse_y * (ph / static_cast<double>(std::max(wh, 1)));
+        const LayoutPoint wheel_point =
+            window_point_to_layout(event.wheel.mouse_x, event.wheel.mouse_y, restoring_windowed_, ww, wh, pw, ph,
+                                   normal_w_, normal_h_, windowed_density_);
+        const double pixel_x = wheel_point.x;
+        const double pixel_y = wheel_point.y;
         // Trackpads report fractions of a notch. A list used to jump a whole
         // row, and a zoom used to jump a whole step, on every event.
         wheel_acc_y_ += event.wheel.y;
