@@ -177,6 +177,13 @@ int main()
         std::fabs(capped_card - 400.0) > 0.5) {
         return fail(40, "the year card is not the height of its content");
     }
+    // 1024x640 leaves about 512px above the message bar and about 564px above
+    // the status bar. A 1944 card is ~524px, so it keeps its lines by tightening
+    // padding. A taller card steps the font down rather than clipping a line.
+    if (year_card_tier(700, 760, 524, 464, 420) != 0 || year_card_tier(512, 564, 524, 464, 420) != 1 ||
+        year_card_tier(512, 564, 700, 540, 500) != 2 || year_card_tier(512, 564, 700, 640, 500) != 3) {
+        return fail(40, "a short year card drops a line instead of tightening");
+    }
     if (marker_step_ms(500) > kMarkerBlink / 2 || marker_step_ms(10) != 10 || !marker_lit(0) || marker_lit(kMarkerMs) ||
         kMarkerMs < 2000) {
         return fail(39, "the highlight ring does not blink for a couple of seconds");

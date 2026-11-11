@@ -582,8 +582,9 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         drop_x += metrics.width + 24;
     }
     // 36px rows read well at 1280. A short window keeps the label inside the
-    // row (the underline used to spill into the next line) and scrolls when
-    // the column still will not fit above the status bar.
+    // row (the underline used to spill into the next line). The popup may
+    // cover the status and message bars; stopping above them pushed the last
+    // Options row off a 1024x640 window. What still will not fit scrolls.
     int n_item = 0;
     int n_sep = 0;
     for (int i = 0; i < count; ++i) {
@@ -593,7 +594,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             ++n_item;
         }
     }
-    const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - status_h_ - message_h_ - 6));
+    const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - 4));
     const int label_h = measure_text(cr, menu_font(), "Ag", -1).height;
     menu_table::MenuPitch pitch =
         menu_table::menu_pitch(avail, n_item, n_sep, static_cast<double>(control_px(36, 48)), label_h);
@@ -653,7 +654,11 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         }
         visible_bottom = y + h;
     }
-    const double drop_h = content_h <= avail + 0.5 ? content_h : std::min(avail, visible_bottom - menu_h_ + 4.0);
+    double drop_h = content_h <= avail + 0.5 ? content_h : std::min(avail, visible_bottom - menu_h_ + 4.0);
+    const double max_drop = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - 4));
+    if (drop_h > max_drop) {
+        drop_h = max_drop;
+    }
     if (drop_x + drop_w > win_w_ - 4) {
         drop_x = std::max(4.0, win_w_ - drop_w - 4);
     }
@@ -3463,19 +3468,14 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     cairo_fill(cr);
     push_hot(0, 0, win_w_, win_h_, 0);
 
-    const double top_limit = menu_h_ + dp(6);
-    const double bottom_limit = band_h - dp(6);
-    const double avail_h = std::max(1.0, bottom_limit - top_limit);
+    double top_limit = menu_h_ + dp(6);
+    double bottom_limit = band_h - dp(6);
+    double avail_h = std::max(1.0, bottom_limit - top_limit);
     const double avail_w = std::max(1.0, static_cast<double>(win_w_) - 2.0 * margin);
     const double panel_w = std::min(static_cast<double>(dp(900)), avail_w);
     const double frame = std::max(6.0, static_cast<double>(dp(8)));
     const double gap = dp(8);
     const double button_h = static_cast<double>(control_px(36, 42));
-    const std::string serif_kicker = ui_scale::scaled_font("DejaVu Serif Bold", 15, ui_scale_);
-    const std::string serif_year = ui_scale::scaled_font("DejaVu Serif Bold", 40, ui_scale_);
-    const std::string serif_city = ui_scale::scaled_font("DejaVu Serif Bold", 20, ui_scale_);
-    const std::string serif_meta = ui_scale::scaled_font("DejaVu Serif", 14, ui_scale_);
-    const std::string serif_card = ui_scale::scaled_font("DejaVu Serif Bold", 23, ui_scale_);
     const double inner_w_est = std::max(1.0, panel_w - 2.0 * frame - dp(62));
     const double card_w_est = std::max(1.0, (inner_w_est - 2.0 * gap) / 3.0);
     const double col_w_est = std::max(1.0, (inner_w_est - gap) / 2.0);
@@ -3493,20 +3493,6 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     };
     const std::string pop_line = "Population " + plain_number(report.population);
     const std::string tax_line = "Tax " + std::to_string(digest.tax_percent) + "%";
-    const int kicker_h = measure_text(cr, serif_kicker.c_str(), "YEAR IN REVIEW", static_cast<int>(left_w_est)).height;
-    const int year_h = measure_text(cr, serif_year.c_str(), year_text, static_cast<int>(left_w_est)).height;
-    const int city_h = measure_text(cr, serif_city.c_str(), who, static_cast<int>(right_w_est)).height;
-    const int meta_h = std::max(measure_text(cr, serif_meta.c_str(), pop_line, static_cast<int>(right_w_est)).height,
-                                 measure_text(cr, serif_meta.c_str(), tax_line, static_cast<int>(right_w_est)).height);
-    const double header_block = std::max(static_cast<double>(kicker_h + dp(2) + year_h),
-                                         static_cast<double>(city_h + dp(4) + meta_h + dp(2) + meta_h));
-    auto card_need = [&](const char *title, const std::string &body, double w) {
-        const int wrap = static_cast<int>(std::max(1.0, w - dp(20)));
-        const int title_h = measure_text(cr, serif_card.c_str(), title, wrap).height;
-        const std::string shown = body.empty() ? std::string(" ") : body;
-        const int body_h = measure_text(cr, body_font(), shown, wrap).height;
-        return static_cast<double>(dp(6) + title_h + dp(8) + body_h + dp(18));
-    };
     const std::int64_t delta = digest.closing_funds - digest.opening_funds;
     const std::string flow =
         std::string(delta >= 0 ? "Surplus " : "Deficit ") + civic::dollars(delta >= 0 ? delta : -delta);
@@ -3555,13 +3541,144 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         }
         challenges += digest.card.intention;
     }
-    const double top_need = std::max(card_need("Funds", funds_body, card_w_est),
-                                     std::max(card_need("People", people_body, card_w_est),
-                                              card_need("Standing", standing, card_w_est)));
-    const double low_need = std::max(card_need("Highlights", highlights, col_w_est),
-                                     card_need("Challenges", challenges, col_w_est));
-    const double chrome = 2.0 * frame + dp(16) + header_block + dp(10) + dp(12) + button_h + dp(16);
-    const double panel_h = year_card_panel_height(avail_h, chrome, top_need, low_need, gap);
+    // A short window used to shrink the top boxes and drop Deficit and the
+    // census line. Try the natural card, then a shorter header and tighter
+    // padding, then the message strip, then one step down in type. The boxes
+    // stay as tall as the text that was measured for the step that fits.
+    struct YearFace {
+        int kicker = 15;
+        int year = 40;
+        int city = 20;
+        int meta = 14;
+        int card = 23;
+        int body = 14;
+        double paper = 0;
+        double after_header = 0;
+        double before_buttons = 0;
+        double after_buttons = 0;
+        double box_top = 0;
+        double box_mid = 0;
+        double box_bot = 0;
+    };
+    struct YearMeasure {
+        double content = 0;
+        double header = 0;
+        double top = 0;
+        double low = 0;
+        int kicker_h = 0;
+        int year_h = 0;
+        int city_h = 0;
+        int meta_h = 0;
+        std::string kicker_font;
+        std::string year_font;
+        std::string city_font;
+        std::string meta_font;
+        std::string card_font;
+        std::string body_font;
+    };
+    auto face_at = [&](int kicker, int year, int city, int meta, int card, int body, int paper, int after_header,
+                       int before_buttons, int after_buttons, int box_top_px, int box_mid, int box_bot) {
+        YearFace face;
+        face.kicker = kicker;
+        face.year = year;
+        face.city = city;
+        face.meta = meta;
+        face.card = card;
+        face.body = body;
+        face.paper = paper;
+        face.after_header = after_header;
+        face.before_buttons = before_buttons;
+        face.after_buttons = after_buttons;
+        face.box_top = box_top_px;
+        face.box_mid = box_mid;
+        face.box_bot = box_bot;
+        return face;
+    };
+    const YearFace natural = face_at(15, 40, 20, 14, 23, 14, dp(16), dp(10), dp(12), dp(16), dp(6), dp(8), dp(18));
+    const YearFace compact = face_at(13, 30, 16, 12, 18, 14, dp(8), dp(4), dp(6), dp(8), dp(4), dp(4), dp(8));
+    YearFace small = face_at(12, 24, 15, 12, 16, 12, dp(6), dp(4), dp(6), dp(6), dp(3), dp(3), dp(6));
+    auto measure_face = [&](const YearFace &face) {
+        YearMeasure out;
+        out.kicker_font = ui_scale::scaled_font("DejaVu Serif Bold", face.kicker, ui_scale_);
+        out.year_font = ui_scale::scaled_font("DejaVu Serif Bold", face.year, ui_scale_);
+        out.city_font = ui_scale::scaled_font("DejaVu Serif Bold", face.city, ui_scale_);
+        out.meta_font = ui_scale::scaled_font("DejaVu Serif", face.meta, ui_scale_);
+        out.card_font = ui_scale::scaled_font("DejaVu Serif Bold", face.card, ui_scale_);
+        out.body_font = ui_scale::scaled_font("Sans", face.body, ui_scale_);
+        out.kicker_h = measure_text(cr, out.kicker_font.c_str(), "YEAR IN REVIEW", static_cast<int>(left_w_est)).height;
+        out.year_h = measure_text(cr, out.year_font.c_str(), year_text, static_cast<int>(left_w_est)).height;
+        out.city_h = measure_text(cr, out.city_font.c_str(), who, static_cast<int>(right_w_est)).height;
+        out.meta_h = std::max(measure_text(cr, out.meta_font.c_str(), pop_line, static_cast<int>(right_w_est)).height,
+                              measure_text(cr, out.meta_font.c_str(), tax_line, static_cast<int>(right_w_est)).height);
+        out.header = std::max(static_cast<double>(out.kicker_h + dp(2) + out.year_h),
+                              static_cast<double>(out.city_h + dp(4) + out.meta_h + dp(2) + out.meta_h));
+        auto card_need = [&](const char *title, const std::string &body, double w) {
+            const int wrap = static_cast<int>(std::max(1.0, w - dp(20)));
+            const int title_h = measure_text(cr, out.card_font.c_str(), title, wrap).height;
+            const std::string shown = body.empty() ? std::string(" ") : body;
+            const int body_h = measure_text(cr, out.body_font.c_str(), shown, wrap).height;
+            return face.box_top + static_cast<double>(title_h) + face.box_mid + static_cast<double>(body_h) + face.box_bot;
+        };
+        out.top = std::max(card_need("Funds", funds_body, card_w_est),
+                           std::max(card_need("People", people_body, card_w_est),
+                                    card_need("Standing", standing, card_w_est)));
+        out.low = std::max(card_need("Highlights", highlights, col_w_est), card_need("Challenges", challenges, col_w_est));
+        const double chrome = 2.0 * frame + face.paper + out.header + face.after_header + face.before_buttons + button_h +
+                              face.after_buttons;
+        out.content = chrome + out.top + gap + out.low;
+        return out;
+    };
+    const double band_avail = avail_h;
+    const double window_top = static_cast<double>(menu_h_) + dp(2);
+    const double window_bottom = static_cast<double>(win_h_ - status_h_) - dp(2);
+    const double window_avail = std::max(band_avail, window_bottom - window_top);
+    YearMeasure natural_m = measure_face(natural);
+    YearMeasure compact_m = measure_face(compact);
+    YearMeasure small_m = measure_face(small);
+    int tier = year_card_tier(band_avail, window_avail, natural_m.content, compact_m.content, small_m.content);
+    YearFace face = tier == 0 ? natural : (tier >= 3 ? small : compact);
+    YearMeasure fitted = tier == 0 ? natural_m : (tier >= 3 ? small_m : compact_m);
+    if (tier >= 3) {
+        int guard = 0;
+        while (fitted.content > window_avail + 0.5 && face.body > 10 && guard < 8) {
+            face.body -= 1;
+            face.card = std::max(12, face.card - 1);
+            face.year = std::max(18, face.year - 2);
+            face.paper = std::max(4.0, face.paper - 2.0);
+            face.after_buttons = std::max(4.0, face.after_buttons - 1.0);
+            fitted = measure_face(face);
+            ++guard;
+        }
+    }
+    if (tier >= 2) {
+        top_limit = window_top;
+        bottom_limit = window_bottom;
+        avail_h = std::max(1.0, bottom_limit - top_limit);
+        cairo_set_source_rgba(cr, 0, 0, 0, 0.28);
+        cairo_rectangle(cr, 0, band_h, win_w_, std::max(0.0, bottom_limit - band_h));
+        cairo_fill(cr);
+    }
+    const std::string serif_kicker = fitted.kicker_font;
+    const std::string serif_year = fitted.year_font;
+    const std::string serif_city = fitted.city_font;
+    const std::string serif_meta = fitted.meta_font;
+    const std::string serif_card = fitted.card_font;
+    const std::string year_body_font = fitted.body_font;
+    const int kicker_h = fitted.kicker_h;
+    const int year_h = fitted.year_h;
+    const int city_h = fitted.city_h;
+    const int meta_h = fitted.meta_h;
+    const double top_need = fitted.top;
+    const double low_need = fitted.low;
+    const double paper_pad = face.paper;
+    const double header_gap = face.after_header;
+    const double button_gap = face.before_buttons;
+    const double box_top = face.box_top;
+    const double box_mid = face.box_mid;
+    const double top_h = top_need;
+    const double low_h = low_need;
+    year_box_shortfall_ = std::max(0.0, fitted.content - avail_h);
+    const double panel_h = year_card_panel_height(avail_h, fitted.content - top_need - gap - low_need, top_need, low_need, gap);
     const double panel_x = (static_cast<double>(win_w_) - panel_w) / 2.0;
     const double panel_y = top_limit + (avail_h - panel_h) / 2.0;
     const double paper_x = panel_x + frame;
@@ -3591,7 +3708,7 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     const double left_w = std::max(1.0, inner_w * 0.46);
     const double right_x = inner_x + inner_w * 0.50;
     const double right_w = std::max(1.0, inner_x + inner_w - right_x);
-    double cursor = paper_y + dp(16);
+    double cursor = paper_y + paper_pad;
     paint_text(cr, serif_kicker.c_str(), "YEAR IN REVIEW", inner_x, cursor, title_r, title_g, title_b,
                static_cast<int>(left_w));
     paint_text(cr, serif_city.c_str(), who, right_x, cursor, ink_r, ink_g, ink_b, static_cast<int>(right_w));
@@ -3603,17 +3720,10 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
                static_cast<int>(right_w));
     const double header_bottom = cursor + std::max(static_cast<double>(kicker_h + dp(2) + year_h),
                                                     static_cast<double>(city_h + dp(4) + meta_h + dp(2) + meta_h));
-    cursor = header_bottom + dp(10);
+    cursor = header_bottom + header_gap;
 
     const double card_w = std::max(1.0, (inner_w - 2.0 * gap) / 3.0);
     const double col_w = std::max(1.0, (inner_w - gap) / 2.0);
-    // The panel is the content height, capped by the window. When a long year
-    // does not fit, the boxes share that room so the buttons stay on the paper.
-    const double cards_room =
-        std::max(1.0, paper_h - (dp(16) + header_block + dp(10) + dp(12) + button_h + dp(16)));
-    const YearBoxPlan boxes = plan_year_boxes(cards_room, 0.0, gap, top_need, low_need);
-    const double top_h = boxes.top_h;
-    const double low_h = boxes.low_h;
 
     auto card_box = [&](double x, double y, double w, double h, const char *title, const std::string &body, double tr,
                         double tg, double tb) {
@@ -3624,9 +3734,10 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         cairo_clip(cr);
         const int title_w = static_cast<int>(std::max(1.0, w - dp(20)));
         const int title_h = measure_text(cr, serif_card.c_str(), title, title_w).height;
-        paint_text(cr, serif_card.c_str(), title, x + dp(10), y + dp(6), tr, tg, tb, title_w);
+        paint_text(cr, serif_card.c_str(), title, x + dp(10), y + box_top, tr, tg, tb, title_w);
         const int body_w = static_cast<int>(std::max(1.0, w - dp(20)));
-        paint_text(cr, body_font(), body, x + dp(10), y + dp(6) + title_h + dp(8), body_r, body_g, body_b, body_w);
+        paint_text(cr, year_body_font.c_str(), body, x + dp(10), y + box_top + title_h + box_mid, body_r, body_g, body_b,
+                   body_w);
         cairo_restore(cr);
     };
 
@@ -3637,7 +3748,7 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     cursor += top_h + gap;
     card_box(inner_x, cursor, col_w, low_h, "Highlights", highlights, funds_r, funds_g, funds_b);
     card_box(inner_x + col_w + gap, cursor, col_w, low_h, "Challenges", challenges, title_r, title_g, title_b);
-    const double buttons_top = cursor + low_h + dp(12);
+    const double buttons_top = cursor + low_h + button_gap;
 
     auto ornate = [&](double x, double y, double w, double h, const char *label, int id, bool primary) {
         push_hot(x, y, w, h, id);

@@ -651,6 +651,9 @@ private:
     bool osk_shift_ = false;
     bool ui_test_ = false;
     bool review_ = false;
+    // How many pixels a year-card box was shorter than its text. Zero means
+    // every measured line was given a box tall enough to hold it.
+    double year_box_shortfall_ = 0;
     int ui_step_ = 0;
     int ui_column_ = 0;
     int ui_drag_frames_ = 0;

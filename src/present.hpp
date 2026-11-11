@@ -246,6 +246,32 @@ inline double year_card_panel_height(double avail, double chrome, double top_nee
     return std::min(avail, std::max(1.0, content));
 }
 
+// How a year card fits a short window without dropping a line.
+// 0: the natural card fits above the message bar.
+// 1: a shorter header and tighter padding fit there.
+// 2: that compact card also needs the message strip.
+// 3: the card font steps down, and the panel uses the message strip.
+inline int year_card_tier(double band, double window, double natural, double compact, double smaller)
+{
+    if (band < 1.0) {
+        band = 1.0;
+    }
+    if (window < band) {
+        window = band;
+    }
+    if (natural <= band + 0.5) {
+        return 0;
+    }
+    if (compact <= band + 0.5) {
+        return 1;
+    }
+    if (compact <= window + 0.5) {
+        return 2;
+    }
+    (void)smaller;
+    return 3;
+}
+
 struct LayoutPoint {
     double x = 0;
     double y = 0;

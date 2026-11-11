@@ -1718,6 +1718,21 @@ void Shell::run_review_checks()
                     render();
                     return;
                 }
+                if (menu_h_ + menu_drop_h_ > static_cast<double>(win_h_) + 1.0) {
+                    fail("menu " + std::to_string(column) + " runs off the window at " + std::to_string(size[0]) +
+                         "x" + std::to_string(size[1]));
+                    menu_.close();
+                    SDL_SetWindowSize(window_, saved_w, saved_h);
+                    render();
+                    return;
+                }
+                if (column == 1 && size[0] == 1024 && size[1] == 640 && !row_visible(column, last)) {
+                    fail("Spooky Look is off the Options menu at 1024x640");
+                    menu_.close();
+                    SDL_SetWindowSize(window_, saved_w, saved_h);
+                    render();
+                    return;
+                }
                 for (int i = 0; i < count; ++i) {
                     if (items[i].kind == ItemKind::Separator) {
                         continue;
@@ -2370,6 +2385,31 @@ void Shell::run_review_checks()
             fail("the year card clipped the buttons or left a tall empty band (button at " +
                  std::to_string(static_cast<int>(button_top)) + ")");
             return;
+        }
+        {
+            const int saved_w = win_w_;
+            const int saved_h = win_h_;
+            SDL_SetWindowSize(window_, 1024, 640);
+            render();
+            double short_top = -1;
+            double short_bottom = -1;
+            for (const Hotspot &spot : hot_) {
+                if (spot.id == kClose) {
+                    short_top = spot.y;
+                    short_bottom = spot.y + spot.h;
+                }
+            }
+            const double above_status = static_cast<double>(win_h_ - status_h_);
+            if (win_w_ != 1024 || win_h_ != 640 || year_box_shortfall_ > 0.5 || short_top < menu_h_ ||
+                short_bottom > above_status - 1.0) {
+                fail("the year card dropped a line or left the window at 1024x640 (shortfall " +
+                     std::to_string(static_cast<int>(year_box_shortfall_)) + ")");
+                SDL_SetWindowSize(window_, saved_w, saved_h);
+                render();
+                return;
+            }
+            SDL_SetWindowSize(window_, saved_w, saved_h);
+            render();
         }
         if (year_digest().locate) {
             const int tile_x = year_digest().locate_x;
