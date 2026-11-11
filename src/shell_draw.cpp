@@ -43,7 +43,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <string>
 
 namespace {
@@ -125,12 +124,16 @@ void Shell::layout()
     if (renderer_ != nullptr) {
         SDL_GetRenderOutputSize(renderer_, &renderer_w, &renderer_h);
     }
+    const bool fullscreen = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
+    if (fullscreen) {
+        // Entering again must not keep painting the windowed layout.
+        restoring_windowed_ = false;
+        fullscreen_hold_frames_ = 0;
+    }
     // While fullscreen is being left, a screen-sized renderer must not become
-    // the layout. Laying out small and stretching into that output is the crop.
-    const int drawable_w = (restoring_windowed_ && renderer_w > 0) ? renderer_w : pixel_w;
-    const int drawable_h = (restoring_windowed_ && renderer_h > 0) ? renderer_h : pixel_h;
-    const LayoutPixels laid = layout_pixels_leaving_fullscreen(restoring_windowed_, drawable_w, drawable_h, normal_w_,
-                                                              normal_h_, windowed_density_);
+    // the layout. Once fullscreen, the live pixel size is the layout.
+    const LayoutPixels laid = layout_pixels_for_window(fullscreen, restoring_windowed_, pixel_w, pixel_h, normal_w_,
+                                                      normal_h_, windowed_density_);
     if (restoring_windowed_ &&
         !fullscreen_exit_needs_drawable_refresh(frame_w, frame_h, renderer_w, renderer_h, normal_w_, normal_h_,
                                                windowed_density_)) {
@@ -3470,7 +3473,7 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     const double avail_h = std::max(1.0, bottom_limit - top_limit);
     const double avail_w = std::max(1.0, static_cast<double>(win_w_) - 2.0 * margin);
     const double panel_w = std::min(static_cast<double>(dp(900)), avail_w);
-    const double panel_h = std::min(static_cast<double>(dp(540)), avail_h);
+    const double panel_h = std::min(avail_h, std::max(static_cast<double>(dp(540)), static_cast<double>(dp(720))));
     const double panel_x = (static_cast<double>(win_w_) - panel_w) / 2.0;
     const double panel_y = top_limit + (avail_h - panel_h) / 2.0;
     const double frame = std::max(6.0, static_cast<double>(dp(8)));
@@ -3549,7 +3552,7 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         const int title_h = measure_text(cr, serif_card.c_str(), title, wrap).height;
         const std::string shown = body.empty() ? std::string(" ") : body;
         const int body_h = measure_text(cr, body_font(), shown, wrap).height;
-        return static_cast<double>(dp(6) + title_h + dp(8) + body_h + dp(12));
+        return static_cast<double>(dp(6) + title_h + dp(8) + body_h + dp(18));
     };
     const std::int64_t delta = digest.closing_funds - digest.opening_funds;
     const std::string flow =
@@ -3794,26 +3797,21 @@ void Shell::render()
         int output_w = 0;
         int output_h = 0;
         SDL_GetRenderOutputSize(renderer_, &output_w, &output_h);
-        const char *driver = SDL_GetRendererName(renderer_);
-        const bool bottom_origin = driver == nullptr || std::strcmp(driver, "software") != 0;
-        const PresentPlace place = present_place(win_w_, win_h_, output_w, output_h, bottom_origin);
-        const bool layout_is_screen = restoring_windowed_ && normal_valid_ && win_w_ > normal_w_ + 48;
-        if (hold_stale_fullscreen_present(restoring_windowed_, layout_is_screen, fullscreen_hold_frames_)) {
+        const bool mismatch = output_w > 0 && output_h > 0 &&
+                              (std::abs(output_w - win_w_) > 48 || std::abs(output_h - win_h_) > 48);
+        if (mismatch) {
+            match_renderer_output();
+            SDL_GetRenderOutputSize(renderer_, &output_w, &output_h);
+        }
+        const bool still_off = output_w > 0 && output_h > 0 &&
+                               (std::abs(output_w - win_w_) > 48 || std::abs(output_h - win_h_) > 48);
+        if (hold_stale_fullscreen_present(true, still_off, fullscreen_hold_frames_)) {
             ++fullscreen_hold_frames_;
         } else {
             SDL_UpdateTexture(texture_, nullptr, cairo_image_surface_get_data(frame_surface_),
                               cairo_image_surface_get_stride(frame_surface_));
             SDL_RenderClear(renderer_);
-            if (place.fitted) {
-                SDL_FRect dest;
-                dest.x = static_cast<float>(place.x);
-                dest.y = static_cast<float>(place.y);
-                dest.w = static_cast<float>(place.w);
-                dest.h = static_cast<float>(place.h);
-                SDL_RenderTexture(renderer_, texture_, nullptr, &dest);
-            } else {
-                SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
-            }
+            SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
             SDL_RenderPresent(renderer_);
             fullscreen_hold_frames_ = 0;
         }

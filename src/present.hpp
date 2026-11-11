@@ -30,10 +30,24 @@ inline double glide_mix(double from, double to, double t)
     return from + (to - from) * glide_ease(t);
 }
 
-// Auto-goto pan. 280 ms, then the marker blinks.
+// Auto-goto pan. 280 ms, then the marker blinks for a couple of seconds.
 inline constexpr int kGlideMs = 280;
-inline constexpr int kMarkerMs = 640;
-inline constexpr int kMarkerBlink = 160;
+inline constexpr int kMarkerMs = 2200;
+inline constexpr int kMarkerBlink = 200;
+
+// A long idle frame must not skip the blink. The ring steps at most one
+// blink-slice per call so a paused city still flashes for the whole beat.
+inline int marker_step_ms(int elapsed_ms)
+{
+    if (elapsed_ms < 0) {
+        return 0;
+    }
+    const int slice = kMarkerBlink / 2;
+    if (elapsed_ms > slice) {
+        return slice;
+    }
+    return elapsed_ms;
+}
 
 inline bool marker_lit(int elapsed_ms)
 {
@@ -201,6 +215,20 @@ inline LayoutPixels layout_pixels_leaving_fullscreen(bool restoring, int live_w,
     out.w = want_w;
     out.h = want_h;
     return out;
+}
+
+// Fullscreen uses the live pixel size. A restore in progress must not keep
+// the windowed layout once the window is fullscreen again.
+inline LayoutPixels layout_pixels_for_window(bool fullscreen, bool restoring, int pixel_w, int pixel_h, int restored_w,
+                                            int restored_h, float density)
+{
+    if (fullscreen) {
+        LayoutPixels out;
+        out.w = std::max(1, pixel_w);
+        out.h = std::max(1, pixel_h);
+        return out;
+    }
+    return layout_pixels_leaving_fullscreen(restoring, pixel_w, pixel_h, restored_w, restored_h, density);
 }
 
 struct LayoutPoint {

@@ -282,7 +282,7 @@ void Shell::advance_presentation(int elapsed_ms)
         }
     }
     if (marker_on_) {
-        marker_ms_ += elapsed_ms;
+        marker_ms_ += marker_step_ms(elapsed_ms);
         if (marker_ms_ >= kMarkerMs) {
             marker_on_ = false;
         }
@@ -1208,9 +1208,27 @@ void Shell::toggle_fullscreen()
     const bool full = (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
     if (!full) {
         note_window_geometry();
+        restoring_windowed_ = false;
+        fullscreen_hold_frames_ = 0;
         SDL_SetWindowFullscreen(window_, true);
-        SDL_SyncWindow(window_);
+        // A late configure must not leave the windowed layout in the corner
+        // of the screen. Read the pixel size until it leaves that rectangle.
+        const Uint64 end = SDL_GetTicks() + 40;
+        do {
+            SDL_PumpEvents();
+            int pw = 0;
+            int ph = 0;
+            SDL_GetWindowSizeInPixels(window_, &pw, &ph);
+            if (pw > normal_w_ + 48 || ph > normal_h_ + 48) {
+                break;
+            }
+            if (SDL_GetTicks() >= end) {
+                break;
+            }
+            SDL_Delay(1);
+        } while (true);
         layout();
+        match_renderer_output();
         save_window_settings();
         return;
     }

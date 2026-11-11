@@ -164,10 +164,15 @@ int main()
     if (fullscreen_exit_position_is_spurious(198, 127, 200, 130)) {
         return fail(38, "the windowed position was discarded");
     }
-    const PresentPlace fitted = present_place(1523, 825, 1920, 1080, true);
     const PresentPlace matched = present_place(1523, 825, 1523, 825, true);
-    if (!fitted.fitted || fitted.y != 1080 - 825 || fitted.w != 1523 || fitted.h != 825 || matched.fitted) {
-        return fail(39, "a screen-sized drawable still stretches the windowed frame");
+    const LayoutPixels entered = layout_pixels_for_window(true, true, 1920, 1080, 1523, 825, 1.0f);
+    const LayoutPixels windowed_again = layout_pixels_for_window(false, true, 1920, 1080, 1523, 825, 1.0f);
+    if (matched.fitted || entered.w != 1920 || entered.h != 1080 || windowed_again.w != 1523 || windowed_again.h != 825) {
+        return fail(39, "fullscreen kept the windowed layout, or a matched frame was moved");
+    }
+    if (marker_step_ms(500) > kMarkerBlink / 2 || marker_step_ms(10) != 10 || !marker_lit(0) || marker_lit(kMarkerMs) ||
+        kMarkerMs < 2000) {
+        return fail(39, "the highlight ring does not blink for a couple of seconds");
     }
     if (!hold_stale_fullscreen_present(true, true, 0) || hold_stale_fullscreen_present(true, true, 1) ||
         hold_stale_fullscreen_present(false, true, 0)) {
