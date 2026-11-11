@@ -3722,9 +3722,9 @@ void Shell::render()
         blink_drew_ = false;
         return;
     }
-    // The leave-fullscreen configure is easy to miss. Keep pulling the
-    // drawable back to the windowed size until it agrees, then draw.
-    if (restoring_windowed_ && windowed_settle_tries_ < 3) {
+    // One more try on the next frame if the drawable was not ready in the
+    // toggle itself. This does not wait on a window-sync timeout.
+    if (restoring_windowed_ && windowed_settle_tries_ < 1) {
         ++windowed_settle_tries_;
         settle_windowed_frame();
     }

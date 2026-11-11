@@ -1139,19 +1139,65 @@ void Shell::settle_windowed_frame()
     if (window_ == nullptr || !normal_valid_ || normal_w_ < 320 || normal_h_ < 240) {
         return;
     }
-    // Leaving fullscreen drops the configure that returns the window to its
-    // old size, and a later resize to that same size does not send another.
-    // SDL and the renderer then stay at the screen size. A one-pixel change
-    // forces a configure, and the real size and position follow it.
-    for (int attempt = 0; attempt < 4 && !windowed_frame_current(); ++attempt) {
-        SDL_PumpEvents();
-        SDL_SetWindowSize(window_, normal_w_ + 1, normal_h_);
-        SDL_SyncWindow(window_);
-        SDL_SetWindowSize(window_, normal_w_, normal_h_);
-        SDL_SetWindowPosition(window_, normal_x_, normal_y_);
-        SDL_SyncWindow(window_);
-        SDL_PumpEvents();
+    // SDL_SyncWindow waits out its whole timeout when the restored size does
+    // not match the size it still expects from fullscreen. Several of those
+    // waits kept the previous frame on screen for about a second. Pump until
+    // the change is visible instead, and only for a short moment.
+    auto pump_for = [](Uint64 budget_ms, const auto &done) {
+        const Uint64 end = SDL_GetTicks() + budget_ms;
+        do {
+            SDL_PumpEvents();
+            if (done()) {
+                return true;
+            }
+            if (SDL_GetTicks() >= end) {
+                break;
+            }
+            SDL_Delay(1);
+        } while (true);
+        return done();
+    };
+    if ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0) {
+        pump_for(20, [&]() { return (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) == 0; });
     }
+    if ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0) {
+        return;
+    }
+    int ww = 0;
+    int wh = 0;
+    SDL_GetWindowSize(window_, &ww, &wh);
+    const bool size_back = std::abs(ww - normal_w_) <= 2 && std::abs(wh - normal_h_) <= 2;
+    int x = 0;
+    int y = 0;
+    SDL_GetWindowPosition(window_, &x, &y);
+    const bool position_back = !fullscreen_exit_position_is_spurious(x, y, normal_x_, normal_y_);
+    if (size_back && position_back) {
+        // The frame is back. A renderer that is still the screen size is
+        // rebuilt by the caller; another resize would only flash.
+        return;
+    }
+    // A same-size resize does not emit a configure once the window manager
+    // has already restored the frame. Change it, wait until that change is
+    // visible, then put the real size and position back.
+    SDL_SetWindowSize(window_, normal_w_ + 1, normal_h_);
+    pump_for(20, [&]() {
+        int live_w = 0;
+        int live_h = 0;
+        SDL_GetWindowSize(window_, &live_w, &live_h);
+        return live_w == normal_w_ + 1 && live_h == normal_h_;
+    });
+    SDL_SetWindowSize(window_, normal_w_, normal_h_);
+    SDL_SetWindowPosition(window_, normal_x_, normal_y_);
+    pump_for(20, [&]() {
+        int live_w = 0;
+        int live_h = 0;
+        int live_x = 0;
+        int live_y = 0;
+        SDL_GetWindowSize(window_, &live_w, &live_h);
+        SDL_GetWindowPosition(window_, &live_x, &live_y);
+        return std::abs(live_w - normal_w_) <= 2 && std::abs(live_h - normal_h_) <= 2 &&
+               !fullscreen_exit_position_is_spurious(live_x, live_y, normal_x_, normal_y_);
+    });
 }
 
 void Shell::toggle_fullscreen()
@@ -1171,10 +1217,6 @@ void Shell::toggle_fullscreen()
     windowed_settle_tries_ = 0;
     restoring_windowed_ = normal_valid_;
     SDL_SetWindowFullscreen(window_, false);
-    SDL_SyncWindow(window_);
-    for (int attempt = 0; attempt < 3 && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0; ++attempt) {
-        SDL_SyncWindow(window_);
-    }
     settle_windowed_frame();
     layout();
     match_renderer_output();
