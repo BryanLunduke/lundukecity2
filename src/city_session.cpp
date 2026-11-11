@@ -1830,6 +1830,13 @@ bool CitySession::needs_save_prompt() const
     if (dirty_ || budget_pending()) {
         return true;
     }
+    // A scenario has no save file until the player writes one. Quitting
+    // throws that session away, so it asks even before the first edit.
+    // A generated city that was never touched, and a saved file that has
+    // not changed since it was loaded, do not.
+    if (ready_ && !fresh_generated_ && save_path_.empty() && engine_ != nullptr && engine_->sim.scoreType != SC_NONE) {
+        return true;
+    }
     if (!time_advanced_since_save()) {
         return false;
     }

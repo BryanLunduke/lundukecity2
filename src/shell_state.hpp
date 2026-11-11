@@ -354,6 +354,7 @@ private:
     // Pixel density of the windowed frame. Fullscreen must not replace it.
     float windowed_density_ = 1.0f;
     int windowed_settle_tries_ = 0;
+    int fullscreen_hold_frames_ = 0;
     int view_x_ = 0;
     int view_y_ = 0;
     int view_w_ = 1;

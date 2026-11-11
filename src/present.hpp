@@ -249,6 +249,97 @@ inline bool fullscreen_exit_position_is_spurious(int live_x, int live_y, int kep
     return std::abs(live_x - kept_x) > 48 || std::abs(live_y - kept_y) > 48;
 }
 
+// Where to put the windowed frame when the renderer output is still the
+// screen. A bottom-origin drawable shows the bottom of that output, so the
+// frame has to sit there or the menu is clipped. A top-origin drawable shows
+// the top, so the frame stays at the origin. Never stretch it to the screen.
+struct PresentPlace {
+    double x = 0;
+    double y = 0;
+    double w = 1;
+    double h = 1;
+    bool fitted = false;
+};
+
+inline PresentPlace present_place(int layout_w, int layout_h, int output_w, int output_h, bool bottom_origin)
+{
+    PresentPlace place;
+    place.w = std::max(1, layout_w);
+    place.h = std::max(1, layout_h);
+    if (output_w > layout_w + 48 || output_h > layout_h + 48) {
+        place.fitted = true;
+        if (bottom_origin) {
+            place.y = std::max(0, output_h - layout_h);
+        }
+    }
+    return place;
+}
+
+// Skip at most one present while the drawable is still the screen, so a
+// stale frame cannot sit on screen and the loop cannot freeze.
+inline bool hold_stale_fullscreen_present(bool restoring, bool drawable_stale, int skipped)
+{
+    return restoring && drawable_stale && skipped < 1;
+}
+
+struct YearBoxPlan {
+    double top_h = 1;
+    double low_h = 1;
+};
+
+// Bottom cards keep the height their text needs. Extra paper is used first.
+// The top cards shrink before a bottom line is clipped.
+inline YearBoxPlan plan_year_boxes(double room, double extra, double gap, double top_need, double low_need)
+{
+    if (gap < 0.0) {
+        gap = 0.0;
+    }
+    if (top_need < 1.0) {
+        top_need = 1.0;
+    }
+    if (low_need < 1.0) {
+        low_need = 1.0;
+    }
+    if (extra < 0.0) {
+        extra = 0.0;
+    }
+    if (room < 1.0) {
+        room = 1.0;
+    }
+    const double need = top_need + gap + low_need;
+    double grow = 0.0;
+    if (need > room) {
+        grow = std::min(extra, need - room);
+    }
+    const double usable = room + grow;
+    YearBoxPlan plan;
+    if (top_need + gap + low_need <= usable + 0.5) {
+        plan.top_h = top_need;
+        plan.low_h = low_need;
+        return plan;
+    }
+    plan.low_h = std::min(low_need, std::max(1.0, usable - gap - 1.0));
+    plan.top_h = std::max(1.0, usable - gap - plan.low_h);
+    if (plan.low_h + 0.5 < low_need && plan.top_h > 1.0) {
+        const double give = std::min(plan.top_h - 1.0, low_need - plan.low_h);
+        plan.top_h -= give;
+        plan.low_h += give;
+    }
+    return plan;
+}
+
+// Focused dialog buttons use the Quit notice's blue, not a pale wash.
+struct DialogFocusFill {
+    double r = 0.20;
+    double g = 0.42;
+    double b = 0.72;
+};
+
+inline DialogFocusFill dialog_focus_fill()
+{
+    return {};
+}
+
 // The thumb stays on the track at both ends. At 100% it used to hang past
 // the right end by half its width.
 inline double slider_thumb_x(double track_x, double track_w, double thumb_w, double t)

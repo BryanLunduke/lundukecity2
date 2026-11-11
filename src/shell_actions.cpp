@@ -1250,6 +1250,12 @@ void Shell::finish_year_and_close(bool jump)
     close_dialog();
     if (jump_ok) {
         center_on_fraction((tile_x + 0.5) / CitySession::kWorldW, (tile_y + 0.5) / CitySession::kWorldH);
+        // The camera clamps at the edge, so the tile may not be centered.
+        // The same blink used by auto-goto keeps the target obvious.
+        marker_tx_ = tile_x;
+        marker_ty_ = tile_y;
+        marker_ms_ = 0;
+        marker_on_ = true;
     }
 }
 

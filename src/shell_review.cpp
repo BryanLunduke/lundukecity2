@@ -1245,6 +1245,23 @@ void Shell::run_review_checks()
         fail("could not load a city after the touch session");
         return;
     }
+    if (!session_.needs_save_prompt()) {
+        fail("a scenario with no save file quit without asking");
+        return;
+    }
+    const bool welcome_was = welcome_gate_;
+    welcome_gate_ = false;
+    request_with_save(AfterSave::Quit);
+    if (dialog_ != Dialog::Unsaved || after_save_ != AfterSave::Quit) {
+        fail("quitting a scenario did not ask to save");
+        return;
+    }
+    on_dialog_button(kCancel);
+    welcome_gate_ = welcome_was;
+    if (quitting_ || dialog_ != Dialog::None) {
+        fail("cancel on the scenario save prompt did not stay in the city");
+        return;
+    }
     render();
     const auto loaded_funds = session_.funds();
     const auto loaded_map = stamp();
@@ -2336,6 +2353,20 @@ void Shell::run_review_checks()
         if (!saw_close) {
             fail("the year-end cover has no Close button");
             return;
+        }
+        if (year_digest().locate) {
+            const int tile_x = year_digest().locate_x;
+            const int tile_y = year_digest().locate_y;
+            marker_on_ = false;
+            on_dialog_button(kYearLocate);
+            if (!marker_on_ || marker_tx_ != tile_x || marker_ty_ != tile_y || dialog_ != Dialog::None) {
+                fail("Map did not mark the highlight and close the year");
+                return;
+            }
+            budget_is_tax_ = true;
+            budget_cover_ = true;
+            tax_pause_hold_ = true;
+            open_dialog(Dialog::Budget);
         }
         on_dialog_button(kCancel);
         if (dialog_ != Dialog::None || budget_cover_ || session_.budget_pending()) {

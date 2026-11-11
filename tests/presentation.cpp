@@ -12,6 +12,7 @@
 #include "placement_hint.hpp"
 #include "present.hpp"
 #include "scene_fade.hpp"
+#include "theme.hpp"
 #include "special_buildings.hpp"
 #include "tile_atlas.hpp"
 #include "tools.hpp"
@@ -163,6 +164,36 @@ int main()
     if (fullscreen_exit_position_is_spurious(198, 127, 200, 130)) {
         return fail(38, "the windowed position was discarded");
     }
+    const PresentPlace fitted = present_place(1523, 825, 1920, 1080, true);
+    const PresentPlace matched = present_place(1523, 825, 1523, 825, true);
+    if (!fitted.fitted || fitted.y != 1080 - 825 || fitted.w != 1523 || fitted.h != 825 || matched.fitted) {
+        return fail(39, "a screen-sized drawable still stretches the windowed frame");
+    }
+    if (!hold_stale_fullscreen_present(true, true, 0) || hold_stale_fullscreen_present(true, true, 1) ||
+        hold_stale_fullscreen_present(false, true, 0)) {
+        return fail(39, "a stale fullscreen frame is presented more than once");
+    }
+    const YearBoxPlan boxes = plan_year_boxes(200, 0, 8, 90, 140);
+    const YearBoxPlan roomy = plan_year_boxes(400, 0, 8, 90, 140);
+    if (boxes.low_h + 0.5 < 140.0 || roomy.low_h + 0.5 < 140.0 || boxes.top_h + boxes.low_h + 8.0 > 200.5) {
+        return fail(40, "a year-card line is clipped by its box");
+    }
+    const DialogFocusFill focus = dialog_focus_fill();
+    if (std::fabs(focus.r - 0.20) > 0.001 || std::fabs(focus.g - 0.42) > 0.001 || std::fabs(focus.b - 0.72) > 0.001) {
+        return fail(41, "a focused dialog button does not match the quit notice");
+    }
+    for (int look = 0; look < 3; ++look) {
+        theme::set_chrome_look(look);
+        double ink_r = 0;
+        double ink_g = 0;
+        double ink_b = 0;
+        theme::reading_ink(ink_r, ink_g, ink_b);
+        if (ink_r > 0.25 || ink_g > 0.25 || ink_b > 0.35) {
+            theme::set_chrome_look(0);
+            return fail(42, "dialog ink is too light on the cream page");
+        }
+    }
+    theme::set_chrome_look(0);
     const double thumb_end = slider_thumb_x(10, 200, 12, 1.0);
     const double thumb_start = slider_thumb_x(10, 200, 12, 0.0);
     if (thumb_start < 10.0 || thumb_end + 12.0 > 210.01 || thumb_end < 10.0) {

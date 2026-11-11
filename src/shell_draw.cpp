@@ -43,6 +43,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <string>
 
 namespace {
@@ -139,6 +140,7 @@ void Shell::layout()
         if (!fullscreen_exit_position_is_spurious(pos_x, pos_y, normal_x_, normal_y_)) {
             restoring_windowed_ = false;
             windowed_settle_tries_ = 0;
+            fullscreen_hold_frames_ = 0;
         }
     }
     win_w_ = laid.w;
@@ -274,9 +276,10 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
             cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : 0.20, pressed ? 0.32 : 0.42, pressed ? 0.62 : 0.72);
             cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
         } else if (focused) {
-            // The focused button stays blue, the same cue the save prompt uses.
-            cairo_pattern_add_color_stop_rgb(shade, 0, 0.76, 0.84, 0.94);
-            cairo_pattern_add_color_stop_rgb(shade, 1, 0.55, 0.68, 0.86);
+            // Same blue as the Quit notice's focused button.
+            const DialogFocusFill fill = dialog_focus_fill();
+            cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : fill.r, pressed ? 0.32 : fill.g, pressed ? 0.62 : fill.b);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
         } else {
             const double lift = hot ? 0.06 : 0.0;
             cairo_pattern_add_color_stop_rgb(shade, 0, 0.78 + lift, 0.77 + lift, 0.75 + lift);
@@ -290,7 +293,8 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         cairo_stroke(cr);
         if (!suppressed && focus_id_ == id && w > 14 && h > 14) {
             round_dialog_rect(cr, x + 6, y + 6, w - 12, h - 12, 3);
-            cairo_set_source_rgb(cr, primary ? 1.0 : 0.10, primary ? 1.0 : 0.16, primary ? 1.0 : 0.32);
+            cairo_set_source_rgb(cr, (primary || focused) ? 1.0 : 0.10, (primary || focused) ? 1.0 : 0.16,
+                                 (primary || focused) ? 1.0 : 0.32);
             cairo_set_line_width(cr, 1.5);
             cairo_stroke(cr);
         }
@@ -298,7 +302,7 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         const TextMetrics metrics = measure_text(cr, ui_font(), plain, -1);
         const double tx = x + (w - metrics.width) / 2.0;
         const double ty = y + (h - metrics.height) / 2.0;
-        if (primary) {
+        if (primary || focused) {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
         } else {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.12, 0.09, 0.06);
@@ -3538,32 +3542,20 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     const double button_h = static_cast<double>(control_px(36, 42));
     const double buttons_top = paper_y + paper_h - button_h - dp(18);
     const double cards_h = std::max(static_cast<double>(dp(96)), buttons_top - cursor - dp(8));
-    const double top_h = std::max(static_cast<double>(dp(78)), cards_h * 0.42);
-    const double low_h = std::max(static_cast<double>(dp(72)), cards_h - top_h - gap);
     const double card_w = std::max(1.0, (inner_w - 2.0 * gap) / 3.0);
-
-    auto card_box = [&](double x, double y, double w, double h, const char *title, const std::string &body, double tr,
-                        double tg, double tb) {
-        fill(cr, x, y, w, h, card_r, card_g, card_b);
-        stroke_rect(cr, x + 0.5, y + 0.5, w - 1, h - 1, gold_r, gold_g, gold_b);
-        cairo_save(cr);
-        cairo_rectangle(cr, x + 1, y + 1, std::max(1.0, w - 2), std::max(1.0, h - 2));
-        cairo_clip(cr);
-        const int title_w = static_cast<int>(std::max(1.0, w - dp(20)));
-        const int title_h = measure_text(cr, serif_card.c_str(), title, title_w).height;
-        paint_text(cr, serif_card.c_str(), title, x + dp(10), y + dp(6), tr, tg, tb, title_w);
-        const int body_w = static_cast<int>(std::max(1.0, w - dp(20)));
-        paint_text(cr, body_font(), body, x + dp(10), y + dp(6) + title_h + dp(8), body_r, body_g, body_b, body_w);
-        cairo_restore(cr);
+    const double col_w = std::max(1.0, (inner_w - gap) / 2.0);
+    auto card_need = [&](const char *title, const std::string &body, double w) {
+        const int wrap = static_cast<int>(std::max(1.0, w - dp(20)));
+        const int title_h = measure_text(cr, serif_card.c_str(), title, wrap).height;
+        const std::string shown = body.empty() ? std::string(" ") : body;
+        const int body_h = measure_text(cr, body_font(), shown, wrap).height;
+        return static_cast<double>(dp(6) + title_h + dp(8) + body_h + dp(12));
     };
-
     const std::int64_t delta = digest.closing_funds - digest.opening_funds;
     const std::string flow =
         std::string(delta >= 0 ? "Surplus " : "Deficit ") + civic::dollars(delta >= 0 ? delta : -delta);
     const std::string funds_body = "Open " + civic::dollars(digest.opening_funds) + "\nClose " +
                                    civic::dollars(digest.closing_funds) + "\n" + flow;
-    card_box(inner_x, cursor, card_w, top_h, "Funds", funds_body, funds_r, funds_g, funds_b);
-
     std::string people_body = digest.card.population;
     const auto paren = people_body.rfind(" (");
     if (paren != std::string::npos) {
@@ -3578,18 +3570,11 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         people_body += "\nR " + std::to_string(homes) + "%   C " + std::to_string(shops) + "%   I " +
                        std::to_string(jobs) + "%";
     }
-    card_box(inner_x + card_w + gap, cursor, card_w, top_h, "People", people_body, people_r, people_g, people_b);
-
     std::string standing = report.no_residents ? "No residents yet, so there is no poll."
                                                : report.category + ". Score " + std::to_string(report.score) + ".";
     if (!report.no_residents) {
         standing += "\n" + std::to_string(report.yes_percent) + "% in favor.";
     }
-    card_box(inner_x + 2.0 * (card_w + gap), cursor, card_w, top_h, "Standing", standing, standing_r, standing_g,
-             standing_b);
-    cursor += top_h + gap;
-
-    const double col_w = std::max(1.0, (inner_w - gap) / 2.0);
     std::string highlights;
     int shown = 0;
     for (const civic::DigestLine &event : digest.events) {
@@ -3614,6 +3599,33 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         }
         challenges += digest.card.intention;
     }
+    const double top_need = std::max(card_need("Funds", funds_body, card_w),
+                                     std::max(card_need("People", people_body, card_w), card_need("Standing", standing, card_w)));
+    const double low_need = std::max(card_need("Highlights", highlights, col_w), card_need("Challenges", challenges, col_w));
+    const YearBoxPlan boxes = plan_year_boxes(cards_h, 0.0, gap, top_need, low_need);
+    const double top_h = boxes.top_h;
+    const double low_h = boxes.low_h;
+
+    auto card_box = [&](double x, double y, double w, double h, const char *title, const std::string &body, double tr,
+                        double tg, double tb) {
+        fill(cr, x, y, w, h, card_r, card_g, card_b);
+        stroke_rect(cr, x + 0.5, y + 0.5, w - 1, h - 1, gold_r, gold_g, gold_b);
+        cairo_save(cr);
+        cairo_rectangle(cr, x + 1, y + 1, std::max(1.0, w - 2), std::max(1.0, h - 2));
+        cairo_clip(cr);
+        const int title_w = static_cast<int>(std::max(1.0, w - dp(20)));
+        const int title_h = measure_text(cr, serif_card.c_str(), title, title_w).height;
+        paint_text(cr, serif_card.c_str(), title, x + dp(10), y + dp(6), tr, tg, tb, title_w);
+        const int body_w = static_cast<int>(std::max(1.0, w - dp(20)));
+        paint_text(cr, body_font(), body, x + dp(10), y + dp(6) + title_h + dp(8), body_r, body_g, body_b, body_w);
+        cairo_restore(cr);
+    };
+
+    card_box(inner_x, cursor, card_w, top_h, "Funds", funds_body, funds_r, funds_g, funds_b);
+    card_box(inner_x + card_w + gap, cursor, card_w, top_h, "People", people_body, people_r, people_g, people_b);
+    card_box(inner_x + 2.0 * (card_w + gap), cursor, card_w, top_h, "Standing", standing, standing_r, standing_g,
+             standing_b);
+    cursor += top_h + gap;
     card_box(inner_x, cursor, col_w, low_h, "Highlights", highlights, funds_r, funds_g, funds_b);
     card_box(inner_x + col_w + gap, cursor, col_w, low_h, "Challenges", challenges, title_r, title_g, title_b);
 
@@ -3778,12 +3790,33 @@ void Shell::render()
             SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_NONE);
         }
     }
-    if (texture_ != nullptr) {
-        SDL_UpdateTexture(texture_, nullptr, cairo_image_surface_get_data(frame_surface_),
-                          cairo_image_surface_get_stride(frame_surface_));
-        SDL_RenderClear(renderer_);
-        SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
-        SDL_RenderPresent(renderer_);
+    if (texture_ != nullptr && renderer_ != nullptr) {
+        int output_w = 0;
+        int output_h = 0;
+        SDL_GetRenderOutputSize(renderer_, &output_w, &output_h);
+        const char *driver = SDL_GetRendererName(renderer_);
+        const bool bottom_origin = driver == nullptr || std::strcmp(driver, "software") != 0;
+        const PresentPlace place = present_place(win_w_, win_h_, output_w, output_h, bottom_origin);
+        const bool layout_is_screen = restoring_windowed_ && normal_valid_ && win_w_ > normal_w_ + 48;
+        if (hold_stale_fullscreen_present(restoring_windowed_, layout_is_screen, fullscreen_hold_frames_)) {
+            ++fullscreen_hold_frames_;
+        } else {
+            SDL_UpdateTexture(texture_, nullptr, cairo_image_surface_get_data(frame_surface_),
+                              cairo_image_surface_get_stride(frame_surface_));
+            SDL_RenderClear(renderer_);
+            if (place.fitted) {
+                SDL_FRect dest;
+                dest.x = static_cast<float>(place.x);
+                dest.y = static_cast<float>(place.y);
+                dest.w = static_cast<float>(place.w);
+                dest.h = static_cast<float>(place.h);
+                SDL_RenderTexture(renderer_, texture_, nullptr, &dest);
+            } else {
+                SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
+            }
+            SDL_RenderPresent(renderer_);
+            fullscreen_hold_frames_ = 0;
+        }
     }
     if (panel_settle_ > 0) {
         --panel_settle_;
