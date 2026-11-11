@@ -125,13 +125,8 @@ void Shell::layout()
         SDL_GetRenderOutputSize(renderer_, &renderer_w, &renderer_h);
     }
     const bool fullscreen = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
-    if (fullscreen) {
-        // Entering again must not keep painting the windowed layout.
-        restoring_windowed_ = false;
-        fullscreen_hold_frames_ = 0;
-    }
-    // While fullscreen is being left, a screen-sized renderer must not become
-    // the layout. Once fullscreen, the live pixel size is the layout.
+    // Leaving fullscreen is authoritative even while the flag and the
+    // reported pixels are still the screen. Entering clears that flag first.
     const LayoutPixels laid = layout_pixels_for_window(fullscreen, restoring_windowed_, pixel_w, pixel_h, normal_w_,
                                                       normal_h_, windowed_density_);
     if (restoring_windowed_ &&
@@ -3473,44 +3468,19 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     const double avail_h = std::max(1.0, bottom_limit - top_limit);
     const double avail_w = std::max(1.0, static_cast<double>(win_w_) - 2.0 * margin);
     const double panel_w = std::min(static_cast<double>(dp(900)), avail_w);
-    const double panel_h = std::min(avail_h, std::max(static_cast<double>(dp(540)), static_cast<double>(dp(720))));
-    const double panel_x = (static_cast<double>(win_w_) - panel_w) / 2.0;
-    const double panel_y = top_limit + (avail_h - panel_h) / 2.0;
     const double frame = std::max(6.0, static_cast<double>(dp(8)));
-    const double paper_x = panel_x + frame;
-    const double paper_y = panel_y + frame;
-    const double paper_w = panel_w - 2.0 * frame;
-    const double paper_h = panel_h - 2.0 * frame;
-
-    fill(cr, panel_x, panel_y, panel_w, panel_h, navy_r, navy_g, navy_b);
-    stroke_rect(cr, panel_x + 1.5, panel_y + 1.5, panel_w - 3, panel_h - 3, gold_r, gold_g, gold_b);
-    fill(cr, paper_x, paper_y, paper_w, paper_h, paper_r, paper_g, paper_b);
-    cairo_save(cr);
-    cairo_rectangle(cr, paper_x, paper_y, paper_w, paper_h);
-    cairo_clip(cr);
-    cairo_set_source_surface(cr, paper_grain(), paper_x, paper_y);
-    cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
-    cairo_paint(cr);
-    cairo_restore(cr);
-    stroke_rect(cr, paper_x + 0.5, paper_y + 0.5, paper_w - 1, paper_h - 1, gold_r, gold_g, gold_b);
-    stroke_rect(cr, paper_x + 3.5, paper_y + 3.5, paper_w - 7, paper_h - 7, gold_hi_r, gold_hi_g, gold_hi_b);
-    filigree(cr, paper_x + dp(8), paper_y + dp(8), 0, gold_r, gold_g, gold_b);
-    filigree(cr, paper_x + paper_w - dp(8), paper_y + dp(8), 1, gold_r, gold_g, gold_b);
-    filigree(cr, paper_x + dp(8), paper_y + paper_h - dp(8), 2, gold_r, gold_g, gold_b);
-    filigree(cr, paper_x + paper_w - dp(8), paper_y + paper_h - dp(8), 3, gold_r, gold_g, gold_b);
-
+    const double gap = dp(8);
+    const double button_h = static_cast<double>(control_px(36, 42));
     const std::string serif_kicker = ui_scale::scaled_font("DejaVu Serif Bold", 15, ui_scale_);
     const std::string serif_year = ui_scale::scaled_font("DejaVu Serif Bold", 40, ui_scale_);
     const std::string serif_city = ui_scale::scaled_font("DejaVu Serif Bold", 20, ui_scale_);
     const std::string serif_meta = ui_scale::scaled_font("DejaVu Serif", 14, ui_scale_);
     const std::string serif_card = ui_scale::scaled_font("DejaVu Serif Bold", 23, ui_scale_);
-
-    const double inner_x = paper_x + dp(34);
-    const double inner_w = std::max(1.0, paper_w - dp(62));
-    const double left_w = std::max(1.0, inner_w * 0.46);
-    const double right_x = inner_x + inner_w * 0.50;
-    const double right_w = std::max(1.0, inner_x + inner_w - right_x);
-    double cursor = paper_y + dp(16);
+    const double inner_w_est = std::max(1.0, panel_w - 2.0 * frame - dp(62));
+    const double card_w_est = std::max(1.0, (inner_w_est - 2.0 * gap) / 3.0);
+    const double col_w_est = std::max(1.0, (inner_w_est - gap) / 2.0);
+    const double left_w_est = std::max(1.0, inner_w_est * 0.46);
+    const double right_w_est = std::max(1.0, inner_w_est - inner_w_est * 0.50);
     const std::string year_text = std::to_string(digest.ended_year);
     const std::string who = session_.city_name();
     const CitySession::Evaluation report = session_.evaluation();
@@ -3523,30 +3493,13 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     };
     const std::string pop_line = "Population " + plain_number(report.population);
     const std::string tax_line = "Tax " + std::to_string(digest.tax_percent) + "%";
-    const int kicker_h = measure_text(cr, serif_kicker.c_str(), "YEAR IN REVIEW", static_cast<int>(left_w)).height;
-    const int year_h = measure_text(cr, serif_year.c_str(), year_text, static_cast<int>(left_w)).height;
-    const int city_h = measure_text(cr, serif_city.c_str(), who, static_cast<int>(right_w)).height;
-    const int meta_h = std::max(measure_text(cr, serif_meta.c_str(), pop_line, static_cast<int>(right_w)).height,
-                                 measure_text(cr, serif_meta.c_str(), tax_line, static_cast<int>(right_w)).height);
-    paint_text(cr, serif_kicker.c_str(), "YEAR IN REVIEW", inner_x, cursor, title_r, title_g, title_b,
-               static_cast<int>(left_w));
-    paint_text(cr, serif_city.c_str(), who, right_x, cursor, ink_r, ink_g, ink_b, static_cast<int>(right_w));
-    paint_text(cr, serif_year.c_str(), year_text, inner_x, cursor + kicker_h + dp(2), title_r, title_g, title_b,
-               static_cast<int>(left_w));
-    paint_text(cr, serif_meta.c_str(), pop_line, right_x, cursor + city_h + dp(4), ink_r, ink_g, ink_b,
-               static_cast<int>(right_w));
-    paint_text(cr, serif_meta.c_str(), tax_line, right_x, cursor + city_h + dp(4) + meta_h + dp(2), ink_r, ink_g, ink_b,
-               static_cast<int>(right_w));
-    const double header_bottom = cursor + std::max(static_cast<double>(kicker_h + dp(2) + year_h),
-                                                    static_cast<double>(city_h + dp(4) + meta_h + dp(2) + meta_h));
-    cursor = header_bottom + dp(10);
-
-    const double gap = dp(8);
-    const double button_h = static_cast<double>(control_px(36, 42));
-    const double buttons_top = paper_y + paper_h - button_h - dp(18);
-    const double cards_h = std::max(static_cast<double>(dp(96)), buttons_top - cursor - dp(8));
-    const double card_w = std::max(1.0, (inner_w - 2.0 * gap) / 3.0);
-    const double col_w = std::max(1.0, (inner_w - gap) / 2.0);
+    const int kicker_h = measure_text(cr, serif_kicker.c_str(), "YEAR IN REVIEW", static_cast<int>(left_w_est)).height;
+    const int year_h = measure_text(cr, serif_year.c_str(), year_text, static_cast<int>(left_w_est)).height;
+    const int city_h = measure_text(cr, serif_city.c_str(), who, static_cast<int>(right_w_est)).height;
+    const int meta_h = std::max(measure_text(cr, serif_meta.c_str(), pop_line, static_cast<int>(right_w_est)).height,
+                                 measure_text(cr, serif_meta.c_str(), tax_line, static_cast<int>(right_w_est)).height);
+    const double header_block = std::max(static_cast<double>(kicker_h + dp(2) + year_h),
+                                         static_cast<double>(city_h + dp(4) + meta_h + dp(2) + meta_h));
     auto card_need = [&](const char *title, const std::string &body, double w) {
         const int wrap = static_cast<int>(std::max(1.0, w - dp(20)));
         const int title_h = measure_text(cr, serif_card.c_str(), title, wrap).height;
@@ -3602,10 +3555,63 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         }
         challenges += digest.card.intention;
     }
-    const double top_need = std::max(card_need("Funds", funds_body, card_w),
-                                     std::max(card_need("People", people_body, card_w), card_need("Standing", standing, card_w)));
-    const double low_need = std::max(card_need("Highlights", highlights, col_w), card_need("Challenges", challenges, col_w));
-    const YearBoxPlan boxes = plan_year_boxes(cards_h, 0.0, gap, top_need, low_need);
+    const double top_need = std::max(card_need("Funds", funds_body, card_w_est),
+                                     std::max(card_need("People", people_body, card_w_est),
+                                              card_need("Standing", standing, card_w_est)));
+    const double low_need = std::max(card_need("Highlights", highlights, col_w_est),
+                                     card_need("Challenges", challenges, col_w_est));
+    const double chrome = 2.0 * frame + dp(16) + header_block + dp(10) + dp(12) + button_h + dp(16);
+    const double panel_h = year_card_panel_height(avail_h, chrome, top_need, low_need, gap);
+    const double panel_x = (static_cast<double>(win_w_) - panel_w) / 2.0;
+    const double panel_y = top_limit + (avail_h - panel_h) / 2.0;
+    const double paper_x = panel_x + frame;
+    const double paper_y = panel_y + frame;
+    const double paper_w = panel_w - 2.0 * frame;
+    const double paper_h = panel_h - 2.0 * frame;
+
+    fill(cr, panel_x, panel_y, panel_w, panel_h, navy_r, navy_g, navy_b);
+    stroke_rect(cr, panel_x + 1.5, panel_y + 1.5, panel_w - 3, panel_h - 3, gold_r, gold_g, gold_b);
+    fill(cr, paper_x, paper_y, paper_w, paper_h, paper_r, paper_g, paper_b);
+    cairo_save(cr);
+    cairo_rectangle(cr, paper_x, paper_y, paper_w, paper_h);
+    cairo_clip(cr);
+    cairo_set_source_surface(cr, paper_grain(), paper_x, paper_y);
+    cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    stroke_rect(cr, paper_x + 0.5, paper_y + 0.5, paper_w - 1, paper_h - 1, gold_r, gold_g, gold_b);
+    stroke_rect(cr, paper_x + 3.5, paper_y + 3.5, paper_w - 7, paper_h - 7, gold_hi_r, gold_hi_g, gold_hi_b);
+    filigree(cr, paper_x + dp(8), paper_y + dp(8), 0, gold_r, gold_g, gold_b);
+    filigree(cr, paper_x + paper_w - dp(8), paper_y + dp(8), 1, gold_r, gold_g, gold_b);
+    filigree(cr, paper_x + dp(8), paper_y + paper_h - dp(8), 2, gold_r, gold_g, gold_b);
+    filigree(cr, paper_x + paper_w - dp(8), paper_y + paper_h - dp(8), 3, gold_r, gold_g, gold_b);
+
+    const double inner_x = paper_x + dp(34);
+    const double inner_w = std::max(1.0, paper_w - dp(62));
+    const double left_w = std::max(1.0, inner_w * 0.46);
+    const double right_x = inner_x + inner_w * 0.50;
+    const double right_w = std::max(1.0, inner_x + inner_w - right_x);
+    double cursor = paper_y + dp(16);
+    paint_text(cr, serif_kicker.c_str(), "YEAR IN REVIEW", inner_x, cursor, title_r, title_g, title_b,
+               static_cast<int>(left_w));
+    paint_text(cr, serif_city.c_str(), who, right_x, cursor, ink_r, ink_g, ink_b, static_cast<int>(right_w));
+    paint_text(cr, serif_year.c_str(), year_text, inner_x, cursor + kicker_h + dp(2), title_r, title_g, title_b,
+               static_cast<int>(left_w));
+    paint_text(cr, serif_meta.c_str(), pop_line, right_x, cursor + city_h + dp(4), ink_r, ink_g, ink_b,
+               static_cast<int>(right_w));
+    paint_text(cr, serif_meta.c_str(), tax_line, right_x, cursor + city_h + dp(4) + meta_h + dp(2), ink_r, ink_g, ink_b,
+               static_cast<int>(right_w));
+    const double header_bottom = cursor + std::max(static_cast<double>(kicker_h + dp(2) + year_h),
+                                                    static_cast<double>(city_h + dp(4) + meta_h + dp(2) + meta_h));
+    cursor = header_bottom + dp(10);
+
+    const double card_w = std::max(1.0, (inner_w - 2.0 * gap) / 3.0);
+    const double col_w = std::max(1.0, (inner_w - gap) / 2.0);
+    // The panel is the content height, capped by the window. When a long year
+    // does not fit, the boxes share that room so the buttons stay on the paper.
+    const double cards_room =
+        std::max(1.0, paper_h - (dp(16) + header_block + dp(10) + dp(12) + button_h + dp(16)));
+    const YearBoxPlan boxes = plan_year_boxes(cards_room, 0.0, gap, top_need, low_need);
     const double top_h = boxes.top_h;
     const double low_h = boxes.low_h;
 
@@ -3631,6 +3637,7 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     cursor += top_h + gap;
     card_box(inner_x, cursor, col_w, low_h, "Highlights", highlights, funds_r, funds_g, funds_b);
     card_box(inner_x + col_w + gap, cursor, col_w, low_h, "Challenges", challenges, title_r, title_g, title_b);
+    const double buttons_top = cursor + low_h + dp(12);
 
     auto ornate = [&](double x, double y, double w, double h, const char *label, int id, bool primary) {
         push_hot(x, y, w, h, id);
@@ -3803,16 +3810,27 @@ void Shell::render()
             match_renderer_output();
             SDL_GetRenderOutputSize(renderer_, &output_w, &output_h);
         }
-        const bool still_off = output_w > 0 && output_h > 0 &&
-                               (std::abs(output_w - win_w_) > 48 || std::abs(output_h - win_h_) > 48);
-        if (hold_stale_fullscreen_present(true, still_off, fullscreen_hold_frames_)) {
+        const bool layout_is_screen =
+            restoring_windowed_ && normal_valid_ && (win_w_ > normal_w_ + 48 || win_h_ > normal_h_ + 48);
+        if (hold_stale_fullscreen_present(restoring_windowed_, layout_is_screen, fullscreen_hold_frames_)) {
             ++fullscreen_hold_frames_;
         } else {
             SDL_UpdateTexture(texture_, nullptr, cairo_image_surface_get_data(frame_surface_),
                               cairo_image_surface_get_stride(frame_surface_));
             SDL_RenderClear(renderer_);
-            SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
-            SDL_RenderPresent(renderer_);
+            if (restoring_windowed_ && (output_w > win_w_ + 48 || output_h > win_h_ + 48)) {
+                // SDL still reports the screen. The X window is already the
+                // saved size. Draw that size, not a stretched screen layout.
+                const SDL_Rect view{0, 0, win_w_, win_h_};
+                SDL_SetRenderViewport(renderer_, &view);
+                SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
+                SDL_RenderPresent(renderer_);
+                SDL_SetRenderViewport(renderer_, nullptr);
+            } else {
+                SDL_SetRenderViewport(renderer_, nullptr);
+                SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
+                SDL_RenderPresent(renderer_);
+            }
             fullscreen_hold_frames_ = 0;
         }
     }

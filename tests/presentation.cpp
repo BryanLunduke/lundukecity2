@@ -165,10 +165,17 @@ int main()
         return fail(38, "the windowed position was discarded");
     }
     const PresentPlace matched = present_place(1523, 825, 1523, 825, true);
-    const LayoutPixels entered = layout_pixels_for_window(true, true, 1920, 1080, 1523, 825, 1.0f);
-    const LayoutPixels windowed_again = layout_pixels_for_window(false, true, 1920, 1080, 1523, 825, 1.0f);
-    if (matched.fitted || entered.w != 1920 || entered.h != 1080 || windowed_again.w != 1523 || windowed_again.h != 825) {
+    const LayoutPixels entered = layout_pixels_for_window(true, false, 1920, 1080, 1523, 825, 1.0f);
+    const LayoutPixels exit_requested = layout_pixels_for_window(true, true, 1920, 1080, 1523, 825, 1.0f);
+    if (matched.fitted || entered.w != 1920 || entered.h != 1080 || exit_requested.w != 1523 || exit_requested.h != 825) {
         return fail(39, "fullscreen kept the windowed layout, or a matched frame was moved");
+    }
+    const double short_card = year_card_panel_height(700, 180, 90, 80, 8);
+    const double long_card = year_card_panel_height(700, 180, 160, 220, 8);
+    const double capped_card = year_card_panel_height(400, 180, 200, 200, 8);
+    if (std::fabs(short_card - 358.0) > 0.5 || std::fabs(long_card - 568.0) > 0.5 || long_card > 700.5 ||
+        std::fabs(capped_card - 400.0) > 0.5) {
+        return fail(40, "the year card is not the height of its content");
     }
     if (marker_step_ms(500) > kMarkerBlink / 2 || marker_step_ms(10) != 10 || !marker_lit(0) || marker_lit(kMarkerMs) ||
         kMarkerMs < 2000) {

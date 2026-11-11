@@ -2354,6 +2354,23 @@ void Shell::run_review_checks()
             fail("the year-end cover has no Close button");
             return;
         }
+        double button_top = -1;
+        double button_bottom = -1;
+        for (const Hotspot &spot : hot_) {
+            if (spot.id == kClose) {
+                button_top = spot.y;
+                button_bottom = spot.y + spot.h;
+            }
+        }
+        const double status_top = static_cast<double>(win_h_ - status_h_ - message_h_);
+        // An empty year is short. The row follows that text, and it stays
+        // above the status bar. A panel pinned near 720 px put the row much
+        // lower on this 800 px window.
+        if (button_top < 0 || button_bottom >= status_top - 8.0 || button_top > static_cast<double>(win_h_) * 0.72) {
+            fail("the year card clipped the buttons or left a tall empty band (button at " +
+                 std::to_string(static_cast<int>(button_top)) + ")");
+            return;
+        }
         if (year_digest().locate) {
             const int tile_x = year_digest().locate_x;
             const int tile_y = year_digest().locate_y;

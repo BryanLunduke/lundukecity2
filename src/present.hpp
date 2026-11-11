@@ -217,18 +217,33 @@ inline LayoutPixels layout_pixels_leaving_fullscreen(bool restoring, int live_w,
     return out;
 }
 
-// Fullscreen uses the live pixel size. A restore in progress must not keep
-// the windowed layout once the window is fullscreen again.
+// Fullscreen uses the live pixel size. Leaving fullscreen keeps the saved
+// window even while the flag and the reported pixels are still the screen.
 inline LayoutPixels layout_pixels_for_window(bool fullscreen, bool restoring, int pixel_w, int pixel_h, int restored_w,
                                             int restored_h, float density)
 {
-    if (fullscreen) {
-        LayoutPixels out;
-        out.w = std::max(1, pixel_w);
-        out.h = std::max(1, pixel_h);
-        return out;
+    if (restoring) {
+        return layout_pixels_leaving_fullscreen(true, pixel_w, pixel_h, restored_w, restored_h, density);
     }
-    return layout_pixels_leaving_fullscreen(restoring, pixel_w, pixel_h, restored_w, restored_h, density);
+    LayoutPixels out;
+    out.w = std::max(1, pixel_w);
+    out.h = std::max(1, pixel_h);
+    (void)fullscreen;
+    return out;
+}
+
+// The year card is as tall as its header, cards, and buttons. A short year
+// stays short. The window is the cap, so a long year does not run off it.
+inline double year_card_panel_height(double avail, double chrome, double top_need, double low_need, double gap)
+{
+    if (avail < 1.0) {
+        avail = 1.0;
+    }
+    if (gap < 0.0) {
+        gap = 0.0;
+    }
+    const double content = chrome + std::max(1.0, top_need) + gap + std::max(1.0, low_need);
+    return std::min(avail, std::max(1.0, content));
 }
 
 struct LayoutPoint {
