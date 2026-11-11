@@ -9,6 +9,7 @@
 #include "text.h"
 
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <malloc.h>
 #include <string>
@@ -269,6 +270,153 @@ int lunduke_city_test_history_starts_clear()
     return 0;
 }
 
+struct SimulatorProbe {
+    static void scan(Micropolis &sim, int x1, int x2) { sim.mapScan(x1, x2); }
+
+    static void askChurch(Micropolis &sim, int x, int y)
+    {
+        sim.needHospital = 0;
+        sim.needChurch = 1;
+        sim.makeHospital(Position(x, y));
+    }
+
+    static bool churchPending(const Micropolis &sim) { return sim.needChurch != 0; }
+};
+
+void fill_dirt(Micropolis &sim)
+{
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            sim.map[x][y] = DIRT;
+        }
+    }
+}
+
+// doRadTile decays when the next 16-bit roll's low 12 bits are clear.
+// primeRandom stores the seed as the generator state, and the scanner
+// draws one roll for a lone radiation tile.
+int decay_seed()
+{
+    for (int seed = 1; seed < 2000000; ++seed) {
+        std::uint64_t next = static_cast<std::uint64_t>(static_cast<unsigned int>(seed));
+        next = next * 1103515245u + 12345u;
+        const unsigned roll = static_cast<unsigned>((next & 0xffff00u) >> 8);
+        if ((roll & 4095u) == 0) {
+            return seed;
+        }
+    }
+    return 0;
+}
+
+int lunduke_city_test_civic_gap_tiles()
+{
+    if (!civicGapTile(SPECIAL_MAYOR) || !civicGapTile(SPECIAL_CASINO) || !civicGapTile(SPECIAL_AMUSEMENT) ||
+        civicGapTile(RADTILE) || civicGapTile(SPECIAL_ZOO) || civicGapTile(SPECIAL_PRISON) ||
+        civicGapTile(SPECIAL_MARINA) || civicGapTile(SPECIAL_FOUNTAIN)) {
+        return fail(16, "the civic-gap check does not match tiles 53-55");
+    }
+
+    Micropolis sim;
+    fill_dirt(sim);
+    sim.autoBulldoze = true;
+    sim.setFunds(100000);
+    const EditingTool lines[] = {TOOL_ROAD, TOOL_RAILROAD, TOOL_WIRE};
+    const int kept[] = {SPECIAL_MAYOR,  SPECIAL_CASINO,   SPECIAL_AMUSEMENT, SPECIAL_ZOO,  SPECIAL_PARK,
+                        SPECIAL_LIBRARY, SPECIAL_PRISON, SPECIAL_MARINA,   SPECIAL_FOUNTAIN, SPECIAL_BODY};
+    for (int tile : kept) {
+        for (EditingTool tool : lines) {
+            sim.map[10][10] = static_cast<unsigned short>(tile | BULLBIT | BURNBIT | ZONEBIT);
+            const long before = static_cast<long>(sim.totalFunds);
+            const ToolResult result = sim.doTool(tool, 10, 10);
+            if (result == TOOLRESULT_OK || (sim.map[10][10] & LOMASK) != tile ||
+                static_cast<long>(sim.totalFunds) != before) {
+                std::fprintf(stderr, "tool %d paved tile %d into %u\n", static_cast<int>(tool), tile, sim.map[10][10]);
+                return fail(17, "a road, rail, or wire paved through a special centre");
+            }
+        }
+    }
+    const int cleared[] = {WOODS, RUBBLE, RADTILE};
+    for (int tile : cleared) {
+        sim.map[10][10] = static_cast<unsigned short>(tile | BULLBIT | BURNBIT);
+        const ToolResult result = sim.doTool(TOOL_ROAD, 10, 10);
+        const int after = sim.map[10][10] & LOMASK;
+        if (result != TOOLRESULT_OK || after == tile || after == DIRT) {
+            std::fprintf(stderr, "tree-like tile %d became %d result %d\n", tile, after, static_cast<int>(result));
+            return fail(18, "auto-bulldoze stopped clearing trees, rubble, or radiation");
+        }
+    }
+
+    const int seed = decay_seed();
+    if (seed == 0) {
+        return fail(19, "could not find a radiation-decay roll");
+    }
+    const int centres[] = {SPECIAL_MAYOR, SPECIAL_CASINO, SPECIAL_AMUSEMENT};
+    for (int tile : centres) {
+        fill_dirt(sim);
+        sim.map[8][8] = static_cast<unsigned short>(tile | ZONEBIT | BULLBIT | BURNBIT);
+        sim.primeRandom(seed);
+        SimulatorProbe::scan(sim, 8, 9);
+        if ((sim.map[8][8] & LOMASK) != tile) {
+            std::fprintf(stderr, "tile %d decayed to %u\n", tile, sim.map[8][8]);
+            return fail(20, "a civic centre decayed like radiation");
+        }
+    }
+    fill_dirt(sim);
+    sim.map[8][8] = RADTILE;
+    sim.primeRandom(seed);
+    SimulatorProbe::scan(sim, 8, 9);
+    if ((sim.map[8][8] & LOMASK) != DIRT) {
+        std::fprintf(stderr, "radiation became %u\n", sim.map[8][8]);
+        return fail(21, "real radiation no longer decays");
+    }
+    return 0;
+}
+
+int lunduke_city_test_classic_church()
+{
+    // tiles.png is 256x960. Extra church types start at tile 960.
+    if (kShippedTileCount != 960 || CHURCH0 >= kShippedTileCount || CHURCH1 < kShippedTileCount ||
+        CHURCH7LAST < kShippedTileCount) {
+        return fail(22, "the shipped sheet length no longer matches the classic church");
+    }
+    Micropolis rolls;
+    rolls.primeRandom(1);
+    bool other_type = false;
+    for (int i = 0; i < 64; ++i) {
+        const int church_type = rolls.rollRandom(7);
+        if (church_type > 0) {
+            other_type = true;
+        }
+    }
+    if (!other_type) {
+        return fail(23, "the church roll never left the classic type, so the test cannot see the bug");
+    }
+
+    Micropolis sim;
+    fill_dirt(sim);
+    sim.primeRandom(1);
+    for (int i = 0; i < 64; ++i) {
+        SimulatorProbe::askChurch(sim, 20, 20);
+        if (SimulatorProbe::churchPending(sim)) {
+            return fail(24, "a church request was left pending");
+        }
+        if ((sim.map[20][20] & LOMASK) != CHURCH0) {
+            std::fprintf(stderr, "centre %u\n", sim.map[20][20]);
+            return fail(25, "a grown church was not the classic building");
+        }
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int tile = sim.map[20 + dx][20 + dy] & LOMASK;
+                if (tile < CHURCH0BASE || tile > CHURCH0BASE + 8 || tile >= kShippedTileCount) {
+                    std::fprintf(stderr, "church cell %d\n", tile);
+                    return fail(26, "a grown church used a tile the shipped sheet does not draw");
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 int main()
 {
     if (const int code = lunduke_city_test_vote_problems()) {
@@ -287,6 +435,12 @@ int main()
         return code;
     }
     if (const int code = lunduke_city_test_tokyo_monster()) {
+        return code;
+    }
+    if (const int code = lunduke_city_test_civic_gap_tiles()) {
+        return code;
+    }
+    if (const int code = lunduke_city_test_classic_church()) {
         return code;
     }
     return 0;

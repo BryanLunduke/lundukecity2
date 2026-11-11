@@ -760,7 +760,9 @@ enum MapTileCharacters {
     // Mayor's House, Casino, and Amusement Park. The map word only has ten
     // tile bits, and 1019 stays the unknown-tile check. These three numbers
     // are UNUSED_TRASH3..5: the simulator never places them. doZone ignores
-    // them the same way it ignores the zoo.
+    // them the same way it ignores the zoo. They sit below the first road
+    // tile and next to the radiation tile, so the scanner and the line
+    // tools have to skip them by id. Renumbering would break saved cities.
     SPECIAL_MAYOR      = 53,
     SPECIAL_CASINO     = 54,
     SPECIAL_AMUSEMENT  = 55,
@@ -777,6 +779,19 @@ enum MapTileCharacters {
 
     TILE_INVALID   = -1, ///< Invalid tile (not used in the world map).
 };
+
+// The shipped tiles.png is 256 by 960, so it draws indices 0 through 959.
+// TILE_COUNT is larger: later ids are simulator values the sheet does not
+// draw. Raise this when the sheet actually contains the extra church
+// graphics. Those types start at CHURCH1 (tile 960).
+constexpr int kShippedTileCount = 960;
+
+// Mayor's House, Casino, and Amusement Park. These ids are not radiation
+// and they are not rubble, even though they fall in that numeric gap.
+inline bool civicGapTile(int tile)
+{
+    return tile == SPECIAL_MAYOR || tile == SPECIAL_CASINO || tile == SPECIAL_AMUSEMENT;
+}
 
 /**
  * Available tools.
@@ -2455,6 +2470,10 @@ public:
     void primeRandom(int seed) { seedRandom(seed); }
 
     short rollRandom(short range) { return getRandom(range); }
+
+    // Headless checks scan one map slice and grow one church. The
+    // running game goes through simTick instead.
+    friend struct SimulatorProbe;
 
 
     /** Name of the Micropolis top level home directory. */

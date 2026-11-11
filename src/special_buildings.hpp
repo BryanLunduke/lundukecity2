@@ -63,7 +63,8 @@ struct SpecialBuilding {
     // crime reduction waits until the power scan actually powers the center.
     bool needs_power = false;
     // The south row may cover shoreline. Open water must still sit
-    // immediately south of the footprint. Bulldoze puts that shoreline back.
+    // immediately south of the footprint. Bulldoze puts that shoreline
+    // back, including after a disaster has erased the footprint.
     bool needs_south_water = false;
 };
 

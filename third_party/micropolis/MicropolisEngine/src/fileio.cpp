@@ -648,6 +648,12 @@ static bool dock_note_current(const Micropolis *sim, const Micropolis::MarinaDoc
     if (tile == SPECIAL_BODY) {
         return true;
     }
+    // A crash paints the dock as a tiny explosion and only later turns
+    // that cell into rubble. Autosave runs while the explosion is still
+    // playing. Dropping the note then forgets the shoreline.
+    if (tile >= TINYEXP && tile <= LASTTINYEXP) {
+        return true;
+    }
     if (tile >= FIRE && tile <= LASTFIRE) {
         return true;
     }
