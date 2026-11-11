@@ -4,11 +4,13 @@
 
 #pragma once
 
-// A 140 ms, three-step ordered dither. Pixels are replaced with one VGA
-// grey. Nothing is blended, so SVGA and Spooky stay on the palette.
+// A 420 ms, three-step ordered dither. About three times the old 140 ms
+// beat, so a look change reads as a change. Pixels are replaced with one
+// VGA grey. Nothing is blended, so SVGA and Spooky stay on the palette.
+// A click or a key still skips it.
 
 struct SceneFade {
-    static constexpr int kTotalMs = 140;
+    static constexpr int kTotalMs = 420;
     // -1 is idle. 0, 1, and 2 are the three steps.
     int step = -1;
     int elapsed_ms = 0;

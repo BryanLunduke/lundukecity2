@@ -37,6 +37,7 @@
 #include <cstdlib>
 #include "version.hpp"
 #include "view_math.hpp"
+#include "zoom_keys.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -211,6 +212,17 @@ void Shell::layout()
     clamp_gamepad_cursor(0.0f, 0.0f);
 }
 
+void round_dialog_rect(cairo_t *cr, double x, double y, double w, double h, double radius)
+{
+    const double rr = std::min(radius, std::min(w, h) / 2.0);
+    cairo_new_path(cr);
+    cairo_arc(cr, x + w - rr, y + rr, rr, -1.5708, 0);
+    cairo_arc(cr, x + w - rr, y + h - rr, rr, 0, 1.5708);
+    cairo_arc(cr, x + rr, y + h - rr, rr, 1.5708, 3.1416);
+    cairo_arc(cr, x + rr, y + rr, rr, 3.1416, 4.7124);
+    cairo_close_path(cr);
+}
+
 void Shell::button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary)
 {
     push_hot(x, y, w, h, id);
@@ -220,6 +232,45 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
     const bool suppressed = dialog_ != Dialog::None && !is_modal_control(id);
     const bool hot = !suppressed && (hover_id_ == id || focus_id_ == id);
     const bool pressed = hot && pointer_down_ && hover_id_ == id;
+    // Dialog buttons match the Year in Review card: a gold edge, a blue
+    // primary, and a warm gray secondary.
+    if (dialog_ != Dialog::None) {
+        const double gold_r = 0.72;
+        const double gold_g = 0.55;
+        const double gold_b = 0.18;
+        round_dialog_rect(cr, x, y, w, h, std::min(6.0, h / 2.0));
+        cairo_pattern_t *shade = cairo_pattern_create_linear(x, y, x, y + h);
+        if (primary) {
+            cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : 0.20, pressed ? 0.32 : 0.42, pressed ? 0.62 : 0.72);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
+        } else {
+            const double lift = hot ? 0.06 : 0.0;
+            cairo_pattern_add_color_stop_rgb(shade, 0, 0.78 + lift, 0.77 + lift, 0.75 + lift);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.62, 0.58, 0.50);
+        }
+        cairo_set_source(cr, shade);
+        cairo_fill_preserve(cr);
+        cairo_pattern_destroy(shade);
+        cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);
+        cairo_set_line_width(cr, std::max(2.0, h / 16.0));
+        cairo_stroke(cr);
+        if (!suppressed && focus_id_ == id) {
+            round_dialog_rect(cr, x + 3, y + 3, std::max(1.0, w - 6), std::max(1.0, h - 6), 4);
+            cairo_set_source_rgb(cr, primary ? 1.0 : 0.15, primary ? 1.0 : 0.10, primary ? 1.0 : 0.04);
+            cairo_set_line_width(cr, 1.5);
+            cairo_stroke(cr);
+        }
+        const std::string plain = strip_mnemonic(label);
+        const TextMetrics metrics = measure_text(cr, ui_font(), plain, -1);
+        const double tx = x + (w - metrics.width) / 2.0;
+        const double ty = y + (h - metrics.height) / 2.0;
+        if (primary) {
+            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
+        } else {
+            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.12, 0.09, 0.06);
+        }
+        return;
+    }
     if (theme::enhanced_chrome()) {
         double body_r = 0;
         double body_g = 0;
@@ -355,42 +406,44 @@ void Shell::paint_vga_veil(cairo_t *cr)
 
 void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, const char *title)
 {
-    if (theme::enhanced_chrome()) {
-        paint_vga_veil(cr);
-        fill(cr, x + 2, y + 2, w, h, 0, 0, 0);
-        double body_r = 0;
-        double body_g = 0;
-        double body_b = 0;
-        theme::chrome_body(body_r, body_g, body_b);
-        fill(cr, x, y, w, h, body_r, body_g, body_b);
-    } else {
-        cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
-        cairo_rectangle(cr, 0, 0, win_w_, win_h_);
-        cairo_fill(cr);
-        fill(cr, x, y, w, h, theme::kWindowR, theme::kWindowG, theme::kWindowB);
-    }
+    // Same materials as the Year in Review card: a navy rim, a gold edge,
+    // and a cream page. The city tiles and the welcome art are untouched.
+    const double navy_r = 0.02;
+    const double navy_g = 0.08;
+    const double navy_b = 0.32;
+    const double gold_r = 0.72;
+    const double gold_g = 0.55;
+    const double gold_b = 0.18;
+    const double paper_r = 0.976;
+    const double paper_g = 0.922;
+    const double paper_b = 0.808;
+    const double title_r = 0.45;
+    const double title_g = 0.04;
+    const double title_b = 0.02;
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
+    cairo_rectangle(cr, 0, 0, win_w_, win_h_);
+    cairo_fill(cr);
+    const double rim = std::max(4.0, static_cast<double>(dp(6)));
+    fill(cr, x, y, w, h, navy_r, navy_g, navy_b);
+    stroke_rect(cr, x + 1.5, y + 1.5, w - 3, h - 3, gold_r, gold_g, gold_b);
+    fill(cr, x + rim, y + rim, std::max(1.0, w - 2 * rim), std::max(1.0, h - 2 * rim), paper_r, paper_g, paper_b);
     push_hot(0, 0, win_w_, win_h_, 0);
     const double kTitleBand = dp(40);
-    fill(cr, x, y, w, kTitleBand, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     const TextMetrics title_metrics = measure_text(cr, title_font(), title, static_cast<int>(w - 24));
-    const double title_y = y + std::max(2.0, (kTitleBand - title_metrics.height) / 2.0);
-    // Pad players read the hint in the title. Mouse players read it in the
-    // status bar, so it is not repeated in both places.
+    const double title_y = y + std::max(rim, (kTitleBand - title_metrics.height) / 2.0);
     const bool title_hint = gamepad_nav_ || deck_ || touch_used_;
     const std::string hint = title_hint ? dialog_title_hint() : std::string();
     const TextMetrics hint_metrics = hint.empty() ? TextMetrics{} : measure_text(cr, ui_font(), hint, -1);
-    const int title_wrap = static_cast<int>(std::max(40.0, w - 24 - (hint.empty() ? 0 : hint_metrics.width + 16)));
-    paint_text(cr, title_font(), title, x + 12, title_y, 1, 1, 1, title_wrap);
-    if (!hint.empty() && hint_metrics.width + 16 < w - title_metrics.width - 36) {
-        paint_text(cr, ui_font(), hint, x + w - hint_metrics.width - 12, y + (kTitleBand - hint_metrics.height) / 2.0, 1,
-                   1, 1, -1);
+    const int title_wrap = static_cast<int>(std::max(40.0, w - rim * 2 - 16 - (hint.empty() ? 0 : hint_metrics.width + 16)));
+    paint_text(cr, title_font(), title, x + rim + 8, title_y, title_r, title_g, title_b, title_wrap);
+    if (!hint.empty() && hint_metrics.width + 16 < w - title_metrics.width - 48) {
+        paint_text(cr, ui_font(), hint, x + w - rim - hint_metrics.width - 8, title_y, 0.28, 0.16, 0.06, -1);
     }
-    if (theme::enhanced_chrome()) {
-        stroke_rect(cr, x, y, w, h, theme::chrome_select_edge_r(), theme::chrome_select_edge_g(),
-                    theme::chrome_select_edge_b());
-    } else {
-        stroke_rect(cr, x, y, w, h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-    }
+    cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);
+    cairo_set_line_width(cr, 2);
+    cairo_move_to(cr, x + rim + 8, y + kTitleBand);
+    cairo_line_to(cr, x + w - rim - 8, y + kTitleBand);
+    cairo_stroke(cr);
 }
 
 void Shell::draw_osk(cairo_t *cr, double x, double y, double w, double max_h)
@@ -463,6 +516,12 @@ void Shell::draw_menubar(cairo_t *cr)
         paint_mnemonic(cr, menu_font(), title, x + 10, 9, menu_.alt_shown || menu_.open(),
                        lit ? 1 : theme::kTextR, lit ? 1 : theme::kTextG, lit ? 1 : theme::kTextB);
         x += w + 2;
+    }
+    const std::string zoom = zoom_menu_label(map_.tile_size());
+    const TextMetrics zoom_metrics = measure_text(cr, menu_font(), zoom, -1);
+    const double zoom_x = static_cast<double>(win_w_) - zoom_metrics.width - 12.0;
+    if (zoom_x > x + 8.0) {
+        paint_text(cr, menu_font(), zoom, zoom_x, 9, theme::kTextR, theme::kTextG, theme::kTextB, -1);
     }
 }
 
@@ -954,8 +1013,10 @@ void Shell::draw_dialog(cairo_t *cr)
         if (from != to) {
             const int x0 = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(from)), -1).width;
             const int x1 = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(to)), -1).width;
+            const int line_h = measure_text(cr, body_font(), text.empty() ? std::string(" ") : text, -1).height;
+            const SelectionBand band = selection_band(ty, std::max(static_cast<double>(line_h), th));
             cairo_set_source_rgba(cr, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b(), 0.55);
-            cairo_rectangle(cr, tx + x0, ty - dp(2), std::max(2, x1 - x0), th);
+            cairo_rectangle(cr, tx + x0, band.top, std::max(2, x1 - x0), band.height);
             cairo_fill(cr);
         }
         const int cx = measure_text(cr, body_font(), text.substr(0, static_cast<std::size_t>(field_caret_)), -1).width;
@@ -1775,69 +1836,75 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Settings) {
         const double bh = static_cast<double>(control_px(36, 44));
         const double switch_w = static_cast<double>(dp(148));
-        const double row_gap = static_cast<double>(dp(8));
-        const double block = static_cast<double>(dp(52));
-        const double rows = block * 2.0 + (bh + row_gap) * 3.0;
-        const double height = dp(40) + margin + rows + dp(8) + bh + margin;
+        const double text_h = static_cast<double>(std::max(dp(18), measure_text(cr, bold_font(), "Volume", -1).height));
+        const double bar_h = static_cast<double>(dp(18));
+        const double stack_gap = static_cast<double>(dp(12));
+        const SettingsStack volume_row = settings_stack(0, text_h, bar_h, stack_gap);
+        const SettingsStack scale_row = settings_stack(volume_row.next_caption, text_h, bar_h, stack_gap);
+        const double toggles = (bh + stack_gap) * 3.0;
+        const double rows = scale_row.next_caption + toggles;
+        const double height = dp(48) + margin + rows + dp(8) + bh + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, dp(640), height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         frame_panel(cr, x, y, dw, panel.h, "Settings");
         const double switch_x = x + dw - margin - switch_w;
+        const double content = y + dp(52);
         auto slider = [&](int index, const std::string &caption, const std::string &value_text, int value, int min,
-                          int max, double sy, bool enabled) {
-            const double label_right = enabled ? dw - 2 * margin - dp(88) : dw - 2 * margin - switch_w - dp(12);
+                          int max, const SettingsStack &row, bool enabled, bool leave_switch) {
+            const double sy = content + row.caption;
+            const double label_right = leave_switch ? switch_x - x - margin - dp(12) : dw - 2 * margin - dp(72);
             paint_text(cr, bold_font(), caption, x + margin, sy, enabled ? theme::kTextR : theme::kDisabledR,
                        enabled ? theme::kTextG : theme::kDisabledG, enabled ? theme::kTextB : theme::kDisabledB,
-                       static_cast<int>(label_right));
-            if (enabled && !value_text.empty()) {
+                       static_cast<int>(std::max(1.0, label_right)));
+            if (enabled && !value_text.empty() && !leave_switch) {
                 const TextMetrics value_metrics = measure_text(cr, bold_font(), value_text, -1);
                 paint_text(cr, bold_font(), value_text, x + dw - margin - value_metrics.width, sy, theme::kTextR,
                            theme::kTextG, theme::kTextB, -1);
             }
-            const double bar_y = sy + dp(24);
+            const double bar_y = content + row.bar;
             const double sx = x + margin;
-            const double sw = dw - 2 * margin;
+            const double sw = leave_switch ? std::max(1.0, switch_x - sx - dp(12)) : dw - 2 * margin;
             if (!enabled) {
-                fill(cr, sx, bar_y, sw, dp(16), 0.86, 0.86, 0.86);
-                stroke_rect(cr, sx, bar_y, sw, dp(16), theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+                fill(cr, sx, bar_y, sw, bar_h, 0.86, 0.84, 0.78);
+                stroke_rect(cr, sx, bar_y, sw, bar_h, 0.72, 0.55, 0.18);
                 return;
             }
-            fill(cr, sx, bar_y, sw, dp(16), 1, 1, 1);
+            fill(cr, sx, bar_y, sw, bar_h, 1, 0.98, 0.92);
             const double t = (value - min) / static_cast<double>(std::max(1, max - min));
-            fill(cr, sx, bar_y, sw * t, dp(16), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
-            const double thumb = dp(14);
-            fill(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), 1, 1, 1);
-            stroke_rect(cr, sx + sw * t - thumb / 2.0, bar_y - dp(4), thumb, dp(24), theme::chrome_select_r(),
-                        theme::chrome_select_g(), theme::chrome_select_b());
-            stroke_rect(cr, sx, bar_y, sw, dp(16), theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
+            fill(cr, sx, bar_y, sw * t, bar_h, 0.20, 0.42, 0.72);
+            const double thumb = dp(12);
+            const double thumb_y = bar_y - dp(3);
+            fill(cr, sx + sw * t - thumb / 2.0, thumb_y, thumb, bar_h + dp(6), 0.98, 0.94, 0.84);
+            stroke_rect(cr, sx + sw * t - thumb / 2.0, thumb_y, thumb, bar_h + dp(6), 0.72, 0.55, 0.18);
+            stroke_rect(cr, sx, bar_y, sw, bar_h, 0.72, 0.55, 0.18);
             const int id = kSlider + index;
-            push_hot(sx, bar_y - dp(6), sw, dp(28), id);
+            push_hot(sx, bar_y - dp(4), sw, bar_h + dp(8), id);
             push_focus(id);
-            next_sliders_.push_back(SliderGeom{id, sx, bar_y - dp(6), sw, static_cast<double>(dp(28)), min, max});
+            next_sliders_.push_back(SliderGeom{id, sx, bar_y - dp(4), sw, bar_h + dp(8), min, max});
             if (focus_id_ == id) {
-                stroke_slider_focus(cr, drawn_look_, sx + 1, bar_y - dp(6), sw - 2, dp(32));
+                stroke_slider_focus(cr, drawn_look_, sx + 1, bar_y - dp(4), sw - 2, bar_h + dp(8));
             }
         };
         auto switch_row = [&](const char *label, const char *state, int id, double sy) {
-            paint_text(cr, ui_font(), label, x + margin, sy + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
+            paint_text(cr, ui_font(), label, x + margin, sy + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(switch_x - x - margin - dp(8)));
             button(cr, switch_x, sy, switch_w, bh, state, id, focus_id_ == id);
         };
         const bool scale_auto = scale_percent_ <= 0;
         const std::string scale_text = scale_auto ? "Auto" : std::to_string(scale_percent_) + "%";
-        double sy = y + dp(48);
-        slider(1, "Volume", std::to_string(volume_) + "%", volume_, 0, 100, sy, true);
-        sy += block;
+        slider(1, "Volume", std::to_string(volume_) + "%", volume_, 0, 100, volume_row, true, false);
         const std::string scale_caption = scale_auto ? "UI scale" : "UI scale  " + scale_text;
-        slider(2, scale_caption, "", scale_auto ? 100 : scale_percent_, 50, 200, sy, !scale_auto);
-        button(cr, switch_x, sy - dp(2), switch_w, bh, scale_auto ? "Auto" : "Manual", kScaleAuto, focus_id_ == kScaleAuto);
-        sy += block;
+        slider(2, scale_caption, "", scale_auto ? 100 : scale_percent_, 50, 200, scale_row, !scale_auto, true);
+        const double auto_h = std::min(bh, text_h + static_cast<double>(dp(6)));
+        button(cr, switch_x, content + scale_row.caption, switch_w, auto_h, scale_auto ? "Auto" : "Manual", kScaleAuto,
+               focus_id_ == kScaleAuto);
+        double sy = content + scale_row.next_caption;
         switch_row("Pause when unfocused", pause_unfocused_ ? "On" : "Off", kReset, sy);
-        sy += bh + row_gap;
+        sy += bh + stack_gap;
         switch_row("Mouse wheel", wheel_zooms_ ? "Zoom" : "Scroll", kWheelZoom, sy);
-        sy += bh + row_gap;
+        sy += bh + stack_gap;
         const bool full = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
         switch_row("Fullscreen", full ? "On" : "Off", kFullscreenBox, sy);
         buttons_at(x, dw, y + panel.h - margin - bh, {{"_Cancel", kCancel}, {"_OK", kOk}});
@@ -3556,7 +3623,7 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         }
     };
 
-    const int count = digest.locate ? 4 : 3;
+    const int count = digest.locate ? 5 : 4;
     const double side = dp(28);
     const double row_w = std::max(1.0, inner_w - 2.0 * side);
     const double bw = std::max(1.0, (row_w - (count - 1) * gap) / count);
@@ -3570,6 +3637,8 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         bx += bw + gap;
         ornate(bx, buttons_top, bw, button_h, "_Map", kYearLocate, false);
     }
+    bx += bw + gap;
+    ornate(bx, buttons_top, bw, button_h, "_Close", kClose, false);
 }
 
 void Shell::paint_scene_fade()

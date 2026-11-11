@@ -449,7 +449,9 @@ void Shell::save_window_settings()
     stored.milestone_notes = milestone_notes_ ? 1 : 0;
     {
         const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
-        const bool maximized = (flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN)) != 0;
+        const bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+        const bool maximized =
+            ui_scale::stored_window_maximized(fullscreen, (flags & SDL_WINDOW_MAXIMIZED) != 0, windowed_maximized_);
         ui_scale::keep_desktop_geometry(stored, loaded_, deck_, normal_valid_, normal_x_, normal_y_, normal_w_, normal_h_,
                                         deck_ ? loaded_.maximized : maximized);
     }
@@ -682,7 +684,12 @@ void Shell::note_window_geometry()
         return;
     }
     const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
-    if ((flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED)) != 0) {
+    const bool fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+    const bool maximized = (flags & SDL_WINDOW_MAXIMIZED) != 0;
+    if (!fullscreen) {
+        windowed_maximized_ = maximized;
+    }
+    if (fullscreen || maximized) {
         return;
     }
     int ww = 0;
@@ -691,11 +698,26 @@ void Shell::note_window_geometry()
     int y = 0;
     SDL_GetWindowSize(window_, &ww, &hh);
     SDL_GetWindowPosition(window_, &x, &y);
-    if (ww > 0 && hh > 0) {
-        normal_w_ = ww;
-        normal_h_ = hh;
-        normal_x_ = x;
-        normal_y_ = y;
+    if (restoring_windowed_) {
+        // The window manager may report the fullscreen size for one event
+        // after leaving fullscreen. Keep the windowed rectangle.
+        if (std::abs(ww - normal_w_) > 48 || std::abs(hh - normal_h_) > 48) {
+            return;
+        }
+        restoring_windowed_ = false;
+    }
+    int keep_x = normal_x_;
+    int keep_y = normal_y_;
+    int keep_w = normal_w_;
+    int keep_h = normal_h_;
+    bool valid = false;
+    ui_scale::choose_stored_window(false, normal_valid_, normal_x_, normal_y_, normal_w_, normal_h_, x, y, ww, hh, keep_x,
+                                   keep_y, keep_w, keep_h, valid);
+    if (valid) {
+        normal_x_ = keep_x;
+        normal_y_ = keep_y;
+        normal_w_ = keep_w;
+        normal_h_ = keep_h;
         normal_valid_ = true;
     }
 }

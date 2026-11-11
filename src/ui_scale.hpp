@@ -318,6 +318,38 @@ inline std::string settings_text(const StoredSettings &settings)
 // window rectangle. When the file already has one, write that rectangle
 // back. When it does not, leave the keys out rather than storing the
 // Deck window.
+// Fullscreen must not replace the windowed rectangle. A live size is stored
+// only while the window is not fullscreen. Otherwise the remembered window
+// is what gets written back.
+inline void choose_stored_window(bool fullscreen, bool have_memory, int mem_x, int mem_y, int mem_w, int mem_h,
+                                 int live_x, int live_y, int live_w, int live_h, int &x, int &y, int &w, int &h,
+                                 bool &valid)
+{
+    if (fullscreen || live_w < 320 || live_h < 240) {
+        valid = have_memory && mem_w >= 320 && mem_h >= 240;
+        x = mem_x;
+        y = mem_y;
+        w = mem_w;
+        h = mem_h;
+        return;
+    }
+    valid = true;
+    x = live_x;
+    y = live_y;
+    w = live_w;
+    h = live_h;
+}
+
+// Fullscreen is not a maximized window. The flag written to settings is the
+// windowed maximized state.
+inline bool stored_window_maximized(bool fullscreen, bool live_maximized, bool remembered_maximized)
+{
+    if (fullscreen) {
+        return remembered_maximized;
+    }
+    return live_maximized;
+}
+
 inline void keep_desktop_geometry(StoredSettings &stored, const StoredSettings &loaded, bool deck, bool live_valid, int x,
                                   int y, int w, int h, bool maximized)
 {

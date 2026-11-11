@@ -11,9 +11,12 @@
 #include "messages.hpp"
 #include "placement_hint.hpp"
 #include "present.hpp"
+#include "scene_fade.hpp"
 #include "special_buildings.hpp"
 #include "tile_atlas.hpp"
 #include "tools.hpp"
+#include "ui_scale.hpp"
+#include "zoom_keys.hpp"
 
 #include "micropolis.h"
 
@@ -110,6 +113,44 @@ int main()
     }
     if (dust_speck_y(16, 0, 0) < 2 || dust_speck_y(16, 300, 7) < 2) {
         return fail(26, "bulldoze dust should stay inside the tile, under the tag");
+    }
+    const SelectionBand band = selection_band(40, 18);
+    if (band.top > 40.0 || band.top + band.height < 40.0 + 18.0) {
+        return fail(27, "the selection highlight does not cover the glyphs");
+    }
+    int sx = 0;
+    int sy = 0;
+    int sw = 0;
+    int sh = 0;
+    bool svalid = false;
+    ui_scale::choose_stored_window(true, true, 40, 50, 1280, 800, 0, 0, 1920, 1080, sx, sy, sw, sh, svalid);
+    if (!svalid || sw != 1280 || sh != 800 || sx != 40) {
+        return fail(28, "fullscreen size replaced the windowed rectangle");
+    }
+    if (ui_scale::stored_window_maximized(true, true, false)) {
+        return fail(29, "fullscreen was stored as a maximized window");
+    }
+    if (zoom_menu_label(16) != "Zoom 100%" || zoom_percent_for_tile(32) != 200 || zoom_percent_for_tile(8) != 50) {
+        return fail(30, "the menu zoom label is not the atlas step as a percent");
+    }
+    const SettingsStack settings_row = settings_stack(0, 18, 20, 12);
+    if (!settings_stack_clear(settings_row, 18) || settings_row.bar < 18 || settings_row.next_caption <= settings_row.bar) {
+        return fail(31, "settings rows overlap");
+    }
+    if (!year_card_dismisses(YearCardClick::Close) || !year_card_dismisses(YearCardClick::Escape) ||
+        !year_card_dismisses(YearCardClick::Map) || year_card_dismisses(YearCardClick::Budget) ||
+        !year_card_jumps(YearCardClick::Map) || year_card_jumps(YearCardClick::Close)) {
+        return fail(32, "year card Close and Map do not dismiss the way they should");
+    }
+    SceneFade fade;
+    fade.start();
+    fade.advance(140);
+    if (!fade.active() || SceneFade::kTotalMs < 400) {
+        return fail(33, "the look fade is still the old short dither");
+    }
+    fade.advance(SceneFade::kTotalMs);
+    if (fade.active()) {
+        return fail(34, "the look fade did not finish");
     }
 
     const ChartPlate spooky = chart_plate(2);

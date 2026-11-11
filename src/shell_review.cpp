@@ -2300,11 +2300,26 @@ void Shell::run_review_checks()
             fail("the year-end cover did not open");
             return;
         }
-        on_dialog_button(kCancel);
-        if (dialog_ != Dialog::Budget || budget_cover_) {
-            fail("escape on the year-end cover did not open the sliders");
+        bool saw_close = false;
+        for (const Hotspot &spot : hot_) {
+            if (spot.id == kClose) {
+                saw_close = true;
+            }
+        }
+        if (!saw_close) {
+            fail("the year-end cover has no Close button");
             return;
         }
+        on_dialog_button(kCancel);
+        if (dialog_ != Dialog::None || budget_cover_ || session_.budget_pending()) {
+            fail("escape on the year-end cover did not dismiss the year");
+            return;
+        }
+        session_.begin_tax_year();
+        budget_is_tax_ = true;
+        budget_cover_ = true;
+        tax_pause_hold_ = true;
+        open_dialog(Dialog::Budget);
         on_dialog_button(kCollect);
         if (dialog_ != Dialog::None || session_.budget_pending()) {
             fail("collecting the empty year did not close the budget");

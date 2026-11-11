@@ -5,8 +5,8 @@
 #pragma once
 
 // Presentation timing and layout that can be asserted without a window.
-// Motion stays short: the city-open dither is 140 ms, and these beats are
-// in that same range.
+// Motion stays in the same family as the city-open dither. The dither itself
+// is a few hundred milliseconds. These smaller beats stay shorter than that.
 
 #include <algorithm>
 #include <string>
@@ -128,6 +128,58 @@ struct YearStamp {
         return "Jan " + std::to_string(show_year);
     }
 };
+
+// The selection wash must cover the glyphs, including the baseline.
+struct SelectionBand {
+    double top = 0;
+    double height = 0;
+};
+
+inline SelectionBand selection_band(double text_top, double line_h)
+{
+    const double above = 1.0;
+    const double below = line_h > 0.0 ? std::max(3.0, line_h * 0.25) : 3.0;
+    SelectionBand band;
+    band.top = text_top - above;
+    band.height = std::max(1.0, line_h) + above + below;
+    return band;
+}
+
+// Settings rows. The value and the slider sit under the caption, and the
+// next caption starts after the slider, so they cannot share a line.
+struct SettingsStack {
+    double caption = 0;
+    double bar = 0;
+    double next_caption = 0;
+};
+
+inline SettingsStack settings_stack(double origin, double text_h, double bar_h, double gap)
+{
+    SettingsStack row;
+    row.caption = origin;
+    row.bar = origin + text_h + gap;
+    row.next_caption = row.bar + bar_h + gap;
+    return row;
+}
+
+inline bool settings_stack_clear(const SettingsStack &row, double text_h)
+{
+    return row.bar >= row.caption + text_h && row.next_caption >= row.bar + 1.0;
+}
+
+enum class YearCardClick { Budget, Evaluation, Graphs, Map, Close, Escape };
+
+// Close, Escape, and Map leave the year card. Map also jumps. Budget opens
+// the sliders and stays in the dialog.
+inline bool year_card_dismisses(YearCardClick click)
+{
+    return click == YearCardClick::Close || click == YearCardClick::Escape || click == YearCardClick::Map;
+}
+
+inline bool year_card_jumps(YearCardClick click)
+{
+    return click == YearCardClick::Map;
+}
 
 // Bulldoze dust stays inside the tile. The status tag is drawn above the
 // tile, so a speck that stays at y >= 2 cannot cover "Nothing to clear".

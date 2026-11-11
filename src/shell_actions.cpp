@@ -1082,7 +1082,50 @@ void Shell::toggle_fullscreen()
         return;
     }
     const bool full = (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
-    SDL_SetWindowFullscreen(window_, !full);
+    if (!full) {
+        note_window_geometry();
+        SDL_SetWindowFullscreen(window_, true);
+    } else {
+        restoring_windowed_ = normal_valid_;
+        SDL_SetWindowFullscreen(window_, false);
+        if (normal_valid_ && normal_w_ >= 320 && normal_h_ >= 240) {
+            SDL_SetWindowSize(window_, normal_w_, normal_h_);
+            SDL_SetWindowPosition(window_, normal_x_, normal_y_);
+        }
+    }
+    SDL_SyncWindow(window_);
+    layout();
+    save_window_settings();
+}
+
+void Shell::finish_year_and_close(bool jump)
+{
+    int tile_x = 0;
+    int tile_y = 0;
+    bool jump_ok = false;
+    if (jump) {
+        const civic::YearDigest digest = year_digest();
+        jump_ok = digest.locate;
+        tile_x = digest.locate_x;
+        tile_y = digest.locate_y;
+    }
+    session_.set_tax(tax_);
+    session_.set_road_funding(road_);
+    session_.set_police_funding(police_);
+    session_.set_fire_funding(fire_);
+    if (budget_is_tax_) {
+        const auto book = session_.budget();
+        queue_milestones(session_.note_civic_year(book.cash_flow));
+        session_.remember_civic_year();
+    }
+    session_.finish_budget_edit();
+    budget_is_tax_ = false;
+    budget_cover_ = false;
+    tax_pause_hold_ = false;
+    close_dialog();
+    if (jump_ok) {
+        center_on_fraction((tile_x + 0.5) / CitySession::kWorldW, (tile_y + 0.5) / CitySession::kWorldH);
+    }
 }
 
 void Shell::toggle_overlay(CitySession::MapLayer layer)
@@ -2126,9 +2169,8 @@ void Shell::on_dialog_button(int id)
         return;
     }
     if (dialog_ == Dialog::Budget) {
-        if (budget_cover_ && budget_is_tax_ && (id == kCancel || id == kBack)) {
-            budget_cover_ = false;
-            focus_id_ = kSlider + 1;
+        if (budget_cover_ && budget_is_tax_ && (id == kCancel || id == kBack || id == kClose)) {
+            finish_year_and_close(false);
             return;
         }
         if (id == kYearBudget) {
@@ -2148,11 +2190,7 @@ void Shell::on_dialog_button(int id)
             return;
         }
         if (id == kYearLocate && budget_cover_ && budget_is_tax_) {
-            const civic::YearDigest digest = year_digest();
-            if (digest.locate) {
-                center_on_fraction((digest.locate_x + 0.5) / CitySession::kWorldW,
-                                   (digest.locate_y + 0.5) / CitySession::kWorldH);
-            }
+            finish_year_and_close(true);
             return;
         }
         if (id == kReset) {
