@@ -69,6 +69,8 @@ public:
     bool stroke_origin(int &tx, int &ty) const;
     void set_cue(const MapCue &cue);
     const MapCue &cue() const { return cue_; }
+    // Bulldoze dust, drawn under the tool tag so it cannot cover the label.
+    void set_dust(bool on, int elapsed_ms, int tile_x, int tile_y);
 
     void set_tile_size(int pixels);
     void set_shake(int dx, int dy);
@@ -108,6 +110,7 @@ public:
 private:
     bool tile_at(double x, double y, int &tx, int &ty) const;
     void draw_footprint(cairo_t *cr) const;
+    void draw_dust(cairo_t *cr) const;
     // 8 for the overview atlas, 16 for every larger zoom.
     int source_px() const;
     void ensure_surface();
@@ -136,6 +139,10 @@ private:
     int origin_x_ = -1;
     int origin_y_ = -1;
     MapCue cue_;
+    bool dust_on_ = false;
+    int dust_ms_ = 0;
+    int dust_tx_ = 0;
+    int dust_ty_ = 0;
     bool blink_on_ = false;
     int blink_ms_ = 0;
     bool atlas_was_loaded_ = false;

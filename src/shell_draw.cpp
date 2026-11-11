@@ -1949,7 +1949,8 @@ void Shell::draw_dialog(cairo_t *cr)
             h += tail + static_cast<double>(dp(16)) + tail;
             return h;
         };
-        const double blocks = block_h(copy.tax_title, copy.tax_value, "") +
+        const double fund_gap = static_cast<double>(dp(14));
+        const double blocks = block_h(copy.tax_title, copy.tax_value, "") + fund_gap +
                               block_h("Road fund", std::to_string(road_) + "%", copy.road) +
                               block_h("Police fund", std::to_string(police_) + "%", copy.police) +
                               block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
@@ -2039,6 +2040,7 @@ void Shell::draw_dialog(cairo_t *cr)
             cursor += dp(16) + tail;
         };
         slider(1, copy.tax_title, copy.tax_value, "", tax_, 0, 20);
+        cursor += fund_gap;
         auto funded = [](int percent, std::int64_t need) {
             return std::to_string(percent) + "%  " + graph_money(need * percent / 100);
         };
@@ -2670,6 +2672,7 @@ void Shell::draw(cairo_t *cr)
         }
         refresh_place_cue();
         map_.sync();
+        map_.set_dust(puff_on_, puff_ms_, puff_tx_, puff_ty_);
         map_.draw(live.cr);
         {
             const int ts = std::max(1, map_.tile_size());
@@ -2685,21 +2688,6 @@ void Shell::draw(cairo_t *cr)
                 cairo_set_line_width(live.cr, 1);
                 cairo_rectangle(live.cr, mx - 1, my - 1, ts + 2, ts + 2);
                 cairo_stroke(live.cr);
-            }
-            if (puff_on_) {
-                const double rise = (puff_ms_ / 220.0) * ts;
-                const double ox = puff_tx_ * ts + ts * 0.5;
-                const double oy = puff_ty_ * ts + ts * 0.25 - rise;
-                for (int i = 0; i < 6; ++i) {
-                    const int px = static_cast<int>(ox) + (i * 3) - 6;
-                    const int py = static_cast<int>(oy) - (i % 3) * 2;
-                    if (((px + py) & 1) == 0) {
-                        continue;
-                    }
-                    cairo_set_source_rgb(live.cr, 0.45, 0.32, 0.18);
-                    cairo_rectangle(live.cr, px, py, 2, 2);
-                    cairo_fill(live.cr);
-                }
             }
             if (pop_on_) {
                 const double grow = pop_ms_ < 90 ? pop_ms_ / 90.0 : std::max(0.0, (180.0 - pop_ms_) / 90.0);
@@ -2901,15 +2889,16 @@ void Shell::draw(cairo_t *cr)
     double ink_b = 0;
     theme::banner_fill(bar_r, bar_g, bar_b);
     theme::banner_ink(ink_r, ink_g, ink_b);
+    const BannerColors look_bar{bar_r, bar_g, bar_b, ink_r, ink_g, ink_b};
     const bool disaster_bar = notice_is_disaster(bar);
-    if (disaster_bar) {
-        bar_r = 128.0 / 255.0;
-        bar_g = 0.0;
-        bar_b = 0.0;
-        ink_r = 1.0;
-        ink_g = 1.0;
-        ink_b = 85.0 / 255.0;
-    }
+    const BannerColors message_bar = message_bar_colors(disaster_bar, look_bar);
+    const BannerColors goal_bar = goal_banner_colors(look_bar);
+    bar_r = message_bar.r;
+    bar_g = message_bar.g;
+    bar_b = message_bar.b;
+    ink_r = message_bar.ink_r;
+    ink_g = message_bar.ink_g;
+    ink_b = message_bar.ink_b;
     fill(cr, 0, win_h_ - message_h_, win_w_, message_h_, bar_r, bar_g, bar_b);
     if (disaster_bar) {
         fill(cr, 0, win_h_ - message_h_, win_w_, 3, 1.0, 0.85, 0.2);
@@ -2949,9 +2938,9 @@ void Shell::draw(cairo_t *cr)
         double edge_g = 0;
         double edge_b = 0;
         theme::banner_edge(edge_r, edge_g, edge_b);
-        fill(cr, gx, gy, gw, gh, bar_r, bar_g, bar_b);
+        fill(cr, gx, gy, gw, gh, goal_bar.r, goal_bar.g, goal_bar.b);
         stroke_rect(cr, gx, gy, gw, gh, edge_r, edge_g, edge_b);
-        paint_text(cr, ui_font(), goal, gx + pad, gy + pad, ink_r, ink_g, ink_b, wrap);
+        paint_text(cr, ui_font(), goal, gx + pad, gy + pad, goal_bar.ink_r, goal_bar.ink_g, goal_bar.ink_b, wrap);
     }
     if (dialog_ != Dialog::None) {
         draw_dialog(cr);

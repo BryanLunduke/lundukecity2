@@ -6,6 +6,7 @@
 
 #include "assets.hpp"
 #include "map_fit.hpp"
+#include "present.hpp"
 #include "special_buildings.hpp"
 
 #include "sprite_art.hpp"
@@ -111,6 +112,39 @@ bool MapView::stroke_origin(int &tx, int &ty) const
     tx = origin_x_;
     ty = origin_y_;
     return true;
+}
+
+void MapView::set_dust(bool on, int elapsed_ms, int tile_x, int tile_y)
+{
+    dust_on_ = on;
+    dust_ms_ = elapsed_ms;
+    dust_tx_ = tile_x;
+    dust_ty_ = tile_y;
+}
+
+void MapView::draw_dust(cairo_t *cr) const
+{
+    if (!dust_on_) {
+        return;
+    }
+    const int tile = std::max(tile_size_, 1);
+    const double origin_x = static_cast<double>(dust_tx_) * tile;
+    const double origin_y = static_cast<double>(dust_ty_) * tile;
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    for (int i = 0; i < 10; ++i) {
+        const int local_y = dust_speck_y(tile, dust_ms_, i);
+        const int local_x = tile / 5 + (i * 3) % std::max(1, tile - 6);
+        const int size = (i % 3 == 0) ? 4 : 3;
+        if (i % 2 == 0) {
+            cairo_set_source_rgb(cr, 1.0, 0.86, 0.55);
+        } else {
+            cairo_set_source_rgb(cr, 0.72, 0.55, 0.28);
+        }
+        cairo_rectangle(cr, origin_x + local_x, origin_y + local_y, size, size);
+        cairo_fill(cr);
+    }
+    cairo_restore(cr);
 }
 
 void MapView::set_cue(const MapCue &cue)
@@ -916,6 +950,7 @@ void MapView::draw(cairo_t *cr)
         }
     }
     cairo_restore(cr);
+    draw_dust(cr);
     draw_footprint(cr);
     cairo_restore(cr);
 }

@@ -251,6 +251,15 @@ void Shell::begin_event_pan(int tile_x, int tile_y)
     marker_ms_ = -kGlideMs;
 }
 
+void Shell::note_year_stamp()
+{
+    const std::string date = session_.date_text();
+    const int month = date.compare(0, 3, "Jan") == 0 ? 0 : 1;
+    if (motion_fx_ || !year_stamp_.armed) {
+        year_stamp_.observe(session_.city_year(), month);
+    }
+}
+
 void Shell::advance_presentation(int elapsed_ms)
 {
     if (elapsed_ms < 0) {
@@ -286,7 +295,7 @@ void Shell::advance_presentation(int elapsed_ms)
     year_stamp_.advance(elapsed_ms);
     if (puff_on_) {
         puff_ms_ += elapsed_ms;
-        if (puff_ms_ >= 220) {
+        if (puff_ms_ >= 380) {
             puff_on_ = false;
         }
     }

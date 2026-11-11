@@ -122,6 +122,7 @@ private:
     void begin_scene_fade();
     void skip_motion();
     void begin_event_pan(int tile_x, int tile_y);
+    void note_year_stamp();
     void advance_presentation(int elapsed_ms);
     void note_disaster_fx();
     void paint_scene_fade();

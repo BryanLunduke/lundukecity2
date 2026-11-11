@@ -2537,9 +2537,9 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     // on an edge the hovered tile does not touch.
     const int crime = layer_value(MapLayer::Crime, x, y);
     const int pollution = layer_value(MapLayer::Pollution, x, y);
-    if (card.offer_power) {
-        card.condition = "Unpowered";
-    } else if (crime >= pollution && crime > 0) {
+    // "Power: off" already says the zone is unpowered. The condition line
+    // keeps crime or pollution so the card does not repeat itself.
+    if (crime >= pollution && crime > 0) {
         card.condition = "Crime " + std::to_string(crime);
     } else if (pollution > 0) {
         card.condition = "Pollution " + std::to_string(pollution);

@@ -1334,8 +1334,12 @@ void Shell::loop()
                 sound_.play(name);
             }
         }
+        note_year_stamp();
         if (session_.take_budget_request()) {
-            if (dialog_pauses() && dialog_ != Dialog::Budget) {
+            // Let "Jan 19xx" stay on the map before the year-in-review card.
+            if (motion_fx_ && year_stamp_.visible() && year_stamp_.elapsed_ms < kYearStampHold) {
+                session_.keep_budget_request();
+            } else if (dialog_pauses() && dialog_ != Dialog::Budget) {
                 session_.keep_budget_request();
             } else if (dialog_ == Dialog::None || dialog_ == Dialog::Budget) {
                 budget_is_tax_ = true;

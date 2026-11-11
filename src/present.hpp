@@ -48,7 +48,42 @@ inline bool look_change_fades(bool already_shown, int before, int after)
     return already_shown && before != after;
 }
 
-// "Jan 1901" for a short beat when the calendar rolls to a new year.
+// Message bar and goal banner. A disaster paints only the message bar.
+// The goal banner keeps the look's own banner colors.
+struct BannerColors {
+    double r = 1;
+    double g = 1;
+    double b = 0.7;
+    double ink_r = 0;
+    double ink_g = 0;
+    double ink_b = 0;
+};
+
+inline BannerColors message_bar_colors(bool disaster, BannerColors look)
+{
+    if (!disaster) {
+        return look;
+    }
+    BannerColors bar = look;
+    bar.r = 128.0 / 255.0;
+    bar.g = 0.0;
+    bar.b = 0.0;
+    bar.ink_r = 1.0;
+    bar.ink_g = 1.0;
+    bar.ink_b = 85.0 / 255.0;
+    return bar;
+}
+
+inline BannerColors goal_banner_colors(BannerColors look)
+{
+    return look;
+}
+
+// "Jan 1901" when the calendar rolls. Long enough to read before the
+// year-in-review card opens (kYearStampHold).
+inline constexpr int kYearStampMs = 1600;
+inline constexpr int kYearStampHold = 1100;
+
 struct YearStamp {
     int watched = -1;
     bool armed = false;
@@ -78,7 +113,7 @@ struct YearStamp {
             ms = 0;
         }
         elapsed_ms += ms;
-        if (elapsed_ms >= 700) {
+        if (elapsed_ms >= kYearStampMs) {
             elapsed_ms = -1;
         }
     }
@@ -93,6 +128,28 @@ struct YearStamp {
         return "Jan " + std::to_string(show_year);
     }
 };
+
+// Bulldoze dust stays inside the tile. The status tag is drawn above the
+// tile, so a speck that stays at y >= 2 cannot cover "Nothing to clear".
+inline int dust_speck_y(int tile_px, int elapsed_ms, int index)
+{
+    if (tile_px < 4) {
+        tile_px = 4;
+    }
+    if (elapsed_ms < 0) {
+        elapsed_ms = 0;
+    }
+    const int rise = elapsed_ms * tile_px / 900;
+    const int base = tile_px / 2 + (index % 3) * (tile_px / 8);
+    int y = base - rise / 3;
+    if (y < 2) {
+        y = 2;
+    }
+    if (y > tile_px - 4) {
+        y = tile_px - 4;
+    }
+    return y;
+}
 
 // Goal banner width so a long scenario line does not cover the hover card.
 // room is the banner's outer width. False means the card is in the way and

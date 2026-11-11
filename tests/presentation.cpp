@@ -94,8 +94,22 @@ int main()
         return fail(8, "a new year should stamp Jan and the year");
     }
     stamp.advance(700);
+    if (!stamp.visible()) {
+        return fail(9, "the year stamp should still be readable after 700 ms");
+    }
+    stamp.advance(kYearStampMs);
     if (stamp.visible()) {
         return fail(9, "the year stamp should leave after its beat");
+    }
+    const BannerColors look{1.0, 1.0, 0.33, 0.1, 0.08, 0.0};
+    const BannerColors message = message_bar_colors(true, look);
+    const BannerColors goal = goal_banner_colors(look);
+    if (message.g > 0.05 || message.r < 0.4 || goal.r != look.r || goal.g != look.g || goal.b != look.b ||
+        goal.ink_r != look.ink_r) {
+        return fail(25, "the goal banner must keep its look colors while the message bar is red");
+    }
+    if (dust_speck_y(16, 0, 0) < 2 || dust_speck_y(16, 300, 7) < 2) {
+        return fail(26, "bulldoze dust should stay inside the tile, under the tag");
     }
 
     const ChartPlate spooky = chart_plate(2);
@@ -212,6 +226,9 @@ int main()
     const CitySession::TileInspect center = session.inspect_tile(anchor_x, anchor_y);
     if (center.access.find("Road") == std::string::npos) {
         return fail(22, "a road on the prison's edge was reported as " + center.access);
+    }
+    if (center.power != "Power: off" || center.condition == "Unpowered") {
+        return fail(22, "an unpowered prison should say power once: " + center.power + " / " + center.condition);
     }
     const int center_raw = session.map_value(anchor_x, anchor_y);
     const int center_cell = prison_row.anchor_y * prison_row.width + prison_row.anchor_x;
