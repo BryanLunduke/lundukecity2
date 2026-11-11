@@ -709,9 +709,11 @@ void Shell::note_window_geometry()
         }
     }
     if (restoring_windowed_) {
-        // The window manager may report the fullscreen size for one event
-        // after leaving fullscreen. Keep the windowed rectangle.
-        if (std::abs(ww - normal_w_) > 48 || std::abs(hh - normal_h_) > 48) {
+        // The window manager may report the fullscreen size, or the screen
+        // origin, for one event after leaving fullscreen. Keep the windowed
+        // rectangle, including where it was.
+        if (std::abs(ww - normal_w_) > 48 || std::abs(hh - normal_h_) > 48 ||
+            fullscreen_exit_position_is_spurious(x, y, normal_x_, normal_y_)) {
             return;
         }
         restoring_windowed_ = false;

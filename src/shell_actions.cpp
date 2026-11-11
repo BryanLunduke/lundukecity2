@@ -1081,6 +1081,14 @@ void Shell::match_renderer_output()
     if (renderer_ == nullptr || window_ == nullptr || win_w_ < 1 || win_h_ < 1) {
         return;
     }
+    int pixel_w = 0;
+    int pixel_h = 0;
+    SDL_GetWindowSizeInPixels(window_, &pixel_w, &pixel_h);
+    // Recreating while SDL still believes the window is the screen builds
+    // another screen-sized renderer. Wait until the window size itself is back.
+    if (std::abs(pixel_w - win_w_) > 2 || std::abs(pixel_h - win_h_) > 2) {
+        return;
+    }
     int output_w = 0;
     int output_h = 0;
     if (!SDL_GetRenderOutputSize(renderer_, &output_w, &output_h)) {
@@ -1104,6 +1112,48 @@ void Shell::match_renderer_output()
     SDL_SetRenderVSync(renderer_, 1);
 }
 
+bool Shell::windowed_frame_current() const
+{
+    if (window_ == nullptr || !normal_valid_ || normal_w_ < 320 || normal_h_ < 240) {
+        return false;
+    }
+    int ww = 0;
+    int wh = 0;
+    int x = 0;
+    int y = 0;
+    int renderer_w = 0;
+    int renderer_h = 0;
+    SDL_GetWindowSize(window_, &ww, &wh);
+    SDL_GetWindowPosition(window_, &x, &y);
+    if (renderer_ != nullptr) {
+        SDL_GetRenderOutputSize(renderer_, &renderer_w, &renderer_h);
+    }
+    if (fullscreen_exit_needs_drawable_refresh(ww, wh, renderer_w, renderer_h, normal_w_, normal_h_, windowed_density_)) {
+        return false;
+    }
+    return !fullscreen_exit_position_is_spurious(x, y, normal_x_, normal_y_);
+}
+
+void Shell::settle_windowed_frame()
+{
+    if (window_ == nullptr || !normal_valid_ || normal_w_ < 320 || normal_h_ < 240) {
+        return;
+    }
+    // Leaving fullscreen drops the configure that returns the window to its
+    // old size, and a later resize to that same size does not send another.
+    // SDL and the renderer then stay at the screen size. A one-pixel change
+    // forces a configure, and the real size and position follow it.
+    for (int attempt = 0; attempt < 4 && !windowed_frame_current(); ++attempt) {
+        SDL_PumpEvents();
+        SDL_SetWindowSize(window_, normal_w_ + 1, normal_h_);
+        SDL_SyncWindow(window_);
+        SDL_SetWindowSize(window_, normal_w_, normal_h_);
+        SDL_SetWindowPosition(window_, normal_x_, normal_y_);
+        SDL_SyncWindow(window_);
+        SDL_PumpEvents();
+    }
+}
+
 void Shell::toggle_fullscreen()
 {
     if (window_ == nullptr) {
@@ -1118,20 +1168,14 @@ void Shell::toggle_fullscreen()
         save_window_settings();
         return;
     }
+    windowed_settle_tries_ = 0;
     restoring_windowed_ = normal_valid_;
     SDL_SetWindowFullscreen(window_, false);
-    // The resize is ignored while the fullscreen flag is still set. Wait
-    // until it clears, then put the windowed rectangle back so the drawable
-    // and the layout leave the screen size on this frame.
     SDL_SyncWindow(window_);
     for (int attempt = 0; attempt < 3 && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0; ++attempt) {
         SDL_SyncWindow(window_);
     }
-    if (normal_valid_ && normal_w_ >= 320 && normal_h_ >= 240) {
-        SDL_SetWindowSize(window_, normal_w_, normal_h_);
-        SDL_SetWindowPosition(window_, normal_x_, normal_y_);
-        SDL_SyncWindow(window_);
-    }
+    settle_windowed_frame();
     layout();
     match_renderer_output();
     save_window_settings();

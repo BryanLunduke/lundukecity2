@@ -119,11 +119,27 @@ void Shell::layout()
     int pixel_h = 0;
     SDL_GetWindowSize(window_, &frame_w, &frame_h);
     SDL_GetWindowSizeInPixels(window_, &pixel_w, &pixel_h);
-    const LayoutPixels laid = layout_pixels_leaving_fullscreen(restoring_windowed_, pixel_w, pixel_h, normal_w_, normal_h_,
-                                                              windowed_density_);
-    if (restoring_windowed_ && std::abs(pixel_w - laid.w) <= 48 && std::abs(pixel_h - laid.h) <= 48 &&
-        std::abs(frame_w - normal_w_) <= 48 && std::abs(frame_h - normal_h_) <= 48) {
-        restoring_windowed_ = false;
+    int renderer_w = 0;
+    int renderer_h = 0;
+    if (renderer_ != nullptr) {
+        SDL_GetRenderOutputSize(renderer_, &renderer_w, &renderer_h);
+    }
+    // While fullscreen is being left, a screen-sized renderer must not become
+    // the layout. Laying out small and stretching into that output is the crop.
+    const int drawable_w = (restoring_windowed_ && renderer_w > 0) ? renderer_w : pixel_w;
+    const int drawable_h = (restoring_windowed_ && renderer_h > 0) ? renderer_h : pixel_h;
+    const LayoutPixels laid = layout_pixels_leaving_fullscreen(restoring_windowed_, drawable_w, drawable_h, normal_w_,
+                                                              normal_h_, windowed_density_);
+    if (restoring_windowed_ &&
+        !fullscreen_exit_needs_drawable_refresh(frame_w, frame_h, renderer_w, renderer_h, normal_w_, normal_h_,
+                                               windowed_density_)) {
+        int pos_x = 0;
+        int pos_y = 0;
+        SDL_GetWindowPosition(window_, &pos_x, &pos_y);
+        if (!fullscreen_exit_position_is_spurious(pos_x, pos_y, normal_x_, normal_y_)) {
+            restoring_windowed_ = false;
+            windowed_settle_tries_ = 0;
+        }
     }
     win_w_ = laid.w;
     win_h_ = laid.h;
@@ -3706,9 +3722,18 @@ void Shell::render()
         blink_drew_ = false;
         return;
     }
+    // The leave-fullscreen configure is easy to miss. Keep pulling the
+    // drawable back to the windowed size until it agrees, then draw.
+    if (restoring_windowed_ && windowed_settle_tries_ < 3) {
+        ++windowed_settle_tries_;
+        settle_windowed_frame();
+    }
     layout();
+    if (restoring_windowed_) {
+        match_renderer_output();
+    }
     clamp_scroll();
-    if (!redraw::needed(redraw_reasons())) {
+    if (!restoring_windowed_ && !redraw::needed(redraw_reasons())) {
         ++skipped_redraws_;
         blink_drew_ = false;
         return;

@@ -221,6 +221,34 @@ inline LayoutPoint window_point_to_layout(double x, double y, bool restoring, in
     return point;
 }
 
+// The X window can already be the windowed size while SDL's size, or the
+// renderer output, is still the screen. A same-size resize does not refresh
+// that drawable. True means the caller has to change the size and change it
+// back before drawing.
+inline bool fullscreen_exit_needs_drawable_refresh(int window_w, int window_h, int renderer_w, int renderer_h,
+                                                  int restored_w, int restored_h, float density)
+{
+    if (restored_w < 320 || restored_h < 240) {
+        return false;
+    }
+    if (!(density > 0.0f)) {
+        density = 1.0f;
+    }
+    const bool window_stale = std::abs(window_w - restored_w) > 48 || std::abs(window_h - restored_h) > 48;
+    const int want_w = std::max(1, static_cast<int>(std::lround(static_cast<double>(restored_w) * density)));
+    const int want_h = std::max(1, static_cast<int>(std::lround(static_cast<double>(restored_h) * density)));
+    const bool renderer_stale = renderer_w > 0 && renderer_h > 0 &&
+                                (std::abs(renderer_w - want_w) > 48 || std::abs(renderer_h - want_h) > 48);
+    return window_stale || renderer_stale;
+}
+
+// A leave-fullscreen configure often reports the screen origin. That is not
+// where the windowed frame was.
+inline bool fullscreen_exit_position_is_spurious(int live_x, int live_y, int kept_x, int kept_y)
+{
+    return std::abs(live_x - kept_x) > 48 || std::abs(live_y - kept_y) > 48;
+}
+
 // The thumb stays on the track at both ends. At 100% it used to hang past
 // the right end by half its width.
 inline double slider_thumb_x(double track_x, double track_w, double thumb_w, double t)

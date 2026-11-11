@@ -148,6 +148,21 @@ int main()
     if (std::fabs(hit.x - 12.0) > 0.01 || std::fabs(hit.y - 4.0) > 0.01) {
         return fail(35, "a click after leaving fullscreen was scaled to the screen");
     }
+    // The window frame is back, but SDL or the renderer is still the screen.
+    // A same-size assignment does not refresh that drawable.
+    if (!fullscreen_exit_needs_drawable_refresh(1920, 1080, 1920, 1080, 1523, 825, 1.0f) ||
+        !fullscreen_exit_needs_drawable_refresh(1523, 825, 1920, 1080, 1523, 825, 1.0f)) {
+        return fail(37, "a screen-sized renderer was treated as the restored window");
+    }
+    if (fullscreen_exit_needs_drawable_refresh(1523, 825, 1523, 825, 1523, 825, 1.0f)) {
+        return fail(37, "a restored drawable was still treated as stale");
+    }
+    if (!fullscreen_exit_position_is_spurious(0, 0, 198, 127)) {
+        return fail(38, "leaving fullscreen stored the screen origin");
+    }
+    if (fullscreen_exit_position_is_spurious(198, 127, 200, 130)) {
+        return fail(38, "the windowed position was discarded");
+    }
     const double thumb_end = slider_thumb_x(10, 200, 12, 1.0);
     const double thumb_start = slider_thumb_x(10, 200, 12, 0.0);
     if (thumb_start < 10.0 || thumb_end + 12.0 > 210.01 || thumb_end < 10.0) {
