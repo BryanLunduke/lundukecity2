@@ -459,6 +459,131 @@ bool crime_service_ready(const Micropolis *sim, int index, int center_x, int cen
     return true;
 }
 
+bool explosion_tile(int tile)
+{
+    return tile >= TINYEXP && tile <= LASTTINYEXP;
+}
+
+bool wrecked_tile(int tile)
+{
+    if (explosion_tile(tile)) {
+        return true;
+    }
+    if (tile >= FIRE && tile <= LASTFIRE) {
+        return true;
+    }
+    return tile >= RUBBLE && tile <= LASTRUBBLE;
+}
+
+bool dock_note_at(const Micropolis *sim, int x, int y)
+{
+    for (const Micropolis::MarinaDock &note : sim->marinaDock) {
+        if (note.x == x && note.y == y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A crash can replace every marina cell, including the centre, with an
+// explosion or with the rubble that explosion becomes. Nothing with
+// ZONEBIT or SPECIAL_BODY is left, so the usual search misses the lot.
+// The dock notes still name the shoreline. One bulldoze of any wrecked
+// cell in that footprint puts the shore back and clears the rest.
+bool bulldoze_dock_wreck(Micropolis *sim, int tile_x, int tile_y)
+{
+    if (!wrecked_tile(tile_of(sim, tile_x, tile_y))) {
+        return false;
+    }
+    int best_notes = 0;
+    int best_wrecked = -1;
+    int best_dist = 1000;
+    bool hit = false;
+    int best_left = 0;
+    int best_top = 0;
+    int best_width = 0;
+    int best_height = 0;
+    for (int index = 0; index < special_building_count(); ++index) {
+        const SpecialBuilding &building = kBuildings[index];
+        if (!building.needs_south_water) {
+            continue;
+        }
+        for (int top = tile_y - (building.height - 1); top <= tile_y; ++top) {
+            for (int left = tile_x - (building.width - 1); left <= tile_x; ++left) {
+                if (left < 0 || top < 0 || left + building.width > WORLD_W || top + building.height > WORLD_H) {
+                    continue;
+                }
+                int notes = 0;
+                int wrecked = 0;
+                int bodies = 0;
+                bool foreign = false;
+                for (int dy = 0; dy < building.height && !foreign; ++dy) {
+                    for (int dx = 0; dx < building.width; ++dx) {
+                        const int sx = left + dx;
+                        const int sy = top + dy;
+                        if (live_center_at(sim, sx, sy)) {
+                            foreign = true;
+                            break;
+                        }
+                        const int tile = tile_of(sim, sx, sy);
+                        if (tile == kSpecialBodyTile) {
+                            ++bodies;
+                        }
+                        if (wrecked_tile(tile) || tile == kSpecialBodyTile || special_index_for_tile(tile) >= 0) {
+                            ++wrecked;
+                        }
+                        if (dock_row(building, dy) && dock_note_at(sim, sx, sy) &&
+                            (tile == kSpecialBodyTile || wrecked_tile(tile))) {
+                            ++notes;
+                        }
+                    }
+                }
+                // A standing body tile still identifies the lot. Leave that
+                // to the ordinary remnant search so a shifted window cannot
+                // claim a neighbour.
+                if (foreign || notes < 1 || bodies > 0) {
+                    continue;
+                }
+                const int cx = left + building.anchor_x;
+                const int cy = top + building.anchor_y;
+                int adx = tile_x - cx;
+                int ady = tile_y - cy;
+                if (adx < 0) {
+                    adx = -adx;
+                }
+                if (ady < 0) {
+                    ady = -ady;
+                }
+                const int dist = adx > ady ? adx : ady;
+                const bool better = notes > best_notes || (notes == best_notes && wrecked > best_wrecked) ||
+                                    (notes == best_notes && wrecked == best_wrecked && dist < best_dist);
+                if (!better) {
+                    continue;
+                }
+                hit = true;
+                best_notes = notes;
+                best_wrecked = wrecked;
+                best_dist = dist;
+                best_left = left;
+                best_top = top;
+                best_width = building.width;
+                best_height = building.height;
+            }
+        }
+    }
+    if (!hit || sim->totalFunds < 1) {
+        return false;
+    }
+    for (int dy = 0; dy < best_height; ++dy) {
+        for (int dx = 0; dx < best_width; ++dx) {
+            settle_cell(sim, best_left + dx, best_top + dy, true);
+        }
+    }
+    sim->spend(1);
+    sim->invalidateMaps();
+    return true;
+}
+
 } // namespace
 
 int special_building_count()
@@ -868,23 +993,24 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y)
     // Bulldozing any of those leftovers, or the burned centre, clears the rest.
     const int clicked = tile_of(sim, tile_x, tile_y);
     const bool burned = (clicked >= FIRE && clicked <= LASTFIRE) || (clicked >= RUBBLE && clicked <= LASTRUBBLE);
-    if (!orphan_body(sim, tile_x, tile_y) && !burned) {
-        return false;
+    if (orphan_body(sim, tile_x, tile_y) || burned) {
+        Remnant remnant;
+        if (orphan_footprint(sim, tile_x, tile_y, remnant)) {
+            if (burned && (tile_x != remnant.left + remnant.anchor_x || tile_y != remnant.top + remnant.anchor_y)) {
+                return false;
+            }
+            if (sim->totalFunds < 1) {
+                return false;
+            }
+            clear_remnant(sim, remnant.left, remnant.top, remnant.width, remnant.height);
+            sim->spend(1);
+            sim->invalidateMaps();
+            return true;
+        }
     }
-    Remnant remnant;
-    if (!orphan_footprint(sim, tile_x, tile_y, remnant)) {
-        return false;
-    }
-    if (burned && (tile_x != remnant.left + remnant.anchor_x || tile_y != remnant.top + remnant.anchor_y)) {
-        return false;
-    }
-    if (sim->totalFunds < 1) {
-        return false;
-    }
-    clear_remnant(sim, remnant.left, remnant.top, remnant.width, remnant.height);
-    sim->spend(1);
-    sim->invalidateMaps();
-    return true;
+    // Every body tile is gone. A marina that covered shoreline can still
+    // be named by the dock notes, including while the explosion plays.
+    return bulldoze_dock_wreck(sim, tile_x, tile_y);
 }
 
 std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y)

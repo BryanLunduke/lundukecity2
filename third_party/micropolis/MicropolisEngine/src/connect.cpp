@@ -147,8 +147,12 @@ ToolResult Micropolis::connectTile(short x, short y,
                     mapVal = neutralizeRoad(mapVal);
 
                     /* Maybe this should check BULLBIT instead of checking tile values? */
-                    if ((mapVal >= TINYEXP && mapVal <= LASTTINYEXP) ||
-                            (mapVal < HBRIDGE && mapVal != DIRT)) {
+                    /* Tiles 53-55 are civic centres. They are below HBRIDGE,
+                       so without this check a road, rail, or wire paves
+                       through the middle of the building. */
+                    if (!civicGapTile(mapVal) &&
+                            ((mapVal >= TINYEXP && mapVal <= LASTTINYEXP) ||
+                             (mapVal < HBRIDGE && mapVal != DIRT))) {
 
                         effects->addCost(1);
 

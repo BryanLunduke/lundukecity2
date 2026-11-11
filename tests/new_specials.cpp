@@ -594,6 +594,121 @@ int main()
         return fail(83, "the hover allowed water under the marina building row");
     }
 
+    // Tiles 53-55 sit under the first road tile. The hover must not offer
+    // to pave them, and it must still offer to clear a tree.
+    Micropolis hover;
+    arm(hover, 21);
+    hover.map[12][12] = static_cast<unsigned short>(SPECIAL_MAYOR | ZONEBIT | BULLBIT | BURNBIT);
+    hover.map[14][14] = static_cast<unsigned short>(SPECIAL_CASINO | ZONEBIT | BULLBIT | BURNBIT);
+    hover.map[16][16] = static_cast<unsigned short>(SPECIAL_AMUSEMENT | ZONEBIT | BULLBIT | BURNBIT);
+    hover.map[18][18] = static_cast<unsigned short>(SPECIAL_PRISON | ZONEBIT | BULLBIT | BURNBIT);
+    hover.map[20][20] = static_cast<unsigned short>(WOODS | BULLBIT | BURNBIT);
+    const int line_tools[] = {TOOL_ROAD, TOOL_RAILROAD, TOOL_WIRE};
+    const int blocked_at[][2] = {{12, 12}, {14, 14}, {16, 16}, {18, 18}};
+    for (int tool : line_tools) {
+        for (const auto &cell : blocked_at) {
+            const PlaceForecast hint = forecast_tile(tool, cell[0], cell[1], -1, 50000, true, at(hover));
+            if (hint.mark == PlaceMark::Ready || hint.mark == PlaceMark::Caution) {
+                std::fprintf(stderr, "hover tool %d at %d,%d '%s'\n", tool, cell[0], cell[1], hint.tag.c_str());
+                return fail(84, "the hover would pave a civic centre or the prison");
+            }
+        }
+    }
+    const PlaceForecast tree_hint = forecast_tile(TOOL_ROAD, 20, 20, -1, 50000, true, at(hover));
+    if (tree_hint.mark != PlaceMark::Ready || tree_hint.cost != 11) {
+        std::fprintf(stderr, "tree hover '%s' cost %d\n", tree_hint.tag.c_str(), tree_hint.cost);
+        return fail(85, "the hover stopped auto-bulldozing a tree");
+    }
+
+    // A crash turns the dock into an explosion. The shoreline note has to
+    // survive that frame and a save taken while it is still playing. If
+    // the whole footprint is gone, bulldoze still puts the shore back.
+    Micropolis blown;
+    arm(blown, 22);
+    if (!place_special_building(&blown, zoo, 27, 30, error)) {
+        return fail(86, "could not place a zoo beside the marina");
+    }
+    blown.map[29][31] = REDGE;
+    blown.map[31][31] = FIRSTRIVEDGE;
+    blown.map[30][32] = CHANNEL;
+    if (!place_special_building(&blown, marina, 30, 30, error) || blown.marinaDock.size() != 2) {
+        std::fprintf(stderr, "blown '%s' notes %zu\n", error.c_str(), blown.marinaDock.size());
+        return fail(87, "the explosion setup did not cover two shoreline tiles");
+    }
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            const int frame = (dx == -1 && dy == 1) ? TINYEXP : LASTTINYEXP;
+            blown.map[30 + dx][30 + dy] = static_cast<unsigned short>(frame | BULLBIT | ANIMBIT);
+        }
+    }
+    const std::string blown_path = "/tmp/lunduke-marina-explosion.cty";
+    std::remove(blown_path.c_str());
+    if (!blown.saveCityAs(blown_path.c_str())) {
+        return fail(88, "could not save a marina while its dock was an explosion");
+    }
+    if (blown.marinaDock.size() != 2) {
+        std::fprintf(stderr, "notes after save %zu\n", blown.marinaDock.size());
+        return fail(89, "saving pruned the shoreline notes while the explosion was still playing");
+    }
+    const long blown_funds = static_cast<long>(blown.totalFunds);
+    if (!bulldoze_special_at(&blown, 30, 30) || static_cast<long>(blown.totalFunds) != blown_funds - 1) {
+        return fail(90, "bulldozing an exploded marina did not cost $1");
+    }
+    if (blown.map[29][31] != REDGE || blown.map[31][31] != FIRSTRIVEDGE || (blown.map[30][31] & LOMASK) != RUBBLE ||
+        (blown.map[30][32] & LOMASK) != CHANNEL || !special_building_intact(&blown, 27, 30)) {
+        std::fprintf(stderr, "shore %u %u mid %u zoo %u\n", blown.map[29][31], blown.map[31][31], blown.map[30][31],
+                     blown.map[27][30]);
+        return fail(91, "bulldozing the exploded marina did not put the shoreline back");
+    }
+    Micropolis loaded_blown;
+    if (!loaded_blown.loadCity(blown_path.c_str())) {
+        std::fprintf(stderr, "blown load '%s'\n", loaded_blown.loadErrorDetail.c_str());
+        return fail(92, "could not load the marina saved during the explosion");
+    }
+    if (loaded_blown.marinaDock.size() != 2) {
+        std::fprintf(stderr, "loaded notes %zu\n", loaded_blown.marinaDock.size());
+        return fail(93, "the save dropped the shoreline record");
+    }
+    const long loaded_blown_funds = static_cast<long>(loaded_blown.totalFunds);
+    if (!bulldoze_special_at(&loaded_blown, 29, 31) ||
+        static_cast<long>(loaded_blown.totalFunds) != loaded_blown_funds - 1 ||
+        loaded_blown.map[29][31] != REDGE || loaded_blown.map[31][31] != FIRSTRIVEDGE ||
+        (loaded_blown.map[30][32] & LOMASK) != CHANNEL) {
+        std::fprintf(stderr, "loaded shore %u %u\n", loaded_blown.map[29][31], loaded_blown.map[31][31]);
+        return fail(94, "bulldozing the loaded explosion did not restore the shoreline");
+    }
+
+    // After the explosion animation the cells are rubble and every body
+    // tile is gone. Bulldozing a corner of that lot still restores the shore.
+    Micropolis rubble_dock;
+    arm(rubble_dock, 23);
+    rubble_dock.map[29][31] = REDGE;
+    rubble_dock.map[31][31] = FIRSTRIVEDGE;
+    rubble_dock.map[30][32] = CHANNEL;
+    if (!place_special_building(&rubble_dock, marina, 30, 30, error)) {
+        return fail(95, "could not place a marina that will be reduced to rubble");
+    }
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            rubble_dock.map[30 + dx][30 + dy] = static_cast<unsigned short>(RUBBLE | BULLBIT);
+        }
+    }
+    rubble_dock.setFunds(0);
+    if (bulldoze_special_at(&rubble_dock, 29, 29) || rubble_dock.map[29][31] != (RUBBLE | BULLBIT)) {
+        return fail(96, "a broke city restored a destroyed marina");
+    }
+    rubble_dock.setFunds(50);
+    if (!bulldoze_special_at(&rubble_dock, 29, 29) || rubble_dock.map[29][31] != REDGE ||
+        rubble_dock.map[31][31] != FIRSTRIVEDGE || (rubble_dock.map[30][32] & LOMASK) != CHANNEL ||
+        rubble_dock.totalFunds != 49) {
+        std::fprintf(stderr, "rubble shore %u %u funds %ld\n", rubble_dock.map[29][31], rubble_dock.map[31][31],
+                     static_cast<long>(rubble_dock.totalFunds));
+        return fail(97, "bulldozing a rubble marina did not put the shoreline back");
+    }
+    if (bulldoze_special_at(&rubble_dock, 29, 31) || rubble_dock.map[29][31] != REDGE) {
+        return fail(98, "a second bulldoze treated the restored shoreline as a marina");
+    }
+
     std::printf("new specials ok\n");
     return 0;
 }

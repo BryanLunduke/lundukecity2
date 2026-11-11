@@ -196,6 +196,10 @@ void prepare_line(Scratch &map, int x, int y, bool auto_bulldoze, int &extra)
         return;
     }
     const int tile = neutralize_road(tile_of(word));
+    // Same exception as connectTile. Tiles 53-55 are civic centres, not waste.
+    if (civicGapTile(tile)) {
+        return;
+    }
     if ((tile >= TINYEXP && tile <= LASTTINYEXP) || (tile < HBRIDGE && tile != DIRT)) {
         extra += 1;
         map.set(x, y, DIRT);

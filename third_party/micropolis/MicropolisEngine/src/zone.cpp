@@ -278,6 +278,24 @@ void Micropolis::setSmoke(const Position &pos, bool zonePower)
 }
 
 
+// zonePlop writes nine consecutive tiles. A church type is drawable
+// only when that whole block is inside the shipped sheet. Types 1-7
+// start at CHURCH1 (tile 960), past the end of the 256x960 atlas, so
+// they draw as dirt. Type 1 also uses the blank cells at 956-959.
+static int churchFootprintBase(int churchType)
+{
+    if (churchType <= 0) {
+        return CHURCH0BASE;
+    }
+    return CHURCH1BASE + ((churchType - 1) * 9);
+}
+
+static bool churchGraphicShipped(int churchType)
+{
+    const int base = churchFootprintBase(churchType);
+    return base >= 0 && base + 8 < kShippedTileCount;
+}
+
 /**
  * If needed, add a new hospital or a new church.
  * @param pos Center position of the new hospital or church.
@@ -292,6 +310,9 @@ void Micropolis::makeHospital(const Position &pos)
 
     if (needChurch > 0) {
         int churchType = getRandom(7); // 0 to 7 inclusive
+        if (!churchGraphicShipped(churchType)) {
+            churchType = 0;
+        }
         int tile;
         if (churchType == 0) {
             tile = CHURCH0;
