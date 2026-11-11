@@ -238,11 +238,16 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         const double gold_r = 0.72;
         const double gold_g = 0.55;
         const double gold_b = 0.18;
+        const bool focused = !suppressed && focus_id_ == id;
         round_dialog_rect(cr, x, y, w, h, std::min(6.0, h / 2.0));
         cairo_pattern_t *shade = cairo_pattern_create_linear(x, y, x, y + h);
         if (primary) {
             cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : 0.20, pressed ? 0.32 : 0.42, pressed ? 0.62 : 0.72);
             cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
+        } else if (focused) {
+            // The focused button stays blue, the same cue the save prompt uses.
+            cairo_pattern_add_color_stop_rgb(shade, 0, 0.76, 0.84, 0.94);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.55, 0.68, 0.86);
         } else {
             const double lift = hot ? 0.06 : 0.0;
             cairo_pattern_add_color_stop_rgb(shade, 0, 0.78 + lift, 0.77 + lift, 0.75 + lift);
@@ -254,9 +259,9 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);
         cairo_set_line_width(cr, std::max(2.0, h / 16.0));
         cairo_stroke(cr);
-        if (!suppressed && focus_id_ == id) {
-            round_dialog_rect(cr, x + 3, y + 3, std::max(1.0, w - 6), std::max(1.0, h - 6), 4);
-            cairo_set_source_rgb(cr, primary ? 1.0 : 0.15, primary ? 1.0 : 0.10, primary ? 1.0 : 0.04);
+        if (!suppressed && focus_id_ == id && w > 14 && h > 14) {
+            round_dialog_rect(cr, x + 6, y + 6, w - 12, h - 12, 3);
+            cairo_set_source_rgb(cr, primary ? 1.0 : 0.10, primary ? 1.0 : 0.16, primary ? 1.0 : 0.32);
             cairo_set_line_width(cr, 1.5);
             cairo_stroke(cr);
         }
