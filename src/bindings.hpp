@@ -565,6 +565,52 @@ inline bool assign_pad(ControlBinds &binds, int act, int button, int &conflict, 
     return true;
 }
 
+// The chord moves to this action. The action that had it receives this
+// action's previous chord, which may be empty. That is how a full pad can
+// be rearranged, and how a binding can be cleared by swapping onto nothing.
+inline void swap_key(ControlBinds &binds, int act, const std::string &token)
+{
+    if (act < 0 || act >= KeyActCount) {
+        return;
+    }
+    const std::string norm = normalize_chord(token);
+    const std::string previous = binds.key[act];
+    int other = -1;
+    if (!norm.empty()) {
+        for (int i = 0; i < KeyActCount; ++i) {
+            if (i != act && binds.key[i] == norm) {
+                other = i;
+                break;
+            }
+        }
+    }
+    binds.key[act] = norm;
+    if (other >= 0) {
+        binds.key[other] = previous == norm ? std::string() : previous;
+    }
+}
+
+inline void swap_pad(ControlBinds &binds, int act, int button)
+{
+    if (act < 0 || act >= PadActCount) {
+        return;
+    }
+    const int previous = binds.pad[act];
+    int other = -1;
+    if (button >= 0) {
+        for (int i = 0; i < PadActCount; ++i) {
+            if (i != act && binds.pad[i] == button) {
+                other = i;
+                break;
+            }
+        }
+    }
+    binds.pad[act] = button;
+    if (other >= 0) {
+        binds.pad[other] = previous == button ? -1 : previous;
+    }
+}
+
 inline int pad_act_for_button(const ControlBinds &binds, int button)
 {
     if (button < 0) {

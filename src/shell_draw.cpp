@@ -284,11 +284,6 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         } else if (primary) {
             cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : 0.20, pressed ? 0.32 : 0.42, pressed ? 0.62 : 0.72);
             cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
-        } else if (focused) {
-            // Same blue as the Quit notice's focused button.
-            const DialogFocusFill fill = dialog_focus_fill();
-            cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : fill.r, pressed ? 0.32 : fill.g, pressed ? 0.62 : fill.b);
-            cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
         } else {
             const double lift = hot ? 0.06 : 0.0;
             cairo_pattern_add_color_stop_rgb(shade, 0, 0.78 + lift, 0.77 + lift, 0.75 + lift);
@@ -312,10 +307,14 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
             cairo_stroke(cr);
         }
         if (focused && w > 18 && h > 18) {
-            // Inset past the gold edge so a sample of the fill still sees blue.
+            // Primary stays blue. Any other focused button keeps the paper
+            // fill and a thick blue ring, so focus is not a second primary.
             round_dialog_rect(cr, x + 8, y + 8, w - 16, h - 16, 3);
-            const bool light_ring = (primary || focused) && !selected;
-            cairo_set_source_rgb(cr, light_ring ? 1.0 : 0.10, light_ring ? 1.0 : 0.28, light_ring ? 1.0 : 0.62);
+            if (primary && !selected) {
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            } else {
+                cairo_set_source_rgb(cr, 0.10, 0.35, 0.78);
+            }
             cairo_set_line_width(cr, 3.0);
             cairo_stroke(cr);
         }
@@ -326,7 +325,7 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         const double ty = y + (h - metrics.height) / 2.0;
         if (!enabled) {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.45, 0.42, 0.38);
-        } else if ((primary || focused) && !selected) {
+        } else if (primary && !selected) {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
         } else {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.12, 0.09, 0.06);
@@ -1222,7 +1221,7 @@ void Shell::draw_dialog(cairo_t *cr)
         place_line(body_font(), shown, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
                    theme::kTextG, theme::kTextB);
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
-                   {{"_Discard", kDiscard}, {"_Cancel", kCancel}, {"_Save", kSave}}, 1);
+                   {{"_Discard", kDiscard}, {"_Cancel", kCancel}, {"_Save", kSave}}, 1, kSave);
         return;
     }
     if (dialog_ == Dialog::Disaster) {
@@ -1279,7 +1278,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const std::string land_intro =
             "Pick a difficulty and the kind of land. Default keeps the usual rivers, lakes, and trees.";
         double want_w = new_page_ == 1 ? dp(640) : dp(520);
-        double want_h = new_page_ == 1 ? dp(560) : new_page_ == 0 ? dp(236) : dp(170);
+        double want_h = new_page_ == 1 ? dp(560) : new_page_ == 0 ? (osk ? dp(190) : dp(236)) : dp(170);
         const double land_intro_h = new_page_ == 1 ? text_block_height(land_intro, want_w - 2 * margin) : 0;
         if (new_page_ == 1) {
             want_h += std::max(0.0, land_intro_h - static_cast<double>(dp(22)));
@@ -1313,9 +1312,11 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, name_editing, x + margin, field_y,
                         dw - 2 * margin, dp(36));
             double below = field_y + dp(36);
-            button(cr, x + margin, below + dp(8), dp(140), dp(32), "_Random", kRandomName, false);
+            if (!osk) {
+                button(cr, x + margin, below + dp(8), dp(140), dp(32), "_Random", kRandomName, false);
+                below += dp(40);
+            }
             push_focus(kFieldName);
-            below += dp(40);
             if (!dialog_error_.empty()) {
                 paint_text(cr, ui_font(), dialog_error_, x + margin, below + dp(4), 0.6, 0.1, 0.1,
                            static_cast<int>(dw - 2 * margin));
@@ -1684,12 +1685,13 @@ void Shell::draw_dialog(cairo_t *cr)
         const std::string question = "Delete \"" + file_target_ + "\"? This cannot be undone.";
         const double width = message_width(win_w_, margin, dp(420), dp(560));
         const double body_h = text_block_height(question, width - 2 * margin);
-        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
+        const double error_h = dialog_error_.empty() ? 0.0 : text_block_height(dialog_error_, width - 2 * margin) + dp(8);
+        const double height = dp(40) + margin + body_h + dp(8) + error_h + dp(12) + dp(36) + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Delete file?");
         label(cr, body_font(), question, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
         if (!dialog_error_.empty()) {
-            paint_text(cr, ui_font(), dialog_error_, panel.x + margin, panel.y + dp(48) + body_h, 0.6, 0.1, 0.1,
+            paint_text(cr, ui_font(), dialog_error_, panel.x + margin, panel.y + dp(48) + body_h + dp(8), 0.6, 0.1, 0.1,
                        static_cast<int>(panel.w - 2 * margin));
         }
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_Delete", kDelete}},
@@ -1702,9 +1704,11 @@ void Shell::draw_dialog(cairo_t *cr)
         const double height = std::min(static_cast<double>(dp(560)), std::max(1.0, band_h - 2.0 * margin));
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Remap controls");
-        label(cr, ui_font(), "Choose a row, then press a key or a button. Esc cancels that press.", panel.x + margin,
-              panel.y + dp(46), static_cast<int>(panel.w - 2 * margin));
-        const double list_top = panel.y + dp(78);
+        label(cr, ui_font(),
+              "Choose a row. A or Enter listens. A taken key or button swaps. Backspace clears. Esc cancels.",
+              panel.x + margin, panel.y + dp(46), static_cast<int>(panel.w - 2 * margin));
+        const double header_y = panel.y + dp(78);
+        const double list_top = header_y + dp(22);
         const double buttons_y = panel.y + panel.h - margin - bh;
         const double error_h = dialog_error_.empty() ? 0.0 : dp(22);
         const double list_bottom = buttons_y - error_h - dp(8);
@@ -1723,6 +1727,12 @@ void Shell::draw_dialog(cairo_t *cr)
             align_list_focus();
         }
         const double row_w = panel.w - 2 * margin - dp(16);
+        paint_text(cr, bold_font(), "Action", panel.x + margin + dp(8), header_y, theme::kTextR, theme::kTextG,
+                   theme::kTextB, static_cast<int>(row_w * 0.46));
+        paint_text(cr, bold_font(), "Key", panel.x + margin + row_w * 0.48, header_y, theme::kTextR, theme::kTextG,
+                   theme::kTextB, static_cast<int>(row_w * 0.28));
+        paint_text(cr, bold_font(), "Button", panel.x + margin + row_w * 0.78, header_y, theme::kTextR, theme::kTextG,
+                   theme::kTextB, static_cast<int>(row_w * 0.2));
         for (int row = 0; row < visible; ++row) {
             const int index = list_scroll_ + row;
             if (index < 0 || index >= count) {
@@ -1767,6 +1777,19 @@ void Shell::draw_dialog(cairo_t *cr)
                 paint_text(cr, ui_font(), pad, panel.x + margin + row_w * 0.78, ry + dp(6), theme::kTextR, theme::kTextG,
                            theme::kTextB, static_cast<int>(row_w * 0.2));
             }
+        }
+        if (count > visible) {
+            const double track_x = panel.x + panel.w - margin - dp(10);
+            const double track_h = visible * static_cast<double>(row_px);
+            list_track_y_ = list_top;
+            list_track_h_ = std::max(1.0, track_h);
+            fill(cr, track_x, list_top, dp(10), track_h, 0.86, 0.86, 0.86);
+            double thumb_y = list_top;
+            double thumb_h = track_h;
+            list_thumb(list_scroll_, count, visible, list_top, track_h, thumb_y, thumb_h);
+            fill(cr, track_x, thumb_y, dp(10), thumb_h, theme::chrome_select_r(), theme::chrome_select_g(),
+                 theme::chrome_select_b());
+            push_hot(track_x - dp(4), list_top, dp(18), track_h, kListScroll);
         }
         if (!dialog_error_.empty()) {
             paint_text(cr, ui_font(), dialog_error_, panel.x + margin, buttons_y - error_h, 0.6, 0.1, 0.1,
@@ -1964,9 +1987,13 @@ void Shell::draw_dialog(cairo_t *cr)
                 }
                 full += name;
                 const CityGlance glance = city_glance(full);
+                const bool svga_pick = list_index_ == i && theme::chrome_look() == 1;
+                const double sub_r = svga_pick ? 0.95 : theme::kAccelR;
+                const double sub_g = svga_pick ? 0.95 : theme::kAccelG;
+                const double sub_b = svga_pick ? 1.0 : theme::kAccelB;
                 if (!glance.ok && !glance.summary.empty()) {
-                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, theme::kAccelR, theme::kAccelG,
-                               theme::kAccelB, static_cast<int>(row_w - (text_x - x)));
+                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, sub_r, sub_g, sub_b,
+                               static_cast<int>(row_w - (text_x - x)));
                 } else if (glance.ok && !glance.swatch.empty()) {
                     const int tw = 48;
                     const int th = 40;
@@ -1990,11 +2017,13 @@ void Shell::draw_dialog(cairo_t *cr)
                     cairo_restore(cr);
                     cairo_surface_destroy(swatch);
                     text_x = x + 16 + tw + 8;
-                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, theme::kAccelR, theme::kAccelG,
-                               theme::kAccelB, static_cast<int>(row_w - (text_x - x)));
+                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, sub_r, sub_g, sub_b,
+                               static_cast<int>(row_w - (text_x - x)));
                 }
             }
-            paint_text(cr, body_font(), name, text_x, ry + 4, theme::kTextR, theme::kTextG, theme::kTextB,
+            const bool svga_name = list_index_ == i && theme::chrome_look() == 1;
+            paint_text(cr, body_font(), name, text_x, ry + 4, svga_name ? 1.0 : theme::kTextR,
+                       svga_name ? 1.0 : theme::kTextG, svga_name ? 1.0 : theme::kTextB,
                        static_cast<int>(std::max(1.0, x + 12 + row_w - text_x - 8)));
         }
         const double track_x = x + dw - 26;
@@ -2193,11 +2222,27 @@ void Shell::draw_dialog(cairo_t *cr)
         const double col_w = tools ? (inner - dp(16)) / 2.0 : inner;
         const double col_h = tools ? std::max(text_block_height(col_a, col_w), text_block_height(col_b, col_w)) : 0.0;
         const double content_h = intro_h + (tools ? dp(8) + col_h : 0.0);
+        double tallest = content_h;
+        for (int page = 0; page < 3; ++page) {
+            if (page == controls_page_) {
+                continue;
+            }
+            const std::string page_intro =
+                std::string(controls_page_title(page, deck_)) + "\n" + controls_page_body(page, deck_, pad_names, key_text);
+            const bool page_tools = controls_page_has_tools(page, deck_);
+            const std::string page_a = page_tools ? controls_tool_column(0, 9, &key_text) : std::string();
+            const std::string page_b = page_tools ? controls_tool_column(9, 17, &key_text) : std::string();
+            const double page_intro_h = text_block_height(page_intro, inner);
+            const double page_col_w = page_tools ? (inner - dp(16)) / 2.0 : inner;
+            const double page_col_h =
+                page_tools ? std::max(text_block_height(page_a, page_col_w), text_block_height(page_b, page_col_w)) : 0.0;
+            tallest = std::max(tallest, page_intro_h + (page_tools ? dp(8) + page_col_h : 0.0));
+        }
         const double footer_h = dp(32);
         const double buttons_h = dp(36);
         const double chrome = dp(40) + margin + footer_h + dp(8) + buttons_h + margin;
         const double max_h = std::max(chrome + dp(48), band_h - 2.0 * margin);
-        const double view_h = std::max(static_cast<double>(dp(48)), std::min(content_h, max_h - chrome));
+        const double view_h = std::max(static_cast<double>(dp(48)), std::min(tallest, max_h - chrome));
         const double height = chrome + view_h;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Controls");
@@ -3493,8 +3538,11 @@ std::string Shell::dialog_title_hint() const
         return pad ? "D-pad reads the chart    " + b + " closes" : "Left and right read the chart    Esc closes";
     }
     if (dialog_ == Dialog::Bindings) {
-        return pad ? (bind_listen_ ? "Press a button    " + b + " cancels" : a + " listens    " + b + " closes")
-                   : (bind_listen_ ? "Press a key    Esc cancels" : "Enter listens    Esc closes");
+        if (bind_listen_) {
+            return pad ? "Press a button. " + b + " cancels. Backspace clears."
+                       : "Press a key. Esc cancels. Backspace clears.";
+        }
+        return pad ? a + " listens    " + b + " closes" : "Enter listens    Esc closes";
     }
     // Graphs, Evaluation, Query, About, and the one-button notices have
     // nothing to confirm. Enter dismisses them. B always has a way out.
@@ -3538,7 +3586,7 @@ std::string Shell::context_hint() const
     const ToolDef *tool = tool_by_index(tool_index_);
     const int engine = tool != nullptr ? tool->engine_id : TOOL_QUERY;
     if (overlay_on_) {
-        return pad ? a + " builds    " + b + " closes the map    D-pad scrolls"
+        return pad ? tool_press_phrase(engine, a.c_str()) + "    " + b + " closes the map    D-pad scrolls"
                    : std::string(tool_click_phrase(engine)) + "    Esc closes the map";
     }
     if (pad) {

@@ -61,8 +61,21 @@ int main()
     if (untouched.key[KeyPause] != "space" || untouched.pad[PadConfirm] != kPadSouth) {
         return fail("an old settings file did not keep the factory bindings");
     }
-    if (chord_label("ctrl+shift+s") != "Ctrl+Shift+S" || chord_label("space") != "Space") {
+    if (chord_label("ctrl+shift+s") != "Ctrl+Shift+S" || chord_label("space") != "Space" || chord_label("f8") != "F8") {
         return fail("chord labels changed");
+    }
+    ControlBinds swapped = factory;
+    swap_pad(swapped, PadPause, kPadSouth);
+    if (swapped.pad[PadPause] != kPadSouth || swapped.pad[PadConfirm] != kPadNorth) {
+        return fail("a taken pad button did not swap");
+    }
+    swap_key(swapped, KeyPause, "b");
+    if (swapped.key[KeyPause] != "b" || swapped.key[KeyTool0] != "space") {
+        return fail("a taken key did not swap");
+    }
+    swap_key(swapped, KeyPause, "");
+    if (!swapped.key[KeyPause].empty()) {
+        return fail("a key binding could not be cleared");
     }
 
     const std::string old_settings = "ui_scale=1.5\nwindow_w=1280\nwindow_h=800\nspeed=2\n";
@@ -111,9 +124,16 @@ int main()
     if (bad.ok || bad.error.find("cannot contain") == std::string::npos) {
         return fail("rename accepted a slash");
     }
+    {
+        std::ofstream side(dir / "Harbor.cty.json");
+        side << "{\"scenario\": 1}\n";
+    }
     const SaveFileResult renamed = rename_city_file(dir.string(), "Harbor.cty", "Port");
     if (!renamed.ok || !std::filesystem::exists(dir / "Port.cty") || std::filesystem::exists(file)) {
         return fail("rename did not move the city file");
+    }
+    if (!std::filesystem::exists(dir / "Port.cty.json") || std::filesystem::exists(dir / "Harbor.cty.json")) {
+        return fail("rename did not move the scenario sidecar");
     }
 #ifndef _WIN32
     if (geteuid() != 0) {
@@ -130,8 +150,8 @@ int main()
         return fail("deleting a missing file did not say so");
     }
     const SaveFileResult removed = delete_city_file(dir.string(), "Port.cty");
-    if (!removed.ok || std::filesystem::exists(dir / "Port.cty")) {
-        return fail("delete left the city file behind");
+    if (!removed.ok || std::filesystem::exists(dir / "Port.cty") || std::filesystem::exists(dir / "Port.cty.json")) {
+        return fail("delete left the city file or its sidecar behind");
     }
     std::filesystem::remove_all(dir, ec);
     std::cout << "round17 ok\n";

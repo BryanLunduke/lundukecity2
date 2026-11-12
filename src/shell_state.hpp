@@ -170,6 +170,8 @@ private:
     void autosave(bool force);
     void drop_recovery();
     void remember_recent(const std::string &path);
+    // Empty replacement drops the path. Either way the recent file is rewritten.
+    void retarget_recent(const std::string &path, const std::string &replacement);
     void load_recent();
     void center_on_fraction(double fx, double fy);
     void clamp_scroll();

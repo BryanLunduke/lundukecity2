@@ -1418,6 +1418,55 @@ void Shell::remember_recent(const std::string &path)
     }
 }
 
+void Shell::retarget_recent(const std::string &path, const std::string &replacement)
+{
+    if (path.empty()) {
+        return;
+    }
+    bool changed = false;
+    std::vector<std::string> next;
+    next.reserve(recent_.size());
+    for (const std::string &item : recent_) {
+        bool same = item == path;
+        if (!same) {
+            std::error_code cmp;
+            same = std::filesystem::equivalent(item, path, cmp);
+        }
+        if (!same) {
+            next.push_back(item);
+            continue;
+        }
+        changed = true;
+        if (!replacement.empty()) {
+            next.push_back(replacement);
+        }
+    }
+    if (!changed) {
+        return;
+    }
+    recent_.clear();
+    for (const std::string &item : next) {
+        if (std::find(recent_.begin(), recent_.end(), item) == recent_.end()) {
+            recent_.push_back(item);
+        }
+    }
+    menu_.recent_count = static_cast<int>(recent_.size());
+    const std::string dir = city_config_dir();
+    if (dir.empty()) {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::string body;
+    for (const std::string &item : recent_) {
+        body += item;
+        body += '\n';
+    }
+    if (!write_text_atomic(dir + "/recent.txt", body)) {
+        note_background_write_failed("Could not update the recent-cities list.");
+    }
+}
+
 void Shell::drop_recovery()
 {
     city_recovery::remove(own_recovery_);
@@ -1523,6 +1572,9 @@ void Shell::finish_open(const std::string &path)
     }
     remember_recent(path);
     sync_title();
+    if (dialog_ == Dialog::Welcome) {
+        close_dialog();
+    }
     if (from_welcome) {
         begin_scene_fade();
     }
@@ -2101,15 +2153,16 @@ void Shell::on_dialog_button(int id)
                 dialog_error_ = renamed.error;
                 return;
             }
-            if (!session_.save_path().empty()) {
-                const std::string target = save_rename_target(field_a_);
-                const std::filesystem::path previous =
-                    files_dir_.empty() ? std::filesystem::path(file_target_) : std::filesystem::path(files_dir_) / file_target_;
-                if (session_.save_path() == previous.string() && !target.empty()) {
-                    const std::filesystem::path next =
-                        files_dir_.empty() ? std::filesystem::path(target) : std::filesystem::path(files_dir_) / target;
-                    session_.set_save_path(next.string());
-                }
+            const std::string target = save_rename_target(field_a_);
+            const std::filesystem::path previous =
+                files_dir_.empty() ? std::filesystem::path(file_target_) : std::filesystem::path(files_dir_) / file_target_;
+            const std::filesystem::path next =
+                target.empty() || files_dir_.empty() ? std::filesystem::path(target) : std::filesystem::path(files_dir_) / target;
+            if (!session_.save_path().empty() && session_.save_path() == previous.string() && !target.empty()) {
+                session_.set_save_path(next.string());
+            }
+            if (!target.empty()) {
+                retarget_recent(previous.string(), next.string());
             }
             return_to_file_list();
             return;
@@ -2127,7 +2180,7 @@ void Shell::on_dialog_button(int id)
             const std::string gone =
                 (files_dir_.empty() ? std::filesystem::path(file_target_) : std::filesystem::path(files_dir_) / file_target_)
                     .string();
-            recent_.erase(std::remove(recent_.begin(), recent_.end(), gone), recent_.end());
+            retarget_recent(gone, "");
             return_to_file_list();
             return;
         }
@@ -2696,6 +2749,22 @@ void Shell::on_hotspot(int id, double x, double y)
             list_index_ = row;
         }
         focus_id_ = id;
+        return;
+    }
+    if (id == kListScroll && dialog_ == Dialog::Bindings) {
+        list_dragging_ = true;
+        const int max_scroll = list_max_scroll(bind_row_count(), std::max(1, files_visible_));
+        double along = list_track_h_ <= 1.0 ? 0.0 : (y - list_track_y_) / list_track_h_;
+        if (along < 0.0) {
+            along = 0.0;
+        }
+        if (along > 1.0) {
+            along = 1.0;
+        }
+        list_scroll_ = static_cast<int>(std::lround(along * max_scroll));
+        if (list_scroll_ > max_scroll) {
+            list_scroll_ = max_scroll;
+        }
         return;
     }
     if (id == kListScroll && (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario)) {
@@ -3760,8 +3829,15 @@ void Shell::activate_focus()
         on_dialog_button(new_page_ == 0 ? kNext : kGenerate);
         return;
     }
-    if (dialog_ == Dialog::Rename) {
+    if (dialog_ == Dialog::Rename || dialog_ == Dialog::FileRename) {
         on_dialog_button(kRename);
+        return;
+    }
+    if (dialog_ == Dialog::Bindings && focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
+        bind_listen_ = !bind_listen_;
+        if (bind_listen_) {
+            dialog_error_.clear();
+        }
     }
 }
 
@@ -3952,8 +4028,19 @@ std::string Shell::chord_token(SDL_Keycode key, int mods) const
         case SDLK_KP_MINUS:
             name = "kp_sub";
             break;
+        case SDLK_F1:
+        case SDLK_F2:
+        case SDLK_F3:
+        case SDLK_F4:
+        case SDLK_F5:
+        case SDLK_F6:
+        case SDLK_F7:
+        case SDLK_F8:
+        case SDLK_F9:
+        case SDLK_F10:
         case SDLK_F11:
-            name = "f11";
+        case SDLK_F12:
+            name = "f" + std::to_string(static_cast<int>(key - SDLK_F1) + 1);
             break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER:
@@ -4115,15 +4202,20 @@ void Shell::offer_bind_key(const std::string &token)
         bind_listen_ = false;
         return;
     }
-    int conflict = -1;
-    if (!assign_key(binds_, spec.key, token, conflict)) {
-        if (conflict >= 0) {
-            dialog_error_ = chord_label(token) + " is already used by " + key_act_label(conflict) + ".";
+    int other = -1;
+    const std::string norm = normalize_chord(token);
+    for (int i = 0; i < KeyActCount; ++i) {
+        if (i != spec.key && binds_.key[i] == norm) {
+            other = i;
+            break;
         }
-        bind_listen_ = false;
-        return;
     }
-    dialog_error_.clear();
+    swap_key(binds_, spec.key, token);
+    if (other >= 0) {
+        dialog_error_ = chord_label(token) + " swapped with " + key_act_label(other) + ".";
+    } else {
+        dialog_error_.clear();
+    }
     bind_listen_ = false;
 }
 
@@ -4141,24 +4233,31 @@ void Shell::offer_bind_pad(int button)
         bind_listen_ = false;
         return;
     }
-    int conflict = -1;
-    if (!assign_pad(binds_, spec.pad, button, conflict)) {
-        if (conflict >= 0) {
-            const char *who = "another action";
-            for (int i = 0; i < bind_row_count(); ++i) {
-                if (bind_row(i).pad == conflict) {
-                    who = bind_row(i).label;
-                    break;
-                }
-            }
-            dialog_error_ = std::string("That button is already used by ") + who + ".";
-        } else {
-            dialog_error_ = "That button cannot be remapped.";
-        }
+    if (button >= 0 && !pad_button_rebindable(button)) {
+        dialog_error_ = "That button cannot be remapped.";
         bind_listen_ = false;
         return;
     }
-    dialog_error_.clear();
+    int other = -1;
+    for (int i = 0; i < PadActCount; ++i) {
+        if (i != spec.pad && button >= 0 && binds_.pad[i] == button) {
+            other = i;
+            break;
+        }
+    }
+    swap_pad(binds_, spec.pad, button);
+    if (other >= 0) {
+        const char *who = "another action";
+        for (int i = 0; i < bind_row_count(); ++i) {
+            if (bind_row(i).pad == other) {
+                who = bind_row(i).label;
+                break;
+            }
+        }
+        dialog_error_ = std::string("That button swapped with ") + who + ".";
+    } else {
+        dialog_error_.clear();
+    }
     bind_listen_ = false;
 }
 

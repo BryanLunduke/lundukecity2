@@ -1073,7 +1073,14 @@ std::string Shell::visual_stamp() const
         << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
         << ' ' << static_cast<int>(menu_scroll_) << ' ' << menu_edge_dir_
         << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_
-        << ' ' << drawn_look_ << ' ' << anim_epoch_;
+        << ' ' << drawn_look_ << ' ' << anim_epoch_ << ' ' << autosave_seconds_ << ' ' << notice_sticky_ << ' '
+        << notice_text_ << ' ' << bind_listen_ << ' ' << wheel_zooms_;
+    for (int i = 0; i < KeyActCount; ++i) {
+        out << ' ' << binds_.key[i];
+    }
+    for (int i = 0; i < PadActCount; ++i) {
+        out << ' ' << binds_.pad[i];
+    }
     return out.str();
 }
 
@@ -1183,6 +1190,11 @@ void Shell::loop()
                 if (hint_until_ > now_wait) {
                     const int ms = static_cast<int>(
                         std::chrono::duration_cast<std::chrono::milliseconds>(hint_until_ - now_wait).count());
+                    timeout = std::max(1, std::min(timeout, ms));
+                }
+                if (notice_sticky_ && notice_until_ > now_wait) {
+                    const int ms = static_cast<int>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(notice_until_ - now_wait).count());
                     timeout = std::max(1, std::min(timeout, ms));
                 }
                 if (next_autosave_ <= now_wait) {
@@ -1298,6 +1310,9 @@ void Shell::loop()
         }
         note_animation();
         const auto wall = std::chrono::steady_clock::now();
+        if (notice_sticky_ && wall >= notice_until_) {
+            dismiss_background_notice();
+        }
         if (autosave_seconds_ > 0 && wall >= next_autosave_) {
             autosave(false);
             schedule_autosave();
@@ -2091,7 +2106,8 @@ void Shell::handle_event(const SDL_Event &event)
         }
         if (slider_drag_ != 0) {
             on_hotspot(slider_drag_, pointer_x_, pointer_y_);
-        } else if (list_dragging_ && (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario)) {
+        } else if (list_dragging_ &&
+                   (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Bindings)) {
             on_hotspot(kListScroll, pointer_x_, pointer_y_);
         } else if (pan_pointer_ && dialog_ == Dialog::None && !menu_.open()) {
             const double dx = pointer_x_ - pan_start_x_;
@@ -2241,7 +2257,7 @@ void Shell::handle_event(const SDL_Event &event)
             }
             break;
         }
-        if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario) && !ctrl) {
+        if ((dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Bindings) && !ctrl) {
             if (notches != 0) {
                 nudge_file_list(-notches, false, true);
                 if (hover_id_ >= kListItem && hover_id_ < kListItem + 64) {
@@ -2302,11 +2318,29 @@ void Shell::handle_event(const SDL_Event &event)
                     bind_listen_ = false;
                     break;
                 }
-                if (!nav && !chord.empty()) {
-                    offer_bind_key(chord);
+                if (key == SDLK_BACKSPACE || key == SDLK_DELETE) {
+                    if (list_index_ >= 0 && list_index_ < bind_row_count()) {
+                        const BindRow spec = bind_row(list_index_);
+                        if (spec.key >= 0) {
+                            binds_.key[spec.key].clear();
+                        } else if (spec.pad >= 0) {
+                            binds_.pad[spec.pad] = -1;
+                        }
+                        dialog_error_ = "Binding cleared.";
+                    }
+                    bind_listen_ = false;
                     break;
                 }
-                bind_listen_ = false;
+                if (nav) {
+                    bind_listen_ = false;
+                } else if (!chord.empty()) {
+                    offer_bind_key(chord);
+                    break;
+                } else {
+                    dialog_error_ = "That key cannot be remapped.";
+                    bind_listen_ = false;
+                    break;
+                }
             } else if (accel == AccelKey::Return && focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
                 bind_listen_ = true;
                 dialog_error_.clear();
@@ -2558,6 +2592,10 @@ void Shell::handle_event(const SDL_Event &event)
         const auto button = static_cast<SDL_GamepadButton>(event.gbutton.button);
         const int pact = pad_act_for_button(binds_, static_cast<int>(button));
         if (dialog_ == Dialog::Bindings && bind_listen_ && pad_button_rebindable(static_cast<int>(button))) {
+            if (pact == PadCancel || pact == PadBack) {
+                bind_listen_ = false;
+                break;
+            }
             offer_bind_pad(static_cast<int>(button));
             break;
         }

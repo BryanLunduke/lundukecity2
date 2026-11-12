@@ -1168,6 +1168,11 @@ bool CitySession::save_city_as(const std::string &path)
     dirty_ = false;
     fresh_generated_ = false;
     mark_clean_time();
+    // A city with no scenario must not keep a goal file that used to sit
+    // beside this name. The write below replaces it only when there is a clock.
+    if (engine_->sim.scoreType == SC_NONE) {
+        remove_scenario_sidecar(path);
+    }
     if (!write_scenario_sidecar(path) && engine_->sim.scoreType != SC_NONE) {
         post_message("The city was saved, but the scenario timer could not be stored. Loading this file ends the scenario.");
         return true;

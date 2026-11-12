@@ -5,6 +5,7 @@
 #pragma once
 
 #include "platform.hpp"
+#include "scenario_sidecar.hpp"
 
 #include <cctype>
 #include <filesystem>
@@ -303,6 +304,7 @@ inline SaveFileResult rename_city_file(const std::string &directory, const std::
         result.error = "Could not rename that file. The folder may be read-only.";
         return result;
     }
+    move_scenario_sidecar(from_path.string(), to_path.string());
     result.ok = true;
     return result;
 }
@@ -326,6 +328,7 @@ inline SaveFileResult delete_city_file(const std::string &directory, const std::
         result.error = "Could not delete that file. The folder may be read-only.";
         return result;
     }
+    remove_scenario_sidecar(path.string());
     result.ok = true;
     return result;
 }
