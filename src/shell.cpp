@@ -449,6 +449,7 @@ void Shell::save_window_settings()
     stored.look = look_pref_.setting();
     stored.milestone_notes = milestone_notes_ ? 1 : 0;
     stored.autosave = std::max(0, autosave_seconds_);
+    keep_required_pad(binds_);
     stored.binds = binds_override_text(binds_);
     {
         const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);

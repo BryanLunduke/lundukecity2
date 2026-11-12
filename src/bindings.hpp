@@ -539,11 +539,45 @@ inline bool assign_key(ControlBinds &binds, int act, const std::string &token, i
     return true;
 }
 
+// Confirm, Cancel, and Back are how a pad leaves a window. An empty
+// binding for one of them leaves the player stuck, so they always keep a
+// button.
+inline bool pad_act_required(int act)
+{
+    return act == PadConfirm || act == PadCancel || act == PadBack;
+}
+
+inline void keep_required_pad(ControlBinds &binds)
+{
+    for (int act = 0; act < PadActCount; ++act) {
+        if (!pad_act_required(act) || binds.pad[act] >= 0) {
+            continue;
+        }
+        const int button = factory_pad(act);
+        if (button < 0) {
+            continue;
+        }
+        for (int i = 0; i < PadActCount; ++i) {
+            if (i != act && binds.pad[i] == button) {
+                binds.pad[i] = -1;
+            }
+        }
+        binds.pad[act] = button;
+    }
+}
+
 inline bool assign_pad(ControlBinds &binds, int act, int button, int &conflict, bool steal = false)
 {
     conflict = -1;
     if (act < 0 || act >= PadActCount) {
         return false;
+    }
+    if (button < 0) {
+        if (pad_act_required(act)) {
+            return false;
+        }
+        binds.pad[act] = -1;
+        return true;
     }
     if (button >= 0) {
         if (!pad_button_rebindable(button)) {
@@ -590,10 +624,15 @@ inline void swap_key(ControlBinds &binds, int act, const std::string &token)
     }
 }
 
-inline void swap_pad(ControlBinds &binds, int act, int button)
+// False when the swap would leave Confirm, Cancel, or Back with no button.
+// Nothing changes in that case.
+inline bool swap_pad(ControlBinds &binds, int act, int button)
 {
     if (act < 0 || act >= PadActCount) {
-        return;
+        return false;
+    }
+    if (button < 0 && pad_act_required(act)) {
+        return false;
     }
     const int previous = binds.pad[act];
     int other = -1;
@@ -605,10 +644,14 @@ inline void swap_pad(ControlBinds &binds, int act, int button)
             }
         }
     }
+    if (other >= 0 && previous < 0 && pad_act_required(other)) {
+        return false;
+    }
     binds.pad[act] = button;
     if (other >= 0) {
         binds.pad[other] = previous == button ? -1 : previous;
     }
+    return true;
 }
 
 inline int pad_act_for_button(const ControlBinds &binds, int button)
@@ -626,26 +669,28 @@ inline int pad_act_for_button(const ControlBinds &binds, int button)
 
 inline std::string binds_override_text(const ControlBinds &binds)
 {
+    ControlBinds safe = binds;
+    keep_required_pad(safe);
     const ControlBinds factory = default_binds();
     std::string out;
     for (int i = 0; i < KeyActCount; ++i) {
-        if (binds.key[i] == factory.key[i]) {
+        if (safe.key[i] == factory.key[i]) {
             continue;
         }
         out += "bind_key_";
         out += key_act_id(i);
         out += "=";
-        out += binds.key[i];
+        out += safe.key[i];
         out += "\n";
     }
     for (int i = 0; i < PadActCount; ++i) {
-        if (binds.pad[i] == factory.pad[i]) {
+        if (safe.pad[i] == factory.pad[i]) {
             continue;
         }
         out += "bind_pad_";
         out += pad_act_id(i);
         out += "=";
-        out += binds.pad[i] < 0 ? "" : pad_button_token(binds.pad[i]);
+        out += safe.pad[i] < 0 ? "" : pad_button_token(safe.pad[i]);
         out += "\n";
     }
     return out;
@@ -689,7 +734,9 @@ inline ControlBinds binds_from_text(const std::string &text)
                 continue;
             }
             if (value.empty()) {
-                binds.pad[act] = -1;
+                if (!pad_act_required(act)) {
+                    binds.pad[act] = -1;
+                }
                 continue;
             }
             const int button = pad_button_from_token(lower_copy(value));
@@ -702,6 +749,7 @@ inline ControlBinds binds_from_text(const std::string &text)
             }
         }
     }
+    keep_required_pad(binds);
     return binds;
 }
 

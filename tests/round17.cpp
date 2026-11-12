@@ -77,6 +77,30 @@ int main()
     if (!swapped.key[KeyPause].empty()) {
         return fail("a key binding could not be cleared");
     }
+    ControlBinds guarded = factory;
+    if (swap_pad(guarded, PadConfirm, -1) || guarded.pad[PadConfirm] != kPadSouth) {
+        return fail("Confirm was cleared");
+    }
+    guarded.pad[PadQuery] = -1;
+    if (swap_pad(guarded, PadQuery, kPadSouth) || guarded.pad[PadConfirm] != kPadSouth) {
+        return fail("a swap left Confirm with no button");
+    }
+    const ControlBinds kept = binds_from_text("bind_pad_confirm=\nbind_pad_cancel=\nbind_pad_back=\n");
+    if (kept.pad[PadConfirm] != kPadSouth || kept.pad[PadCancel] != kPadEast || kept.pad[PadBack] != kPadBack) {
+        return fail("empty Confirm, Cancel, or Back did not keep the factory button");
+    }
+    const ControlBinds stolen = binds_from_text("bind_pad_query=east\n");
+    if (stolen.pad[PadCancel] != kPadEast || stolen.pad[PadQuery] == kPadEast) {
+        return fail("taking Cancel's button left Cancel unbound");
+    }
+    const ControlBinds query_clear = binds_from_text("bind_pad_query=\n");
+    if (query_clear.pad[PadQuery] != -1 || query_clear.pad[PadCancel] != kPadEast) {
+        return fail("an empty Query line did not clear only Query");
+    }
+    if (binds_override_text(kept).find("bind_pad_cancel=") != std::string::npos ||
+        binds_override_text(stolen).find("bind_pad_cancel=") != std::string::npos) {
+        return fail("a required pad binding was written empty");
+    }
 
     const std::string old_settings = "ui_scale=1.5\nwindow_w=1280\nwindow_h=800\nspeed=2\n";
     const ui_scale::StoredSettings parsed = ui_scale::settings_parse(old_settings);

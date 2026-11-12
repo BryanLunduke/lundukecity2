@@ -123,19 +123,9 @@ void Shell::run_review_checks()
             return;
         }
         gamepad_nav_ = true;
-        list_index_ = 1;
-        binds_.pad[PadConfirm] = 0;
-        clear_bind_row(true);
-        if (binds_.pad[PadConfirm] != -1) {
-            fail("the Query button did not clear Confirm");
-            binds_.key[KeyPause] = saved_pause;
-            binds_.pad[PadConfirm] = saved_confirm;
-            gamepad_nav_ = saved_pad;
-            dialog_ = Dialog::None;
-            return;
-        }
+        focus_id_ = kListItem;
         const std::string pad_hint = dialog_title_hint();
-        if (pad_hint.find("clears") == std::string::npos) {
+        if (pad_hint.find("clears") == std::string::npos || pad_hint.find("  ") != std::string::npos) {
             fail("pad remap hint: " + pad_hint);
             binds_.key[KeyPause] = saved_pause;
             binds_.pad[PadConfirm] = saved_confirm;
@@ -143,18 +133,70 @@ void Shell::run_review_checks()
             dialog_ = Dialog::None;
             return;
         }
-        focus_id_ = kCancel;
-        const std::string cancel_hint = dialog_title_hint();
-        if (cancel_hint.find("cancels") == std::string::npos || cancel_hint.find("listens") != std::string::npos) {
-            fail("remap hint while Cancel is focused: " + cancel_hint);
+        focus_id_ = kOk;
+        const std::string keep_hint = dialog_title_hint();
+        if (keep_hint.find("keeps these") == std::string::npos || keep_hint.find("  ") != std::string::npos ||
+            keep_hint.find(". ") == std::string::npos) {
+            fail("remap hint while OK is focused: " + keep_hint);
             binds_.key[KeyPause] = saved_pause;
             binds_.pad[PadConfirm] = saved_confirm;
             gamepad_nav_ = saved_pad;
             dialog_ = Dialog::None;
             return;
         }
+        list_index_ = 39;
+        const int saved_query = binds_.pad[PadQuery];
+        clear_bind_row(true);
+        if (binds_.pad[PadQuery] != -1 || !dialog_note_ok_) {
+            fail("the Query button did not clear Query");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            binds_.pad[PadQuery] = saved_query;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        focus_id_ = kListItem;
+        const std::string cleared_hint = dialog_title_hint();
+        if (cleared_hint.find("clears") != std::string::npos || cleared_hint.find("  ") != std::string::npos) {
+            fail("a cleared Query button was still named: " + cleared_hint);
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            binds_.pad[PadQuery] = saved_query;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        list_index_ = 1;
+        const int confirm_before = binds_.pad[PadConfirm];
+        clear_bind_row(true);
+        if (binds_.pad[PadConfirm] != confirm_before || dialog_note_ok_ ||
+            dialog_error_.find("stay bound") == std::string::npos) {
+            fail("Confirm was cleared");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            binds_.pad[PadQuery] = saved_query;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        list_index_ = 2;
+        clear_bind_row(true);
+        list_index_ = 3;
+        clear_bind_row(true);
+        if (binds_.pad[PadCancel] < 0 || binds_.pad[PadBack] < 0) {
+            fail("Cancel or Back was cleared");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            binds_.pad[PadQuery] = saved_query;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        focus_id_ = kListItem;
         binds_.key[KeyPause] = saved_pause;
         binds_.pad[PadConfirm] = saved_confirm;
+        binds_.pad[PadQuery] = saved_query;
         gamepad_nav_ = saved_pad;
         bind_listen_ = false;
         dialog_error_.clear();

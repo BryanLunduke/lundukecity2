@@ -3498,7 +3498,8 @@ void Shell::note_speed_feedback()
     }
     std::string text;
     if (speed_ <= 0) {
-        text = std::string("Paused. ") + glyph_for(PadPause) + " resumes";
+        const char *pause = glyph_for(PadPause);
+        text = pause[0] == '\0' ? std::string("Paused.") : std::string("Paused. ") + pause + " resumes";
     } else if (speed_ == 1) {
         text = "Speed: Slow";
     } else if (speed_ >= 3) {
@@ -3518,9 +3519,12 @@ void Shell::note_controller_connected()
     }
     std::string text = "Controller connected";
     if (speed_ <= 0) {
-        text += ". ";
-        text += glyph_for(PadPause);
-        text += " resumes";
+        const char *pause = glyph_for(PadPause);
+        if (pause[0] != '\0') {
+            text += ". ";
+            text += pause;
+            text += " resumes";
+        }
     }
     shown_message_ = text;
     shown_message_serial_ = session_.message_serial();
@@ -4251,7 +4255,12 @@ void Shell::offer_bind_pad(int button)
             break;
         }
     }
-    swap_pad(binds_, spec.pad, button);
+    if (!swap_pad(binds_, spec.pad, button)) {
+        dialog_error_ = "Confirm, Cancel, and Back stay bound.";
+        dialog_note_ok_ = false;
+        bind_listen_ = false;
+        return;
+    }
     if (other >= 0) {
         const char *who = "another action";
         for (int i = 0; i < bind_row_count(); ++i) {
@@ -4275,6 +4284,13 @@ void Shell::clear_bind_row(bool pad_side)
         return;
     }
     const BindRow spec = bind_row(list_index_);
+    const bool pad_column = pad_side ? spec.pad >= 0 : spec.key < 0 && spec.pad >= 0;
+    if (pad_column && pad_act_required(spec.pad)) {
+        dialog_error_ = "Confirm, Cancel, and Back stay bound.";
+        dialog_note_ok_ = false;
+        bind_listen_ = false;
+        return;
+    }
     bool cleared = false;
     if (pad_side) {
         if (spec.pad >= 0) {

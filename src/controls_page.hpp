@@ -24,8 +24,18 @@ inline char controls_letter(char key)
 // is already named Options (a PlayStation pad), which would read twice.
 inline std::string pause_run_hint(const std::string &run_button, const std::string &menu_button)
 {
-    if (menu_button == "Options") {
-        return "Game paused. Press " + run_button + ", or Options, to run the city.";
+    const bool run = !run_button.empty();
+    const bool menu = !menu_button.empty();
+    if (!run && !menu) {
+        return "Game paused.";
+    }
+    if (!run) {
+        return menu_button == "Options" ? "Game paused. Press Options to run the city."
+                                        : "Game paused. Press " + menu_button + " then Options, to run the city.";
+    }
+    if (!menu || menu_button == "Options") {
+        return menu ? "Game paused. Press " + run_button + ", or Options, to run the city."
+                    : "Game paused. Press " + run_button + " to run the city.";
     }
     return "Game paused. Press " + run_button + ", or " + menu_button + " then Options, to run the city.";
 }

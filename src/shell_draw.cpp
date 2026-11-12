@@ -61,6 +61,57 @@ const char *speed_word(int speed)
     }
 }
 
+// A hint clause is "A closes". An unbound button contributes nothing, so the
+// line never reads " closes" or "A closes  ".
+std::string hint_button(const std::string &glyph, const char *words)
+{
+    if (glyph.empty() || words == nullptr || words[0] == '\0') {
+        return {};
+    }
+    return glyph + " " + words;
+}
+
+std::string hint_pair(const std::string &left, const std::string &right, const char *words)
+{
+    if (words == nullptr || words[0] == '\0' || (left.empty() && right.empty())) {
+        return {};
+    }
+    if (left.empty()) {
+        return right + " " + words;
+    }
+    if (right.empty()) {
+        return left + " " + words;
+    }
+    return left + "/" + right + " " + words;
+}
+
+// Clauses are separated by ". " and a missing clause is dropped. That keeps
+// one space between words when a button name is absent.
+std::string hint_join(std::initializer_list<std::string> parts)
+{
+    std::string out;
+    for (const std::string &part : parts) {
+        std::string piece;
+        for (char ch : part) {
+            if (ch == ' ' && (piece.empty() || piece.back() == ' ')) {
+                continue;
+            }
+            piece.push_back(ch);
+        }
+        while (!piece.empty() && piece.back() == ' ') {
+            piece.pop_back();
+        }
+        if (piece.empty()) {
+            continue;
+        }
+        if (!out.empty()) {
+            out += ". ";
+        }
+        out += piece;
+    }
+    return out;
+}
+
 void stroke_slider_focus(cairo_t *cr, int look, double x, double y, double w, double h)
 {
     const SliderFocusRing ring = slider_focus_ring(look);
@@ -1761,8 +1812,15 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             const bool listening = bind_listen_ && list_index_ == index && focus_id_ == id;
             std::string keys = spec.key >= 0 ? chord_label(binds_.key[spec.key]) : std::string();
-            std::string pad = spec.pad >= 0 && binds_.pad[spec.pad] >= 0 ? glyph(static_cast<SDL_GamepadButton>(binds_.pad[spec.pad]))
-                                                                         : std::string();
+            std::string pad;
+            if (spec.pad >= 0) {
+                if (binds_.pad[spec.pad] >= 0) {
+                    pad = glyph(static_cast<SDL_GamepadButton>(binds_.pad[spec.pad]));
+                }
+                if (pad.empty()) {
+                    pad = "None";
+                }
+            }
             if (listening) {
                 if (spec.key >= 0 && spec.pad >= 0) {
                     keys = "Press a key or button";
@@ -2210,16 +2268,17 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::Controls) {
         const std::string heading = controls_page_title(controls_page_, deck_);
         ControlsPadNames pad_names;
-        pad_names.confirm = glyph_for(PadConfirm);
-        pad_names.cancel = glyph_for(PadCancel);
-        pad_names.west = glyph_for(PadQuery);
-        pad_names.north = glyph_for(PadPause);
-        pad_names.left = glyph_for(PadPrevTool);
-        pad_names.right = glyph_for(PadNextTool);
-        pad_names.menu = glyph_for(PadMenu);
-        pad_names.view = glyph_for(PadBack);
-        pad_names.l3 = glyph_for(PadOverlay);
-        pad_names.r3 = glyph_for(PadCenter);
+        auto named = [](const char *glyph) { return glyph != nullptr && glyph[0] != '\0' ? glyph : "None"; };
+        pad_names.confirm = named(glyph_for(PadConfirm));
+        pad_names.cancel = named(glyph_for(PadCancel));
+        pad_names.west = named(glyph_for(PadQuery));
+        pad_names.north = named(glyph_for(PadPause));
+        pad_names.left = named(glyph_for(PadPrevTool));
+        pad_names.right = named(glyph_for(PadNextTool));
+        pad_names.menu = named(glyph_for(PadMenu));
+        pad_names.view = named(glyph_for(PadBack));
+        pad_names.l3 = named(glyph_for(PadOverlay));
+        pad_names.r3 = named(glyph_for(PadCenter));
         const ControlsKeyText key_text = controls_keys();
         const std::string intro = std::string(heading) + "\n" + controls_page_body(controls_page_, deck_, pad_names, key_text);
         const bool tools = controls_page_has_tools(controls_page_, deck_);
@@ -3033,9 +3092,11 @@ void Shell::draw(cairo_t *cr)
             paint_text(cr, ui_font(), card_cost, side_x_ + 6, card_top + dp(20), theme::kTextR, theme::kTextG, theme::kTextB,
                        side_w_ - 12);
             if ((gamepad_nav_ || deck_) && card_bottom - card_top >= 52.0) {
-                const std::string legend = std::string(glyph_for(PadConfirm)) + " uses";
-                paint_text(cr, ui_font(), legend, side_x_ + 6, card_top + dp(36), theme::kAccelR, theme::kAccelG,
-                           theme::kAccelB, side_w_ - 12);
+                const char *use = glyph_for(PadConfirm);
+                if (use[0] != '\0') {
+                    paint_text(cr, ui_font(), std::string(use) + " uses", side_x_ + 6, card_top + dp(36), theme::kAccelR,
+                               theme::kAccelG, theme::kAccelB, side_w_ - 12);
+                }
             }
         }
     }
@@ -3489,22 +3550,17 @@ std::string Shell::dialog_title_hint() const
     const std::string menu = glyph_for(PadMenu);
     const bool osk_key = focus_id_ >= kOsk && focus_id_ < kOsk + 64;
     const bool field = focus_id_ == kFieldName || focus_id_ == kFieldSeed;
-    auto b_action = [&](const std::string &typed) {
+    auto b_action = [&](const std::string &typed) -> std::string {
+        if (b.empty()) {
+            return {};
+        }
         if (field_backspace_would_delete(typed, field_caret_, field_anchor_)) {
             return b + " deletes";
         }
         return b + " back";
     };
     auto with_b = [&](const std::string &lead, const std::string &typed, const std::string &tail) {
-        std::string line = lead;
-        const std::string act = b_action(typed);
-        if (!act.empty()) {
-            line += "    " + act;
-        }
-        if (!tail.empty()) {
-            line += "    " + tail;
-        }
-        return line;
+        return hint_join({lead, b_action(typed), tail});
     };
     if (osk_key) {
         int key_count = 0;
@@ -3513,79 +3569,88 @@ std::string Shell::dialog_title_hint() const
         const std::string &typed = (dialog_ == Dialog::NewCity && new_page_ > 0 && focus_id_ == kFieldSeed) ? field_b_
                                                                                                             : field_a_;
         if (index >= 0 && index < key_count && keys[index].kind == OskKind::Auto) {
-            return pad ? with_b(a + " picks a name", typed, menu + " confirms") : "Enter picks a name    Esc closes";
+            return pad ? with_b(hint_button(a, "picks a name"), typed, hint_button(menu, "confirms"))
+                       : "Enter picks a name. Esc closes";
         }
-        return pad ? with_b(a + " types", typed, menu + " confirms") : "Enter types    Esc closes";
+        return pad ? with_b(hint_button(a, "types"), typed, hint_button(menu, "confirms")) : "Enter types. Esc closes";
     }
     if (field) {
         if (dialog_ == Dialog::NewCity && new_page_ > 0 && focus_id_ == kFieldSeed && field_b_ == "auto") {
-            return pad ? a + " types    " + b + " goes back    " + menu + " confirms"
-                       : "Type here    Enter confirms    Esc goes back";
+            return pad ? hint_join({hint_button(a, "types"), hint_button(b, "goes back"), hint_button(menu, "confirms")})
+                       : "Type here. Enter confirms. Esc goes back";
         }
         const std::string &typed = focus_id_ == kFieldSeed ? field_b_ : field_a_;
-        return pad ? with_b(a + " types", typed, menu + " confirms") : "Type here    Enter confirms    Esc closes";
+        return pad ? with_b(hint_button(a, "types"), typed, hint_button(menu, "confirms"))
+                   : "Type here. Enter confirms. Esc closes";
     }
     if (focus_id_ >= kSlider && focus_id_ < kSlider + 8) {
         const std::string left = glyph_for(PadPrevTool);
         const std::string right = glyph_for(PadNextTool);
-        return pad ? "D-pad adjusts    " + left + "/" + right + " step    " + a + " confirms    " + b + " closes"
-                   : "Left and right adjust    Enter confirms    Esc closes";
+        return pad ? hint_join({"D-pad adjusts", hint_pair(left, right, "step"), hint_button(a, "confirms"),
+                                hint_button(b, "closes")})
+                   : "Left and right adjust. Enter confirms. Esc closes";
     }
     if (dialog_ == Dialog::Messages && session_.notices().empty()) {
-        return pad ? a + " closes    " + b + " closes" : "Enter closes    Esc closes";
+        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
     }
     if (dialog_ == Dialog::Messages) {
-        return pad ? a + " jumps    " + b + " closes    D-pad moves" : "Enter jumps    Esc closes";
+        return pad ? hint_join({hint_button(a, "jumps"), hint_button(b, "closes"), "D-pad moves"})
+                   : "Enter jumps. Esc closes";
     }
     if (dialog_ == Dialog::Files) {
         if (focus_id_ == kCancel) {
-            return pad ? a + " cancels    " + b + " closes" : "Enter cancels    Esc closes";
+            return pad ? hint_join({hint_button(a, "cancels"), hint_button(b, "closes")}) : "Enter cancels. Esc closes";
         }
         if (focus_id_ == kUp) {
-            return pad ? a + " goes up    " + b + " closes" : "Enter goes up    Esc closes";
+            return pad ? hint_join({hint_button(a, "goes up"), hint_button(b, "closes")}) : "Enter goes up. Esc closes";
         }
         if (focus_id_ == kRename) {
-            return pad ? a + " renames    " + b + " closes" : "Enter renames    Esc closes";
+            return pad ? hint_join({hint_button(a, "renames"), hint_button(b, "closes")}) : "Enter renames. Esc closes";
         }
         if (focus_id_ == kDelete) {
-            return pad ? a + " deletes    " + b + " closes" : "Enter deletes    Esc closes";
+            return pad ? hint_join({hint_button(a, "deletes"), hint_button(b, "closes")}) : "Enter deletes. Esc closes";
         }
         const char *verb = files_save_ ? "saves" : "opens";
-        const std::string lead = (pad ? a : std::string("Enter")) + " " + verb;
-        return pad ? lead + "    " + b + " closes    D-pad moves" : lead + "    Esc closes";
+        return pad ? hint_join({hint_button(a, verb), hint_button(b, "closes"), "D-pad moves"})
+                   : std::string("Enter ") + verb + ". Esc closes";
     }
     if (dialog_ == Dialog::Scenario) {
         if (focus_id_ == kCancel) {
-            return pad ? a + " cancels    " + b + " closes" : "Enter cancels    Esc closes";
+            return pad ? hint_join({hint_button(a, "cancels"), hint_button(b, "closes")}) : "Enter cancels. Esc closes";
         }
-        return pad ? a + " opens    " + b + " closes    D-pad moves" : "Enter opens    Esc closes";
+        return pad ? hint_join({hint_button(a, "opens"), hint_button(b, "closes"), "D-pad moves"})
+                   : "Enter opens. Esc closes";
     }
     if (dialog_ == Dialog::Controls) {
-        return pad ? a + " closes    " + b + " closes    D-pad pages" : "Enter closes    Left and right change page";
+        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes"), "D-pad pages"})
+                   : "Enter closes. Left and right change page";
     }
     if (dialog_ == Dialog::Graphs && focus_id_ == kGraphPlot) {
-        return pad ? "D-pad reads the chart    " + b + " closes" : "Left and right read the chart    Esc closes";
+        return pad ? hint_join({"D-pad reads the chart", hint_button(b, "closes")})
+                   : "Left and right read the chart. Esc closes";
     }
     if (dialog_ == Dialog::Bindings) {
         if (bind_listen_) {
-            return pad ? "Press a button. " + b + " cancels. Backspace clears."
-                       : "Press a key. Esc cancels. Backspace clears.";
+            return pad ? hint_join({"Press a button", hint_button(b, "cancels"), "Backspace clears"})
+                       : "Press a key. Esc cancels. Backspace clears";
         }
         if (focus_id_ == kCancel) {
-            return pad ? a + " cancels    " + b + " closes" : "Enter cancels    Esc closes";
+            return pad ? hint_join({hint_button(a, "cancels"), hint_button(b, "closes")}) : "Enter cancels. Esc closes";
         }
         if (focus_id_ == kReset) {
-            return pad ? a + " resets    " + b + " closes" : "Enter resets    Esc closes";
+            return pad ? hint_join({hint_button(a, "resets"), hint_button(b, "closes")}) : "Enter resets. Esc closes";
         }
         if (focus_id_ == kOk) {
-            return pad ? a + " keeps these    " + b + " closes" : "Enter keeps these    Esc closes";
+            return pad ? hint_join({hint_button(a, "keeps these"), hint_button(b, "closes")})
+                       : "Enter keeps these. Esc closes";
         }
         const bool on_row = focus_id_ >= kListItem && focus_id_ < kListItem + 64;
         if (on_row) {
-            return pad ? a + " listens. " + glyph_for(PadQuery) + " clears. " + b + " closes"
+            return pad ? hint_join({hint_button(a, "listens"), hint_button(glyph_for(PadQuery), "clears"),
+                                    hint_button(b, "closes")})
                        : "Enter listens. Backspace clears. Esc closes";
         }
-        return pad ? a + " chooses    " + b + " closes" : "Enter chooses    Esc closes";
+        return pad ? hint_join({hint_button(a, "chooses"), hint_button(b, "closes")}) : "Enter chooses. Esc closes";
     }
     // Graphs, Evaluation, Query, About, and the one-button notices have
     // nothing to confirm. Enter dismisses them. B always has a way out.
@@ -3593,15 +3658,16 @@ std::string Shell::dialog_title_hint() const
                         dialog_ == Dialog::About || dialog_ == Dialog::Info || dialog_ == Dialog::LoadError ||
                         dialog_ == Dialog::SaveError || dialog_ == Dialog::HowToPlay;
     if (closes) {
-        return pad ? a + " closes    " + b + " closes" : "Enter closes    Esc closes";
+        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
     }
     if (focus_id_ == kCancel) {
-        return pad ? a + " cancels    " + b + " closes" : "Enter cancels    Esc closes";
+        return pad ? hint_join({hint_button(a, "cancels"), hint_button(b, "closes")}) : "Enter cancels. Esc closes";
     }
     if (dialog_ == Dialog::NewCity && new_page_ > 0) {
-        return pad ? a + " confirms    " + b + " goes back" : "Enter confirms    Esc goes back";
+        return pad ? hint_join({hint_button(a, "confirms"), hint_button(b, "goes back")})
+                   : "Enter confirms. Esc goes back";
     }
-    return pad ? a + " confirms    " + b + " closes" : "Enter confirms    Esc closes";
+    return pad ? hint_join({hint_button(a, "confirms"), hint_button(b, "closes")}) : "Enter confirms. Esc closes";
 }
 
 std::string Shell::context_hint() const
@@ -3614,7 +3680,8 @@ std::string Shell::context_hint() const
     const std::string right = glyph_for(PadNextTool);
     const std::string menu = glyph_for(PadMenu);
     if (menu_.open()) {
-        return pad ? a + " chooses    " + b + " closes    D-pad moves" : "Enter chooses    Esc closes";
+        return pad ? hint_join({hint_button(a, "chooses"), hint_button(b, "closes"), "D-pad moves"})
+                   : "Enter chooses. Esc closes";
     }
     if (dialog_ != Dialog::None) {
         // Pad players read this in the title bar. Mouse players read it here.
@@ -3624,42 +3691,41 @@ std::string Shell::context_hint() const
         return dialog_title_hint();
     }
     if (special_open_) {
-        return pad ? a + " selects    " + b + " closes" : "Enter selects    Esc closes";
+        return pad ? hint_join({hint_button(a, "selects"), hint_button(b, "closes")}) : "Enter selects. Esc closes";
     }
     const ToolDef *tool = tool_by_index(tool_index_);
     const int engine = tool != nullptr ? tool->engine_id : TOOL_QUERY;
     if (overlay_on_) {
-        return pad ? tool_press_phrase(engine, a.c_str()) + "    " + b + " closes the map    D-pad scrolls"
-                   : std::string(tool_click_phrase(engine)) + "    Esc closes the map";
+        return pad ? hint_join({tool_press_phrase(engine, a.c_str()), hint_button(b, "closes the map"), "D-pad scrolls"})
+                   : std::string(tool_click_phrase(engine)) + ". Esc closes the map";
     }
     if (pad) {
         const int under = hit(cursor_x_, cursor_y_);
         if (under == kPaletteId) {
-            return "Tools: " + a + " selects    " + left + "/" + right + " cycle    " + menu + " menu";
+            std::string tools = "Tools";
+            if (!a.empty()) {
+                tools += ": " + a + " selects";
+            }
+            return hint_join({tools, hint_pair(left, right, "cycle"), hint_button(menu, "menu")});
         }
         if (under == kMinimapId) {
-            return "Minimap: " + a + " jumps    D-pad scrolls    " + menu + " menu";
+            std::string mini = "Minimap";
+            if (!a.empty()) {
+                mini += ": " + a + " jumps";
+            }
+            return hint_join({mini, "D-pad scrolls", hint_button(menu, "menu")});
         }
         if (under >= kMenuTitle && under < kMenuTitle + 8) {
-            return a + " opens the menu";
+            return a.empty() ? std::string("Opens the menu") : a + " opens the menu";
         }
         if (cursor_y_ < static_cast<float>(menu_h_) || cursor_x_ < static_cast<float>(view_x_)) {
-            return "Pointing at the panel. " + a + " uses it    " + menu + " menu";
+            return hint_join({"Pointing at the panel", hint_button(a, "uses it"), hint_button(menu, "menu")});
         }
         const std::string query = glyph_for(PadQuery);
         const std::string pause = glyph_for(PadPause);
-        std::string line = tool_press_phrase(engine, a.c_str());
-        if (!query.empty()) {
-            line += "    " + query + " query";
-        }
-        if (!pause.empty()) {
-            line += "    " + pause + (speed_ <= 0 ? " resumes" : " pauses");
-        }
-        if (overlay_on_) {
-            line += "    " + b + " closes the map";
-        }
-        line += "    " + left + "/" + right + " tool    " + menu + " menu";
-        return line;
+        return hint_join({tool_press_phrase(engine, a.c_str()), hint_button(query, "query"),
+                          hint_button(pause, speed_ <= 0 ? "resumes" : "pauses"), hint_pair(left, right, "tool"),
+                          hint_button(menu, "menu")});
     }
     if (finger) {
         std::string phrase = tool_click_phrase(engine);
@@ -3670,8 +3736,11 @@ std::string Shell::context_hint() const
         return phrase;
     }
     const std::string pause_key = chord_label(binds_.key[KeyPause]);
-    return std::string(tool_click_phrase(engine)) + "    Arrows pan    " + pause_key +
-           (speed_ <= 0 ? " resumes" : " pauses");
+    std::string line = std::string(tool_click_phrase(engine)) + ". Arrows pan";
+    if (!pause_key.empty() && pause_key != "None") {
+        line += ". " + pause_key + (speed_ <= 0 ? " resumes" : " pauses");
+    }
+    return line;
 }
 
 std::string Shell::idle_message() const
