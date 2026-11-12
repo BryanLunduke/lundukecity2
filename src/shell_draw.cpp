@@ -1708,7 +1708,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double height = std::min(static_cast<double>(dp(560)), std::max(1.0, band_h - 2.0 * margin));
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Remap controls");
-        const std::string help = "A or Enter listens. Taken bindings swap. Backspace clears the row.";
+        const std::string help = "A or Enter listens. Taken bindings swap. Backspace clears.";
         const double help_w = std::max(1.0, panel.w - 2 * margin);
         const double help_h = text_block_height(help, help_w);
         label(cr, ui_font(), help, panel.x + margin, panel.y + dp(46), static_cast<int>(help_w));
