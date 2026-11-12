@@ -2701,6 +2701,7 @@ void Shell::on_hotspot(int id, double x, double y)
             focus_id_ = id;
             bind_listen_ = true;
             dialog_error_.clear();
+            dialog_note_ok_ = false;
             return;
         }
         if (dialog_ == Dialog::Files) {
@@ -4199,6 +4200,7 @@ void Shell::offer_bind_key(const std::string &token)
     const BindRow spec = bind_row(list_index_);
     if (spec.key < 0) {
         dialog_error_ = "That row takes a button, not a key.";
+        dialog_note_ok_ = false;
         bind_listen_ = false;
         return;
     }
@@ -4213,8 +4215,10 @@ void Shell::offer_bind_key(const std::string &token)
     swap_key(binds_, spec.key, token);
     if (other >= 0) {
         dialog_error_ = chord_label(token) + " swapped with " + key_act_label(other) + ".";
+        dialog_note_ok_ = true;
     } else {
         dialog_error_.clear();
+        dialog_note_ok_ = false;
     }
     bind_listen_ = false;
 }
@@ -4230,11 +4234,13 @@ void Shell::offer_bind_pad(int button)
     const BindRow spec = bind_row(list_index_);
     if (spec.pad < 0) {
         dialog_error_ = "That row takes a key, not a button.";
+        dialog_note_ok_ = false;
         bind_listen_ = false;
         return;
     }
     if (button >= 0 && !pad_button_rebindable(button)) {
         dialog_error_ = "That button cannot be remapped.";
+        dialog_note_ok_ = false;
         bind_listen_ = false;
         return;
     }
@@ -4255,10 +4261,41 @@ void Shell::offer_bind_pad(int button)
             }
         }
         dialog_error_ = std::string("That button swapped with ") + who + ".";
+        dialog_note_ok_ = true;
     } else {
         dialog_error_.clear();
+        dialog_note_ok_ = false;
     }
     bind_listen_ = false;
+}
+
+void Shell::clear_bind_row(bool pad_side)
+{
+    if (dialog_ != Dialog::Bindings || list_index_ < 0 || list_index_ >= bind_row_count()) {
+        return;
+    }
+    const BindRow spec = bind_row(list_index_);
+    bool cleared = false;
+    if (pad_side) {
+        if (spec.pad >= 0) {
+            binds_.pad[spec.pad] = -1;
+            cleared = true;
+        } else if (spec.key >= 0) {
+            binds_.key[spec.key].clear();
+            cleared = true;
+        }
+    } else if (spec.key >= 0) {
+        binds_.key[spec.key].clear();
+        cleared = true;
+    } else if (spec.pad >= 0) {
+        binds_.pad[spec.pad] = -1;
+        cleared = true;
+    }
+    bind_listen_ = false;
+    if (cleared) {
+        dialog_error_ = "Binding cleared.";
+        dialog_note_ok_ = true;
+    }
 }
 
 void Shell::return_to_file_list()

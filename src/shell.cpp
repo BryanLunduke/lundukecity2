@@ -1067,7 +1067,7 @@ std::string Shell::visual_stamp() const
         << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_gate_ << ' ' << shown_message_ << ' '
         << hint_visible << ' ' << query_pinned_ << ' ' << gamepad_nav_ << ' ' << cursor_x_ << ' ' << cursor_y_ << ' '
         << pointer_x_ << ' ' << pointer_y_ << ' ' << field_a_ << ' ' << field_b_ << ' ' << field_caret_ << ' ' << field_anchor_
-        << ' ' << dialog_error_ << ' '
+        << ' ' << dialog_error_ << ' ' << dialog_note_ok_ << ' '
         << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
         << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
         << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
@@ -2319,16 +2319,7 @@ void Shell::handle_event(const SDL_Event &event)
                     break;
                 }
                 if (key == SDLK_BACKSPACE || key == SDLK_DELETE) {
-                    if (list_index_ >= 0 && list_index_ < bind_row_count()) {
-                        const BindRow spec = bind_row(list_index_);
-                        if (spec.key >= 0) {
-                            binds_.key[spec.key].clear();
-                        } else if (spec.pad >= 0) {
-                            binds_.pad[spec.pad] = -1;
-                        }
-                        dialog_error_ = "Binding cleared.";
-                    }
-                    bind_listen_ = false;
+                    clear_bind_row(false);
                     break;
                 }
                 if (nav) {
@@ -2338,12 +2329,18 @@ void Shell::handle_event(const SDL_Event &event)
                     break;
                 } else {
                     dialog_error_ = "That key cannot be remapped.";
+                    dialog_note_ok_ = false;
                     bind_listen_ = false;
                     break;
                 }
+            } else if ((key == SDLK_BACKSPACE || key == SDLK_DELETE) && focus_id_ >= kListItem &&
+                       focus_id_ < kListItem + 64) {
+                clear_bind_row(false);
+                break;
             } else if (accel == AccelKey::Return && focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
                 bind_listen_ = true;
                 dialog_error_.clear();
+                dialog_note_ok_ = false;
                 break;
             } else if (!nav && accel != AccelKey::Escape && accel != AccelKey::Return && !chord.empty() &&
                        focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
@@ -2696,6 +2693,8 @@ void Shell::handle_event(const SDL_Event &event)
         if (pact == PadQuery) {
             if (active_field() != nullptr) {
                 backspace_field();
+            } else if (dialog_ == Dialog::Bindings && focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
+                clear_bind_row(true);
             } else if (dialog_ == Dialog::None && !menu_.open()) {
                 select_tool(kToolCount - 1);
             }

@@ -607,9 +607,9 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         drop_x += metrics.width + 24;
     }
     // 36px rows read well at 1280. A short window keeps the label inside the
-    // row (the underline used to spill into the next line). The popup may
-    // cover the status and message bars; stopping above them pushed the last
-    // Options row off a 1024x640 window. What still will not fit scrolls.
+    // row. A desktop popup may cover the status and hint bars; stopping
+    // above them pushed the last Options row off a 1024x640 window. On a
+    // Deck the popup stops above those bars and scrolls, so the hint stays.
     int n_item = 0;
     int n_sep = 0;
     for (int i = 0; i < count; ++i) {
@@ -619,7 +619,11 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             ++n_item;
         }
     }
-    const double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - 4));
+    double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - 4));
+    if (deck_) {
+        const double bars = static_cast<double>(status_h_ + message_h_);
+        avail = std::max(120.0, static_cast<double>(win_h_ - menu_h_) - bars - 4.0);
+    }
     const int label_h = measure_text(cr, menu_font(), "Ag", -1).height;
     menu_table::MenuPitch pitch =
         menu_table::menu_pitch(avail, n_item, n_sep, static_cast<double>(control_px(36, 48)), label_h);
@@ -1704,13 +1708,15 @@ void Shell::draw_dialog(cairo_t *cr)
         const double height = std::min(static_cast<double>(dp(560)), std::max(1.0, band_h - 2.0 * margin));
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Remap controls");
-        label(cr, ui_font(),
-              "Choose a row. A or Enter listens. A taken key or button swaps. Backspace clears. Esc cancels.",
-              panel.x + margin, panel.y + dp(46), static_cast<int>(panel.w - 2 * margin));
-        const double header_y = panel.y + dp(78);
+        const std::string help = "A or Enter listens. Taken bindings swap. Backspace clears the row.";
+        const double help_w = std::max(1.0, panel.w - 2 * margin);
+        const double help_h = text_block_height(help, help_w);
+        label(cr, ui_font(), help, panel.x + margin, panel.y + dp(46), static_cast<int>(help_w));
+        const double header_y = panel.y + dp(46) + help_h + dp(10);
         const double list_top = header_y + dp(22);
         const double buttons_y = panel.y + panel.h - margin - bh;
-        const double error_h = dialog_error_.empty() ? 0.0 : dp(22);
+        const double note_w = std::max(1.0, panel.w - 2 * margin);
+        const double error_h = dialog_error_.empty() ? 0.0 : text_block_height(dialog_error_, note_w) + dp(6);
         const double list_bottom = buttons_y - error_h - dp(8);
         const int row_px = control_px(32, 40);
         const int visible = std::max(1, static_cast<int>((list_bottom - list_top) / row_px));
@@ -1792,7 +1798,10 @@ void Shell::draw_dialog(cairo_t *cr)
             push_hot(track_x - dp(4), list_top, dp(18), track_h, kListScroll);
         }
         if (!dialog_error_.empty()) {
-            paint_text(cr, ui_font(), dialog_error_, panel.x + margin, buttons_y - error_h, 0.6, 0.1, 0.1,
+            const double ink_r = dialog_note_ok_ ? 0.10 : 0.6;
+            const double ink_g = dialog_note_ok_ ? 0.38 : 0.1;
+            const double ink_b = dialog_note_ok_ ? 0.16 : 0.1;
+            paint_text(cr, ui_font(), dialog_error_, panel.x + margin, buttons_y - error_h, ink_r, ink_g, ink_b,
                        static_cast<int>(panel.w - 2 * margin));
         }
         buttons_at(panel.x, panel.w, buttons_y, {{"_Reset to defaults", kReset}, {"_Cancel", kCancel}, {"_OK", kOk}}, 1,
@@ -2165,7 +2174,7 @@ void Shell::draw_dialog(cairo_t *cr)
         auto switch_row = [&](const char *label, const char *state, int id, double sy) {
             paint_text(cr, ui_font(), label, x + margin, sy + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(switch_x - x - margin - dp(8)));
-            button(cr, switch_x, sy, switch_w, bh, state, id, focus_id_ == id);
+            button(cr, switch_x, sy, switch_w, bh, state, id, false);
         };
         const bool scale_auto = scale_percent_ <= 0;
         const std::string scale_text = scale_auto ? "Auto" : std::to_string(scale_percent_) + "%";
@@ -2174,7 +2183,7 @@ void Shell::draw_dialog(cairo_t *cr)
         slider(2, scale_caption, "", scale_auto ? 100 : scale_percent_, 50, 200, scale_row, !scale_auto, true);
         const double auto_h = std::min(bh, text_h + static_cast<double>(dp(6)));
         button(cr, switch_x, content + scale_row.caption, switch_w, auto_h, scale_auto ? "Auto" : "Manual", kScaleAuto,
-               focus_id_ == kScaleAuto);
+               false);
         double sy = content + scale_row.next_caption;
         switch_row("Pause when unfocused", pause_unfocused_ ? "On" : "Off", kReset, sy);
         sy += bh + stack_gap;
@@ -3528,7 +3537,27 @@ std::string Shell::dialog_title_hint() const
     if (dialog_ == Dialog::Messages) {
         return pad ? a + " jumps    " + b + " closes    D-pad moves" : "Enter jumps    Esc closes";
     }
-    if (dialog_ == Dialog::Scenario || dialog_ == Dialog::Files) {
+    if (dialog_ == Dialog::Files) {
+        if (focus_id_ == kCancel) {
+            return pad ? a + " cancels    " + b + " closes" : "Enter cancels    Esc closes";
+        }
+        if (focus_id_ == kUp) {
+            return pad ? a + " goes up    " + b + " closes" : "Enter goes up    Esc closes";
+        }
+        if (focus_id_ == kRename) {
+            return pad ? a + " renames    " + b + " closes" : "Enter renames    Esc closes";
+        }
+        if (focus_id_ == kDelete) {
+            return pad ? a + " deletes    " + b + " closes" : "Enter deletes    Esc closes";
+        }
+        const char *verb = files_save_ ? "saves" : "opens";
+        const std::string lead = (pad ? a : std::string("Enter")) + " " + verb;
+        return pad ? lead + "    " + b + " closes    D-pad moves" : lead + "    Esc closes";
+    }
+    if (dialog_ == Dialog::Scenario) {
+        if (focus_id_ == kCancel) {
+            return pad ? a + " cancels    " + b + " closes" : "Enter cancels    Esc closes";
+        }
         return pad ? a + " opens    " + b + " closes    D-pad moves" : "Enter opens    Esc closes";
     }
     if (dialog_ == Dialog::Controls) {
@@ -3542,7 +3571,21 @@ std::string Shell::dialog_title_hint() const
             return pad ? "Press a button. " + b + " cancels. Backspace clears."
                        : "Press a key. Esc cancels. Backspace clears.";
         }
-        return pad ? a + " listens    " + b + " closes" : "Enter listens    Esc closes";
+        if (focus_id_ == kCancel) {
+            return pad ? a + " cancels    " + b + " closes" : "Enter cancels    Esc closes";
+        }
+        if (focus_id_ == kReset) {
+            return pad ? a + " resets    " + b + " closes" : "Enter resets    Esc closes";
+        }
+        if (focus_id_ == kOk) {
+            return pad ? a + " keeps these    " + b + " closes" : "Enter keeps these    Esc closes";
+        }
+        const bool on_row = focus_id_ >= kListItem && focus_id_ < kListItem + 64;
+        if (on_row) {
+            return pad ? a + " listens. " + glyph_for(PadQuery) + " clears. " + b + " closes"
+                       : "Enter listens. Backspace clears. Esc closes";
+        }
+        return pad ? a + " chooses    " + b + " closes" : "Enter chooses    Esc closes";
     }
     // Graphs, Evaluation, Query, About, and the one-button notices have
     // nothing to confirm. Enter dismisses them. B always has a way out.

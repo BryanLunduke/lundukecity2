@@ -277,6 +277,9 @@ private:
     void fill_random_city_name();
     void offer_bind_key(const std::string &token);
     void offer_bind_pad(int button);
+    // pad_side clears the button column. Otherwise the key column. A row with
+    // only one of them clears that one.
+    void clear_bind_row(bool pad_side);
     void return_to_file_list();
     bool file_row_selected() const;
     std::string chord_token(SDL_Keycode key, int mods) const;
@@ -468,6 +471,9 @@ private:
     int field_caret_ = 0;
     int field_anchor_ = 0;
     std::string dialog_error_;
+    // A note in dialog_error_ that is a result, not a problem. Drawn in ink,
+    // not the red used for a name or a file error.
+    bool dialog_note_ok_ = false;
     std::string info_title_;
     std::string info_body_;
     int new_page_ = 0;

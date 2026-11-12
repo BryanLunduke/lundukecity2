@@ -76,7 +76,91 @@ void Shell::run_review_checks()
         fail("clicking visible row 4 while scrolled to 21 should select file 25, got " + std::to_string(list_index_));
         return;
     }
+    // The Load footer follows the focused control. Cancel must not keep
+    // saying that Enter opens a city.
+    focus_id_ = kCancel;
+    const std::string load_cancel = dialog_title_hint();
+    if (load_cancel.find("cancels") == std::string::npos || load_cancel.find("opens") != std::string::npos) {
+        fail("Load hint while Cancel is focused: " + load_cancel);
+        return;
+    }
+    focus_id_ = kListItem;
+    const std::string load_row_hint = dialog_title_hint();
+    if (load_row_hint.find("opens") == std::string::npos) {
+        fail("Load hint while a file is focused: " + load_row_hint);
+        return;
+    }
     dialog_ = Dialog::None;
+
+    // Backspace clears a focused remap row before it is listening, and the
+    // Query button clears the pad column. A swap note is not an error.
+    {
+        const std::string saved_pause = binds_.key[KeyPause];
+        const int saved_confirm = binds_.pad[PadConfirm];
+        const bool saved_pad = gamepad_nav_;
+        dialog_ = Dialog::Bindings;
+        list_index_ = 0;
+        focus_id_ = kListItem;
+        bind_listen_ = false;
+        gamepad_nav_ = false;
+        binds_.key[KeyPause] = "k";
+        clear_bind_row(false);
+        if (!binds_.key[KeyPause].empty() || !dialog_note_ok_ || dialog_error_ != "Binding cleared.") {
+            fail("Backspace on a focused row did not clear Pause");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        const std::string key_hint = dialog_title_hint();
+        if (key_hint.find("Backspace") == std::string::npos || key_hint.find("listens") == std::string::npos) {
+            fail("remap hint for a focused row: " + key_hint);
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        gamepad_nav_ = true;
+        list_index_ = 1;
+        binds_.pad[PadConfirm] = 0;
+        clear_bind_row(true);
+        if (binds_.pad[PadConfirm] != -1) {
+            fail("the Query button did not clear Confirm");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        const std::string pad_hint = dialog_title_hint();
+        if (pad_hint.find("clears") == std::string::npos) {
+            fail("pad remap hint: " + pad_hint);
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        focus_id_ = kCancel;
+        const std::string cancel_hint = dialog_title_hint();
+        if (cancel_hint.find("cancels") == std::string::npos || cancel_hint.find("listens") != std::string::npos) {
+            fail("remap hint while Cancel is focused: " + cancel_hint);
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        binds_.key[KeyPause] = saved_pause;
+        binds_.pad[PadConfirm] = saved_confirm;
+        gamepad_nav_ = saved_pad;
+        bind_listen_ = false;
+        dialog_error_.clear();
+        dialog_note_ok_ = false;
+        dialog_ = Dialog::None;
+    }
 
     // H1: Budget Cancel restores the rates from when the window opened,
     // including outside a tax year where the sliders apply live.
