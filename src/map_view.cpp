@@ -722,7 +722,7 @@ void paint_corners(cairo_t *cr, double x, double y, double w, double h, double l
     cairo_stroke(cr);
 }
 
-void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::string &text, int tile)
+void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::string &text, int tile, int slot)
 {
     if (text.empty()) {
         return;
@@ -735,9 +735,15 @@ void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::s
     const double tw = extents.width + pad * 2;
     const double th = extents.height + pad * 2;
     double tx = w > tw ? x + (w - tw) / 2.0 : x;
-    double ty = y - th - 2.0;
+    const int stack = slot < 0 ? 0 : slot;
+    double ty = y - (stack + 1) * (th + 2.0);
     if (ty < 0.0) {
-        ty = y + h + 2.0;
+        ty = y + h + 2.0 + stack * (th + 2.0);
+    }
+    const double cx = x + w * 0.5;
+    const double cy = y + h * 0.5;
+    if (cx >= tx && cx <= tx + tw && cy >= ty && cy <= ty + th) {
+        tx = cx + std::max(8.0, w * 0.55);
     }
     vga_rgb(cr, 0, 0, 0);
     cairo_rectangle(cr, tx + 1.0, ty + 1.0, tw, th);
@@ -844,7 +850,7 @@ void MapView::draw_footprint(cairo_t *cr) const
                 cairo_stroke(cr);
             }
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.55), cue_.mark);
-            paint_tag(cr, x, y, w, h, cue_.tag, tile_size_);
+            paint_tag(cr, x, y, w, h, cue_.tag, tile_size_, 0);
         }
         if (cue_.receipt && cue_.rwidth > 0 && cue_.rheight > 0) {
             const double x = cue_.rleft * tile;
@@ -852,7 +858,8 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double w = cue_.rwidth * tile;
             const double h = cue_.rheight * tile;
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.6), cue_.receipt_ok ? 1 : 3);
-            paint_tag(cr, x, y + (cue_.active ? h + 4.0 : 0.0), w, h, cue_.receipt_text, tile_size_);
+            const int receipt_slot = cue_.active && !cue_.tag.empty() ? 1 : 0;
+            paint_tag(cr, x, y, w, h, cue_.receipt_text, tile_size_, receipt_slot);
         }
         cairo_restore(cr);
         if (cue_.active) {

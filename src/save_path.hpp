@@ -239,3 +239,93 @@ inline void remember_city_folder(const std::string &path)
     }
     out << folder << '\n';
 }
+
+struct SaveFileResult {
+    bool ok = false;
+    std::string error;
+};
+
+inline bool save_name_has_separator(const std::string &name)
+{
+    return name.find_first_of("/\\") != std::string::npos;
+}
+
+// The name that will be written. Adds .cty when the player left it off.
+inline std::string save_rename_target(const std::string &typed)
+{
+    const std::string stem = save_name_stem(typed);
+    if (stem.empty()) {
+        return {};
+    }
+    return stem + ".cty";
+}
+
+inline SaveFileResult rename_city_file(const std::string &directory, const std::string &from_name, const std::string &typed)
+{
+    SaveFileResult result;
+    if (from_name.empty() || from_name == ".." || from_name.back() == '/') {
+        result.error = "Choose a saved city first.";
+        return result;
+    }
+    if (save_name_has_separator(typed)) {
+        result.error = "That name cannot contain / or \\.";
+        return result;
+    }
+    if (!save_name_has_stem(typed)) {
+        result.error = "Enter a file name. The name cannot be only .cty.";
+        return result;
+    }
+    if (save_name_starts_with_dot(typed)) {
+        result.error = "Names cannot start with a dot.";
+        return result;
+    }
+    const std::string target = save_rename_target(typed);
+    if (target.empty()) {
+        result.error = "Enter a file name. The name cannot be only .cty.";
+        return result;
+    }
+    const std::filesystem::path from_path =
+        directory.empty() ? std::filesystem::path(from_name) : std::filesystem::path(directory) / from_name;
+    const std::filesystem::path to_path =
+        directory.empty() ? std::filesystem::path(target) : std::filesystem::path(directory) / target;
+    if (target == from_name) {
+        result.ok = true;
+        return result;
+    }
+    std::error_code ec;
+    if (std::filesystem::exists(to_path, ec)) {
+        result.error = "A file with that name already exists.";
+        return result;
+    }
+    ec.clear();
+    std::filesystem::rename(from_path, to_path, ec);
+    if (ec) {
+        result.error = "Could not rename that file. The folder may be read-only.";
+        return result;
+    }
+    result.ok = true;
+    return result;
+}
+
+inline SaveFileResult delete_city_file(const std::string &directory, const std::string &name)
+{
+    SaveFileResult result;
+    if (name.empty() || name == ".." || name.back() == '/') {
+        result.error = "Choose a saved city first.";
+        return result;
+    }
+    const std::filesystem::path path =
+        directory.empty() ? std::filesystem::path(name) : std::filesystem::path(directory) / name;
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) {
+        result.error = "That file is no longer there.";
+        return result;
+    }
+    ec.clear();
+    if (!std::filesystem::remove(path, ec) || ec) {
+        result.error = "Could not delete that file. The folder may be read-only.";
+        return result;
+    }
+    result.ok = true;
+    return result;
+}

@@ -76,6 +76,17 @@ enum HotspotId : int {
     kLedgerNotes = 146,
     kYearLocate = 147,
     kWelcomeContinue = 148,
+    kAutosave = 149,
+    kRandomName = 150,
+    kControlsPrev = 151,
+    kControlsNext = 152,
+    kRemap = 153,
+    kPageDot0 = 154,
+    kPageDot1 = 155,
+    kPageDot2 = 156,
+
+    // The history chart. Left and right read a value. It is not a button.
+    kGraphPlot = 180,
 
     kMenuItem = 1000,
     kRecentItem = 2000,
@@ -93,7 +104,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kWelcomeContinue;
+    return id >= kCancel && id <= kPageDot2;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the
@@ -103,7 +114,7 @@ inline bool is_modal_control(int id)
     if (is_dialog_button(id)) {
         return true;
     }
-    if (id == kFieldName || id == kFieldSeed || id == kOverlayMap || id == kListScroll) {
+    if (id == kFieldName || id == kFieldSeed || id == kOverlayMap || id == kListScroll || id == kGraphPlot) {
         return true;
     }
     if (id >= kOsk && id < kOsk + 64) {

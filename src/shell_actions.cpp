@@ -356,7 +356,7 @@ std::string Shell::welcome_continue_label() const
     if (base.empty()) {
         return {};
     }
-    return "Continue: " + base;
+    return "_Continue: " + base;
 }
 
 civic::YearDigest Shell::year_digest() const
@@ -453,9 +453,24 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         focus_id_ = kListItem;
         list_index_ = scenario_index_;
     } else if (dialog == Dialog::Files && !files_save_) {
-        focus_id_ = files_.empty() ? kUp : kListItem;
+        focus_id_ = files_.empty() ? kCancel : kListItem;
     } else if (dialog == Dialog::Welcome) {
-        focus_id_ = kWelcomeNew;
+        focus_id_ = welcome_continue_label().empty() ? kWelcomeNew : kWelcomeContinue;
+    } else if (dialog == Dialog::Graphs) {
+        focus_id_ = kGraphPlot;
+        graph_pointer_x_ = -1;
+    } else if (dialog == Dialog::Bindings) {
+        binds_undo_ = binds_;
+        list_index_ = 0;
+        list_scroll_ = 0;
+        bind_listen_ = false;
+        focus_id_ = kListItem;
+    } else if (dialog == Dialog::FileRename) {
+        field_a_ = file_target_;
+        focus_id_ = kFieldName;
+        select_save_name();
+    } else if (dialog == Dialog::FileDelete) {
+        focus_id_ = kCancel;
     } else if (dialog == Dialog::QuitConfirm) {
         // Cancel is the focused button, so a stray A does not leave the game.
         focus_id_ = kCancel;
@@ -487,6 +502,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         }
         scale_percent_ = open_scale_percent_;
         open_pause_unfocused_ = pause_unfocused_;
+        open_autosave_ = autosave_seconds_;
         focus_id_ = kSlider + 1;
     }
     set_paused_for_dialog();
@@ -500,6 +516,10 @@ void Shell::sync_title()
     if (dialog_ == Dialog::LoadError) {
         const std::string failed = std::string(kProductName) + " - Could not load city";
         SDL_SetWindowTitle(window_, failed.c_str());
+        return;
+    }
+    if (welcome_gate_ && !city_chosen_) {
+        SDL_SetWindowTitle(window_, kProductName);
         return;
     }
     const std::string title = std::string(kProductName) + " - " + session_.city_name();
@@ -858,6 +878,10 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
             move_focus(delta, false);
             return;
         }
+        if ((dir == AccelKey::Left || dir == AccelKey::Right) && dialog_ == Dialog::Graphs && focus_id_ == kGraphPlot) {
+            scrub_graph(dir == AccelKey::Left ? -1 : 1);
+            return;
+        }
         if ((dir == AccelKey::Left || dir == AccelKey::Right) &&
             adjust_focused_slider(dir == AccelKey::Left ? -1 : 1)) {
             return;
@@ -865,7 +889,7 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
         if ((dir == AccelKey::Up && nudge_dialog_up_down(-1)) || (dir == AccelKey::Down && nudge_dialog_up_down(1))) {
             return;
         }
-        move_focus(delta);
+        move_focus(delta, false);
         return;
     }
     int dx = 0;
@@ -1939,6 +1963,9 @@ void Shell::apply_action(Action action)
     case Action::Controls:
         open_dialog(Dialog::Controls);
         break;
+    case Action::RemapControls:
+        open_dialog(Dialog::Bindings);
+        break;
     case Action::HowToPlay:
         open_dialog(Dialog::HowToPlay);
         break;
@@ -1959,6 +1986,17 @@ void Shell::on_dialog_button(int id)
             scale_percent_ = scale_percent_ <= 0 ? 100 : 0;
             return;
         }
+        if (id == kAutosave) {
+            static const int steps[] = {60, 300, 600, 0};
+            int index = 0;
+            for (; index < 4; ++index) {
+                if (steps[index] == autosave_seconds_) {
+                    break;
+                }
+            }
+            autosave_seconds_ = steps[(index + 1) % 4];
+            return;
+        }
         if (id == kWheelZoom) {
             wheel_zooms_ = !wheel_zooms_;
             return;
@@ -1972,6 +2010,8 @@ void Shell::on_dialog_button(int id)
             scale_percent_ = open_scale_percent_;
             pause_unfocused_ = open_pause_unfocused_;
             wheel_zooms_ = open_wheel_zooms_;
+            autosave_seconds_ = open_autosave_;
+            schedule_autosave();
             user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
             sound_.set_volume(static_cast<float>(volume_) / 100.0f);
             if (window_ != nullptr) {
@@ -1988,13 +2028,110 @@ void Shell::on_dialog_button(int id)
             user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
             sound_.set_volume(static_cast<float>(volume_) / 100.0f);
             refresh_ui_scale();
+            schedule_autosave();
             save_window_settings();
             close_dialog();
             return;
         }
     }
     if (dialog_ == Dialog::Controls) {
+        if (id == kControlsPrev || id == kControlsNext || id == kPageDot0 || id == kPageDot1 || id == kPageDot2) {
+            int page = controls_page_;
+            if (id == kControlsNext) {
+                page = (controls_page_ + 1) % 3;
+            } else if (id == kControlsPrev) {
+                page = (controls_page_ + 2) % 3;
+            } else if (id == kPageDot0) {
+                page = deck_ ? 1 : 0;
+            } else if (id == kPageDot1) {
+                page = deck_ ? 0 : 1;
+            } else {
+                page = 2;
+            }
+            // Page dots are the visible page (keyboard, gamepad, touch), which
+            // a Deck session shows in a different order.
+            if (id == kPageDot0 || id == kPageDot1 || id == kPageDot2) {
+                const int shown = id == kPageDot0 ? 0 : id == kPageDot1 ? 1 : 2;
+                if (!deck_) {
+                    page = shown;
+                } else if (shown == 0) {
+                    page = 1;
+                } else if (shown == 1) {
+                    page = 0;
+                } else {
+                    page = 2;
+                }
+            }
+            controls_page_ = page;
+            controls_scroll_ = 0;
+            return;
+        }
+        if (id == kRemap) {
+            open_dialog(Dialog::Bindings);
+            return;
+        }
         close_dialog();
+        return;
+    }
+    if (dialog_ == Dialog::Bindings) {
+        if (id == kReset) {
+            binds_ = default_binds();
+            dialog_error_.clear();
+            bind_listen_ = false;
+            return;
+        }
+        if (id == kCancel) {
+            binds_ = binds_undo_;
+            bind_listen_ = false;
+            close_dialog();
+            return;
+        }
+        if (id == kOk) {
+            bind_listen_ = false;
+            save_window_settings();
+            close_dialog();
+            return;
+        }
+        return;
+    }
+    if (dialog_ == Dialog::FileRename) {
+        if (id == kRename || id == kOk) {
+            const SaveFileResult renamed = rename_city_file(files_dir_, file_target_, field_a_);
+            if (!renamed.ok) {
+                dialog_error_ = renamed.error;
+                return;
+            }
+            if (!session_.save_path().empty()) {
+                const std::string target = save_rename_target(field_a_);
+                const std::filesystem::path previous =
+                    files_dir_.empty() ? std::filesystem::path(file_target_) : std::filesystem::path(files_dir_) / file_target_;
+                if (session_.save_path() == previous.string() && !target.empty()) {
+                    const std::filesystem::path next =
+                        files_dir_.empty() ? std::filesystem::path(target) : std::filesystem::path(files_dir_) / target;
+                    session_.set_save_path(next.string());
+                }
+            }
+            return_to_file_list();
+            return;
+        }
+        return_to_file_list();
+        return;
+    }
+    if (dialog_ == Dialog::FileDelete) {
+        if (id == kDelete || id == kOk) {
+            const SaveFileResult removed = delete_city_file(files_dir_, file_target_);
+            if (!removed.ok) {
+                dialog_error_ = removed.error;
+                return;
+            }
+            const std::string gone =
+                (files_dir_.empty() ? std::filesystem::path(file_target_) : std::filesystem::path(files_dir_) / file_target_)
+                    .string();
+            recent_.erase(std::remove(recent_.begin(), recent_.end(), gone), recent_.end());
+            return_to_file_list();
+            return;
+        }
+        return_to_file_list();
         return;
     }
     if (dialog_ == Dialog::Welcome) {
@@ -2243,6 +2380,14 @@ void Shell::on_dialog_button(int id)
         return;
     }
     if (dialog_ == Dialog::Files) {
+        if (id == kRename || id == kDelete) {
+            if (!file_row_selected()) {
+                return;
+            }
+            file_target_ = files_[static_cast<std::size_t>(list_index_)];
+            open_dialog(id == kRename ? Dialog::FileRename : Dialog::FileDelete);
+            return;
+        }
         if (id == kOk || id == kSave || id == kPlay) {
             if (files_save_) {
                 if (text_has_path_separator(field_a_)) {
@@ -2495,6 +2640,16 @@ void Shell::on_hotspot(int id, double x, double y)
     }
     if (id >= kListItem && id < kListItem + 64) {
         const int row = id - kListItem;
+        if (dialog_ == Dialog::Bindings) {
+            list_index_ = list_scroll_ + row;
+            if (list_index_ >= bind_row_count()) {
+                list_index_ = bind_row_count() - 1;
+            }
+            focus_id_ = id;
+            bind_listen_ = true;
+            dialog_error_.clear();
+            return;
+        }
         if (dialog_ == Dialog::Files) {
             const int picked = list_scroll_ + row;
             if (picked == list_index_ && picked >= 0 && picked < static_cast<int>(files_.size())) {
@@ -2578,20 +2733,7 @@ void Shell::on_hotspot(int id, double x, double y)
             type_text(" ");
         } else if (key.kind == OskKind::Auto) {
             if (active_field() != nullptr) {
-                static const char *names[] = {
-                    "Pine Harbor", "Red Mesa", "Oak Crossing", "Cedar Bluff", "Silver Ford",
-                    "Little Falls", "West Ridge", "Copper Bend", "Green Hollow", "Stone Ferry",
-                };
-                const unsigned salt = static_cast<unsigned>(SDL_GetTicks());
-                int pick = static_cast<int>(salt % 10);
-                if (pick == osk_last_name_) {
-                    pick = (pick + 1) % 10;
-                }
-                osk_last_name_ = pick;
-                *active_field() = names[pick];
-                field_caret_ = static_cast<int>(active_field()->size());
-                field_anchor_ = field_caret_;
-                clear_resolved_field_error();
+                fill_random_city_name();
             }
         } else if (key.kind == OskKind::Shift) {
             osk_shift_ = !osk_shift_;
@@ -2604,6 +2746,11 @@ void Shell::on_hotspot(int id, double x, double y)
     if (id >= kGraphSeries && id < kGraphSeries + 16 && dialog_ == Dialog::Graphs) {
         graph_mask_ ^= 1 << (id - kGraphSeries);
         focus_id_ = id;
+        return;
+    }
+    if (id == kRandomName && dialog_ == Dialog::NewCity) {
+        fill_random_city_name();
+        focus_id_ = kFieldName;
         return;
     }
     if (id == kNewTerrain && dialog_ == Dialog::NewCity) {
@@ -2761,27 +2908,25 @@ bool Shell::osk_visible() const
 
 std::string *Shell::active_field()
 {
-    if (dialog_ == Dialog::NewCity && (focus_id_ == kFieldName || focus_id_ == kFieldSeed || new_page_ == 0)) {
-        if (focus_id_ == kFieldSeed || (new_page_ == 1 && focus_id_ != kFieldName)) {
-            if (focus_id_ == kFieldSeed) {
-                return &field_b_;
-            }
-        }
-        if (new_page_ == 0 || focus_id_ == kFieldName) {
+    const bool osk = focus_id_ >= kOsk && focus_id_ < kOsk + 64;
+    const bool name = focus_id_ == kFieldName || osk;
+    if (dialog_ == Dialog::NewCity) {
+        if (new_page_ == 0 && name) {
             return &field_a_;
         }
+        if (focus_id_ == kFieldSeed) {
+            return &field_b_;
+        }
+        if (focus_id_ == kFieldName) {
+            return &field_a_;
+        }
+        return nullptr;
     }
-    if (dialog_ == Dialog::Rename && (focus_id_ == kFieldName || focus_id_ == 0)) {
+    if ((dialog_ == Dialog::Rename || dialog_ == Dialog::FileRename) && name) {
         return &field_a_;
     }
-    if (dialog_ == Dialog::Files && files_save_ &&
-        (focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64))) {
+    if (dialog_ == Dialog::Files && files_save_ && name) {
         return &field_a_;
-    }
-    if ((dialog_ == Dialog::NewCity && new_page_ == 1 && focus_id_ == kFieldSeed) ||
-        (dialog_ == Dialog::Rename) || (dialog_ == Dialog::Files && files_save_ && focus_id_ == kFieldName) ||
-        (dialog_ == Dialog::NewCity && new_page_ == 0)) {
-        return focus_id_ == kFieldSeed ? &field_b_ : &field_a_;
     }
     return nullptr;
 }
@@ -3134,7 +3279,8 @@ bool Shell::nudge_dialog_up_down(int direction)
     // Cancel. Down returns to the selected file; Left and Right still
     // move along the buttons.
     if (direction > 0 && dialog_ == Dialog::Files &&
-        (focus_id_ == kUp || focus_id_ == kCancel || focus_id_ == kSave || focus_id_ == kOk)) {
+        (focus_id_ == kUp || focus_id_ == kCancel || focus_id_ == kSave || focus_id_ == kOk || focus_id_ == kRename ||
+         focus_id_ == kDelete)) {
         if (files_.empty()) {
             return false;
         }
@@ -3150,7 +3296,8 @@ bool Shell::nudge_dialog_up_down(int direction)
 
 void Shell::align_list_focus()
 {
-    if (dialog_ != Dialog::Files && dialog_ != Dialog::Scenario && dialog_ != Dialog::Messages) {
+    if (dialog_ != Dialog::Files && dialog_ != Dialog::Scenario && dialog_ != Dialog::Messages &&
+        dialog_ != Dialog::Bindings) {
         return;
     }
     if (focus_id_ < kListItem || focus_id_ >= kListItem + 64) {
@@ -3276,12 +3423,12 @@ int Shell::control_px(int design, int floor) const
 
 void Shell::note_speed_feedback()
 {
-    if (notice_sticky_ || !(gamepad_nav_ || deck_)) {
+    if (!(gamepad_nav_ || deck_)) {
         return;
     }
     std::string text;
     if (speed_ <= 0) {
-        text = std::string("Paused. ") + glyph(SDL_GAMEPAD_BUTTON_NORTH) + " resumes";
+        text = std::string("Paused. ") + glyph_for(PadPause) + " resumes";
     } else if (speed_ == 1) {
         text = "Speed: Slow";
     } else if (speed_ >= 3) {
@@ -3296,14 +3443,13 @@ void Shell::note_speed_feedback()
 
 void Shell::note_controller_connected()
 {
-    gamepad_nav_ = true;
     if (notice_sticky_) {
         return;
     }
     std::string text = "Controller connected";
     if (speed_ <= 0) {
         text += ". ";
-        text += glyph(SDL_GAMEPAD_BUTTON_NORTH);
+        text += glyph_for(PadPause);
         text += " resumes";
     }
     shown_message_ = text;
@@ -3329,8 +3475,10 @@ int Shell::dialog_accept_id() const
         return kRename;
     case Dialog::Files:
         return files_save_ ? kSave : (files_.empty() ? 0 : kOk);
+    case Dialog::FileRename:
+        return kRename;
     case Dialog::Welcome:
-        return kWelcomeNew;
+        return welcome_continue_label().empty() ? kWelcomeNew : kWelcomeContinue;
     case Dialog::Scenario:
         return kPlay;
     case Dialog::Unsaved:
@@ -3421,8 +3569,10 @@ void Shell::reveal_file_list()
     list_scroll_free_ = false;
     const bool scenarios = dialog_ == Dialog::Scenario;
     const bool messages = dialog_ == Dialog::Messages;
+    const bool bindings = dialog_ == Dialog::Bindings;
     const int count = scenarios ? CitySession::kScenarioCount
                                 : messages ? static_cast<int>(session_.notices().size())
+                                : bindings ? bind_row_count()
                                            : static_cast<int>(files_.size());
     const int index = scenarios ? scenario_index_ : list_index_;
     list_reveal(list_scroll_, index, std::max(1, files_visible_), count);
@@ -3492,7 +3642,8 @@ bool Shell::nudge_file_list(int delta, bool page, bool force)
     const bool files = dialog_ == Dialog::Files && !files_.empty();
     const bool scenarios = dialog_ == Dialog::Scenario;
     const bool messages = dialog_ == Dialog::Messages && !session_.notices().empty();
-    if ((!files && !scenarios && !messages) || delta == 0) {
+    const bool bindings = dialog_ == Dialog::Bindings;
+    if ((!files && !scenarios && !messages && !bindings) || delta == 0) {
         return false;
     }
     const bool on_list = focus_id_ >= kListItem && focus_id_ < kListItem + 64;
@@ -3501,6 +3652,7 @@ bool Shell::nudge_file_list(int delta, bool page, bool force)
     }
     const int count = scenarios ? CitySession::kScenarioCount
                                : messages ? static_cast<int>(session_.notices().size())
+                               : bindings ? bind_row_count()
                                           : static_cast<int>(files_.size());
     int index = scenarios ? scenario_index_ : list_index_;
     const int step = page ? std::max(1, files_visible_ - 1) : std::max(1, std::abs(delta));
@@ -3761,6 +3913,329 @@ const char *Shell::glyph(SDL_GamepadButton button) const
     }
 }
 
+std::string Shell::chord_token(SDL_Keycode key, int mods) const
+{
+    std::string token;
+    if ((mods & static_cast<int>(AccelMod::Ctrl)) != 0) {
+        token += "ctrl+";
+    }
+    if ((mods & static_cast<int>(AccelMod::Shift)) != 0) {
+        token += "shift+";
+    }
+    if ((mods & static_cast<int>(AccelMod::Alt)) != 0) {
+        token += "alt+";
+    }
+    std::string name;
+    if (key >= 'a' && key <= 'z') {
+        name = std::string(1, static_cast<char>(key));
+    } else if (key >= 'A' && key <= 'Z') {
+        name = std::string(1, static_cast<char>(key - 'A' + 'a'));
+    } else if (key >= '0' && key <= '9') {
+        name = std::string(1, static_cast<char>(key));
+    } else {
+        switch (key) {
+        case SDLK_SPACE:
+            name = "space";
+            break;
+        case SDLK_EQUALS:
+            name = "equal";
+            break;
+        case SDLK_PLUS:
+            name = "plus";
+            break;
+        case SDLK_MINUS:
+            name = "minus";
+            break;
+        case SDLK_KP_PLUS:
+            name = "kp_add";
+            break;
+        case SDLK_KP_MINUS:
+            name = "kp_sub";
+            break;
+        case SDLK_F11:
+            name = "f11";
+            break;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER:
+            name = "return";
+            break;
+        case SDLK_ESCAPE:
+            name = "escape";
+            break;
+        case SDLK_UP:
+            name = "up";
+            break;
+        case SDLK_DOWN:
+            name = "down";
+            break;
+        case SDLK_LEFT:
+            name = "left";
+            break;
+        case SDLK_RIGHT:
+            name = "right";
+            break;
+        default:
+            break;
+        }
+    }
+    if (name.empty()) {
+        return {};
+    }
+    token += name;
+    return normalize_chord(token);
+}
+
+void Shell::apply_key_act(int act)
+{
+    switch (act) {
+    case KeyPause:
+        toggle_pause();
+        break;
+    case KeyNewCity:
+        apply_action(Action::NewCity);
+        break;
+    case KeyLoad:
+        apply_action(Action::Load);
+        break;
+    case KeySave:
+        apply_action(Action::Save);
+        break;
+    case KeySaveAs:
+        apply_action(Action::SaveAs);
+        break;
+    case KeyQuit:
+        apply_action(Action::Quit);
+        break;
+    case KeySlow:
+        apply_action(Action::Slow);
+        break;
+    case KeyMedium:
+        apply_action(Action::Medium);
+        break;
+    case KeyFast:
+        apply_action(Action::Fast);
+        break;
+    case KeyZoomIn:
+        zoom_by(2);
+        break;
+    case KeyZoomOut:
+        zoom_by(-2);
+        break;
+    case KeyBudget:
+        apply_action(Action::Budget);
+        break;
+    case KeyGraphs:
+        apply_action(Action::Graphs);
+        break;
+    case KeyEvaluation:
+        apply_action(Action::Evaluation);
+        break;
+    case KeyFullscreen:
+        toggle_fullscreen();
+        break;
+    default:
+        if (act >= KeyTool0 && act < KeyActCount) {
+            select_tool(act - KeyTool0);
+        }
+        break;
+    }
+}
+
+bool Shell::take_bound_key(SDL_Keycode key, int mods)
+{
+    const std::string token = chord_token(key, mods);
+    if (token.empty()) {
+        return false;
+    }
+    const int act = key_act_for_token(binds_, token);
+    if (act >= 0) {
+        apply_key_act(act);
+        return true;
+    }
+    return token_is_shadowed(binds_, token);
+}
+
+void Shell::sync_pointer_cursor()
+{
+    if (gamepad_nav_) {
+        SDL_HideCursor();
+    } else {
+        SDL_ShowCursor();
+    }
+}
+
+void Shell::scrub_graph(int direction)
+{
+    if (graph_chart_w_ < 2 || direction == 0) {
+        return;
+    }
+    const int step = std::max(4, static_cast<int>(graph_chart_w_ / 20.0));
+    if (graph_pointer_x_ < 0) {
+        graph_pointer_x_ = direction < 0 ? 0 : graph_chart_w_ - 1;
+        return;
+    }
+    graph_pointer_x_ += direction * step;
+    if (graph_pointer_x_ < 0) {
+        graph_pointer_x_ = 0;
+    }
+    if (graph_pointer_x_ >= graph_chart_w_) {
+        graph_pointer_x_ = graph_chart_w_ - 1;
+    }
+}
+
+void Shell::fill_random_city_name()
+{
+    static const char *names[] = {
+        "Pine Harbor", "Red Mesa", "Oak Crossing", "Cedar Bluff", "Silver Ford",
+        "Little Falls", "West Ridge", "Copper Bend", "Green Hollow", "Stone Ferry",
+    };
+    const unsigned salt = static_cast<unsigned>(SDL_GetTicks());
+    int pick = static_cast<int>(salt % 10);
+    if (pick == osk_last_name_) {
+        pick = (pick + 1) % 10;
+    }
+    osk_last_name_ = pick;
+    field_a_ = names[pick];
+    field_caret_ = static_cast<int>(field_a_.size());
+    field_anchor_ = field_caret_;
+    clear_resolved_field_error();
+}
+
+void Shell::offer_bind_key(const std::string &token)
+{
+    if (dialog_ != Dialog::Bindings || token.empty()) {
+        return;
+    }
+    if (list_index_ < 0 || list_index_ >= bind_row_count()) {
+        return;
+    }
+    const BindRow spec = bind_row(list_index_);
+    if (spec.key < 0) {
+        dialog_error_ = "That row takes a button, not a key.";
+        bind_listen_ = false;
+        return;
+    }
+    int conflict = -1;
+    if (!assign_key(binds_, spec.key, token, conflict)) {
+        if (conflict >= 0) {
+            dialog_error_ = chord_label(token) + " is already used by " + key_act_label(conflict) + ".";
+        }
+        bind_listen_ = false;
+        return;
+    }
+    dialog_error_.clear();
+    bind_listen_ = false;
+}
+
+void Shell::offer_bind_pad(int button)
+{
+    if (dialog_ != Dialog::Bindings) {
+        return;
+    }
+    if (list_index_ < 0 || list_index_ >= bind_row_count()) {
+        return;
+    }
+    const BindRow spec = bind_row(list_index_);
+    if (spec.pad < 0) {
+        dialog_error_ = "That row takes a key, not a button.";
+        bind_listen_ = false;
+        return;
+    }
+    int conflict = -1;
+    if (!assign_pad(binds_, spec.pad, button, conflict)) {
+        if (conflict >= 0) {
+            const char *who = "another action";
+            for (int i = 0; i < bind_row_count(); ++i) {
+                if (bind_row(i).pad == conflict) {
+                    who = bind_row(i).label;
+                    break;
+                }
+            }
+            dialog_error_ = std::string("That button is already used by ") + who + ".";
+        } else {
+            dialog_error_ = "That button cannot be remapped.";
+        }
+        bind_listen_ = false;
+        return;
+    }
+    dialog_error_.clear();
+    bind_listen_ = false;
+}
+
+void Shell::return_to_file_list()
+{
+    dialog_ = Dialog::Files;
+    dialog_error_.clear();
+    bind_listen_ = false;
+    refresh_files();
+    if (files_.empty()) {
+        focus_id_ = kCancel;
+        list_index_ = 0;
+        return;
+    }
+    if (list_index_ >= static_cast<int>(files_.size())) {
+        list_index_ = static_cast<int>(files_.size()) - 1;
+    }
+    const int row = list_index_ - list_scroll_;
+    focus_id_ = row >= 0 && row < 64 ? kListItem + row : kListItem;
+}
+
+bool Shell::file_row_selected() const
+{
+    if (dialog_ != Dialog::Files || list_index_ < 0 || list_index_ >= static_cast<int>(files_.size())) {
+        return false;
+    }
+    const std::string &name = files_[static_cast<std::size_t>(list_index_)];
+    return !name.empty() && name != ".." && name.back() != '/';
+}
+
+ControlsKeyText Shell::controls_keys() const
+{
+    ControlsKeyText keys;
+    auto put = [&](std::string &dest, int act) {
+        const std::string label = chord_label(binds_.key[act]);
+        if (!label.empty() && label != "None") {
+            dest = label;
+        }
+    };
+    put(keys.pause, KeyPause);
+    put(keys.neu, KeyNewCity);
+    put(keys.load, KeyLoad);
+    put(keys.save, KeySave);
+    put(keys.save_as, KeySaveAs);
+    put(keys.quit, KeyQuit);
+    put(keys.slow, KeySlow);
+    put(keys.medium, KeyMedium);
+    put(keys.fast, KeyFast);
+    put(keys.zoom_in, KeyZoomIn);
+    put(keys.zoom_out, KeyZoomOut);
+    put(keys.budget, KeyBudget);
+    put(keys.graphs, KeyGraphs);
+    put(keys.evaluation, KeyEvaluation);
+    put(keys.fullscreen, KeyFullscreen);
+    for (int i = 0; i < 17; ++i) {
+        put(keys.tool[i], KeyTool0 + i);
+    }
+    return keys;
+}
+
+void Shell::schedule_autosave()
+{
+    if (autosave_seconds_ <= 0) {
+        next_autosave_ = std::chrono::steady_clock::time_point::max();
+        return;
+    }
+    next_autosave_ = std::chrono::steady_clock::now() + std::chrono::seconds(autosave_seconds_);
+}
+
+const char *Shell::glyph_for(int pad_act) const
+{
+    if (pad_act < 0 || pad_act >= PadActCount || binds_.pad[pad_act] < 0) {
+        return "";
+    }
+    return glyph(static_cast<SDL_GamepadButton>(binds_.pad[pad_act]));
+}
+
 void Shell::absorb_placement_note()
 {
     CitySession::PlacementNote note;
@@ -3799,11 +4274,11 @@ void Shell::absorb_placement_note()
     receipt_age_ = 0;
     if (note.ok) {
         receipt_life_ = 280;
-        const std::string amount = civic::dollars(note.spent);
+        const std::string amount = civic::dollars(note.spent > 0 ? -note.spent : note.spent);
         if (note.tiles > 1) {
-            receipt_text_ = std::to_string(note.tiles) + " tiles \u00b7 \u2212" + amount;
+            receipt_text_ = std::to_string(note.tiles) + " tiles \u00b7 " + amount;
         } else {
-            receipt_text_ = "\u2212" + amount;
+            receipt_text_ = amount;
         }
     } else {
         receipt_life_ = 1400;

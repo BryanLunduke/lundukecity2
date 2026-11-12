@@ -4,7 +4,7 @@
 
 #pragma once
 
-// Menu model for the SDL shell. 52 actionable rows: 8 System, 16 Options,
+// Menu model for the SDL shell. 53 actionable rows: 8 System, 17 Options,
 // 6 Disasters, 19 Windows, 3 Help. Fullscreen, the zone and coverage
 // maps, the single-zone and transportation maps, and Messages are the
 // rows past the original 37. The look trio sits at the bottom of Options.
@@ -47,7 +47,7 @@ enum class Action {
     Fire, Flood, Tornado, Earthquake, Monster, Meltdown,
     Budget, Graphs, Evaluation, Ledger,
     Power, Water, Pollution, Crime, LandValue, Traffic,
-    About, Settings, Controls, HowToPlay,
+    About, Settings, Controls, HowToPlay, RemapControls,
     Fullscreen,
     Zones, ZoneResidential, ZoneCommercial, ZoneIndustrial, Transportation,
     PoliceMap, FireMap, Population, Growth, Messages,
@@ -104,14 +104,14 @@ inline std::string strip_mnemonic(const char *label)
 namespace menu_table {
 
 inline constexpr MenuEntry kSystem[] = {
-    {"_New City", "Ctrl+N", ItemKind::Normal, Action::NewCity, AccelKey::N, static_cast<int>(AccelMod::Ctrl), 0},
-    {"_Load City…", "Ctrl+O", ItemKind::Normal, Action::Load, AccelKey::O, static_cast<int>(AccelMod::Ctrl), 0},
-    {"Open _Recent", nullptr, ItemKind::Submenu, Action::Recent, AccelKey::None, 0, 0},
-    {"Save _City", "Ctrl+S", ItemKind::Normal, Action::Save, AccelKey::S, static_cast<int>(AccelMod::Ctrl), 0},
-    {"Save City _As…", "Ctrl+Shift+S", ItemKind::Normal, Action::SaveAs, AccelKey::S,
+    {"_New city", "Ctrl+N", ItemKind::Normal, Action::NewCity, AccelKey::N, static_cast<int>(AccelMod::Ctrl), 0},
+    {"_Load city…", "Ctrl+O", ItemKind::Normal, Action::Load, AccelKey::O, static_cast<int>(AccelMod::Ctrl), 0},
+    {"Open _recent", nullptr, ItemKind::Submenu, Action::Recent, AccelKey::None, 0, 0},
+    {"Save _city", "Ctrl+S", ItemKind::Normal, Action::Save, AccelKey::S, static_cast<int>(AccelMod::Ctrl), 0},
+    {"Save city _as…", "Ctrl+Shift+S", ItemKind::Normal, Action::SaveAs, AccelKey::S,
      static_cast<int>(AccelMod::Ctrl) | static_cast<int>(AccelMod::Shift), 0},
-    {"Play _Scenario…", nullptr, ItemKind::Normal, Action::Scenario, AccelKey::None, 0, 0},
-    {"Rename Cit_y…", nullptr, ItemKind::Normal, Action::Rename, AccelKey::None, 0, 0},
+    {"Play _scenario…", nullptr, ItemKind::Normal, Action::Scenario, AccelKey::None, 0, 0},
+    {"Rename cit_y…", nullptr, ItemKind::Normal, Action::Rename, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Quit", "Ctrl+Q", ItemKind::Normal, Action::Quit, AccelKey::Q, static_cast<int>(AccelMod::Ctrl), 0},
 };
@@ -124,6 +124,7 @@ inline constexpr MenuEntry kOptions[] = {
     {"_Mute sound", nullptr, ItemKind::Check, Action::Mute, AccelKey::None, 0, 0},
     {"Fu_llscreen", "F11", ItemKind::Check, Action::Fullscreen, AccelKey::None, 0, 0},
     {"_Settings…", nullptr, ItemKind::Normal, Action::Settings, AccelKey::None, 0, 0},
+    {"_Remap controls…", nullptr, ItemKind::Normal, Action::RemapControls, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Pause", "Ctrl+P", ItemKind::Radio, Action::SetPause, AccelKey::None, 0, 1},
     {"Slo_w", "Ctrl+1", ItemKind::Radio, Action::Slow, AccelKey::D1, static_cast<int>(AccelMod::Ctrl), 1},
@@ -133,9 +134,9 @@ inline constexpr MenuEntry kOptions[] = {
     {"Zoom _in", "Ctrl+=", ItemKind::Normal, Action::ZoomIn, AccelKey::Equal, static_cast<int>(AccelMod::Ctrl), 0},
     {"Zoom _out", "Ctrl+-", ItemKind::Normal, Action::ZoomOut, AccelKey::Minus, static_cast<int>(AccelMod::Ctrl), 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
-    {"_Classic Look", nullptr, ItemKind::Radio, Action::ClassicLook, AccelKey::None, 0, 2},
-    {"SVGA Loo_k", nullptr, ItemKind::Radio, Action::SvgaLook, AccelKey::None, 0, 2},
-    {"Spook_y Look", nullptr, ItemKind::Radio, Action::SpookyLook, AccelKey::None, 0, 2},
+    {"_Classic look", nullptr, ItemKind::Radio, Action::ClassicLook, AccelKey::None, 0, 2},
+    {"SVGA loo_k", nullptr, ItemKind::Radio, Action::SvgaLook, AccelKey::None, 0, 2},
+    {"Spook_y look", nullptr, ItemKind::Radio, Action::SpookyLook, AccelKey::None, 0, 2},
 };
 
 inline constexpr MenuEntry kDisasters[] = {
@@ -166,7 +167,7 @@ inline constexpr MenuEntry kWindows[] = {
     {"_Fire coverage", nullptr, ItemKind::Check, Action::FireMap, AccelKey::None, 0, 0},
     {"Pop_ulation", nullptr, ItemKind::Check, Action::Population, AccelKey::None, 0, 0},
     {"G_rowth rate", nullptr, ItemKind::Check, Action::Growth, AccelKey::None, 0, 0},
-    {"Milestones", nullptr, ItemKind::Normal, Action::Ledger, AccelKey::None, 0, 0},
+    {"Mile_stones", nullptr, ItemKind::Normal, Action::Ledger, AccelKey::None, 0, 0},
     {"_Messages", nullptr, ItemKind::Normal, Action::Messages, AccelKey::None, 0, 0},
 };
 

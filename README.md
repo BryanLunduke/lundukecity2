@@ -96,7 +96,7 @@ Gamepad (Xbox letters, or PlayStation symbols when the pad reports a PlayStation
 
 The status line shows the glyphs for the connected pad. A focused slider draws a dark outer ring and a light or orange inner ring, so it stays visible on the dialog and on the slider fill.
 
-City name and rename fields call `SDL_StartTextInput`. On the Steam Deck that raises the Steam keyboard. A gamepad, a Deck session, or a touchscreen also gets an on-screen key grid in those dialogs.
+City name, rename, and save fields call `SDL_StartTextInput` for a physical keyboard. A gamepad, a Deck session, or a touchscreen also gets the in-game key grid. SDL's own screen keyboard stays off, so Steam does not open a second keyboard on top of that grid.
 
 ## Menus
 

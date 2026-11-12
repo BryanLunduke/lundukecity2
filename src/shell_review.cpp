@@ -889,27 +889,28 @@ void Shell::run_review_checks()
     // M10: an autosave or recent-list failure stays until the player dismisses it,
     // and the next failure after that is shown again.
     note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
-    if (!notice_sticky_ || shown_message_.find("Autosave failed") == std::string::npos) {
+    if (!notice_sticky_ || notice_text_.find("Autosave failed") == std::string::npos) {
         fail("autosave failure was not shown");
         return;
     }
-    const auto held = hint_until_;
-    if (held < std::chrono::steady_clock::now() + std::chrono::hours(1)) {
-        fail("autosave failure notice expires on its own");
+    const auto held = notice_until_;
+    if (held > std::chrono::steady_clock::now() + std::chrono::seconds(30) ||
+        held < std::chrono::steady_clock::now()) {
+        fail("autosave failure notice has no short timeout");
         return;
     }
     note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
-    if (hint_until_ != held) {
+    if (notice_until_ != held) {
         fail("repeating the same failure restarted the notice");
         return;
     }
     dismiss_background_notice();
-    if (notice_sticky_ || !shown_message_.empty()) {
+    if (notice_sticky_ || !notice_text_.empty()) {
         fail("dismiss did not clear the failure notice");
         return;
     }
     note_background_write_failed("Could not update the recent-cities list.");
-    if (!notice_sticky_ || shown_message_.find("recent-cities") == std::string::npos) {
+    if (!notice_sticky_ || notice_text_.find("recent-cities") == std::string::npos) {
         fail("a later failure was not shown again");
         return;
     }
@@ -2531,6 +2532,78 @@ void Shell::run_review_checks()
         if (!map_.cue().active || map_.cue().mark != 2 || map_.cue().tag != "Water: bridge cost") {
             fail("a road touching water did not preview the bridge cost, tag " + map_.cue().tag);
             return;
+        }
+    }
+
+    // Enter on a focused Cancel must not save. A focused name still accepts.
+    {
+        close_dialog();
+        files_.clear();
+        files_.push_back("kept.cty");
+        files_save_ = true;
+        dialog_ = Dialog::Files;
+        field_a_ = "kept.cty";
+        focus_id_ = kCancel;
+        SDL_Event enter{};
+        enter.type = SDL_EVENT_KEY_DOWN;
+        enter.key.key = SDLK_RETURN;
+        enter.key.down = true;
+        enter.key.mod = SDL_KMOD_NONE;
+        handle_event(enter);
+        if (dialog_ == Dialog::Files) {
+            fail("Enter on Cancel left the save dialog open");
+            return;
+        }
+        if (dialog_ == Dialog::None && session_.save_path().find("kept.cty") != std::string::npos) {
+            fail("Enter on Cancel saved the city");
+            return;
+        }
+        close_dialog();
+        dialog_ = Dialog::NewCity;
+        new_page_ = 0;
+        field_a_ = "Harbor";
+        focus_id_ = kCancel;
+        if (active_field() != nullptr) {
+            fail("a focused Cancel still owns the name field");
+            return;
+        }
+        type_text("Z");
+        if (field_a_ != "Harbor") {
+            fail("typing reached the name while Cancel was focused");
+            return;
+        }
+        close_dialog();
+    }
+
+    // A zone edge reports the centre's power, not "Power: line".
+    {
+        bool compared = false;
+        for (int y = 1; y < CitySession::kWorldH - 1 && !compared; ++y) {
+            for (int x = 1; x < CitySession::kWorldW - 1; ++x) {
+                const auto centre = session_.inspect_tile(x, y);
+                if (!centre.zone || centre.power == "Power: line" || centre.power == "Power: —") {
+                    continue;
+                }
+                for (int dy = -centre.height; dy <= centre.height; ++dy) {
+                    for (int dx = -centre.width; dx <= centre.width; ++dx) {
+                        const int nx = x + dx;
+                        const int ny = y + dy;
+                        if (nx == x && ny == y) {
+                            continue;
+                        }
+                        if (nx < centre.left || ny < centre.top || nx >= centre.left + centre.width ||
+                            ny >= centre.top + centre.height) {
+                            continue;
+                        }
+                        const auto edge = session_.inspect_tile(nx, ny);
+                        if (edge.name == centre.name && edge.power != centre.power) {
+                            fail("zone edge power was " + edge.power + " and the centre was " + centre.power);
+                            return;
+                        }
+                        compared = true;
+                    }
+                }
+            }
         }
     }
 }

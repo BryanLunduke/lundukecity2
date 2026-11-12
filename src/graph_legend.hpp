@@ -44,7 +44,7 @@ inline std::string grouped_number(std::int64_t value)
 inline std::string graph_money(std::int64_t value)
 {
     const bool neg = value < 0;
-    return (neg ? "-$" : "$") + grouped_number(neg ? -value : value);
+    return (neg ? "\u2212$" : "$") + grouped_number(neg ? -value : value);
 }
 
 // Legend text for one history series. People samples are scaled to residents.

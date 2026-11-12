@@ -19,6 +19,8 @@
 #include "side_widgets.hpp"
 #include "sound_player.hpp"
 #include "tool_palette.hpp"
+#include "bindings.hpp"
+#include "controls_page.hpp"
 #include "ui_scale.hpp"
 
 #include <SDL3/SDL.h>
@@ -62,7 +64,10 @@ enum class Dialog : int {
     Welcome,
     QuitConfirm,
     Messages,
-    Ledger
+    Ledger,
+    FileRename,
+    FileDelete,
+    Bindings
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
@@ -250,7 +255,8 @@ private:
     void autoscroll_menu();
     void activate_focus();
     void activate_file_row();
-    void button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary);
+    void button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary,
+                bool selected = false, bool enabled = true);
     void label(cairo_t *cr, const char *font, const std::string &text, double x, double y, int wrap);
     void frame_panel(cairo_t *cr, double x, double y, double w, double h, const char *title);
     void paint_vga_veil(cairo_t *cr);
@@ -261,6 +267,19 @@ private:
     void note_civic_month();
     bool return_from_overlay();
     const char *glyph(SDL_GamepadButton button) const;
+    const char *glyph_for(int pad_act) const;
+    bool take_bound_key(SDL_Keycode key, int mods);
+    void apply_key_act(int act);
+    void sync_pointer_cursor();
+    void scrub_graph(int direction);
+    void fill_random_city_name();
+    void offer_bind_key(const std::string &token);
+    void offer_bind_pad(int button);
+    void return_to_file_list();
+    bool file_row_selected() const;
+    std::string chord_token(SDL_Keycode key, int mods) const;
+    ControlsKeyText controls_keys() const;
+    void schedule_autosave();
     bool adjust_focused_slider(int direction, int coarse = 1);
     bool nudge_file_list(int delta, bool page, bool force);
     void reveal_file_list();
@@ -583,6 +602,18 @@ private:
     bool autosave_warned_ = false;
     bool notice_sticky_ = false;
     std::chrono::steady_clock::time_point next_autosave_{};
+    // 0 is off. 60 matches the interval the game used before the setting existed.
+    int autosave_seconds_ = 60;
+    int open_autosave_ = 60;
+    ControlBinds binds_{};
+    ControlBinds binds_undo_{};
+    bool bind_listen_ = false;
+    bool key_cursor_ = false;
+    std::string notice_text_;
+    std::chrono::steady_clock::time_point notice_until_{};
+    double notice_bar_y_ = -1;
+    double notice_bar_h_ = 0;
+    std::string file_target_;
     int quake_strength_ = 0;
     std::chrono::steady_clock::time_point quake_until_{};
     std::chrono::steady_clock::time_point quake_started_{};

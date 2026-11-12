@@ -252,25 +252,36 @@ void round_dialog_rect(cairo_t *cr, double x, double y, double w, double h, doub
     cairo_close_path(cr);
 }
 
-void Shell::button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary)
+void Shell::button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary,
+                    bool selected, bool enabled)
 {
-    push_hot(x, y, w, h, id);
-    push_focus(id);
+    if (enabled) {
+        push_hot(x, y, w, h, id);
+        push_focus(id);
+    }
     // A modal covers the city. Anything that is not part of the dialog must
     // not light up with the dialog's focus.
     const bool suppressed = dialog_ != Dialog::None && !is_modal_control(id);
-    const bool hot = !suppressed && (hover_id_ == id || focus_id_ == id);
+    const bool hot = enabled && !suppressed && (hover_id_ == id || focus_id_ == id);
     const bool pressed = hot && pointer_down_ && hover_id_ == id;
+    const bool focused = enabled && !suppressed && focus_id_ == id;
     // Dialog buttons match the Year in Review card: a gold edge, a blue
     // primary, and a warm gray secondary.
     if (dialog_ != Dialog::None) {
         const double gold_r = 0.72;
         const double gold_g = 0.55;
         const double gold_b = 0.18;
-        const bool focused = !suppressed && focus_id_ == id;
         round_dialog_rect(cr, x, y, w, h, std::min(6.0, h / 2.0));
         cairo_pattern_t *shade = cairo_pattern_create_linear(x, y, x, y + h);
-        if (primary) {
+        if (!enabled) {
+            cairo_pattern_add_color_stop_rgb(shade, 0, 0.78, 0.76, 0.70);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.68, 0.66, 0.60);
+        } else if (selected) {
+            // A chosen chip stays cream with a gold edge. Blue is the action
+            // and the focus, so a selected row is not another blue button.
+            cairo_pattern_add_color_stop_rgb(shade, 0, 0.99, 0.96, 0.88);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.93, 0.86, 0.70);
+        } else if (primary) {
             cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : 0.20, pressed ? 0.32 : 0.42, pressed ? 0.62 : 0.72);
             cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
         } else if (focused) {
@@ -286,21 +297,36 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         cairo_set_source(cr, shade);
         cairo_fill_preserve(cr);
         cairo_pattern_destroy(shade);
-        cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);
-        cairo_set_line_width(cr, std::max(2.0, h / 16.0));
+        cairo_set_source_rgb(cr, enabled ? gold_r : 0.62, enabled ? gold_g : 0.58, enabled ? gold_b : 0.48);
+        cairo_set_line_width(cr, selected ? std::max(3.0, h / 12.0) : std::max(2.0, h / 16.0));
         cairo_stroke(cr);
-        if (!suppressed && focus_id_ == id && w > 14 && h > 14) {
-            round_dialog_rect(cr, x + 6, y + 6, w - 12, h - 12, 3);
-            cairo_set_source_rgb(cr, (primary || focused) ? 1.0 : 0.10, (primary || focused) ? 1.0 : 0.16,
-                                 (primary || focused) ? 1.0 : 0.32);
-            cairo_set_line_width(cr, 1.5);
+        if (selected && enabled && w > 22 && h > 16) {
+            const double mark = std::min(h * 0.42, 14.0);
+            const double mx = x + 8;
+            const double my = y + (h - mark) / 2.0;
+            cairo_set_source_rgb(cr, gold_r, gold_g * 0.85, gold_b);
+            cairo_set_line_width(cr, std::max(2.0, mark / 6.0));
+            cairo_move_to(cr, mx, my + mark * 0.55);
+            cairo_line_to(cr, mx + mark * 0.35, my + mark * 0.9);
+            cairo_line_to(cr, mx + mark, my + mark * 0.15);
+            cairo_stroke(cr);
+        }
+        if (focused && w > 18 && h > 18) {
+            // Inset past the gold edge so a sample of the fill still sees blue.
+            round_dialog_rect(cr, x + 8, y + 8, w - 16, h - 16, 3);
+            const bool light_ring = (primary || focused) && !selected;
+            cairo_set_source_rgb(cr, light_ring ? 1.0 : 0.10, light_ring ? 1.0 : 0.28, light_ring ? 1.0 : 0.62);
+            cairo_set_line_width(cr, 3.0);
             cairo_stroke(cr);
         }
         const std::string plain = strip_mnemonic(label);
         const TextMetrics metrics = measure_text(cr, ui_font(), plain, -1);
-        const double tx = x + (w - metrics.width) / 2.0;
+        const double shift = selected ? 8.0 : 0.0;
+        const double tx = x + (w - metrics.width + shift) / 2.0;
         const double ty = y + (h - metrics.height) / 2.0;
-        if (primary || focused) {
+        if (!enabled) {
+            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.45, 0.42, 0.38);
+        } else if ((primary || focused) && !selected) {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
         } else {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.12, 0.09, 0.06);
@@ -833,10 +859,15 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             recent_row_y = y;
             have_recent_row = true;
         }
-        if (item.accel_text != nullptr && !gamepad_nav_) {
-            const TextMetrics accel = measure_text(cr, menu_font(), item.accel_text, -1);
+        std::string accel_shown = item.accel_text != nullptr ? item.accel_text : "";
+        const int bound_act = key_act_for_menu(item.action);
+        if (bound_act >= 0) {
+            accel_shown = chord_label(binds_.key[bound_act]);
+        }
+        if (!accel_shown.empty() && !gamepad_nav_) {
+            const TextMetrics accel = measure_text(cr, menu_font(), accel_shown, -1);
             const double accel_pad = menu_scrolls ? 22.0 : 12.0;
-            paint_text(cr, menu_font(), item.accel_text, drop_x + drop_w - accel.width - accel_pad, y + pitch.text_dy,
+            paint_text(cr, menu_font(), accel_shown, drop_x + drop_w - accel.width - accel_pad, y + pitch.text_dy,
                        theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
         }
     }
@@ -986,11 +1017,23 @@ void Shell::draw_dialog(cairo_t *cr)
             const TextMetrics metrics = measure_text(cr, ui_font(), strip_mnemonic(buttons[static_cast<std::size_t>(i)].first), -1);
             widths[static_cast<std::size_t>(i)] = button_width(metrics.width, dp(32), dp(120));
         }
+        auto control_enabled = [&](int id) {
+            if (dialog_ != Dialog::Files) {
+                return true;
+            }
+            if (id == kRename || id == kDelete) {
+                return file_row_selected();
+            }
+            if (!files_save_ && id == kOk) {
+                return !files_.empty() && list_index_ >= 0 && list_index_ < static_cast<int>(files_.size());
+            }
+            return true;
+        };
         double left = px + margin;
         for (int i = 0; i < left_count; ++i) {
             const auto &button_def = buttons[static_cast<std::size_t>(i)];
             button(cr, left, by, widths[static_cast<std::size_t>(i)], bh, button_def.first, button_def.second,
-                   button_def.second == primary_id);
+                   button_def.second == primary_id, false, control_enabled(button_def.second));
             left += widths[static_cast<std::size_t>(i)] + gap;
         }
         double right_w = 0;
@@ -1007,7 +1050,7 @@ void Shell::draw_dialog(cairo_t *cr)
         for (int i = left_count; i < count; ++i) {
             const auto &button_def = buttons[static_cast<std::size_t>(i)];
             button(cr, right, by, widths[static_cast<std::size_t>(i)], bh, button_def.first, button_def.second,
-                   button_def.second == primary_id);
+                   button_def.second == primary_id, false, control_enabled(button_def.second));
             right += widths[static_cast<std::size_t>(i)] + gap;
         }
     };
@@ -1114,17 +1157,17 @@ void Shell::draw_dialog(cairo_t *cr)
         cairo_stroke(cr);
         const double bw = plaque_w - dp(28);
         double by = py + dp(12);
-        button(cr, px + dp(14), by, bw, bh, "_Start a New City", kWelcomeNew, focus_id_ == kWelcomeNew);
-        by += bh + gap;
-        button(cr, px + dp(14), by, bw, bh, "_Load a Saved City", kWelcomeLoad, focus_id_ == kWelcomeLoad);
-        by += bh + gap;
-        button(cr, px + dp(14), by, bw, bh, "Select a _Scenario", kWelcomeScenario, focus_id_ == kWelcomeScenario);
-        by += bh + gap;
-        button(cr, px + dp(14), by, bw, bh, "_Quit", kWelcomeQuit, focus_id_ == kWelcomeQuit);
         if (!continued.empty()) {
+            button(cr, px + dp(14), by, bw, bh, continued.c_str(), kWelcomeContinue, false);
             by += bh + gap;
-            button(cr, px + dp(14), by, bw, bh, continued.c_str(), kWelcomeContinue, focus_id_ == kWelcomeContinue);
         }
+        button(cr, px + dp(14), by, bw, bh, "_Start a new city", kWelcomeNew, false);
+        by += bh + gap;
+        button(cr, px + dp(14), by, bw, bh, "_Load a saved city", kWelcomeLoad, false);
+        by += bh + gap;
+        button(cr, px + dp(14), by, bw, bh, "Select a _scenario", kWelcomeScenario, false);
+        by += bh + gap;
+        button(cr, px + dp(14), by, bw, bh, "_Quit", kWelcomeQuit, false);
         return;
     }
     if (dialog_ == Dialog::QuitConfirm) {
@@ -1227,7 +1270,8 @@ void Shell::draw_dialog(cairo_t *cr)
         theme::reading_ink(ink_r, ink_g, ink_b);
         place_line(body_font(), detail, panel.x + margin, panel.y + dp(52) + question_h + dp(6), panel.w - 2 * margin,
                    ink_r, ink_g, ink_b);
-        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Start", kOk}, {"_Cancel", kCancel}}, 1);
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_Start", kOk}}, 0,
+                   kOk);
         return;
     }
     if (dialog_ == Dialog::NewCity) {
@@ -1235,7 +1279,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const std::string land_intro =
             "Pick a difficulty and the kind of land. Default keeps the usual rivers, lakes, and trees.";
         double want_w = new_page_ == 1 ? dp(640) : dp(520);
-        double want_h = new_page_ == 1 ? dp(560) : new_page_ == 0 ? dp(190) : dp(170);
+        double want_h = new_page_ == 1 ? dp(560) : new_page_ == 0 ? dp(236) : dp(170);
         const double land_intro_h = new_page_ == 1 ? text_block_height(land_intro, want_w - 2 * margin) : 0;
         if (new_page_ == 1) {
             want_h += std::max(0.0, land_intro_h - static_cast<double>(dp(22)));
@@ -1263,13 +1307,15 @@ void Shell::draw_dialog(cairo_t *cr)
             stroke_rect(cr, x + margin, field_y, dw - 2 * margin, dp(36), theme::kMenuFrameR, theme::kMenuFrameG,
                         theme::kMenuFrameB);
             push_hot(x + margin, field_y, dw - 2 * margin, dp(36), kFieldName);
-            push_focus(kFieldName);
             paint_text(cr, body_font(), field_a_.empty() ? " " : field_a_, x + margin + dp(8), field_y + dp(8),
                        theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(16)));
             const bool name_editing = focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64);
             paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, name_editing, x + margin, field_y,
                         dw - 2 * margin, dp(36));
             double below = field_y + dp(36);
+            button(cr, x + margin, below + dp(8), dp(140), dp(32), "_Random", kRandomName, false);
+            push_focus(kFieldName);
+            below += dp(40);
             if (!dialog_error_.empty()) {
                 paint_text(cr, ui_font(), dialog_error_, x + margin, below + dp(4), 0.6, 0.1, 0.1,
                            static_cast<int>(dw - 2 * margin));
@@ -1302,7 +1348,7 @@ void Shell::draw_dialog(cairo_t *cr)
                            static_cast<int>(label_w));
                 for (int o = 0; o < 3; ++o) {
                     button(cr, x + margin + label_w + o * (choice_w + dp(6)), gy, choice_w, dp(32), options[g][o],
-                           kChoice + g * 10 + o, selected[g] == o);
+                           kChoice + g * 10 + o, false, selected[g] == o);
                 }
             }
             const double seed_y = block_top + 5 * dp(40);
@@ -1416,15 +1462,21 @@ void Shell::draw_dialog(cairo_t *cr)
                 cairo_restore(cr);
             }
             button(cr, x + margin + dp(260), preview_y, dp(160), dp(32), "New terrain", kNewTerrain, false);
-            const std::string summary = "Generate \"" + field_a_ + "\". This replaces the city on the map.";
+            std::string summary = "Generate \"" + field_a_ + "\".";
+            if (city_chosen_) {
+                summary += " This replaces the city on the map.";
+            }
             paint_text(cr, ui_font(), summary, x + margin, summary_y, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 2 * margin));
-            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Generate", kGenerate}});
+            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Generate", kGenerate}}, 0, kGenerate);
         } else {
             // A saved page index from an older session. Generate is on page 2 now.
-            const std::string summary = "Generate \"" + field_a_ + "\".\nThis replaces the city on the map.";
+            std::string summary = "Generate \"" + field_a_ + "\".";
+            if (city_chosen_) {
+                summary += "\nThis replaces the city on the map.";
+            }
             label(cr, body_font(), summary, x + margin, y + dp(52), static_cast<int>(dw - 2 * margin));
-            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Generate", kGenerate}});
+            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Generate", kGenerate}}, 0, kGenerate);
         }
         return;
     }
@@ -1449,7 +1501,9 @@ void Shell::draw_dialog(cairo_t *cr)
         const double dw = panel.w;
         const double dh = panel.h;
         frame_panel(cr, x, y, dw, dh, "Play Scenario");
-        label(cr, ui_font(), "Choose a scenario. Playing it replaces the city on the map.", x + margin, y + dp(46),
+        const char *scenario_lead = city_chosen_ ? "Choose a scenario. Playing it replaces the city on the map."
+                                                 : "Choose a scenario.";
+        label(cr, ui_font(), scenario_lead, x + margin, y + dp(46),
               static_cast<int>(dw - 2 * margin));
         const double list_top = y + header;
         const double buttons_y = y + dh - margin - dp(36);
@@ -1582,6 +1636,144 @@ void Shell::draw_dialog(cairo_t *cr)
             draw_osk(cr, x + margin, osk_top, dw - 2 * margin, osk_limit - osk_top);
         }
         buttons_at(x, dw, y + rename_h - margin - dp(36), {{"_Cancel", kCancel}, {"_Rename", kRename}});
+        return;
+    }
+    if (dialog_ == Dialog::FileRename) {
+        const bool osk = osk_visible();
+        double want_w = osk ? dp(600) : dp(520);
+        double want_h = dp(190);
+        if (osk) {
+            want_h += dp(280);
+        }
+        if (!dialog_error_.empty()) {
+            want_h += dp(28);
+        }
+        const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
+        const double x = panel.x;
+        const double y = panel.y;
+        const double dw = panel.w;
+        frame_panel(cr, x, y, dw, panel.h, "Rename file");
+        label(cr, body_font(), "New name for " + file_target_ + ".", x + margin, y + dp(48),
+              static_cast<int>(dw - 2 * margin));
+        const double field_y = y + dp(84);
+        fill(cr, x + margin, field_y, dw - 2 * margin, dp(36), 1, 1, 1);
+        stroke_rect(cr, x + margin, field_y, dw - 2 * margin, dp(36), theme::kMenuFrameR, theme::kMenuFrameG,
+                    theme::kMenuFrameB);
+        push_hot(x + margin, field_y, dw - 2 * margin, dp(36), kFieldName);
+        push_focus(kFieldName);
+        paint_text(cr, body_font(), field_a_, x + margin + dp(8), field_y + dp(8), theme::kTextR, theme::kTextG,
+                   theme::kTextB, static_cast<int>(dw - 2 * margin - dp(16)));
+        const bool editing = focus_id_ == kFieldName || (focus_id_ >= kOsk && focus_id_ < kOsk + 64);
+        paint_caret(x + margin + dp(8), field_y + dp(8), dp(18), field_a_, editing, x + margin, field_y,
+                    dw - 2 * margin, dp(36));
+        double below = field_y + dp(36);
+        if (!dialog_error_.empty()) {
+            paint_text(cr, ui_font(), dialog_error_, x + margin, below + dp(4), 0.6, 0.1, 0.1,
+                       static_cast<int>(dw - 2 * margin));
+            below += dp(28);
+        }
+        if (osk) {
+            const double osk_top = below + dp(8);
+            const double osk_limit = y + panel.h - margin - dp(36) - dp(8);
+            draw_osk(cr, x + margin, osk_top, dw - 2 * margin, std::max(0.0, osk_limit - osk_top));
+        }
+        buttons_at(x, dw, y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_Rename", kRename}}, 0, kRename);
+        return;
+    }
+    if (dialog_ == Dialog::FileDelete) {
+        const std::string question = "Delete \"" + file_target_ + "\"? This cannot be undone.";
+        const double width = message_width(win_w_, margin, dp(420), dp(560));
+        const double body_h = text_block_height(question, width - 2 * margin);
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Delete file?");
+        label(cr, body_font(), question, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
+        if (!dialog_error_.empty()) {
+            paint_text(cr, ui_font(), dialog_error_, panel.x + margin, panel.y + dp(48) + body_h, 0.6, 0.1, 0.1,
+                       static_cast<int>(panel.w - 2 * margin));
+        }
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_Delete", kDelete}},
+                   0, kDelete);
+        return;
+    }
+    if (dialog_ == Dialog::Bindings) {
+        const double bh = static_cast<double>(control_px(36, 44));
+        const double width = std::min(static_cast<double>(dp(720)), std::max(1.0, win_w_ - 2.0 * margin));
+        const double height = std::min(static_cast<double>(dp(560)), std::max(1.0, band_h - 2.0 * margin));
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Remap controls");
+        label(cr, ui_font(), "Choose a row, then press a key or a button. Esc cancels that press.", panel.x + margin,
+              panel.y + dp(46), static_cast<int>(panel.w - 2 * margin));
+        const double list_top = panel.y + dp(78);
+        const double buttons_y = panel.y + panel.h - margin - bh;
+        const double error_h = dialog_error_.empty() ? 0.0 : dp(22);
+        const double list_bottom = buttons_y - error_h - dp(8);
+        const int row_px = control_px(32, 40);
+        const int visible = std::max(1, static_cast<int>((list_bottom - list_top) / row_px));
+        files_visible_ = visible;
+        const int count = bind_row_count();
+        if (list_index_ < 0) {
+            list_index_ = 0;
+        }
+        if (list_index_ >= count) {
+            list_index_ = count - 1;
+        }
+        place_list_window(list_index_, count);
+        if (focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
+            align_list_focus();
+        }
+        const double row_w = panel.w - 2 * margin - dp(16);
+        for (int row = 0; row < visible; ++row) {
+            const int index = list_scroll_ + row;
+            if (index < 0 || index >= count) {
+                break;
+            }
+            const BindRow spec = bind_row(index);
+            const double ry = list_top + row * row_px;
+            const int id = kListItem + row;
+            push_hot(panel.x + margin, ry, row_w, row_px - 4, id);
+            push_focus(id);
+            if (list_index_ == index) {
+                fill(cr, panel.x + margin, ry, row_w, row_px - 4, theme::chrome_hover_r(), theme::chrome_hover_g(),
+                     theme::chrome_hover_b());
+            }
+            if (focus_id_ == id) {
+                cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
+                cairo_set_line_width(cr, 2.5);
+                cairo_rectangle(cr, panel.x + margin + 1, ry + 1, row_w - 2, row_px - 6);
+                cairo_stroke(cr);
+            }
+            const bool listening = bind_listen_ && list_index_ == index && focus_id_ == id;
+            std::string keys = spec.key >= 0 ? chord_label(binds_.key[spec.key]) : std::string();
+            std::string pad = spec.pad >= 0 && binds_.pad[spec.pad] >= 0 ? glyph(static_cast<SDL_GamepadButton>(binds_.pad[spec.pad]))
+                                                                         : std::string();
+            if (listening) {
+                if (spec.key >= 0 && spec.pad >= 0) {
+                    keys = "Press a key or button";
+                    pad.clear();
+                } else if (spec.key >= 0) {
+                    keys = "Press a key";
+                } else {
+                    pad = "Press a button";
+                }
+            }
+            paint_text(cr, ui_font(), spec.label, panel.x + margin + dp(8), ry + dp(6), theme::kTextR, theme::kTextG,
+                       theme::kTextB, static_cast<int>(row_w * 0.46));
+            if (!keys.empty()) {
+                paint_text(cr, ui_font(), keys, panel.x + margin + row_w * 0.48, ry + dp(6), theme::kTextR, theme::kTextG,
+                           theme::kTextB, static_cast<int>(row_w * 0.28));
+            }
+            if (!pad.empty()) {
+                paint_text(cr, ui_font(), pad, panel.x + margin + row_w * 0.78, ry + dp(6), theme::kTextR, theme::kTextG,
+                           theme::kTextB, static_cast<int>(row_w * 0.2));
+            }
+        }
+        if (!dialog_error_.empty()) {
+            paint_text(cr, ui_font(), dialog_error_, panel.x + margin, buttons_y - error_h, 0.6, 0.1, 0.1,
+                       static_cast<int>(panel.w - 2 * margin));
+        }
+        buttons_at(panel.x, panel.w, buttons_y, {{"_Reset to defaults", kReset}, {"_Cancel", kCancel}, {"_OK", kOk}}, 1,
+                   kOk);
         return;
     }
     if (dialog_ == Dialog::About) {
@@ -1847,7 +2039,9 @@ void Shell::draw_dialog(cairo_t *cr)
         }
         const char *open_label = files_save_ ? "_Save" : (folder_row ? "Open _Folder" : "_Open");
         const int open_id = files_save_ ? kSave : kOk;
-        buttons_at(x, dw, buttons_top, {{"_Up", kUp}, {"_Cancel", kCancel}, {open_label, open_id}}, 1);
+        buttons_at(x, dw, buttons_top,
+                   {{"_Up", kUp}, {"_Rename", kRename}, {"_Delete", kDelete}, {"_Cancel", kCancel}, {open_label, open_id}},
+                   3, open_id);
         return;
     }
     if (dialog_ == Dialog::LoadError || dialog_ == Dialog::SaveError || dialog_ == Dialog::Info) {
@@ -1892,7 +2086,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double stack_gap = static_cast<double>(dp(12));
         const SettingsStack volume_row = settings_stack(0, text_h, bar_h, stack_gap);
         const SettingsStack scale_row = settings_stack(volume_row.next_caption, text_h, bar_h, stack_gap);
-        const double toggles = (bh + stack_gap) * 3.0;
+        const double toggles = (bh + stack_gap) * 4.0;
         const double rows = scale_row.next_caption + toggles;
         const double height = dp(48) + margin + rows + dp(8) + bh + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, dp(640), height, margin);
@@ -1959,33 +2153,47 @@ void Shell::draw_dialog(cairo_t *cr)
         sy += bh + stack_gap;
         const bool full = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
         switch_row("Fullscreen", full ? "On" : "Off", kFullscreenBox, sy);
+        sy += bh + stack_gap;
+        const char *autosave_state = "Off";
+        std::string autosave_owned;
+        if (autosave_seconds_ > 0) {
+            if (autosave_seconds_ % 60 == 0) {
+                const int minutes = autosave_seconds_ / 60;
+                autosave_owned = std::to_string(minutes) + (minutes == 1 ? " minute" : " minutes");
+            } else {
+                autosave_owned = std::to_string(autosave_seconds_) + " seconds";
+            }
+            autosave_state = autosave_owned.c_str();
+        }
+        switch_row("Autosave", autosave_state, kAutosave, sy);
         buttons_at(x, dw, y + panel.h - margin - bh, {{"_Cancel", kCancel}, {"_OK", kOk}});
         return;
     }
     if (dialog_ == Dialog::Controls) {
         const std::string heading = controls_page_title(controls_page_, deck_);
         ControlsPadNames pad_names;
-        pad_names.confirm = glyph(SDL_GAMEPAD_BUTTON_SOUTH);
-        pad_names.cancel = glyph(SDL_GAMEPAD_BUTTON_EAST);
-        pad_names.west = glyph(SDL_GAMEPAD_BUTTON_WEST);
-        pad_names.north = glyph(SDL_GAMEPAD_BUTTON_NORTH);
-        pad_names.left = glyph(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        pad_names.right = glyph(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        pad_names.menu = glyph(SDL_GAMEPAD_BUTTON_START);
-        pad_names.view = glyph(SDL_GAMEPAD_BUTTON_BACK);
-        pad_names.l3 = glyph(SDL_GAMEPAD_BUTTON_LEFT_STICK);
-        pad_names.r3 = glyph(SDL_GAMEPAD_BUTTON_RIGHT_STICK);
-        const std::string intro = std::string(heading) + "\n" + controls_page_body(controls_page_, deck_, pad_names);
+        pad_names.confirm = glyph_for(PadConfirm);
+        pad_names.cancel = glyph_for(PadCancel);
+        pad_names.west = glyph_for(PadQuery);
+        pad_names.north = glyph_for(PadPause);
+        pad_names.left = glyph_for(PadPrevTool);
+        pad_names.right = glyph_for(PadNextTool);
+        pad_names.menu = glyph_for(PadMenu);
+        pad_names.view = glyph_for(PadBack);
+        pad_names.l3 = glyph_for(PadOverlay);
+        pad_names.r3 = glyph_for(PadCenter);
+        const ControlsKeyText key_text = controls_keys();
+        const std::string intro = std::string(heading) + "\n" + controls_page_body(controls_page_, deck_, pad_names, key_text);
         const bool tools = controls_page_has_tools(controls_page_, deck_);
-        const std::string col_a = tools ? controls_tool_column(0, 9) : std::string();
-        const std::string col_b = tools ? controls_tool_column(9, 17) : std::string();
+        const std::string col_a = tools ? controls_tool_column(0, 9, &key_text) : std::string();
+        const std::string col_b = tools ? controls_tool_column(9, 17, &key_text) : std::string();
         const double width = message_width(win_w_, margin, dp(520), dp(860));
         const double inner = width - 2 * margin;
         const double intro_h = text_block_height(intro, inner);
         const double col_w = tools ? (inner - dp(16)) / 2.0 : inner;
         const double col_h = tools ? std::max(text_block_height(col_a, col_w), text_block_height(col_b, col_w)) : 0.0;
         const double content_h = intro_h + (tools ? dp(8) + col_h : 0.0);
-        const double footer_h = dp(22);
+        const double footer_h = dp(32);
         const double buttons_h = dp(36);
         const double chrome = dp(40) + margin + footer_h + dp(8) + buttons_h + margin;
         const double max_h = std::max(chrome + dp(48), band_h - 2.0 * margin);
@@ -2024,10 +2232,20 @@ void Shell::draw_dialog(cairo_t *cr)
             fill(cr, track_x, thumb_y, track_w, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         }
         const double footer_y = body_top + view_h + dp(4);
-        const std::string page_line = controls_page_indicator(controls_page_) + "    Left and right change page.";
-        paint_text(cr, ui_font(), page_line, panel.x + margin, footer_y, theme::kTextR, theme::kTextG, theme::kTextB,
-                   static_cast<int>(panel.w - 2 * margin));
-        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - buttons_h, {{"_Close", kCancel}});
+        const double dot = dp(14);
+        const double dot_gap = dp(8);
+        const double dots_w = dot * 3 + dot_gap * 2;
+        const double prev_w = dp(88);
+        const double next_w = dp(88);
+        button(cr, panel.x + margin, footer_y, prev_w, dp(28), "_Prev", kControlsPrev, false);
+        const double dots_x = panel.x + (panel.w - dots_w) / 2.0;
+        for (int page = 0; page < 3; ++page) {
+            const int id = page == 0 ? kPageDot0 : page == 1 ? kPageDot1 : kPageDot2;
+            const bool here = controls_page_index(controls_page_, deck_) == page;
+            button(cr, dots_x + page * (dot + dot_gap), footer_y + dp(6), dot, dot, "", id, false, here);
+        }
+        button(cr, panel.x + panel.w - margin - next_w, footer_y, next_w, dp(28), "_Next", kControlsNext, false);
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - buttons_h, {{"_Remap", kRemap}, {"_Close", kCancel}});
         return;
     }
     if (dialog_ == Dialog::Budget && budget_cover_ && budget_is_tax_) {
@@ -2168,7 +2386,7 @@ void Shell::draw_dialog(cairo_t *cr)
         slider(3, "Police fund", funded(police_, book.police_need), copy.police, police_, 0, 100);
         slider(4, "Fire fund", funded(fire_, book.fire_need), copy.fire, fire_, 0, 100);
         if (budget_is_tax_) {
-            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Reset", kReset}, {"_Collect Taxes", kCollect}});
+            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Reset", kReset}, {"_Collect taxes", kCollect}});
         } else {
             buttons_at(x, dw, y + dh - margin - dp(36), {{"_Cancel", kCancel}, {"_OK", kOk}});
         }
@@ -2188,8 +2406,8 @@ void Shell::draw_dialog(cairo_t *cr)
         const double dw = panel.w;
         const double dh = panel.h;
         frame_panel(cr, x, y, dw, dh, "Graphs");
-        button(cr, x + margin, y + dp(46), dp(140), dp(32), "10 year", kShortScale, !graphs_long_);
-        button(cr, x + margin + dp(148), y + dp(46), dp(140), dp(32), "120 year", kLongScale, graphs_long_);
+        button(cr, x + margin, y + dp(46), dp(140), dp(32), "10 year", kShortScale, false, !graphs_long_);
+        button(cr, x + margin + dp(148), y + dp(46), dp(140), dp(32), "120 year", kLongScale, false, graphs_long_);
         const double legend_row_h = dp(20);
         const double button_top = y + dh - margin - dp(36);
         const double legend_top = button_top - dp(12) - legend_h;
@@ -2204,6 +2422,14 @@ void Shell::draw_dialog(cairo_t *cr)
             graph_chart_h_ = chart_h;
             draw_history_chart(live.cr, &session_, graphs_long_, static_cast<int>(dw - 2 * margin),
                                static_cast<int>(chart_h), graph_mask_, graph_pointer_x_, &graph_readout_, ui_scale_);
+        }
+        push_hot(graph_chart_x_, graph_chart_y_, graph_chart_w_, graph_chart_h_, kGraphPlot);
+        push_focus(kGraphPlot);
+        if (focus_id_ == kGraphPlot) {
+            cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
+            cairo_set_line_width(cr, 2);
+            cairo_rectangle(cr, graph_chart_x_ + 1, graph_chart_y_ + 1, graph_chart_w_ - 2, graph_chart_h_ - 2);
+            cairo_stroke(cr);
         }
         const double col_w = (dw - 2 * margin) / legend_cols;
         for (int i = 0; i < static_cast<int>(legend.size()); ++i) {
@@ -2408,7 +2634,7 @@ void Shell::draw_dialog(cairo_t *cr)
                     place_line(body_font(), line, right_x + 4, right_y + 2, live_col - why_w - 8, theme::kTextR,
                                theme::kTextG, theme::kTextB);
                     button(cr, right_x + live_col - why_w, right_y, why_w, std::max(1.0, problem_row - 2), "Why?",
-                           kEvalWhy + i, eval_why_ == i);
+                           kEvalWhy + i, false, eval_why_ == i);
                     right_y += problem_row + gap;
                 }
             } else {
@@ -2448,7 +2674,12 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::Messages) {
-        const DialogRect panel = place_dialog(win_w_, band_h, large_w, std::min(large_h, static_cast<double>(dp(520))), margin);
+        const auto &notes_for_size = session_.notices();
+        const double messages_h = notes_for_size.empty()
+                                      ? dp(40) + margin + dp(48) + dp(12) + static_cast<double>(control_px(36, 44)) + margin
+                                      : std::min(large_h, static_cast<double>(dp(520)));
+        const DialogRect panel = place_dialog(win_w_, band_h, notes_for_size.empty() ? std::min(large_w, static_cast<double>(dp(480))) : large_w,
+                                              messages_h, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -2586,7 +2817,7 @@ void Shell::draw_dialog(cairo_t *cr)
             cursor += row_h;
         }
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
-                   {{milestone_notes_ ? "Notes: on" : "Notes: off", kLedgerNotes}, {"_Close", kClose}});
+                   {{milestone_notes_ ? "Pop-up notes: on" : "Pop-up notes: off", kLedgerNotes}, {"_Close", kClose}});
     }
 }
 
@@ -2674,6 +2905,7 @@ void Shell::draw_special_menu(cairo_t *cr)
 
 void Shell::draw(cairo_t *cr)
 {
+    sync_pointer_cursor();
     if (show_osk() && dialog_ != Dialog::None) {
         osk_latched_ = true;
     }
@@ -2733,10 +2965,10 @@ void Shell::draw(cairo_t *cr)
             } else {
                 card_cost = "No charge";
             }
-            if (!deck_ && !gamepad_nav_ && tool_index_ >= 0) {
-                const char key = tool_hotkey(tool_index_);
-                if (key != 0) {
-                    card_cost += std::string("  [") + static_cast<char>(key - 'a' + 'A') + "]";
+            if (!deck_ && !gamepad_nav_ && tool_index_ >= 0 && tool_index_ < 17) {
+                const std::string key_name = chord_label(binds_.key[KeyTool0 + tool_index_]);
+                if (!key_name.empty() && key_name != "None") {
+                    card_cost += "  [" + key_name + "]";
                 }
             }
             fill(cr, side_x_, card_top, side_w_, card_bottom - card_top, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
@@ -2747,7 +2979,7 @@ void Shell::draw(cairo_t *cr)
             paint_text(cr, ui_font(), card_cost, side_x_ + 6, card_top + dp(20), theme::kTextR, theme::kTextG, theme::kTextB,
                        side_w_ - 12);
             if ((gamepad_nav_ || deck_) && card_bottom - card_top >= 52.0) {
-                const std::string legend = std::string(glyph(SDL_GAMEPAD_BUTTON_SOUTH)) + " uses";
+                const std::string legend = std::string(glyph_for(PadConfirm)) + " uses";
                 paint_text(cr, ui_font(), legend, side_x_ + 6, card_top + dp(36), theme::kAccelR, theme::kAccelG,
                            theme::kAccelB, side_w_ - 12);
             }
@@ -2767,8 +2999,11 @@ void Shell::draw(cairo_t *cr)
         TargetCr live(cr);
         cairo_rectangle(live.cr, view_x_, view_y_, view_w_, view_h_);
         cairo_clip(live.cr);
-        cairo_translate(live.cr, snapped_map_origin(view_x_, map_ox_, scroll_x_),
-                        snapped_map_origin(view_y_, map_oy_, scroll_y_));
+        const double map_origin_x = snapped_map_origin(view_x_, map_ox_, scroll_x_);
+        const double map_origin_y = snapped_map_origin(view_y_, map_oy_, scroll_y_);
+        cairo_rectangle(live.cr, map_origin_x, map_origin_y, map_.pixel_width(), map_.pixel_height());
+        cairo_clip(live.cr);
+        cairo_translate(live.cr, map_origin_x, map_origin_y);
         if (!map_.dragging() && dialog_ == Dialog::None && !menu_.open()) {
             // The footprint follows the pointer before the button goes down,
             // including while the city is paused. Motion updates the tile
@@ -2830,18 +3065,6 @@ void Shell::draw(cairo_t *cr)
         paint_dim_plate(cr, view_x_, view_y_ + view_h_ - edge, view_w_, edge, 0.75, 0.05, 0.04);
         paint_dim_plate(cr, view_x_, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
         paint_dim_plate(cr, view_x_ + view_w_ - edge, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
-    }
-    if (year_stamp_.visible() && dialog_ == Dialog::None) {
-        const std::string stamp = year_stamp_.text();
-        const TextMetrics stamp_m = measure_text(cr, bold_font(), stamp, -1);
-        const double sw = stamp_m.width + dp(16);
-        const double sh = stamp_m.height + dp(10);
-        const double sx = view_x_ + (view_w_ - sw) / 2.0;
-        const double sy = view_y_ + dp(28);
-        fill(cr, sx + 2, sy + 2, sw, sh, 0, 0, 0);
-        fill(cr, sx, sy, sw, sh, 1, 1, 0.33);
-        stroke_rect(cr, sx, sy, sw, sh, 0, 0, 0);
-        paint_text(cr, bold_font(), stamp, sx + dp(8), sy + dp(4), 0, 0, 0, -1);
     }
     push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
     if (dialog_ == Dialog::None && !menu_.open() && tool_index_ == kToolCount - 1) {
@@ -2961,9 +3184,7 @@ void Shell::draw(cairo_t *cr)
         hint_until_ = now;
         query_pinned_ = false;
     }
-    if (notice_sticky_ && !shown_message_.empty()) {
-        bar = shown_message_;
-    } else if (notice.show_notice && !session_.message().empty()) {
+    if (notice.show_notice && !session_.message().empty()) {
         shown_message_serial_ = session_.message_serial();
         shown_message_ = session_.message();
         hint_until_ = now + std::chrono::seconds(4);
@@ -2982,8 +3203,14 @@ void Shell::draw(cairo_t *cr)
                 const char *tip = palette_.tooltip();
                 bar = tip != nullptr ? tip : "";
             }
-            if (show_keys) {
-                bar = tool_hint_with_key(hover, bar.c_str());
+            if (show_keys && hover >= 0 && hover < 17) {
+                const std::string key_name = chord_label(binds_.key[KeyTool0 + hover]);
+                if (!key_name.empty() && key_name != "None") {
+                    if (!bar.empty()) {
+                        bar += "  ";
+                    }
+                    bar += "[" + key_name + "]";
+                }
             }
         } else if (!hint_fits && !hint.empty()) {
             bar = hint;
@@ -3023,6 +3250,21 @@ void Shell::draw(cairo_t *cr)
         bar_line += dots;
     }
     paint_text(cr, body_font(), bar_line, 8, win_h_ - message_h_ + 10, ink_r, ink_g, ink_b, win_w_ - 16);
+    notice_bar_y_ = -1;
+    notice_bar_h_ = 0;
+    if (notice_sticky_ && !notice_text_.empty()) {
+        if (now >= notice_until_) {
+            dismiss_background_notice();
+        } else {
+            const int notice_wrap = std::max(8, win_w_ - 16);
+            const TextMetrics notice_m = measure_text(cr, ui_font(), notice_text_, notice_wrap);
+            notice_bar_h_ = static_cast<double>(notice_m.height + dp(10));
+            notice_bar_y_ = static_cast<double>(status_y) - notice_bar_h_;
+            fill(cr, 0, notice_bar_y_, win_w_, notice_bar_h_, 1.0, 0.96, 0.72);
+            stroke_rect(cr, 0, notice_bar_y_, win_w_, notice_bar_h_, 0.55, 0.32, 0.08);
+            paint_text(cr, ui_font(), notice_text_, 8, notice_bar_y_ + dp(4), 0.25, 0.12, 0.04, notice_wrap);
+        }
+    }
     const std::string goal = session_.scenario_progress();
     if (session_.scenario_id() != goal_scenario_) {
         goal_scenario_ = session_.scenario_id();
@@ -3030,6 +3272,9 @@ void Shell::draw(cairo_t *cr)
         goal_until_ = now + std::chrono::seconds(6);
     }
     const bool goal_visible = !goal.empty() && !goal_dismissed_ && now < goal_until_;
+    double goal_bottom = 0;
+    double goal_left = 0;
+    double goal_right = 0;
     if (goal_visible && dialog_ == Dialog::None && view_w_ > dp(32)) {
         const int pad = dp(8);
         double room = 0;
@@ -3051,6 +3296,24 @@ void Shell::draw(cairo_t *cr)
         fill(cr, gx, gy, gw, gh, goal_bar.r, goal_bar.g, goal_bar.b);
         stroke_rect(cr, gx, gy, gw, gh, edge_r, edge_g, edge_b);
         paint_text(cr, ui_font(), goal, gx + pad, gy + pad, goal_bar.ink_r, goal_bar.ink_g, goal_bar.ink_b, wrap);
+        goal_bottom = gy + gh;
+        goal_left = gx;
+        goal_right = gx + gw;
+    }
+    if (year_stamp_.visible() && dialog_ == Dialog::None) {
+        const std::string stamp = year_stamp_.text();
+        const TextMetrics stamp_m = measure_text(cr, bold_font(), stamp, -1);
+        const double sw = stamp_m.width + dp(16);
+        const double sh = stamp_m.height + dp(10);
+        const double sx = view_x_ + (view_w_ - sw) / 2.0;
+        double sy = view_y_ + dp(28);
+        if (goal_bottom > 0 && sx < goal_right && sx + sw > goal_left && sy < goal_bottom) {
+            sy = goal_bottom + dp(6);
+        }
+        fill(cr, sx + 2, sy + 2, sw, sh, 0, 0, 0);
+        fill(cr, sx, sy, sw, sh, 1, 1, 0.33);
+        stroke_rect(cr, sx, sy, sw, sh, 0, 0, 0);
+        paint_text(cr, bold_font(), stamp, sx + dp(8), sy + dp(4), 0, 0, 0, -1);
     }
     if (dialog_ != Dialog::None) {
         draw_dialog(cr);
@@ -3082,8 +3345,13 @@ void Shell::draw(cairo_t *cr)
         const double ramp_y = ly + lh - dp(10);
         const CitySession::MapLayer shown = overlay_.layer();
         const bool on_off = shown == CitySession::MapLayer::Residential || shown == CitySession::MapLayer::Commercial ||
-                            shown == CitySession::MapLayer::Industrial || shown == CitySession::MapLayer::Transportation;
-        if (!on_off) {
+                            shown == CitySession::MapLayer::Industrial || shown == CitySession::MapLayer::Transportation ||
+                            shown == CitySession::MapLayer::Power;
+        if (shown == CitySession::MapLayer::Power) {
+            fill(cr, lx + pad, ramp_y, dp(28), dp(6), 220 / 255.0, 40 / 255.0, 32 / 255.0);
+            fill(cr, lx + pad + dp(34), ramp_y, dp(28), dp(6), 240 / 255.0, 140 / 255.0, 24 / 255.0);
+            fill(cr, lx + pad + dp(68), ramp_y, dp(28), dp(6), 250 / 255.0, 220 / 255.0, 40 / 255.0);
+        } else if (!on_off) {
             for (int i = 0; i < 8; ++i) {
                 const double t = i / 7.0;
                 cairo_set_source_rgba(cr, 1, 0.86 * (1.0 - t), 0.12 * (1.0 - t), 0.35 + 0.6 * t);
@@ -3112,12 +3380,14 @@ void Shell::draw(cairo_t *cr)
                 chip_w = static_cast<double>(dp(legend_chip_px(shown)));
             } else if (shown == CitySession::MapLayer::Transportation) {
                 chip_w = static_cast<double>(dp(34) + dp(28));
+            } else if (shown == CitySession::MapLayer::Power) {
+                chip_w = static_cast<double>(dp(68) + dp(28));
             }
             cairo_rectangle(cr, lx + pad + 0.5, ramp_y + 0.5, chip_w - 1.0, dp(6) - 1.0);
             cairo_stroke(cr);
         }
     }
-    if (gamepad_nav_ && dialog_ == Dialog::None) {
+    if ((gamepad_nav_ || key_cursor_) && dialog_ == Dialog::None) {
         double hx = cursor_x_;
         double hy = cursor_y_;
         double arm = 10.0;
@@ -3160,9 +3430,9 @@ void Shell::draw(cairo_t *cr)
 std::string Shell::dialog_title_hint() const
 {
     const bool pad = gamepad_nav_ || deck_ || touch_used_;
-    const std::string a = glyph(SDL_GAMEPAD_BUTTON_SOUTH);
-    const std::string b = glyph(SDL_GAMEPAD_BUTTON_EAST);
-    const std::string menu = glyph(SDL_GAMEPAD_BUTTON_START);
+    const std::string a = glyph_for(PadConfirm);
+    const std::string b = glyph_for(PadCancel);
+    const std::string menu = glyph_for(PadMenu);
     const bool osk_key = focus_id_ >= kOsk && focus_id_ < kOsk + 64;
     const bool field = focus_id_ == kFieldName || focus_id_ == kFieldSeed;
     auto b_action = [&](const std::string &typed) {
@@ -3202,8 +3472,8 @@ std::string Shell::dialog_title_hint() const
         return pad ? with_b(a + " types", typed, menu + " confirms") : "Type here    Enter confirms    Esc closes";
     }
     if (focus_id_ >= kSlider && focus_id_ < kSlider + 8) {
-        const std::string left = glyph(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        const std::string right = glyph(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        const std::string left = glyph_for(PadPrevTool);
+        const std::string right = glyph_for(PadNextTool);
         return pad ? "D-pad adjusts    " + left + "/" + right + " step    " + a + " confirms    " + b + " closes"
                    : "Left and right adjust    Enter confirms    Esc closes";
     }
@@ -3218,6 +3488,13 @@ std::string Shell::dialog_title_hint() const
     }
     if (dialog_ == Dialog::Controls) {
         return pad ? a + " closes    " + b + " closes    D-pad pages" : "Enter closes    Left and right change page";
+    }
+    if (dialog_ == Dialog::Graphs && focus_id_ == kGraphPlot) {
+        return pad ? "D-pad reads the chart    " + b + " closes" : "Left and right read the chart    Esc closes";
+    }
+    if (dialog_ == Dialog::Bindings) {
+        return pad ? (bind_listen_ ? "Press a button    " + b + " cancels" : a + " listens    " + b + " closes")
+                   : (bind_listen_ ? "Press a key    Esc cancels" : "Enter listens    Esc closes");
     }
     // Graphs, Evaluation, Query, About, and the one-button notices have
     // nothing to confirm. Enter dismisses them. B always has a way out.
@@ -3240,11 +3517,11 @@ std::string Shell::context_hint() const
 {
     const bool pad = gamepad_nav_ || deck_;
     const bool finger = touch_used_ && !pad;
-    const std::string a = glyph(SDL_GAMEPAD_BUTTON_SOUTH);
-    const std::string b = glyph(SDL_GAMEPAD_BUTTON_EAST);
-    const std::string left = glyph(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-    const std::string right = glyph(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-    const std::string menu = glyph(SDL_GAMEPAD_BUTTON_START);
+    const std::string a = glyph_for(PadConfirm);
+    const std::string b = glyph_for(PadCancel);
+    const std::string left = glyph_for(PadPrevTool);
+    const std::string right = glyph_for(PadNextTool);
+    const std::string menu = glyph_for(PadMenu);
     if (menu_.open()) {
         return pad ? a + " chooses    " + b + " closes    D-pad moves" : "Enter chooses    Esc closes";
     }
@@ -3273,13 +3550,25 @@ std::string Shell::context_hint() const
             return "Minimap: " + a + " jumps    D-pad scrolls    " + menu + " menu";
         }
         if (under >= kMenuTitle && under < kMenuTitle + 8) {
-            return a + " opens the menu    " + b + " back";
+            return a + " opens the menu";
         }
         if (cursor_y_ < static_cast<float>(menu_h_) || cursor_x_ < static_cast<float>(view_x_)) {
             return "Pointing at the panel. " + a + " uses it    " + menu + " menu";
         }
-        return tool_press_phrase(engine, a.c_str()) + "    " + b + " back    " + left + "/" + right + " tool    " +
-               menu + " menu";
+        const std::string query = glyph_for(PadQuery);
+        const std::string pause = glyph_for(PadPause);
+        std::string line = tool_press_phrase(engine, a.c_str());
+        if (!query.empty()) {
+            line += "    " + query + " query";
+        }
+        if (!pause.empty()) {
+            line += "    " + pause + (speed_ <= 0 ? " resumes" : " pauses");
+        }
+        if (overlay_on_) {
+            line += "    " + b + " closes the map";
+        }
+        line += "    " + left + "/" + right + " tool    " + menu + " menu";
+        return line;
     }
     if (finger) {
         std::string phrase = tool_click_phrase(engine);
@@ -3289,7 +3578,9 @@ std::string Shell::context_hint() const
         }
         return phrase;
     }
-    return std::string(tool_click_phrase(engine)) + "    Arrows pan    Space pauses";
+    const std::string pause_key = chord_label(binds_.key[KeyPause]);
+    return std::string(tool_click_phrase(engine)) + "    Arrows pan    " + pause_key +
+           (speed_ <= 0 ? " resumes" : " pauses");
 }
 
 std::string Shell::idle_message() const
