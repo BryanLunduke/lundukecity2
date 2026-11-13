@@ -39,10 +39,13 @@ Sheets &sheets()
     return stored;
 }
 
+enum class OverviewSnap { None, Vga, Svga };
+
 // 2×2 box filter. (sum + 2) / 4 matches the overview used since the crisp
-// 8px zoom. snap is for the SVGA and Spooky sheets, whose averages must
-// stay on the VGA palette. Classic passes false and is unchanged.
-void build_overview(const std::uint32_t *pixels, int count, std::vector<std::uint32_t> &overview, bool snap)
+// 8px zoom. SVGA snaps to the VGA palette plus the dirt B ramps, so
+// zoomed-out dirt stays tan. Spooky still snaps to VGA only. Classic
+// passes None and is unchanged.
+void build_overview(const std::uint32_t *pixels, int count, std::vector<std::uint32_t> &overview, OverviewSnap snap)
 {
     overview.assign(static_cast<std::size_t>(count) * TileAtlas::kOverview * TileAtlas::kOverview, 0);
     for (int tile = 0; tile < count; ++tile) {
@@ -60,8 +63,11 @@ void build_overview(const std::uint32_t *pixels, int count, std::vector<std::uin
                     return (sum + 2u) / 4u;
                 };
                 std::uint32_t word = (mix(24) << 24) | (mix(16) << 16) | (mix(8) << 8) | mix(0);
-                if (snap) {
-                    word = snap_vga_rgb((word >> 16) & 255u, (word >> 8) & 255u, word & 255u);
+                if (snap != OverviewSnap::None) {
+                    const unsigned r = (word >> 16) & 255u;
+                    const unsigned g = (word >> 8) & 255u;
+                    const unsigned b = word & 255u;
+                    word = (snap == OverviewSnap::Svga) ? snap_svga_rgb(r, g, b) : snap_vga_rgb(r, g, b);
                 }
                 dst[y * TileAtlas::kOverview + x] = word;
             }
@@ -69,7 +75,7 @@ void build_overview(const std::uint32_t *pixels, int count, std::vector<std::uin
     }
 }
 
-bool decode_png(const std::string &path, Sheet &sheet, bool snap, int &columns, int &count, std::string &error)
+bool decode_png(const std::string &path, Sheet &sheet, OverviewSnap snap, int &columns, int &count, std::string &error)
 {
     cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
     if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
@@ -170,7 +176,7 @@ bool TileAtlas::ensure_loaded()
     }
     int columns = 0;
     int count = 0;
-    if (!decode_png(path, sheets().classic, false, columns, count, error_)) {
+    if (!decode_png(path, sheets().classic, OverviewSnap::None, columns, count, error_)) {
         std::cerr << error_ << "\n";
         pixels_ = nullptr;
         return false;
@@ -181,9 +187,9 @@ bool TileAtlas::ensure_loaded()
     bind_active();
 
     // A missing or unreadable optional sheet leaves Classic in place. It is
-    // not an error: the game still runs. Both optional sheets snap the 8px
-    // overview onto the VGA palette.
-    auto take_sheet = [&](const char *relative, Sheet &dest, bool &ready, const char *label) {
+    // not an error: the game still runs. SVGA's 8px overview snaps to VGA
+    // plus the dirt B ramps. Spooky still snaps to VGA only.
+    auto take_sheet = [&](const char *relative, Sheet &dest, bool &ready, const char *label, OverviewSnap snap) {
         const std::string path = asset_file(relative);
         if (path.empty()) {
             return;
@@ -192,7 +198,7 @@ bool TileAtlas::ensure_loaded()
         int extra_columns = 0;
         int extra_count = 0;
         std::string extra_error;
-        if (decode_png(path, extra, true, extra_columns, extra_count, extra_error) && extra_count == count_ &&
+        if (decode_png(path, extra, snap, extra_columns, extra_count, extra_error) && extra_count == count_ &&
             extra_columns == columns_) {
             dest = std::move(extra);
             ready = true;
@@ -200,8 +206,8 @@ bool TileAtlas::ensure_loaded()
             std::cerr << label << " tiles unavailable, using Classic:\n" << extra_error << "\n";
         }
     };
-    take_sheet("images/micropolisEngine/tiles-svga.png", sheets().svga, svga_ready_, "SVGA");
-    take_sheet("images/micropolisEngine/tiles-spooky.png", sheets().spooky, spooky_ready_, "Spooky");
+    take_sheet("images/micropolisEngine/tiles-svga.png", sheets().svga, svga_ready_, "SVGA", OverviewSnap::Svga);
+    take_sheet("images/micropolisEngine/tiles-spooky.png", sheets().spooky, spooky_ready_, "Spooky", OverviewSnap::Vga);
     return true;
 }
 

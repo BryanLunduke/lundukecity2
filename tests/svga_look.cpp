@@ -141,6 +141,7 @@ int main()
     std::vector<std::uint32_t> svga16(classic16.size());
     std::vector<std::uint32_t> svga8(classic8.size());
     int off_palette = 0;
+    int dirt_pixels = 0;
     atlas.blit(0, reinterpret_cast<unsigned char *>(svga16.data()), TileAtlas::kSize * 4);
     if (std::memcmp(svga16.data(), classic_ground.data(), classic_ground.size() * sizeof(std::uint32_t)) == 0) {
         return fail("SVGA ground matches Classic");
@@ -151,7 +152,14 @@ int main()
         for (int y = 0; y < TileAtlas::kSize; ++y) {
             for (int x = 0; x < TileAtlas::kSize; ++x) {
                 const std::uint32_t px = svga16[static_cast<std::size_t>(y * TileAtlas::kSize + x)];
-                const auto snapped = snap_vga_rgb((px >> 16) & 255u, (px >> 8) & 255u, px & 255u);
+                const unsigned r = (px >> 16) & 255u;
+                const unsigned g = (px >> 8) & 255u;
+                const unsigned b = px & 255u;
+                if (is_svga_dirt_rgb(r, g, b)) {
+                    ++dirt_pixels;
+                    continue;
+                }
+                const auto snapped = snap_vga_rgb(r, g, b);
                 if (((px & 0x00ffffffu) | (255u << 24)) != snapped) {
                     ++off_palette;
                 }
@@ -166,7 +174,7 @@ int main()
                 const unsigned r = mix4(p00, p10, p01, p11, 16);
                 const unsigned g = mix4(p00, p10, p01, p11, 8);
                 const unsigned b = mix4(p00, p10, p01, p11, 0);
-                const std::uint32_t expect = snap_vga_rgb(r, g, b);
+                const std::uint32_t expect = snap_svga_rgb(r, g, b);
                 if (svga8[static_cast<std::size_t>(y * TileAtlas::kOverview + x)] != expect) {
                     return fail("SVGA 8px overview is not the snapped box average");
                 }
@@ -175,6 +183,24 @@ int main()
     }
     if (off_palette != 0) {
         return fail("SVGA 16px atlas left the VGA palette");
+    }
+    if (dirt_pixels == 0) {
+        return fail("SVGA 16px atlas has no dirt B colours");
+    }
+    // Tile 0 is open dirt. Its 8px overview must stay in the tan family,
+    // not collapse to the nearest VGA grey.
+    atlas.blit_overview(0, reinterpret_cast<unsigned char *>(svga8.data()), TileAtlas::kOverview * 4);
+    int tan_cells = 0;
+    for (int i = 0; i < TileAtlas::kOverview * TileAtlas::kOverview; ++i) {
+        const unsigned r = (svga8[static_cast<std::size_t>(i)] >> 16) & 255u;
+        const unsigned g = (svga8[static_cast<std::size_t>(i)] >> 8) & 255u;
+        const unsigned b = svga8[static_cast<std::size_t>(i)] & 255u;
+        if (is_svga_dirt_rgb(r, g, b)) {
+            ++tan_cells;
+        }
+    }
+    if (tan_cells == 0) {
+        return fail("SVGA 8px dirt overview is not tan");
     }
 
     if (!atlas.set_look(0) || atlas.use_svga()) {
