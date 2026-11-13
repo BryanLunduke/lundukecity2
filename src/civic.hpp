@@ -320,7 +320,7 @@ inline std::string dollars(std::int64_t amount)
         }
         grouped.push_back(digits[i]);
     }
-    return (neg ? "-$" : "$") + grouped;
+    return (neg ? "\u2212$" : "$") + grouped;
 }
 
 inline YearCard make_year_card(std::int64_t opening, std::int64_t closing, bool when_collected, bool estimated,

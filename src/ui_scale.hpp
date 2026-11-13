@@ -282,6 +282,10 @@ struct StoredSettings {
     int look = -1;
     // -1 absent (show milestone notes), 0 off, 1 on.
     int milestone_notes = -1;
+    // -1 absent (one minute, the historical interval). 0 is off.
+    int autosave = -1;
+    // bind_key_* and bind_pad_* lines, kept so a rewrite does not drop them.
+    std::string binds;
 };
 
 inline std::string settings_text(const StoredSettings &settings)
@@ -311,6 +315,13 @@ inline std::string settings_text(const StoredSettings &settings)
     put("wheel_zoom", settings.wheel_zoom);
     put("look", settings.look);
     put("milestone_notes", settings.milestone_notes);
+    put("autosave", settings.autosave);
+    if (!settings.binds.empty()) {
+        out << settings.binds;
+        if (settings.binds.back() != '\n') {
+            out << '\n';
+        }
+    }
     return out.str();
 }
 
@@ -453,6 +464,12 @@ inline StoredSettings settings_parse(const std::string &text)
         } else if (key == "milestone_notes") {
             bool saw = false;
             as_int(settings.milestone_notes, saw);
+        } else if (key == "autosave") {
+            bool saw = false;
+            as_int(settings.autosave, saw);
+        } else if (key.compare(0, 5, "bind_") == 0) {
+            settings.binds += line;
+            settings.binds.push_back('\n');
         }
     }
     if (saw_w && saw_h && settings.w >= 320 && settings.h >= 240) {

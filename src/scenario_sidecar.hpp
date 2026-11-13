@@ -11,6 +11,7 @@
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
+#include <filesystem>
 #include <string>
 
 struct ScenarioClock {
@@ -26,6 +27,40 @@ struct ScenarioClock {
 inline std::string scenario_sidecar_path(const std::string &city_path)
 {
     return city_path + ".json";
+}
+
+inline void remove_scenario_sidecar(const std::string &city_path)
+{
+    if (city_path.empty()) {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::remove(scenario_sidecar_path(city_path), ec);
+}
+
+// The goal file follows the city. A destination that already has a sidecar
+// loses it, so a rename cannot inherit the goal that used to live there.
+inline void move_scenario_sidecar(const std::string &from_city, const std::string &to_city)
+{
+    if (from_city.empty() || to_city.empty() || from_city == to_city) {
+        return;
+    }
+    const std::string from = scenario_sidecar_path(from_city);
+    const std::string to = scenario_sidecar_path(to_city);
+    std::error_code ec;
+    const bool have = std::filesystem::exists(from, ec);
+    std::filesystem::remove(to, ec);
+    if (!have) {
+        return;
+    }
+    ec.clear();
+    std::filesystem::rename(from, to, ec);
+    if (ec) {
+        std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing, ec);
+        if (!ec) {
+            std::filesystem::remove(from, ec);
+        }
+    }
 }
 
 inline std::string scenario_sidecar_text(const ScenarioClock &clock)

@@ -1051,14 +1051,27 @@ void Shell::drive_ui_test()
             fail("the welcome screen is missing a button");
             return;
         }
-        if (focus_id_ != kWelcomeNew) {
+        const bool can_continue = find_hot(hot_, kWelcomeContinue, 0) != nullptr;
+        if (can_continue) {
+            if (focus_id_ != kWelcomeContinue) {
+                fail("the welcome screen did not focus Continue");
+                return;
+            }
+            tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeContinue; });
+            if (focus_id_ != kWelcomeNew) {
+                fail("D-pad Down did not move from Continue to Start a new city");
+                return;
+            }
+        } else if (focus_id_ != kWelcomeNew) {
             fail("the welcome screen did not focus Start a New City");
             return;
         }
-        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeNew; });
-        if (focus_id_ != kWelcomeNew) {
-            fail("Welcome focus wrapped onto Quit");
-            return;
+        if (!can_continue) {
+            tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeNew; });
+            if (focus_id_ != kWelcomeNew) {
+                fail("Welcome focus wrapped onto Quit");
+                return;
+            }
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeNew; });
         if (focus_id_ != kWelcomeLoad) {

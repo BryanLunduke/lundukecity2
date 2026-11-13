@@ -24,8 +24,18 @@ inline char controls_letter(char key)
 // is already named Options (a PlayStation pad), which would read twice.
 inline std::string pause_run_hint(const std::string &run_button, const std::string &menu_button)
 {
-    if (menu_button == "Options") {
-        return "Game paused. Press " + run_button + ", or Options, to run the city.";
+    const bool run = !run_button.empty();
+    const bool menu = !menu_button.empty();
+    if (!run && !menu) {
+        return "Game paused.";
+    }
+    if (!run) {
+        return menu_button == "Options" ? "Game paused. Press Options to run the city."
+                                        : "Game paused. Press " + menu_button + " then Options, to run the city.";
+    }
+    if (!menu || menu_button == "Options") {
+        return menu ? "Game paused. Press " + run_button + ", or Options, to run the city."
+                    : "Game paused. Press " + run_button + " to run the city.";
     }
     return "Game paused. Press " + run_button + ", or " + menu_button + " then Options, to run the city.";
 }
@@ -94,7 +104,34 @@ inline bool controls_page_has_tools(int page, bool deck)
     return controls_page_index(page, deck) == 0;
 }
 
-inline std::string controls_tool_column(int begin, int end)
+struct ControlsKeyText {
+    std::string pause = "Space";
+    std::string slow = "Ctrl+1";
+    std::string medium = "Ctrl+2";
+    std::string fast = "Ctrl+3";
+    std::string neu = "Ctrl+N";
+    std::string load = "Ctrl+O";
+    std::string save = "Ctrl+S";
+    std::string save_as = "Ctrl+Shift+S";
+    std::string quit = "Ctrl+Q";
+    std::string zoom_in = "Ctrl+=";
+    std::string zoom_out = "Ctrl+-";
+    std::string budget = "Ctrl+B";
+    std::string graphs = "Ctrl+G";
+    std::string evaluation = "Ctrl+E";
+    std::string fullscreen = "F11";
+    std::string tool[17];
+
+    ControlsKeyText()
+    {
+        static const char letters[] = {'B', 'R', 'T', 'W', 'G', 'H', 'C', 'I', 'O', 'F', 'D', 'P', 'E', 'U', 'A', 'V', 'Q'};
+        for (int i = 0; i < 17; ++i) {
+            tool[i] = std::string(1, letters[i]);
+        }
+    }
+};
+
+inline std::string controls_tool_column(int begin, int end, const ControlsKeyText *keys = nullptr)
 {
     static const char *names[] = {"Bulldozer", "Roads", "Rail", "Power lines", "Park", "Residential",
                                   "Commercial", "Industrial", "Police", "Fire dept", "Stadium", "Seaport",
@@ -107,7 +144,11 @@ inline std::string controls_tool_column(int begin, int end)
         end = 17;
     }
     for (int i = begin; i < end; ++i) {
-        text.push_back(controls_letter(tool_hotkey(i)));
+        if (keys != nullptr && !keys->tool[i].empty()) {
+            text += keys->tool[i];
+        } else {
+            text.push_back(controls_letter(tool_hotkey(i)));
+        }
         text += "  ";
         text += names[i];
         if (i + 1 < end) {
@@ -133,7 +174,8 @@ struct ControlsPadNames {
     const char *r3 = "RS";
 };
 
-inline std::string controls_page_body(int page, bool deck, const ControlsPadNames &pad = {})
+inline std::string controls_page_body(int page, bool deck, const ControlsPadNames &pad = {},
+                                      const ControlsKeyText &keys = {})
 {
     switch (controls_page_index(page, deck)) {
     case 1: {
@@ -162,6 +204,9 @@ inline std::string controls_page_body(int page, bool deck, const ControlsPadName
         body += " opens the menu. In a window it confirms OK when that window has one. On a field or a keyboard key, ";
         body += pad.menu;
         body += " confirms that page.\n";
+        body += "Hold ";
+        body += pad.confirm;
+        body += " and move the D-pad or the left stick to drag a line of the current tool.\n";
         body += "The left stick moves the cursor. The D-pad moves one step, then repeats while held. It scrolls a list, adjusts a slider, or pans the map.\n";
         body += pad.left;
         body += " and ";
@@ -184,16 +229,21 @@ inline std::string controls_page_body(int page, bool deck, const ControlsPadName
                "A second finger pans or pinches to zoom. Drag a slider, the minimap, or a list with one finger.\n"
                "\n"
                "The on-screen keyboard types into the name and seed fields. Random fills a city name and does not repeat the last one.\n"
-               "\n") +
-               pad.menu + " confirms the page instead of typing the highlighted key.";
+               "\n"
+               "Confirming the page does not type the highlighted key.");
     default:
         break;
     }
-    return "Enter confirms. Esc closes a window, and closes a map overlay when no window is open.\n"
-           "Space pauses. Ctrl+P pauses. Ctrl+1 slow, Ctrl+2 medium, Ctrl+3 fast.\n"
-           "Ctrl+N new city. Ctrl+O load. Ctrl+S save. Ctrl+Shift+S save as. Ctrl+Q quit.\n"
-           "Arrow keys pan. Ctrl+= and Ctrl+- zoom. F11 or Alt+Enter toggles fullscreen.\n"
+    return "Enter confirms. Esc closes a window, and closes a map overlay when no window is open.\n" + keys.pause +
+           " pauses. Ctrl+P pauses. " + keys.slow + " slow, " + keys.medium + " medium, " + keys.fast + " fast.\n" +
+           keys.neu + " new city. " + keys.load + " load. " + keys.save + " save. " + keys.save_as + " save as. " +
+           keys.quit + " quit.\n"
+           "Arrow keys pan. Hold Ctrl and press an arrow to move a build cursor. Enter builds with it. Esc clears it.\n" +
+           keys.zoom_in + " and " + keys.zoom_out +
+           " zoom. " + keys.fullscreen +
+           " or Alt+Enter toggles fullscreen.\n"
            "The wheel scrolls the map. Hold Ctrl and roll the wheel to zoom. Settings can make the wheel zoom by itself.\n"
            "Left drag builds. Right or middle drag pans. A short right-click switches to Query.\n"
-           "Tool keys, with no Ctrl or Alt:";
+           "In Graphs, Left and Right read the values under the chart.\n"
+           "Tool keys:";
 }

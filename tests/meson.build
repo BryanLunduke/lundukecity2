@@ -374,6 +374,14 @@ menu_model = executable(
 
 test('menu_model', menu_model)
 
+round17 = executable(
+  'round17',
+  'round17.cpp',
+  include_directories: include_directories('../src'),
+)
+
+test('round17', round17)
+
 svga_look = executable(
   'svga_look',
   'svga_look.cpp',

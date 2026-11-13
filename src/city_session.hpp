@@ -447,6 +447,7 @@ public:
     std::vector<SpriteDot> sprites() const;
 
     const std::string &save_path() const { return save_path_; }
+    void set_save_path(const std::string &path) { save_path_ = path; }
 
 private:
     struct Engine;

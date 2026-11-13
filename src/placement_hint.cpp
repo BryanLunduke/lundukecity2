@@ -57,7 +57,7 @@ std::string money(int amount)
         }
         grouped.push_back(digits[i]);
     }
-    return (neg ? "-$" : "$") + grouped;
+    return (neg ? "\u2212$" : "$") + grouped;
 }
 
 struct Scratch {

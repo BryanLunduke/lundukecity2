@@ -56,7 +56,7 @@ std::string grouped_count(std::int64_t value)
 std::string with_commas(std::int64_t value)
 {
     const bool neg = value < 0;
-    return (neg ? "-$" : "$") + grouped_count(neg ? -value : value);
+    return (neg ? "\u2212$" : "$") + grouped_count(neg ? -value : value);
 }
 
 const char *kMonths[] = {
@@ -1168,6 +1168,11 @@ bool CitySession::save_city_as(const std::string &path)
     dirty_ = false;
     fresh_generated_ = false;
     mark_clean_time();
+    // A city with no scenario must not keep a goal file that used to sit
+    // beside this name. The write below replaces it only when there is a clock.
+    if (engine_->sim.scoreType == SC_NONE) {
+        remove_scenario_sidecar(path);
+    }
     if (!write_scenario_sidecar(path) && engine_->sim.scoreType != SC_NONE) {
         post_message("The city was saved, but the scenario timer could not be stored. Loading this file ends the scenario.");
         return true;
@@ -2528,16 +2533,6 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     } else {
         card.name = "Land";
     }
-    const bool zone = (raw & ZONEBIT) != 0 || !special.empty();
-    if (zone && tile != DIRT) {
-        const bool powered = (raw & PWRBIT) != 0;
-        card.power = powered ? "Power: on" : "Power: off";
-        card.offer_power = !powered;
-    } else if ((raw & CONDBIT) != 0) {
-        card.power = "Power: line";
-    } else {
-        card.power = "Power: —";
-    }
     bool road = false;
     bool rail = false;
     // Filled in after the footprint is known. A 4x4 prison's road can sit
@@ -2607,6 +2602,18 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
         if (card.top < 0) {
             card.top = 0;
         }
+    }
+    const bool inside = card.zone && card.width > 0 && card.height > 0 && x >= card.left && y >= card.top &&
+                        x < card.left + card.width && y < card.top + card.height;
+    if (inside || ((raw & ZONEBIT) != 0 && tile != DIRT)) {
+        const int sample = inside ? map_value(center_x, center_y) : raw;
+        const bool powered = (sample & PWRBIT) != 0;
+        card.power = powered ? "Power: on" : "Power: off";
+        card.offer_power = !powered;
+    } else if ((raw & CONDBIT) != 0) {
+        card.power = "Power: line";
+    } else {
+        card.power = "Power: —";
     }
     auto touch = [&](int tx, int ty) {
         if (!Micropolis::testBounds(tx, ty)) {

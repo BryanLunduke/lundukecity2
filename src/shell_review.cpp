@@ -76,7 +76,133 @@ void Shell::run_review_checks()
         fail("clicking visible row 4 while scrolled to 21 should select file 25, got " + std::to_string(list_index_));
         return;
     }
+    // The Load footer follows the focused control. Cancel must not keep
+    // saying that Enter opens a city.
+    focus_id_ = kCancel;
+    const std::string load_cancel = dialog_title_hint();
+    if (load_cancel.find("cancels") == std::string::npos || load_cancel.find("opens") != std::string::npos) {
+        fail("Load hint while Cancel is focused: " + load_cancel);
+        return;
+    }
+    focus_id_ = kListItem;
+    const std::string load_row_hint = dialog_title_hint();
+    if (load_row_hint.find("opens") == std::string::npos) {
+        fail("Load hint while a file is focused: " + load_row_hint);
+        return;
+    }
     dialog_ = Dialog::None;
+
+    // Backspace clears a focused remap row before it is listening, and the
+    // Query button clears the pad column. A swap note is not an error.
+    {
+        const std::string saved_pause = binds_.key[KeyPause];
+        const int saved_confirm = binds_.pad[PadConfirm];
+        const bool saved_pad = gamepad_nav_;
+        dialog_ = Dialog::Bindings;
+        list_index_ = 0;
+        focus_id_ = kListItem;
+        bind_listen_ = false;
+        gamepad_nav_ = false;
+        binds_.key[KeyPause] = "k";
+        clear_bind_row(false);
+        if (!binds_.key[KeyPause].empty() || !dialog_note_ok_ || dialog_error_ != "Binding cleared.") {
+            fail("Backspace on a focused row did not clear Pause");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        const std::string key_hint = dialog_title_hint();
+        if (key_hint.find("Backspace") == std::string::npos || key_hint.find("listens") == std::string::npos) {
+            fail("remap hint for a focused row: " + key_hint);
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        gamepad_nav_ = true;
+        focus_id_ = kListItem;
+        const std::string pad_hint = dialog_title_hint();
+        if (pad_hint.find("clears") == std::string::npos || pad_hint.find("  ") != std::string::npos) {
+            fail("pad remap hint: " + pad_hint);
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        focus_id_ = kOk;
+        const std::string keep_hint = dialog_title_hint();
+        if (keep_hint.find("keeps these") == std::string::npos || keep_hint.find("  ") != std::string::npos ||
+            keep_hint.find(". ") == std::string::npos) {
+            fail("remap hint while OK is focused: " + keep_hint);
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        list_index_ = 39;
+        const int saved_query = binds_.pad[PadQuery];
+        clear_bind_row(true);
+        if (binds_.pad[PadQuery] != -1 || !dialog_note_ok_) {
+            fail("the Query button did not clear Query");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            binds_.pad[PadQuery] = saved_query;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        focus_id_ = kListItem;
+        const std::string cleared_hint = dialog_title_hint();
+        if (cleared_hint.find("clears") != std::string::npos || cleared_hint.find("  ") != std::string::npos) {
+            fail("a cleared Query button was still named: " + cleared_hint);
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            binds_.pad[PadQuery] = saved_query;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        list_index_ = 1;
+        const int confirm_before = binds_.pad[PadConfirm];
+        clear_bind_row(true);
+        if (binds_.pad[PadConfirm] != confirm_before || dialog_note_ok_ ||
+            dialog_error_.find("stay bound") == std::string::npos) {
+            fail("Confirm was cleared");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            binds_.pad[PadQuery] = saved_query;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        list_index_ = 2;
+        clear_bind_row(true);
+        list_index_ = 3;
+        clear_bind_row(true);
+        if (binds_.pad[PadCancel] < 0 || binds_.pad[PadBack] < 0) {
+            fail("Cancel or Back was cleared");
+            binds_.key[KeyPause] = saved_pause;
+            binds_.pad[PadConfirm] = saved_confirm;
+            binds_.pad[PadQuery] = saved_query;
+            gamepad_nav_ = saved_pad;
+            dialog_ = Dialog::None;
+            return;
+        }
+        focus_id_ = kListItem;
+        binds_.key[KeyPause] = saved_pause;
+        binds_.pad[PadConfirm] = saved_confirm;
+        binds_.pad[PadQuery] = saved_query;
+        gamepad_nav_ = saved_pad;
+        bind_listen_ = false;
+        dialog_error_.clear();
+        dialog_note_ok_ = false;
+        dialog_ = Dialog::None;
+    }
 
     // H1: Budget Cancel restores the rates from when the window opened,
     // including outside a tax year where the sliders apply live.
@@ -889,27 +1015,28 @@ void Shell::run_review_checks()
     // M10: an autosave or recent-list failure stays until the player dismisses it,
     // and the next failure after that is shown again.
     note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
-    if (!notice_sticky_ || shown_message_.find("Autosave failed") == std::string::npos) {
+    if (!notice_sticky_ || notice_text_.find("Autosave failed") == std::string::npos) {
         fail("autosave failure was not shown");
         return;
     }
-    const auto held = hint_until_;
-    if (held < std::chrono::steady_clock::now() + std::chrono::hours(1)) {
-        fail("autosave failure notice expires on its own");
+    const auto held = notice_until_;
+    if (held > std::chrono::steady_clock::now() + std::chrono::seconds(30) ||
+        held < std::chrono::steady_clock::now()) {
+        fail("autosave failure notice has no short timeout");
         return;
     }
     note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
-    if (hint_until_ != held) {
+    if (notice_until_ != held) {
         fail("repeating the same failure restarted the notice");
         return;
     }
     dismiss_background_notice();
-    if (notice_sticky_ || !shown_message_.empty()) {
+    if (notice_sticky_ || !notice_text_.empty()) {
         fail("dismiss did not clear the failure notice");
         return;
     }
     note_background_write_failed("Could not update the recent-cities list.");
-    if (!notice_sticky_ || shown_message_.find("recent-cities") == std::string::npos) {
+    if (!notice_sticky_ || notice_text_.find("recent-cities") == std::string::npos) {
         fail("a later failure was not shown again");
         return;
     }
@@ -2531,6 +2658,78 @@ void Shell::run_review_checks()
         if (!map_.cue().active || map_.cue().mark != 2 || map_.cue().tag != "Water: bridge cost") {
             fail("a road touching water did not preview the bridge cost, tag " + map_.cue().tag);
             return;
+        }
+    }
+
+    // Enter on a focused Cancel must not save. A focused name still accepts.
+    {
+        close_dialog();
+        files_.clear();
+        files_.push_back("kept.cty");
+        files_save_ = true;
+        dialog_ = Dialog::Files;
+        field_a_ = "kept.cty";
+        focus_id_ = kCancel;
+        SDL_Event enter{};
+        enter.type = SDL_EVENT_KEY_DOWN;
+        enter.key.key = SDLK_RETURN;
+        enter.key.down = true;
+        enter.key.mod = SDL_KMOD_NONE;
+        handle_event(enter);
+        if (dialog_ == Dialog::Files) {
+            fail("Enter on Cancel left the save dialog open");
+            return;
+        }
+        if (dialog_ == Dialog::None && session_.save_path().find("kept.cty") != std::string::npos) {
+            fail("Enter on Cancel saved the city");
+            return;
+        }
+        close_dialog();
+        dialog_ = Dialog::NewCity;
+        new_page_ = 0;
+        field_a_ = "Harbor";
+        focus_id_ = kCancel;
+        if (active_field() != nullptr) {
+            fail("a focused Cancel still owns the name field");
+            return;
+        }
+        type_text("Z");
+        if (field_a_ != "Harbor") {
+            fail("typing reached the name while Cancel was focused");
+            return;
+        }
+        close_dialog();
+    }
+
+    // A zone edge reports the centre's power, not "Power: line".
+    {
+        bool compared = false;
+        for (int y = 1; y < CitySession::kWorldH - 1 && !compared; ++y) {
+            for (int x = 1; x < CitySession::kWorldW - 1; ++x) {
+                const auto centre = session_.inspect_tile(x, y);
+                if (!centre.zone || centre.power == "Power: line" || centre.power == "Power: —") {
+                    continue;
+                }
+                for (int dy = -centre.height; dy <= centre.height; ++dy) {
+                    for (int dx = -centre.width; dx <= centre.width; ++dx) {
+                        const int nx = x + dx;
+                        const int ny = y + dy;
+                        if (nx == x && ny == y) {
+                            continue;
+                        }
+                        if (nx < centre.left || ny < centre.top || nx >= centre.left + centre.width ||
+                            ny >= centre.top + centre.height) {
+                            continue;
+                        }
+                        const auto edge = session_.inspect_tile(nx, ny);
+                        if (edge.name == centre.name && edge.power != centre.power) {
+                            fail("zone edge power was " + edge.power + " and the centre was " + centre.power);
+                            return;
+                        }
+                        compared = true;
+                    }
+                }
+            }
         }
     }
 }
