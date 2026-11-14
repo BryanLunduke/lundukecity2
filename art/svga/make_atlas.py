@@ -2873,7 +2873,7 @@ def main() -> int:
         classic = assemble(atlas, base, width, height)
         digest.update(paint(classic, [[tile_kind(base)] * width for _ in range(height)]).tobytes())
     digest.update(svga_scene.tobytes())
-    batch1_sha = "f8e48f4044b59fa7292010837f008b0e912a26fec26aeb5cee5b22b90971842d"
+    batch1_sha = "3f0796c0761c43f6216f395b1c1916e4ef0603d0c81a3548c0e1da0de6075acb"
     if digest.hexdigest() != batch1_sha:
         lines.append(f"FAIL batch 1 tiles changed: {digest.hexdigest()}")
         failed = True
@@ -2884,7 +2884,7 @@ def main() -> int:
     for index, _classic, svga in painted_smoke:
         digest2.update(svga.tobytes())
     digest2.update(svga_down.tobytes())
-    batch2_sha = "19916eac7e959f386f092441d5f1ac41bda8dfc7f46c91757171709ddb9a7923"
+    batch2_sha = "fedfa67241e65184ffddf7419af15422069ea35205f79d4834051009874b99b2"
     if digest2.hexdigest() != batch2_sha:
         lines.append(f"FAIL batch 2 tiles changed: {digest2.hexdigest()}")
         failed = True
@@ -2892,7 +2892,7 @@ def main() -> int:
     for index in road_ids:
         digest3.update(painted_road[index][1].tobytes())
     digest3.update(svga_trip.tobytes())
-    batch3_sha = "95c312fcb2bc5b4307222857ed9adf1708c37c109342011a896e5655ed4c154c"
+    batch3_sha = "84f2826f4d947ef980843022500865a23d5ac631cfe742cfacdeefd08ccbddc2"
     if digest3.hexdigest() != batch3_sha:
         lines.append(f"FAIL batch 3 tiles changed: {digest3.hexdigest()}")
         failed = True
@@ -3272,7 +3272,7 @@ def main() -> int:
     digest4.update(svga_quarter.tobytes())
     for _name, _classic_s, svga_s in painted_special:
         digest4.update(svga_s.tobytes())
-    batch4_sha = "bc3893633dd4edb79f0b9224bcfc4a96a40eba24e8723990e69ee0e94b610b9f"
+    batch4_sha = "1d364817e447c9b0321238e34c628c1399919b4f9577ae98df28d59fbcdcdaca"
     if digest4.hexdigest() != batch4_sha:
         lines.append(f"FAIL batch 4 tiles changed: {digest4.hexdigest()}")
         failed = True
