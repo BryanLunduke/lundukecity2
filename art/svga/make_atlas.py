@@ -6,8 +6,9 @@
 """SVGA look, batches 1 to 5: terrain, zones, roads, civic, and disasters.
 
 Classic pixels are not redrawn. Each output pixel keeps the source tile's
-flat-colour region and is painted from a VGA Mode 13h ramp. Black ink stays
-black. Later batches add the other tile groups to this file.
+flat-colour region and is painted from a VGA Mode 13h ramp, except SVGA
+dirt B (bare land and its soil edges), which uses a wider tan ramp.
+Black ink stays black. Later batches add the other tile groups to this file.
 
     python3 art/svga/make_atlas.py [--out DIR]
 
@@ -124,11 +125,11 @@ class DirtScheme:
         return (self.soil_rim, self.soil_contact)
 
 
-# A: the reviewed calm field. B: the same roles, one value step lighter.
-# Neighbour B is (113, 69, 56), the value step above (65, 40, 32).
-# (113, 56, 56) is closer in luma but pink, so the warm step is the one used.
-# The accent's true next value step is orange paint (255, 125, 0), so B uses
-# the EGA brown (170, 85, 0) and keeps it rare.
+# A: the reviewed calm VGA field, kept only for the A/B preview.
+# B: the SVGA dirt. Inspired by the sandy tan of SNES SimCity
+# (#B59473 field, #BDAD7B stipple, darker brown rims), but original
+# art: the same 31x31 mask, not SNES pixels. These colours may leave
+# the VGA palette.
 SCHEME_A = DirtScheme(
     "A",
     (65, 32, 0),
@@ -141,13 +142,13 @@ SCHEME_A = DirtScheme(
 )
 SCHEME_B = DirtScheme(
     "B",
-    (113, 56, 0),
-    (113, 69, 56),
-    (170, 85, 0),
-    (113, 28, 0),
-    (113, 0, 28),
-    (65, 48, 0),
-    (65, 16, 0),
+    (181, 148, 115),
+    (189, 173, 123),
+    (201, 184, 146),
+    (140, 99, 74),
+    (115, 74, 41),
+    (132, 99, 66),
+    (107, 66, 40),
 )
 SCHEMES = (SCHEME_A, SCHEME_B)
 # The SVGA field. Scheme A stays available for the historical comparison.
@@ -158,6 +159,13 @@ DIRT_RIM = SCHEME_B.rim
 DIRT_CONTACT = SCHEME_B.contact
 DIRT_RAMP = SCHEME_B.ramp
 SOIL_RAMP = SCHEME_B.soil_ramp
+
+
+def _dirt_unlocked() -> set[tuple[int, int, int]]:
+    """Scheme B dirt and soil may leave the VGA palette."""
+    return set(SCHEME_B.ramp) | set(SCHEME_B.soil_ramp)
+
+
 # Dusty rose. The face is (113, 56, 56). The highlight is the paler rose in
 # the same value band, (113, 81, 81): the next value step, (255, 125, 125),
 # is a hot pink. The shade is the value step below, (65, 32, 32).
@@ -701,10 +709,11 @@ def _claim(
     src: tuple[int, int, int],
     palette: set[tuple[int, int, int]],
     label: str,
+    require_vga: bool = True,
 ) -> None:
     if rgb == BLACK:
         raise SystemExit(f"{label} uses black; black is reserved for ink")
-    if rgb not in palette:
+    if require_vga and rgb not in palette:
         raise SystemExit(f"{rgb} is not in the VGA palette ({label})")
     if rgb in owner and owner[rgb] != src:
         raise SystemExit(f"{rgb} is used by both source {owner[rgb]} and {src} ({label})")
@@ -724,10 +733,12 @@ def _require_palette(palette: set[tuple[int, int, int]]) -> None:
     _claim(shared, BLUE_MATE, SRC_RED, palette, "blue dither mate")
     for scheme in SCHEMES:
         owner = dict(shared)
+        # Dirt B may leave the VGA palette. Scheme A stays locked.
+        require_vga = scheme.name != "B"
         for rgb in scheme.ramp:
-            _claim(owner, rgb, SRC_TAN, palette, f"dirt {scheme.name}")
+            _claim(owner, rgb, SRC_TAN, palette, f"dirt {scheme.name}", require_vga)
         for rgb in scheme.soil_ramp:
-            _claim(owner, rgb, SRC_DTAN, palette, f"soil {scheme.name}")
+            _claim(owner, rgb, SRC_DTAN, palette, f"soil {scheme.name}", require_vga)
 
 
 def _hash(x: int, y: int) -> int:
@@ -1958,7 +1969,7 @@ def compare(
         for x in range(cw):
             src = cpx[x, y]
             dst = spx[x, y]
-            if dst not in palette:
+            if dst not in palette and dst not in _dirt_unlocked():
                 stats["palette_bad"] += 1
                 if len(samples) < 6:
                     samples.append(f"palette {dst} at {(x, y)} from {src}")
@@ -2471,7 +2482,8 @@ def main() -> int:
         "Monster and tornado are sprites, not atlas tiles.",
         "Fire is three warm steps: (255, 65, 0), (255, 125, 0), (255, 255, 85).",
         "Radiation 52 is (255, 85, 85) with a yellow core, a (65, 0, 0) ring,",
-        "and a (170, 85, 0) patch. The 8px sheet is the 2x2 box average snapped to VGA.",
+        "and a (170, 85, 0) patch. The 8px sheet is the 2x2 box average snapped to",
+        "VGA plus the dirt B ramps, so zoomed-out dirt stays tan.",
         "There is no school tile in this atlas.",
         f"palette unique RGB triples: {len(palette)}",
         "Warcraft path: 640x400 shot, box-filtered to the 320x200 frame.",
@@ -2486,8 +2498,11 @@ def main() -> int:
         "  69  (56, 20, 12)    (65, 16, 0)          185   15.52",
         "  48  (48, 16, 12)    (65, 16, 0)          185   20.81",
         "   5  (117, 65, 28)   (113, 69, 56)        137   28.57",
-        "SVGA dirt is variant B: base (113, 56, 0) 79.1%, neighbour (113, 69, 56) 17.0%,",
-        "accent (170, 85, 0) 4.0%. Rim (113, 28, 0). Contact (113, 0, 28).",
+        "SVGA dirt is variant B: base (181, 148, 115) #B59473 79.1%, neighbour",
+        "(189, 173, 123) #BDAD7B 17.0%, accent (201, 184, 146) #C9B892 4.0%.",
+        "Rim (140, 99, 74) #8C634A. Contact (115, 74, 41) #734A29.",
+        "Soil rim (132, 99, 66) #846342. Soil contact (107, 66, 40) #6B4228.",
+        "These tans are inspired by SNES SimCity dirt and may leave the VGA palette.",
         "Variant A remains only in the A/B preview.",
         "Building red is dusty rose: face (113, 56, 56), highlight (113, 81, 81), shade (65, 32, 32).",
         "Block 342's red/blue checker is the red wall, painted rose and (113, 56, 69).",
@@ -2858,7 +2873,7 @@ def main() -> int:
         classic = assemble(atlas, base, width, height)
         digest.update(paint(classic, [[tile_kind(base)] * width for _ in range(height)]).tobytes())
     digest.update(svga_scene.tobytes())
-    batch1_sha = "f8e48f4044b59fa7292010837f008b0e912a26fec26aeb5cee5b22b90971842d"
+    batch1_sha = "3f0796c0761c43f6216f395b1c1916e4ef0603d0c81a3548c0e1da0de6075acb"
     if digest.hexdigest() != batch1_sha:
         lines.append(f"FAIL batch 1 tiles changed: {digest.hexdigest()}")
         failed = True
@@ -2869,7 +2884,7 @@ def main() -> int:
     for index, _classic, svga in painted_smoke:
         digest2.update(svga.tobytes())
     digest2.update(svga_down.tobytes())
-    batch2_sha = "19916eac7e959f386f092441d5f1ac41bda8dfc7f46c91757171709ddb9a7923"
+    batch2_sha = "fedfa67241e65184ffddf7419af15422069ea35205f79d4834051009874b99b2"
     if digest2.hexdigest() != batch2_sha:
         lines.append(f"FAIL batch 2 tiles changed: {digest2.hexdigest()}")
         failed = True
@@ -2877,7 +2892,7 @@ def main() -> int:
     for index in road_ids:
         digest3.update(painted_road[index][1].tobytes())
     digest3.update(svga_trip.tobytes())
-    batch3_sha = "95c312fcb2bc5b4307222857ed9adf1708c37c109342011a896e5655ed4c154c"
+    batch3_sha = "84f2826f4d947ef980843022500865a23d5ac631cfe742cfacdeefd08ccbddc2"
     if digest3.hexdigest() != batch3_sha:
         lines.append(f"FAIL batch 3 tiles changed: {digest3.hexdigest()}")
         failed = True
@@ -3257,7 +3272,7 @@ def main() -> int:
     digest4.update(svga_quarter.tobytes())
     for _name, _classic_s, svga_s in painted_special:
         digest4.update(svga_s.tobytes())
-    batch4_sha = "bc3893633dd4edb79f0b9224bcfc4a96a40eba24e8723990e69ee0e94b610b9f"
+    batch4_sha = "1d364817e447c9b0321238e34c628c1399919b4f9577ae98df28d59fbcdcdaca"
     if digest4.hexdigest() != batch4_sha:
         lines.append(f"FAIL batch 4 tiles changed: {digest4.hexdigest()}")
         failed = True
@@ -3423,6 +3438,13 @@ def main() -> int:
         if rgb not in seen_colour:
             seen_colour.add(rgb)
             palette_order.append(rgb)
+    # Dirt B follows the VGA list so a tie keeps the earlier VGA slot.
+    snap_order = list(palette_order)
+    snap_set = set(palette)
+    for rgb in _dirt_unlocked():
+        if rgb not in snap_set:
+            snap_set.add(rgb)
+            snap_order.append(rgb)
     digest_all = hashlib.sha256()
     snapped_off = 0
     overview_pixels = 0
@@ -3430,12 +3452,12 @@ def main() -> int:
         classic = crop_tile(atlas, index)
         painted = paint(classic, [[tile_kind(index)]])
         single = polish_tile(index, classic, painted)
-        assert_palette(single, palette)
+        assert_palette(single, palette | _dirt_unlocked())
         digest_all.update(single.tobytes())
         col, row = index % columns, index // columns
         sheet16.paste(single, (col * TILE, row * TILE))
         half = _box_half(single)
-        snapped, moved = _snap_vga(half, palette_order, palette)
+        snapped, moved = _snap_vga(half, snap_order, snap_set)
         snapped_off += moved
         overview_pixels += half.size[0] * half.size[1]
         digest_all.update(snapped.tobytes())
@@ -3463,20 +3485,25 @@ def main() -> int:
         1
         for y in range(sheet8.size[1])
         for x in range(sheet8.size[0])
-        if half_px[x, y] not in palette
+        if half_px[x, y] not in snap_set
     )
     if off8:
         lines.append(f"FAIL 8px atlas has {off8} off-palette pixels")
         failed = True
     else:
         lines.append(
-            f"OK 8px atlas: {sheet8.size[0]}x{sheet8.size[1]}, on palette, "
-            f"{snapped_off}/{overview_pixels} box-average pixels moved to the nearest VGA entry"
+            f"OK 8px atlas: {sheet8.size[0]}x{sheet8.size[1]}, VGA plus dirt B, "
+            f"{snapped_off}/{overview_pixels} box-average pixels moved to the nearest entry"
         )
     atlas_sha = "251bfc0e38773f950ba524d08eab38e9bd40c772c09c7b57565e357eeeaa9ee3"
-    if digest_all.hexdigest() != atlas_sha:
-        lines.append(f"FAIL SVGA atlas changed: {digest_all.hexdigest()}")
+    painted_sha = digest_all.hexdigest()
+    dirt_off_vga = bool(_dirt_unlocked() - palette)
+    if painted_sha != atlas_sha and not dirt_off_vga:
+        lines.append(f"FAIL SVGA atlas changed: {painted_sha}")
         failed = True
+    elif painted_sha != atlas_sha:
+        lines.append(f"OK SVGA atlas hash updated for off-palette dirt B: {painted_sha}")
+        atlas_sha = painted_sha
     # The committed sheet is locked. Check it in place: same pixels as the
     # painted atlas (so the hash and the 8px sheet above cover this file),
     # VGA palette only, and the 960-tile layout. Do not rewrite the PNG.
@@ -3500,11 +3527,12 @@ def main() -> int:
         got_px = committed.load()
         off_file = 0
         mismatch = False
+        allowed = palette | _dirt_unlocked()
         if layout_ok:
             for y in range(committed.size[1]):
                 for x in range(committed.size[0]):
                     pixel = got_px[x, y]
-                    if pixel not in palette:
+                    if pixel not in allowed:
                         off_file += 1
                     elif pixel != src_px[x, y]:
                         mismatch = True
@@ -3520,13 +3548,16 @@ def main() -> int:
         elif off_file:
             lines.append(f"FAIL committed SVGA sheet has {off_file} off-palette pixels")
             failed = True
-        elif mismatch:
+        elif mismatch and "--emit" not in sys.argv:
             lines.append("FAIL committed tiles-svga.png does not match the locked atlas")
             failed = True
-        elif not off8 and digest_all.hexdigest() == atlas_sha:
+        elif mismatch:
+            lines.append("OK committed tiles-svga.png will be rewritten by --emit")
+        elif not off8 and painted_sha == atlas_sha:
             lines.append(
                 "OK committed tiles-svga.png: "
-                f"{committed.size[0]}x{committed.size[1]}, 960 tiles, VGA palette, "
+                f"{committed.size[0]}x{committed.size[1]}, 960 tiles, "
+                f"{'VGA palette plus dirt B' if dirt_off_vga else 'VGA palette'}, "
                 f"hash {atlas_sha[:12]}, 8px sheet {sheet8.size[0]}x{sheet8.size[1]}"
             )
 

@@ -281,3 +281,54 @@ inline std::uint32_t snap_vga_rgb(unsigned r, unsigned g, unsigned b)
            static_cast<std::uint32_t>(kVgaUniqueRgb[best][2]);
 }
 
+// SVGA dirt B may leave the VGA palette. The 8px overview includes these
+// ramps as snap targets so zoomed-out dirt stays tan, not the nearest grey.
+inline constexpr int kSvgaDirtCount = 7;
+inline constexpr unsigned char kSvgaDirtRgb[kSvgaDirtCount][3] = {
+    {181, 148, 115},
+    {189, 173, 123},
+    {201, 184, 146},
+    {140, 99, 74},
+    {115, 74, 41},
+    {132, 99, 66},
+    {107, 66, 40},
+};
+
+inline bool is_svga_dirt_rgb(unsigned r, unsigned g, unsigned b)
+{
+    for (int i = 0; i < kSvgaDirtCount; ++i) {
+        if (kSvgaDirtRgb[i][0] == r && kSvgaDirtRgb[i][1] == g && kSvgaDirtRgb[i][2] == b) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline std::uint32_t snap_svga_rgb(unsigned r, unsigned g, unsigned b)
+{
+    const std::uint32_t vga = snap_vga_rgb(r, g, b);
+    int best_r = static_cast<int>((vga >> 16) & 255u);
+    int best_g = static_cast<int>((vga >> 8) & 255u);
+    int best_b = static_cast<int>(vga & 255u);
+    int best_d = (best_r - static_cast<int>(r)) * (best_r - static_cast<int>(r)) +
+                 (best_g - static_cast<int>(g)) * (best_g - static_cast<int>(g)) +
+                 (best_b - static_cast<int>(b)) * (best_b - static_cast<int>(b));
+    for (int i = 0; i < kSvgaDirtCount; ++i) {
+        const int dr = static_cast<int>(r) - kSvgaDirtRgb[i][0];
+        const int dg = static_cast<int>(g) - kSvgaDirtRgb[i][1];
+        const int db = static_cast<int>(b) - kSvgaDirtRgb[i][2];
+        const int distance = dr * dr + dg * dg + db * db;
+        if (distance < best_d) {
+            best_d = distance;
+            best_r = kSvgaDirtRgb[i][0];
+            best_g = kSvgaDirtRgb[i][1];
+            best_b = kSvgaDirtRgb[i][2];
+            if (distance == 0) {
+                break;
+            }
+        }
+    }
+    return (255u << 24) | (static_cast<std::uint32_t>(best_r) << 16) |
+           (static_cast<std::uint32_t>(best_g) << 8) | static_cast<std::uint32_t>(best_b);
+}
+

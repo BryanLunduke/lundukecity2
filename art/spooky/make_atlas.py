@@ -88,8 +88,9 @@ CHANGED = (
     + tuple(range(689, 698))
     + tuple(range(700, 729))
     + tuple(range(731, 736))
-    + tuple(range(737, 746))
-    + tuple(range(747, 750))
+    # 746 keeps the VGA dirt the night pass does not repaint, so it
+    # differs from the tan SVGA field.
+    + tuple(range(737, 750))
     + tuple(range(751, 754))
     + tuple(range(755, 765))
     + tuple(range(766, 770))
@@ -831,10 +832,34 @@ def _paint_manors(atlas: Image.Image) -> None:
     _scatter(atlas, 324, fence)
 
 
+# Tan SVGA dirt, mapped back to the VGA scheme B roles the night pass
+# already knows. The committed Spooky sheet stays on that ramp.
+_TAN_TO_VGA_DIRT = {
+    (181, 148, 115): (113, 56, 0),
+    (189, 173, 123): (113, 69, 56),
+    (201, 184, 146): (170, 85, 0),
+    (140, 99, 74): (113, 28, 0),
+    (115, 74, 41): (113, 0, 28),
+    (132, 99, 66): (65, 48, 0),
+    (107, 66, 40): (65, 16, 0),
+}
+
+
+def _restore_vga_dirt(atlas: Image.Image) -> None:
+    px = atlas.load()
+    width, height = atlas.size
+    for y in range(height):
+        for x in range(width):
+            colour = _TAN_TO_VGA_DIRT.get(px[x, y])
+            if colour is not None:
+                px[x, y] = colour
+
+
 def build() -> Image.Image:
     with Image.open(SVGA_PATH) as opened:
         atlas = opened.convert("RGB")
         atlas.load()
+    _restore_vga_dirt(atlas)
     _paint_parks(atlas)
     _paint_fountains(atlas)
     _paint_houses(atlas)
