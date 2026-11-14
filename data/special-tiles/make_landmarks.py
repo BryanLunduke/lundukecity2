@@ -5,6 +5,7 @@
 # Original drawings. Every colour this script writes is an exact VGA mode 13h
 # entry (the hand-drawn Classic sheets use the Micropolis Classic palette).
 # Not a recolor of one mesh: each look has its own plan.
+# Toolbar and dropdown icons come from data/tool-icons/make_icons.py.
 
 import pathlib
 import struct
@@ -15,7 +16,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "art" / "sv
 from vga_palette import vga_palette_8bit
 
 ROOT = pathlib.Path(__file__).resolve().parent
-ICON = pathlib.Path(__file__).resolve().parents[1] / "tool-icons"
 PAL = set(vga_palette_8bit())
 
 # Exact VGA triples.
@@ -532,14 +532,6 @@ def park_spooky(im):
     apply_shadow(im, mask, K)
 
 
-def icon_from(sheet):
-    out = new(40, 40, None)
-    for y in range(40):
-        for x in range(40):
-            out[y][x] = sheet[y + 4][x + 4]
-    return out
-
-
 def write_png(path, im):
     h = len(im)
     w = len(im[0])
@@ -587,7 +579,6 @@ def main():
             im = new(48, 48, E)
             draw(im)
             write_png(ROOT / f"{stem}{suffix}.png", im)
-            write_png(ICON / f"{stem}{suffix}.png", icon_from(im))
 
 
 if __name__ == "__main__":

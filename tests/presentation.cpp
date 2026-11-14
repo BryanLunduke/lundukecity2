@@ -201,18 +201,15 @@ int main()
     if (std::fabs(focus.r - 0.20) > 0.001 || std::fabs(focus.g - 0.42) > 0.001 || std::fabs(focus.b - 0.72) > 0.001) {
         return fail(41, "a focused dialog button does not match the quit notice");
     }
-    for (int look = 0; look < 3; ++look) {
-        theme::set_chrome_look(look);
+    {
         double ink_r = 0;
         double ink_g = 0;
         double ink_b = 0;
         theme::reading_ink(ink_r, ink_g, ink_b);
         if (ink_r > 0.25 || ink_g > 0.25 || ink_b > 0.35) {
-            theme::set_chrome_look(0);
             return fail(42, "dialog ink is too light on the cream page");
         }
     }
-    theme::set_chrome_look(0);
     const double thumb_end = slider_thumb_x(10, 200, 12, 1.0);
     const double thumb_start = slider_thumb_x(10, 200, 12, 0.0);
     if (thumb_start < 10.0 || thumb_end + 12.0 > 210.01 || thumb_end < 10.0) {
@@ -241,10 +238,9 @@ int main()
         return fail(34, "the look fade did not finish");
     }
 
-    const ChartPlate spooky = chart_plate(2);
-    const ChartPlate classic = chart_plate(0);
-    if (!spooky.night || spooky.paper_r > 0.5 || classic.night || classic.paper_r < 0.8) {
-        return fail(10, "the chart plate should follow the look");
+    const ChartPlate plate = chart_plate();
+    if (plate.night || plate.paper_r < 0.8) {
+        return fail(10, "the chart plate should be the standard cream paper in every look");
     }
     double lo = 0;
     double hi = 100;

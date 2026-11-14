@@ -1,782 +1,1001 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Original toolbar icons for Lunduke City 2. These are not traced from
-# SimCity or any other game. Run this script to regenerate the PNGs.
+# Copyright (C) 2026 The Lunduke City authors
+# See COPYING and NOTICE.
+"""Original toolbar and landmark icons for Lunduke City 2 ("engraved stone").
 
+These are original drawings, not traced from SimCity or any other game.
+Each object is drawn on an 18x18 grid with a 1px dark-brown outline (20x20),
+then doubled with nearest-neighbour to the 40x40 PNGs the game loads. One
+icon set is used in every tile look. The button plate, hover and selected
+states are drawn by the toolbar code (src/tool_palette.cpp), not baked in.
+
+Style: a four-step sepia ramp, light from the top left, and one accent hue
+per icon. Zone icons carry an 8x8 sign with the zone letter and colour
+(R green, C blue, I yellow).
+
+    python3 data/tool-icons/make_icons.py            # rewrite the PNGs here
+    python3 data/tool-icons/make_icons.py --out DIR  # write elsewhere
+    python3 data/tool-icons/make_icons.py --check    # compare, do not write
+"""
+
+import argparse
 import math
 import pathlib
-import struct
-import zlib
+import sys
+
+from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent
-SIZE = 40
+N = 18
+ICON = 20
+SCALE = 2
 
-# Several shades per hue, plus a dark outline. Indexed so the sprites stay
-# crisp when the game scales them with nearest-neighbor.
-PALETTE = {
-    "K": (22, 16, 12),
-    "Y": (236, 184, 32),
-    "y": (255, 226, 120),
-    "d": (176, 120, 16),
-    "B": (28, 28, 32),
-    "N": (52, 52, 58),
-    "G": (176, 176, 182),
-    "g": (112, 114, 122),
-    "W": (248, 246, 240),
-    "w": (214, 210, 200),
-    "R": (196, 40, 34),
-    "r": (236, 96, 64),
-    "n": (120, 22, 20),
-    "E": (40, 132, 48),
-    "e": (92, 184, 68),
-    "f": (18, 78, 28),
-    "L": (168, 208, 72),
-    "T": (132, 78, 36),
-    "t": (84, 48, 22),
-    "H": (176, 124, 64),
-    "U": (36, 72, 168),
-    "u": (96, 148, 220),
-    "b": (18, 36, 96),
-    "Q": (48, 112, 176),
-    "q": (140, 196, 224),
-    "S": (168, 176, 186),
-    "s": (72, 78, 88),
-    "O": (224, 112, 28),
-    "o": (255, 176, 64),
-    "A": (212, 164, 40),
-    "a": (255, 220, 112),
-    "C": (40, 132, 140),
-    "c": (148, 214, 206),
-    "Z": (20, 72, 78),
-    "F": (228, 228, 232),
-    "M": (156, 156, 164),
-    "P": (124, 44, 68),
-    "p": (184, 80, 100),
-    "D": (206, 170, 96),
-    "V": (64, 48, 36),
+
+def hx(s):
+    s = s.lstrip('#')
+    return tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def mix(a, b, t):
+    return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+class Canvas:
+    def __init__(self, n=N):
+        self.n = n
+        self.px = [[None] * n for _ in range(n)]
+        self.hard = set()  # pixels that must stay (no auto outline over)
+
+    def put(self, x, y, mat, s):
+        if 0 <= x < self.n and 0 <= y < self.n:
+            self.px[y][x] = (mat, s)
+
+    def rect(self, x0, y0, x1, y1, mat, s):
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                self.put(x, y, mat, s)
+
+    def hline(self, x0, x1, y, mat, s):
+        self.rect(x0, y, x1, y, mat, s)
+
+    def vline(self, x, y0, y1, mat, s):
+        self.rect(x, y0, x, y1, mat, s)
+
+    def dither(self, x0, y0, x1, y1, mat, s, phase=0):
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                if (x + y + phase) % 2 == 0:
+                    self.put(x, y, mat, s)
+
+    def rows(self, ox, oy, art, legend):
+        """Hand-placed pixels: art is a list of strings, legend maps char."""
+        for j, line in enumerate(art):
+            for i, ch in enumerate(line):
+                if ch in legend:
+                    v = legend[ch]
+                    if v is None:
+                        self.px[oy + j][ox + i] = None
+                    else:
+                        self.put(ox + i, oy + j, *v)
+
+
+
+RAMPS = {
+    'yellow': ['#F8E088', '#E8C048', '#C09028', '#86601A'],
+    'metal': ['#E0DED6', '#A8A6A0', '#7A7876', '#4E4C50'],
+    'rubber': ['#6A6670', '#4A4650', '#34303A', '#221E26'],
+    'glass': ['#B8DCF4', '#6C9CDC', '#3A64AC', '#22386E'],
+    'asphalt': ['#8E8C90', '#727076', '#58565E', '#3C3A42'],
+    'paint': ['#FCF8EC', '#E4DCC8', '#C0B6A0', '#8C8270'],
+    'line': ['#F8E088', '#E8C048', '#C09028', '#86601A'],
+    'cone': ['#F8B870', '#E07C34', '#B0501E', '#703012'],
+    'roof': ['#E88868', '#C4523A', '#943428', '#5E1E1C'],
+    'wall': ['#FCF2DC', '#EADCB8', '#C9B892', '#9C8664'],
+    'door': ['#B07C54', '#8C634A', '#6B4228', '#4A2A18'],
+    'brick': ['#D89068', '#B06446', '#844430', '#5A2C20'],
+    'grass': ['#A8CC6C', '#6CA448', '#3E7A30', '#245020'],
+    'smoke': ['#F4F4F2', '#D0D0D2', '#A8A8B0', '#7C7C88'],
+    'navy': ['#5874CC', '#2E4698', '#1C2C6C', '#0C1440'],
+    'gold': ['#FCEEB0', '#E8C775', '#B88C2E', '#7A5A18'],
+    'wood': ['#C08858', '#8C634A', '#6B4228', '#4A2A18'],
+}
+RAMPS = {k: [hx(c) for c in v] for k, v in RAMPS.items()}
+
+
+
+def bulldozer():
+    c = Canvas()
+    Y, G, B, K = 'yellow', 'metal', 'glass', 'rubber'
+    # cab: lit roof, front window, shaded right side
+    c.hline(8, 13, 2, Y, 0)
+    c.rect(8, 3, 12, 8, Y, 1)
+    c.rect(13, 3, 14, 8, Y, 2)
+    c.vline(14, 3, 8, Y, 3)
+    c.rect(9, 4, 11, 6, B, 1)
+    c.put(9, 4, B, 0)
+    c.put(10, 4, B, 0)
+    c.hline(9, 11, 6, B, 2)
+    c.rect(13, 4, 13, 6, B, 2)
+    # hood / engine block
+    c.hline(4, 8, 7, Y, 0)
+    c.rect(4, 8, 13, 10, Y, 1)
+    c.rect(13, 9, 14, 10, Y, 2)
+    c.hline(4, 14, 11, Y, 3)
+    c.dither(5, 9, 7, 9, Y, 2)  # grille hint
+    # exhaust stack
+    c.vline(5, 3, 6, G, 2)
+    c.put(5, 3, G, 0)
+    c.put(6, 4, G, 3)
+    # lift arm + blade (left)
+    c.hline(2, 4, 10, G, 2)
+    c.rect(0, 8, 1, 14, G, 1)
+    c.vline(0, 8, 14, G, 0)
+    c.vline(2, 9, 14, G, 3)
+    c.put(1, 15, G, 3)
+    c.hline(0, 1, 15, G, 2)
+    # tracks
+    c.rect(4, 12, 16, 16, K, 2)
+    c.hline(5, 15, 12, K, 1)
+    c.hline(5, 15, 16, K, 3)
+    c.put(4, 12, K, 3); c.put(16, 12, K, 3); c.put(4, 16, K, 3); c.put(16, 16, K, 3)
+    for x in (6, 9, 12, 15):
+        c.put(x, 14, G, 1)
+        c.put(x - 1, 14, K, 3)
+    for x in range(5, 16, 2):
+        c.put(x, 13, K, 0)
+    return c
+
+
+def road():
+    c = Canvas()
+    A, W, L, O, V = 'asphalt', 'paint', 'line', 'cone', 'grass'
+    # road running away from the viewer: wide at the bottom, narrow at top
+    rows = {}
+    for y in range(2, 17):
+        half = 2 + (y - 2) * 6 // 14       # 2 .. 8
+        x0, x1 = 8 - half, 9 + half
+        rows[y] = (x0, x1)
+        c.hline(x0, x1, y, A, 0 if y < 5 else (1 if y < 11 else 2))
+        c.put(x1, y, A, 3)
+        c.put(x0 + 1, y, W, 0 if y < 9 else 1)
+        c.put(x1 - 1, y, W, 1 if y < 9 else 2)
+    c.hline(0, 17, 17, A, 3)
+    # centre dashes grow toward the viewer
+    for (y0, y1) in ((3, 3), (6, 7), (10, 12), (15, 17)):
+        for y in range(y0, min(y1, 17) + 1):
+            c.put(8, y, L, 0 if y < 9 else 1)
+            c.put(9, y, L, 1 if y < 9 else 2)
+    # traffic cone on the right shoulder
+    c.rows(13, 9, [
+        "..o..",
+        ".oO..",
+        ".wW..",
+        ".oOO.",
+        "owwW.",
+        "oOOOO",
+        "ppppp",
+    ], {'o': (O, 0), 'O': (O, 2), 'w': (W, 0), 'W': (W, 2), 'p': (O, 3)})
+    return c
+
+
+def coal():
+    c = Canvas()
+    P, M, S, Y, G = 'brick', 'metal', 'smoke', 'gold', 'rubber'
+    # smoke puffs drifting up-left from the stack
+    c.rows(8, 0, [
+        "..ss..ss.",
+        ".sSSssSSs",
+        "sSSSSSSss",
+        ".ssss.ss.",
+    ], {'s': (S, 2), 'S': (S, 0)})
+    # smokestack (round: lit left, shaded right) with metal bands
+    c.rect(11, 4, 14, 16, P, 1)
+    c.vline(11, 4, 16, P, 0)
+    c.vline(14, 4, 16, P, 2)
+    c.hline(11, 14, 4, M, 2)
+    for y in (7, 11):
+        c.hline(11, 14, y, M, 1)
+        c.put(11, y, M, 0)
+        c.put(14, y, M, 2)
+    # plant hall: lit roof, brick front, shaded right side
+    c.hline(1, 9, 7, M, 0)
+    c.hline(1, 9, 8, M, 1)
+    c.rect(1, 9, 9, 16, P, 1)
+    c.vline(1, 9, 16, P, 0)
+    c.dither(2, 9, 9, 16, P, 2, phase=1)
+    c.rect(10, 8, 10, 16, P, 3)
+    # gold bolt on a dark panel: "this makes power"
+    c.rect(3, 10, 8, 15, G, 2)
+    c.rows(3, 10, [
+        "....Y.",
+        "...YY.",
+        "..YYYY",
+        ".YYYy.",
+        "...Yy.",
+        "..Y...",
+    ], {'Y': (Y, 1), 'y': (Y, 2)})
+    c.hline(0, 16, 17, G, 3)
+    return c
+
+
+def police():
+    c = Canvas()
+    N_, W, B, K, R, Y, M = 'navy', 'paint', 'glass', 'rubber', 'roof', 'gold', 'metal'
+    # light bar
+    c.rect(6, 3, 8, 4, R, 1)
+    c.put(6, 3, R, 0)
+    c.rect(9, 3, 11, 4, B, 1)
+    c.put(11, 3, B, 0)
+    c.hline(6, 11, 5, M, 3)
+    # cabin roof (white) and windows
+    c.hline(5, 12, 6, W, 0)
+    c.rect(4, 7, 13, 9, W, 1)
+    c.rect(5, 7, 7, 9, B, 1)
+    c.put(5, 7, B, 0)
+    c.rect(9, 7, 12, 9, B, 1)
+    c.put(9, 7, B, 0)
+    c.vline(8, 7, 9, W, 1)
+    c.vline(13, 7, 9, W, 2)
+    # body: white doors over navy skirt
+    c.rect(1, 10, 16, 11, W, 1)
+    c.hline(1, 16, 10, W, 0)
+    c.rect(1, 12, 16, 13, N_, 1)
+    c.hline(1, 16, 14, N_, 3)
+    c.vline(16, 10, 13, N_, 2)
+    c.put(0, 11, M, 1); c.put(0, 12, M, 2)  # bumper / headlight
+    c.put(17, 11, R, 2)  # tail light
+    c.put(17, 12, M, 2)
+    c.put(1, 11, Y, 0)   # headlight
+    # door star
+    c.put(9, 11, Y, 1); c.put(8, 12, Y, 2); c.put(10, 12, Y, 2); c.put(9, 12, Y, 0)
+    c.vline(7, 10, 13, N_, 3)
+    # wheels
+    for wx in (3, 12):
+        c.rect(wx, 13, wx + 2, 16, K, 2)
+        c.hline(wx, wx + 2, 13, K, 1)
+        c.put(wx + 1, 14, M, 1)
+        c.put(wx + 1, 15, M, 2)
+        c.hline(wx, wx + 2, 16, K, 3)
+    return c
+
+
+def query():
+    c = Canvas()
+    Y, B, T = 'gold', 'glass', 'wood'
+    ring = [
+        ".....yyyy.....",
+        "...yYYYYYYy...",
+        "..yYgggggYYd..",
+        ".yYgGGggggYYd.",
+        ".yYgGgggggg Yd",
+        "yYgGgggggggYYd",
+        "yYggggggggbYYd",
+        "yYggggggggbYYd",
+        "yYgggggggbbYYd",
+        ".yYgggggbbYYd.",
+        ".dYYgggbbYYdd.",
+        "..dYYYYYYYdd..",
+        "...ddYYYYdd...",
+        ".....dddd.....",
+    ]
+    leg = {'y': (Y, 0), 'Y': (Y, 1), 'd': (Y, 3), 'g': (B, 1), 'G': (B, 0),
+           'b': (B, 2), ' ': (Y, 1), '.': None}
+    c.rows(0, 0, ring, leg)
+    # handle from lower right, 45 degrees, chunky
+    for k in range(5):
+        x, y = 12 + k, 12 + k
+        c.put(x, y, T, 1)
+        c.put(x + 1, y, T, 2) if x + 1 < 18 else None
+        c.put(x, y + 1, T, 3) if y + 1 < 18 else None
+        c.put(x - 1, y, T, 0) if k else None
+    c.put(11, 12, Y, 3); c.put(12, 11, Y, 3)  # collar
+    c.put(12, 12, Y, 2)
+    # a little ? glint inside the lens (reads as Query)
+    c.rows(4, 3, [
+        ".WW.",
+        "W..W",
+        "..W.",
+        ".W..",
+        "....",
+        ".W..",
+    ], {'W': ('paint', 0)})
+    return c
+
+
+GLYPH = {
+    'R': ["###.", "#..#", "#..#", "###.", "#.#.", "#..#"],
+    'C': [".###", "#...", "#...", "#...", "#...", ".###"],
+    'I': ["####", ".##.", ".##.", ".##.", ".##.", "####"],
 }
 
 
-def blank():
-    return [["."] * SIZE for _ in range(SIZE)]
+def badge(c, x, y, letter, mat, ink=('paint', 0)):
+    """8x8 zone sign: zone colour, dark rim, 4x6 letter with side padding."""
+    c.rect(x, y, x + 7, y + 7, mat, 3)
+    c.rect(x + 1, y + 1, x + 6, y + 6, mat, 1)
+    for j, row in enumerate(GLYPH[letter]):
+        for i, ch in enumerate(row):
+            if ch == '#':
+                c.put(x + 2 + i, y + 1 + j, *ink)
 
 
-def put(im, x, y, color):
-    if 0 <= x < SIZE and 0 <= y < SIZE and color != ".":
-        im[y][x] = color
+def poly(c, pts, mat, s):
+    m = Image.new('L', (c.n, c.n), 0)
+    ImageDraw.Draw(m).polygon(pts, fill=255)
+    for y in range(c.n):
+        for x in range(c.n):
+            if m.getpixel((x, y)):
+                c.put(x, y, mat, s)
 
 
-def rect(im, x, y, w, h, color):
-    for yy in range(y, y + h):
-        for xx in range(x, x + w):
-            put(im, xx, yy, color)
+def ball(c, cx, cy, r, mat, dither=True, bias=0):
+    """Round blob lit from the top left (tree crowns, puffs)."""
+    for y in range(c.n):
+        for x in range(c.n):
+            dx, dy = x + 0.5 - cx, y + 0.5 - cy
+            d = math.hypot(dx, dy)
+            if d <= r:
+                lit = (-dx - dy) / (r * 1.41)
+                s = 0 if lit > 0.45 else 1 if lit > -0.1 else 2 if d < r - 1 or lit > -0.5 else 3
+                if dither and s in (1, 2) and (x + y) % 2 == 0 and abs(lit - (0.45 if s == 1 else -0.1)) < 0.18:
+                    s -= 1
+                c.put(x, y, mat, min(3, s + bias))
 
 
-def hline(im, x, y, w, color):
-    rect(im, x, y, w, 1, color)
+def ellipse(c, cx, cy, rx, ry, mat, s):
+    for y in range(c.n):
+        for x in range(c.n):
+            if ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1:
+                c.put(x, y, mat, s)
 
 
-def vline(im, x, y, h, color):
-    rect(im, x, y, 1, h, color)
+# ---------------------------------------------------------------- transport
+def rail():
+    """A commuter rail car on its track, seen from the side at 3/4."""
+    c = Canvas()
+    B = 'wall'
+    # roof (lit) and a sliver of the back side
+    c.hline(3, 15, 3, B, 0)
+    c.hline(2, 16, 4, B, 0)
+    c.rect(1, 5, 16, 12, B, 1)
+    c.vline(1, 5, 12, B, 0)
+    c.vline(16, 5, 12, B, 2)
+    c.rect(17, 6, 17, 12, B, 3)           # end face
+    # windows band
+    for x0 in (3, 7, 11):
+        c.rect(x0, 6, x0 + 2, 8, 'glass', 1)
+        c.put(x0, 6, 'glass', 0)
+    c.rect(15, 6, 15, 10, 'glass', 2)     # door window
+    # accent stripe
+    c.hline(1, 16, 10, 'cone', 1)
+    c.hline(1, 16, 11, 'cone', 2)
+    c.hline(1, 17, 12, B, 3)
+    # bogies + wheels
+    for wx in (3, 12):
+        c.rect(wx, 13, wx + 3, 14, 'rubber', 2)
+        c.put(wx, 14, 'metal', 1); c.put(wx + 3, 14, 'metal', 1)
+    # track: rail + sleepers
+    c.hline(0, 17, 15, 'metal', 0)
+    for x in range(0, 18, 3):
+        c.rect(x, 16, x + 1, 16, 'wood', 2)
+    c.hline(0, 17, 17, 'stone', 3)
+    return c
 
 
-def disc(im, cx, cy, rx, ry, color):
-    for y in range(cy - ry, cy + ry + 1):
-        for x in range(cx - rx, cx + rx + 1):
-            if rx > 0 and ry > 0:
-                nx = (x - cx) / rx
-                ny = (y - cy) / ry
-                if nx * nx + ny * ny <= 1.0:
-                    put(im, x, y, color)
+# ---------------------------------------------------------------- utilities
+def wire():
+    c = Canvas()
+    W = 'wood'
+    # wires first, sagging off both sides
+    for (y, xs) in ((4, range(0, 18)), (9, range(0, 18))):
+        for x in xs:
+            sag = 1 if 3 < x < 14 and x not in (7, 8, 9, 10) else 0
+            c.put(x, y + sag, 'stone', 3)
+            c.hard.add((x, y + sag))
+    # pole
+    c.rect(8, 2, 9, 17, W, 1)
+    c.vline(8, 2, 17, W, 0)
+    c.vline(9, 2, 17, W, 2)
+    # cross arms
+    c.rect(2, 5, 15, 5, W, 1); c.hline(2, 15, 6, W, 3)
+    c.rect(4, 10, 13, 10, W, 1); c.hline(4, 13, 11, W, 3)
+    # insulators (gold accent)
+    for x in (3, 6, 11, 14):
+        c.rect(x, 3, x, 4, 'gold', 1); c.put(x, 3, 'gold', 0)
+    for x in (5, 12):
+        c.rect(x, 8, x, 9, 'gold', 1); c.put(x, 8, 'gold', 0)
+    c.hline(7, 10, 17, W, 3)
+    return c
 
 
-def outlined(draw):
-    im = blank()
-    draw(im)
-    base = [row[:] for row in im]
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if base[y][x] != ".":
+def nuclear():
+    c = Canvas()
+    T = 'stone'
+    for y in range(4, 17):
+        if y < 10:
+            half = 5 - (y - 4) * 1.4 / 6
+        else:
+            half = 3.6 + (y - 10) * 3.4 / 6
+        x0, x1 = round(8.5 - half), round(8.5 + half) - 1
+        for x in range(x0, x1 + 1):
+            t = (x - x0) / max(1, x1 - x0)
+            s = 0 if t < 0.2 else 1 if t < 0.55 else 2 if t < 0.85 else 3
+            c.put(x, y, T, s)
+    c.hline(4, 12, 4, T, 0)
+    c.hline(5, 11, 5, T, 3)  # inner rim shadow
+    # steam
+    for (cx, cy, r) in ((7, 2.2, 2.3), (10.5, 1.8, 2.0), (12.8, 3.0, 1.4)):
+        ball(c, cx, cy, r, 'smoke', dither=False)
+    # trefoil sign (gold accent)
+    c.rows(5, 9, [
+        ".YYYYY.",
+        "YooYooY",
+        "YooYooY",
+        "YYYoYYY",
+        "YYoooYY",
+        "YYoooYY",
+        ".YYYYY.",
+    ], {'Y': ('gold', 1), 'o': ('ink', 0)})
+    c.hline(1, 16, 17, T, 3)
+    return c
+
+
+# ---------------------------------------------------------------- zones
+def residential():
+    c = Canvas()
+    W, R = 'wall', 'roofs'
+    ax = 10
+    for y in range(3, 9):                       # front gable
+        k = y - 3
+        c.hline(ax - k, ax + k, y, W, 1)
+        c.put(ax - k - 1, y, R, 0)              # bargeboard trim
+        x0, x1 = ax + k + 1, min(17, ax + k + 4)
+        c.hline(x0, x1, y, R, 1 if y % 2 else 2)  # roof plane, shingle rows
+    c.hline(ax, ax + 4, 2, R, 0)                # ridge
+    c.hline(ax - 6, ax - 5, 9, R, 0)
+    c.rect(ax - 4, 9, ax + 4, 16, W, 1)         # front wall
+    c.vline(ax - 4, 9, 16, W, 0)
+    c.rect(ax + 5, 9, 17, 16, W, 3)             # side wall
+    c.dither(ax + 5, 9, 17, 9, W, 2)
+    c.hline(ax - 4, 17, 9, W, 2)                # eave shadow
+    c.rect(14, 0, 15, 2, 'stone', 1); c.vline(15, 0, 2, 'stone', 2)  # chimney
+    c.rect(ax - 1, 12, ax, 16, 'door', 1); c.vline(ax, 12, 16, 'door', 2)
+    for wx in (ax - 3, ax + 2):
+        c.rect(wx, 11, wx + 1, 12, 'glass', 1); c.put(wx, 11, 'glass', 0)
+    c.rect(ax + 6, 11, ax + 6, 12, 'glass', 3)
+    c.vline(ax, 5, 6, 'glass', 2)
+    c.hline(0, 17, 17, 'zr', 1)
+    c.dither(0, 17, 17, 17, 'zr', 2)
+    badge(c, 0, 0, 'R', 'zr')
+    return c
+
+
+def commercial():
+    c = Canvas()
+    W = 'wall'
+    # box: front face, lit roof, shaded right side
+    c.rect(3, 8, 13, 16, W, 1)
+    c.vline(3, 8, 16, W, 0)
+    poly(c, [(3, 7), (13, 7), (16, 4), (6, 4)], W, 0)
+    c.hline(7, 16, 4, W, 0)
+    c.hline(4, 13, 7, W, 2)
+    poly(c, [(14, 7), (17, 4), (17, 13), (14, 16)], W, 3)
+    c.dither(14, 6, 17, 12, W, 2)
+    # striped awning in the zone blue, scalloped edge
+    for x in range(3, 14):
+        m = 'zc' if ((x - 3) // 2) % 2 == 0 else 'paint'
+        c.put(x, 9, m, 0)
+        c.put(x, 10, m, 1)
+        if x % 2 == 1:
+            c.put(x, 11, m, 2)
+    c.hline(2, 14, 8, 'zc', 3)
+    # shop window + door
+    c.rect(4, 12, 9, 15, 'glass', 1)
+    c.hline(4, 9, 12, 'glass', 0)
+    c.put(8, 13, 'glass', 0)
+    c.rect(11, 12, 12, 16, 'door', 2); c.put(11, 14, 'door', 0)
+    c.hline(3, 13, 16, W, 2)
+    badge(c, 0, 0, 'C', 'zc')
+    return c
+
+
+def industrial():
+    c = Canvas()
+    M = 'stone'
+    # short stack with a puff
+    c.rect(13, 3, 15, 16, M, 1); c.vline(13, 3, 16, M, 0); c.vline(15, 3, 16, M, 2)
+    c.hline(13, 15, 3, M, 3)
+    c.hline(13, 15, 6, 'zi', 1)
+    ball(c, 12.5, 1.5, 1.6, 'smoke', dither=False)
+    ball(c, 15.0, 1.2, 1.3, 'smoke', dither=False)
+    # sawtooth hall
+    c.rect(1, 9, 12, 16, M, 1)
+    c.vline(1, 9, 16, M, 0)
+    c.hline(1, 12, 9, M, 3)
+    c.hline(1, 6, 8, M, 0)
+    for x0 in (6, 9):
+        c.vline(x0, 5, 8, 'glass', 1)           # north-light glazing
+        c.put(x0, 5, 'glass', 0)
+        for k in range(1, 4):
+            c.put(x0 + k, 5 + k - 1, M, 0)     # sloped roof falls to the right
+            c.vline(x0 + k, 5 + k, 8, M, 2)
+    # loading door with yellow hazard stripe
+    c.rect(6, 12, 10, 16, 'ink', 0)
+    for x in range(6, 11):
+        c.put(x, 12, 'zi', 0 if x % 2 else 3)
+    c.rect(7, 13, 9, 16, M, 3)
+    c.rect(2, 11, 4, 12, 'glass', 2)
+    c.hline(0, 16, 17, M, 3)
+    badge(c, 0, 0, 'I', 'zi', ink=('ink', 0))
+    return c
+
+
+# ---------------------------------------------------------------- services
+def span_shade(c, y, x0, x1, mat, lift=0):
+    """Fill a row and shade it as a lit-from-the-left cylinder."""
+    w = max(1, x1 - x0)
+    for x in range(x0, x1 + 1):
+        t = (x - x0) / w
+        sh = 0 if t < 0.2 else 1 if t < 0.6 else 2 if t < 0.88 else 3
+        c.put(x, y, mat, max(0, min(3, sh + lift)))
+
+
+def fire():
+    """Hydrant: small square nut, low rounded dome, flange, body, side nozzles."""
+    c = Canvas()
+    R = 'roof'
+    c.hline(7, 10, 1, R, 1)                  # operating nut
+    c.put(7, 1, R, 0)
+    span_shade(c, 2, 5, 12, R, lift=1)       # low dome, flat on top
+    span_shade(c, 3, 4, 13, R, lift=1)
+    span_shade(c, 4, 4, 13, R)
+    span_shade(c, 5, 3, 14, R, lift=-1)      # bonnet flange (lit top)
+    c.hline(3, 14, 6, R, 3)                  # flange underside
+    for y in range(7, 15):
+        span_shade(c, y, 5, 12, R)
+    for y in (9, 10, 11):                    # side nozzles, symmetric
+        span_shade(c, y, 2, 15, R)
+    c.put(1, 10, 'metal', 1); c.put(16, 10, 'metal', 2)
+    c.put(8, 10, R, 3); c.put(9, 10, R, 3)   # centre cap boss
+    span_shade(c, 15, 4, 13, R)              # base collar
+    span_shade(c, 16, 3, 14, R, lift=-1)
+    c.hline(3, 14, 17, R, 3)
+    return c
+
+
+def stadium():
+    """American football seen from the side, laces on top."""
+    c = Canvas()
+    B = 'wood'
+    cx, cy, rx, ry = 9.0, 9.0, 8.9, 5.8
+    for y in range(18):
+        for x in range(18):
+            u = (x + 0.5 - cx) / rx
+            if abs(u) >= 1:
                 continue
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    yy, xx = y + dy, x + dx
-                    if 0 <= yy < SIZE and 0 <= xx < SIZE and base[yy][xx] != ".":
-                        im[y][x] = "K"
-                        break
-                else:
-                    continue
-                break
-    return im
+            h = ry * (1 - u * u) ** 1.0
+            dy = y + 0.5 - cy
+            if abs(dy) <= h:
+                lit = -(u * 0.45) - dy / h * 0.8
+                sh = 0 if lit > 0.45 else 1 if lit > -0.1 else 2 if lit > -0.6 else 3
+                c.put(x, y, B, sh)
+    for x in (4, 13):                          # end stripes
+        for y in range(18):
+            if c.px[y][x] is not None:
+                c.put(x, y, 'paint', 1 if x < 9 else 2)
+    c.hline(6, 11, 6, 'paint', 1)              # seam
+    for x in (6, 8, 9, 11):                    # laces cross the seam
+        c.vline(x, 5, 7, 'paint', 0)
+    return c
 
 
-def bulldozer(im):
-    # Blade, tall enough to read at the Deck's real pixel size.
-    rect(im, 1, 6, 7, 24, "G")
-    vline(im, 1, 6, 24, "W")
-    vline(im, 7, 8, 20, "s")
-    # Body.
-    rect(im, 8, 14, 28, 14, "Y")
-    hline(im, 8, 14, 28, "y")
-    hline(im, 8, 26, 28, "d")
-    hline(im, 8, 27, 28, "d")
-    # Cab.
-    rect(im, 22, 3, 15, 13, "Y")
-    hline(im, 22, 3, 15, "y")
-    rect(im, 24, 5, 11, 9, "u")
-    hline(im, 24, 5, 11, "q")
-    vline(im, 29, 5, 9, "U")
-    # Exhaust and hydraulic arm.
-    rect(im, 12, 7, 4, 8, "s")
-    put(im, 13, 6, "N")
-    hline(im, 9, 18, 10, "d")
-    # Tracks and rollers.
-    rect(im, 5, 28, 33, 10, "N")
-    rect(im, 6, 29, 31, 8, "s")
-    for x in (8, 16, 24, 31):
-        rect(im, x, 30, 4, 5, "G")
-        put(im, x + 1, 32, "W")
-    hline(im, 5, 37, 33, "B")
+# ---------------------------------------------------------------- big builds
+def seaport():
+    c = Canvas()
+    N = 'navy'
+    # bridge tower at the stern
+    c.rect(12, 3, 15, 9, 'paint', 1); c.vline(12, 3, 9, 'paint', 0); c.vline(15, 3, 9, 'paint', 2)
+    c.hline(12, 15, 5, 'glass', 1)
+    c.rect(13, 1, 13, 2, 'stone', 2)
+    # containers
+    for (x0, y0, s) in ((2, 7, 1), (6, 7, 2), (4, 5, 0), (8, 5, 1), (2, 9, 2), (6, 9, 1)):
+        c.rect(x0, y0, x0 + 3, y0 + 1, 'stone', s)
+        c.put(x0 + 3, y0, 'stone', 3)
+    c.rect(10, 7, 11, 10, 'stone', 2)
+    # hull (accent navy) with raised bow on the left
+    poly(c, [(0, 9), (17, 10), (16, 14), (3, 14)], N, 1)
+    c.hline(1, 17, 11, N, 0)
+    c.hline(3, 16, 14, N, 3)
+    c.hline(2, 16, 12, 'roof', 2)
+    # water
+    for x in range(0, 18):
+        c.put(x, 15 + (x % 4 == 0), 'glass', 1 if x % 3 else 0)
+        if x % 2:
+            c.put(x, 17, 'glass', 2)
+    return c
 
 
-def road(im):
-    # Horizontal roadway, same band as the rails. The asphalt is 15 pixels
-    # tall so a 1px centre line has the same asphalt above and below it.
-    rect(im, 0, 11, 40, 17, "g")
-    rect(im, 0, 12, 40, 15, "N")
-    hline(im, 0, 12, 40, "G")
-    hline(im, 0, 26, 40, "B")
-    for x in (2, 12, 22, 32):
-        rect(im, x, 19, 6, 1, "Y")
+def airport():
+    """Airliner in side view, nose right: thick fuselage, broad swept wing
+    toward the viewer, big engine, window row, tail fin. Accent: navy."""
+    c = Canvas()
+    B = 'paint'
+    # tail fin, swept back, navy tip
+    fin = {1: (1, 2), 2: (1, 3), 3: (1, 4), 4: (2, 5), 5: (2, 6), 6: (2, 3)}
+    for y, (a, b) in fin.items():
+        c.hline(a, b, y, B, 1)
+        c.put(a, y, B, 0)
+    c.hline(1, 2, 1, 'navy', 1); c.hline(1, 3, 2, 'navy', 1); c.hline(1, 4, 3, 'navy', 2)
+    # fuselage rows 6..11, rounded nose at the right
+    c.hline(4, 14, 6, B, 0)
+    c.hline(1, 16, 7, B, 1)
+    c.hline(1, 17, 8, B, 1)
+    c.hline(1, 17, 9, 'navy', 1)             # cheatline
+    c.hline(1, 16, 10, B, 2)
+    c.hline(3, 14, 11, B, 3)
+    c.put(1, 7, B, 0)
+    c.put(15, 7, 'glass', 2); c.put(16, 7, 'glass', 3)   # cockpit
+    c.put(16, 8, 'glass', 2)
+    for x in range(4, 14, 2):                            # cabin windows
+        c.put(x, 7, 'glass', 1)
+    c.hline(0, 3, 10, B, 2)                  # tailplane
+    c.put(0, 10, B, 3)
+    # broad wing, swept back toward the viewer
+    poly(c, [(6, 11), (11, 11), (7, 16), (4, 16)], B, 1)
+    c.hline(4, 7, 16, B, 3)
+    for y in range(12, 16):                  # lit leading edge
+        c.put(max(4, 6 - (y - 11) // 2), y, B, 0)
+    # engine under the wing
+    c.rect(10, 12, 14, 14, 'stone', 2)
+    c.hline(10, 13, 12, 'stone', 0)
+    c.vline(14, 12, 14, 'stone', 3)
+    c.hline(10, 14, 14, 'stone', 3)
+    c.put(14, 13, 'ink', 0)                  # intake
+    return c
 
 
-def rail(im):
-    # Horizontal track, same thickness as the road. Ties, two rails, no train.
-    for x in range(0, 40, 4):
-        rect(im, x, 11, 2, 17, "T")
-        vline(im, x, 11, 17, "H")
-    rect(im, 0, 14, 40, 3, "N")
-    hline(im, 0, 14, 40, "G")
-    rect(im, 0, 23, 40, 3, "N")
-    hline(im, 0, 25, 40, "s")
+def special():
+    """Clean symmetric 5-point star, two-tone bevel and a lit edge."""
+    c = Canvas()
+    G = 'gold'
+    cx, cy = 9.0, 9.6
+    # Hand-placed silhouette, symmetric about x=8.5. Two-pixel tip, calm
+    # stair steps on each diagonal, broad bar and two clean lower points.
+    spans = [
+        [(8, 9)], [(8, 9)], [(8, 9)], [(7, 10)], [(7, 10)], [(6, 11)],
+        [(0, 17)], [(1, 16)], [(2, 15)], [(4, 13)], [(5, 12)], [(5, 12)],
+        [(4, 13)], [(4, 7), (10, 13)], [(3, 6), (11, 14)],
+        [(3, 5), (12, 14)], [(2, 4), (13, 15)], [(2, 3), (14, 15)],
+    ]
+    for y, rr in enumerate(spans):
+        for x0, x1 in rr:
+            c.hline(x0, x1, y, G, 1)
+    # bevel: each arm has a lit side and a shaded side, split on its ridge.
+    for y in range(18):
+        for x in range(18):
+            if c.px[y][x] is None:
+                continue
+            dx, dy = x + 0.5 - cx, y + 0.5 - cy
+            a = math.atan2(dy, dx)
+            k = round((a + math.pi / 2) / (2 * math.pi / 5)) % 5
+            arm = -math.pi / 2 + k * 2 * math.pi / 5
+            side = math.sin(a - arm)            # >0 clockwise of the ridge
+            lit_arm = k in (0, 4)                # top and upper-left arms face the light
+            if lit_arm:
+                sh = 0 if side < 0 else 1
+            elif k == 1:
+                sh = 1 if side < 0 else 2
+            else:
+                sh = 1 if side > 0 else 2
+            if dx * dx + dy * dy < 2.2:
+                sh = 1
+            c.put(x, y, G, sh)
+    return c
 
 
-def wire(im):
-    # Wooden pole, one crossarm, insulators, wires leaving both sides.
-    sag = ((0, 10), (2, 12), (4, 14), (6, 15), (8, 16), (10, 16), (12, 15), (14, 13), (16, 11))
-    for x, y in sag:
-        put(im, x, y, "B")
-        put(im, x, y + 1, "N")
-        put(im, 39 - x, y, "B")
-        put(im, 39 - x, y + 1, "N")
-    rect(im, 4, 10, 32, 3, "T")
-    hline(im, 4, 10, 32, "H")
-    for x in (8, 18, 29):
-        rect(im, x, 7, 3, 4, "W")
-        hline(im, x, 7, 3, "Y")
-        put(im, x + 1, 8, "y")
-    rect(im, 18, 13, 4, 22, "T")
-    vline(im, 18, 13, 22, "t")
-    vline(im, 21, 13, 22, "H")
-    rect(im, 14, 34, 12, 4, "t")
-    hline(im, 14, 34, 12, "H")
+# ---------------------------------------------------------------- landmarks
+def amusement():
+    c = Canvas()
+    M = 'stone'
+    cx, cy, r = 9, 7.5, 6.5
+    for t in range(0, 360, 4):
+        a = math.radians(t)
+        x, y = cx + r * math.cos(a), cy + r * math.sin(a)
+        c.put(int(x), int(y), M, 1 if t > 180 else 2)
+    for t in range(0, 360, 45):
+        a = math.radians(t + 22)
+        for k in range(1, 6):
+            c.put(int(cx + k * math.cos(a)), int(cy + k * math.sin(a)), M, 2)
+    # legs
+    for k in range(10):
+        c.put(int(cx - 0.5 - k * 0.55), int(cy + 1 + k), M, 0)
+        c.put(int(cx + k * 0.55), int(cy + 1 + k), M, 2)
+    c.hline(2, 15, 17, M, 3)
+    # cabins (red accent)
+    for t in range(0, 360, 45):
+        a = math.radians(t)
+        x, y = int(cx + r * math.cos(a)), int(cy + r * math.sin(a))
+        c.rect(x - 1, y, x, y + 1, 'roof', 1)
+        c.put(x - 1, y, 'roof', 0)
+    c.rect(8, 7, 9, 8, M, 0)  # hub
+    return c
 
 
-def park(im):
-    # Grass with an irregular canopy. The crown is stacked blocks, not a disc.
-    rect(im, 1, 26, 38, 12, "E")
-    hline(im, 1, 26, 38, "e")
-    hline(im, 2, 36, 36, "f")
-    rect(im, 18, 20, 4, 12, "T")
-    vline(im, 18, 20, 12, "t")
-    vline(im, 21, 20, 11, "H")
-    rect(im, 8, 16, 20, 8, "E")
-    rect(im, 5, 12, 14, 8, "e")
-    rect(im, 18, 9, 14, 8, "E")
-    rect(im, 11, 7, 8, 6, "L")
-    rect(im, 24, 13, 8, 5, "f")
-    rect(im, 14, 18, 10, 4, "e")
-    rect(im, 9, 14, 4, 3, "L")
-    put(im, 28, 11, "e")
-    put(im, 7, 15, "E")
+def park():
+    c = Canvas()
+    ellipse(c, 9, 15.8, 8.4, 2.4, 'grass', 2)
+    ellipse(c, 9, 15.2, 8.0, 1.8, 'grass', 1)
+    c.rect(8, 10, 9, 15, 'wood', 1); c.vline(9, 10, 15, 'wood', 2)
+    ball(c, 9, 6.5, 5.8, 'grass')
+    return c
 
 
-def _badge(im, x, y, fill, hi, letter):
-    rect(im, x, y, 14, 14, fill)
-    hline(im, x, y, 14, hi)
-    vline(im, x, y, 14, hi)
-    # 5x6 letters, doubled so they stay readable on the 40px sprite.
-    glyphs = {
-        "R": ("WWW..", "W..W.", "WWW..", "W.W..", "W..W.", "W..W."),
-        "C": (".WWW.", "W....", "W....", "W....", "W....", ".WWW."),
-        "I": ("WWWWW", "..W..", "..W..", "..W..", "..W..", "WWWWW"),
-    }
-    glyph = glyphs[letter]
-    for row, bits in enumerate(glyph):
-        for col, bit in enumerate(bits):
-            if bit == "W":
-                rect(im, x + 2 + col * 2, y + 1 + row * 2, 2, 2, "W")
+def bigpark():
+    c = Canvas()
+    ellipse(c, 9, 15.6, 8.8, 2.6, 'grass', 2)
+    ellipse(c, 9, 15.0, 8.4, 2.0, 'grass', 1)
+    for x in (4, 12):
+        c.rect(x, 9, x, 14, 'wood', 2)
+    ball(c, 12.5, 5.2, 4.6, 'grass', bias=1)
+    ball(c, 4.6, 6.2, 4.2, 'grass', bias=1)
+    c.rect(8, 12, 9, 15, 'wood', 1)
+    ball(c, 8.8, 9.6, 4.0, 'grass')
+    # little fence in front
+    for x in range(1, 17, 3):
+        c.vline(x, 15, 16, 'wood', 0)
+    c.hline(1, 16, 16, 'wood', 1)
+    return c
 
 
-def residential(im):
-    rect(im, 2, 26, 36, 12, "e")
-    hline(im, 2, 36, 36, "f")
-    rect(im, 8, 18, 20, 14, "W")
-    vline(im, 8, 18, 14, "w")
-    rect(im, 15, 24, 6, 8, "T")
-    vline(im, 15, 24, 8, "t")
-    rect(im, 10, 21, 4, 4, "u")
-    rect(im, 22, 21, 4, 4, "u")
-    for i, w in enumerate(range(6, 28, 3)):
-        hline(im, 18 - w // 2, 8 + i, w, "R" if i % 2 == 0 else "r")
-    hline(im, 9, 17, 18, "n")
-    rect(im, 20, 6, 3, 6, "T")
-    put(im, 21, 5, "t")
-    _badge(im, 24, 1, "E", "e", "R")
+def casino():
+    c = Canvas()
+    D = 'roof'
+    c.rect(2, 7, 11, 16, D, 1)
+    c.vline(2, 7, 16, D, 0)
+    poly(c, [(2, 6), (11, 6), (15, 2), (6, 2)], D, 0)
+    poly(c, [(12, 6), (15, 3), (15, 12), (12, 15)], D, 2)
+    c.vline(15, 3, 12, D, 3)
+    c.hline(3, 11, 16, D, 3)
+    P = ('paint', 0)
+    for (x, y) in ((3, 8), (9, 8), (6, 11), (3, 14), (9, 14)):
+        c.rect(x, y, x + 1, y + 1, *P)
+    c.rect(8, 3, 9, 4, 'paint', 1)      # top face pip
+    c.put(13, 6, 'paint', 1); c.put(14, 5, 'paint', 1)   # side pips
+    c.put(13, 11, 'paint', 1); c.put(14, 10, 'paint', 1)
+    return c
 
 
-def commercial(im):
-    rect(im, 3, 16, 30, 20, "U")
-    hline(im, 3, 16, 30, "u")
-    hline(im, 3, 34, 30, "b")
-    rect(im, 3, 10, 30, 7, "W")
-    for x in range(3, 33, 5):
-        rect(im, x, 10, 3, 7, "R")
-    hline(im, 3, 10, 30, "r")
-    rect(im, 6, 20, 7, 7, "q")
-    rect(im, 15, 20, 7, 7, "q")
-    hline(im, 6, 23, 7, "W")
-    hline(im, 15, 23, 7, "W")
-    rect(im, 24, 22, 7, 14, "H")
-    vline(im, 24, 22, 14, "T")
-    put(im, 28, 28, "A")
-    _badge(im, 24, 1, "U", "u", "C")
+def fountain():
+    c = Canvas()
+    S, Wt = 'stone', 'glass'
+    ellipse(c, 9, 14.4, 8.6, 3.2, S, 2)
+    ellipse(c, 9, 13.6, 8.6, 3.0, S, 1)
+    ellipse(c, 9, 13.4, 7.0, 2.0, Wt, 1)
+    c.dither(3, 13, 15, 14, Wt, 0)
+    c.rect(8, 8, 9, 13, S, 1); c.vline(9, 8, 13, S, 2)
+    ellipse(c, 9, 7.6, 4.6, 1.6, S, 1)
+    c.hline(5, 12, 8, S, 2)
+    c.hline(6, 11, 7, Wt, 1)
+    # spray
+    for (x, y) in ((8, 1), (9, 1), (8, 2), (9, 2), (8, 3), (9, 4), (7, 2), (10, 2), (6, 3), (11, 3),
+                   (5, 4), (12, 4), (4, 6), (13, 6), (4, 5), (13, 5), (3, 8), (14, 8), (3, 10), (14, 10)):
+        c.put(x, y, Wt, 0 if y < 4 else 1)
+    return c
 
 
-def industrial(im):
-    rect(im, 2, 18, 24, 16, "H")
-    hline(im, 2, 18, 24, "D")
-    hline(im, 2, 32, 24, "t")
-    rect(im, 5, 22, 5, 5, "u")
-    rect(im, 12, 22, 5, 5, "N")
-    rect(im, 19, 24, 5, 10, "T")
-    for x in (2, 8, 14, 20):
-        put(im, x, 17, "s")
-        put(im, x + 1, 15, "S")
-        put(im, x + 2, 14, "W")
-        put(im, x + 3, 16, "N")
-        put(im, x + 4, 18, "s")
-    rect(im, 28, 12, 6, 22, "N")
-    vline(im, 28, 12, 22, "G")
-    vline(im, 33, 12, 22, "B")
-    rect(im, 28, 9, 6, 3, "s")
-    disc(im, 31, 6, 5, 3, "M")
-    disc(im, 28, 4, 3, 2, "F")
-    put(im, 24, 3, "W")
-    _badge(im, 2, 2, "O", "o", "I")
+def library():
+    c = Canvas()
+    Cv = 'roof'
+    # cover (accent) under the pages, then the open pages
+    poly(c, [(0, 6), (8, 8), (9, 8), (17, 6), (17, 14), (9, 16), (8, 16), (0, 14)], Cv, 2)
+    c.hline(0, 1, 14, Cv, 3)
+    poly(c, [(1, 4), (8, 6), (8, 14), (1, 12)], 'paint', 0)
+    poly(c, [(9, 6), (16, 4), (16, 12), (9, 14)], 'paint', 1)
+    c.vline(8, 6, 15, 'paint', 2); c.vline(9, 6, 15, 'paint', 3)
+    for k, y in enumerate((7, 9, 11)):
+        for x in range(2, 8):
+            c.put(x, y + (x - 1) * 2 // 7, 'stone', 2)
+        for x in range(10, 16):
+            c.put(x, y + (16 - x) * 2 // 7, 'stone', 2)
+    c.vline(12, 1, 6, Cv, 1); c.vline(13, 1, 5, Cv, 2)   # ribbon marker
+    c.put(12, 7, Cv, 1)
+    return c
 
 
-GLYPHS = {
-    "P": ("####.", "#...#", "#...#", "####.", "#....", "#....", "#...."),
-    # Straight left stem, round right side. Cutting every corner made this
-    # read as O at 1x.
-    "D": ("####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."),
-    "F": ("#####", "#....", "#....", "####.", "#....", "#....", "#...."),
+def marina():
+    c = Canvas()
+    c.vline(9, 1, 12, 'wood', 1)
+    poly(c, [(10, 2), (10, 11), (16.5, 11)], 'paint', 0)
+    poly(c, [(8, 3), (8, 11), (2, 11)], 'paint', 1)
+    c.dither(11, 7, 15, 10, 'paint', 1)
+    c.vline(8, 4, 10, 'paint', 2)
+    poly(c, [(1, 12), (17, 12), (15, 15), (3, 15)], 'roof', 1)
+    c.hline(2, 16, 12, 'roof', 0)
+    c.hline(3, 15, 15, 'roof', 3)
+    c.hline(2, 16, 13, 'paint', 1)
+    for x in range(0, 18):
+        c.put(x, 16 + (x % 4 == 0), 'glass', 1 if x % 3 else 0)
+    return c
+
+
+def mayor():
+    c = Canvas()
+    W = 'wall'
+    c.vline(8, 0, 4, 'wood', 2)
+    c.rect(9, 0, 12, 2, 'roof', 1); c.hline(9, 12, 0, 'roof', 0); c.put(12, 2, 'roof', 2)
+    # house body
+    c.rect(1, 8, 16, 16, W, 1)
+    c.vline(1, 8, 16, W, 0)
+    c.vline(16, 8, 16, W, 3)
+    poly(c, [(0, 8), (3, 5), (14, 5), (17, 8)], 'roofs', 1)
+    c.hline(3, 14, 5, 'roofs', 0)
+    # portico + pediment
+    for k in range(4):
+        c.hline(8 - k - 1, 9 + k + 1, 4 + k, W, 0 if k < 3 else 2)
+    c.put(8, 5, 'glass', 2); c.put(9, 5, 'glass', 2)
+    c.hline(4, 13, 8, W, 2)
+    for x in (5, 8, 10, 13):
+        c.vline(x, 9, 15, 'paint', 0)
+        c.vline(x + 1, 9, 15, W, 2)
+    c.rect(2, 10, 3, 12, 'glass', 1); c.rect(14, 10, 15, 12, 'glass', 2)
+    c.hline(0, 17, 16, W, 3)
+    c.hline(4, 13, 17, W, 2)
+    return c
+
+
+def prison():
+    c = Canvas()
+    S = 'stone'
+    c.rect(1, 6, 12, 16, S, 1)
+    c.vline(1, 6, 16, S, 0)
+    c.hline(1, 12, 6, S, 0)
+    for y in range(8, 16, 2):  # block courses
+        for x in range(2 + (y // 2) % 2 * 2, 12, 4):
+            c.put(x, y, S, 2)
+    c.rect(3, 8, 9, 13, 'ink', 0)
+    for x in (4, 6, 8):
+        c.vline(x, 8, 13, 'metal', 0)
+    c.hline(3, 9, 10, 'metal', 1)
+    # watchtower with lamp (yellow accent)
+    c.rect(13, 5, 15, 16, S, 2); c.vline(13, 5, 16, S, 1); c.vline(15, 5, 16, S, 3)
+    c.rect(12, 2, 16, 4, S, 1); c.hline(12, 16, 2, S, 0)
+    c.rect(13, 3, 15, 3, 'yellow', 0)
+    c.put(14, 1, S, 2)
+    c.hline(0, 16, 17, S, 3)
+    return c
+
+
+def zoo():
+    c = Canvas()
+    Y = 'yellow'
+    # legs
+    for x in (7, 9, 13, 15):
+        c.vline(x, 11, 16, Y, 2 if x in (9, 15) else 1)
+        c.put(x, 17, 'stone', 3)
+    # body
+    c.rect(7, 8, 15, 11, Y, 1)
+    c.hline(8, 15, 8, Y, 0)
+    c.hline(7, 15, 11, Y, 2)
+    c.put(16, 8, Y, 2); c.put(17, 9, Y, 2); c.put(17, 10, Y, 3)  # tail
+    # neck to the upper left
+    for k in range(7):
+        c.rect(5 + k // 2 - 0, 7 - k, 6 + k // 2 + 1, 7 - k, Y, 1)
+        c.put(5 + k // 2, 7 - k, Y, 0)
+    # head
+    c.rect(1, 1, 5, 3, Y, 1); c.hline(2, 5, 1, Y, 0); c.put(1, 3, Y, 2)
+    c.put(3, 0, 'stone', 3); c.put(5, 0, 'stone', 3)  # ossicones
+    c.put(3, 2, 'ink', 0)
+    # patches
+    for (x, y) in ((9, 9), (12, 9), (14, 10), (10, 10), (7, 6), (6, 4), (8, 3)):
+        c.put(x, y, Y, 3)
+    c.put(13, 8, Y, 3)
+    return c
+
+
+SPRITES = {
+    'bulldozer': (bulldozer, 'tool'), 'road': (road, 'transport'), 'rail': (rail, 'transport'),
+    'wire': (wire, 'utility'), 'park': (park, 'tool'), 'residential': (residential, 'res'),
+    'commercial': (commercial, 'com'), 'industrial': (industrial, 'ind'), 'police': (police, 'service'),
+    'fire': (fire, 'service'), 'stadium': (stadium, 'landmark'), 'seaport': (seaport, 'landmark'),
+    'coal': (coal, 'utility'), 'nuclear': (nuclear, 'utility'), 'airport': (airport, 'landmark'),
+    'special': (special, 'landmark'), 'query': (query, 'tool'),
+    'amusement': (amusement, 'landmark'), 'bigpark': (bigpark, 'landmark'), 'casino': (casino, 'landmark'),
+    'fountain': (fountain, 'landmark'), 'library': (library, 'landmark'), 'marina': (marina, 'landmark'),
+    'mayor': (mayor, 'landmark'), 'prison': (prison, 'landmark'), 'zoo': (zoo, 'landmark'),
+}
+TOOLBAR = ['bulldozer', 'road', 'rail', 'wire', 'park', 'residential', 'commercial', 'industrial',
+           'police', 'fire', 'stadium', 'seaport', 'coal', 'nuclear', 'airport', 'special', 'query']
+LANDMARKS = ['zoo', 'fountain', 'library', 'mayor', 'casino', 'amusement', 'prison', 'marina', 'bigpark']
+ACCENTS = {
+    'bulldozer': {'yellow'}, 'road': {'line', 'cone'}, 'rail': {'cone'}, 'wire': {'gold'},
+    'park': {'grass'}, 'residential': {'zr'}, 'commercial': {'zc'}, 'industrial': {'zi'},
+    'police': {'navy', 'roof'}, 'fire': {'roof'}, 'stadium': {'wood'}, 'seaport': {'navy'},
+    'coal': {'gold', 'brick'}, 'nuclear': {'gold'}, 'airport': {'navy'}, 'special': {'gold'},
+    'query': {'gold'}, 'amusement': {'roof'}, 'bigpark': {'grass'}, 'casino': {'roof'},
+    'fountain': {'glass'}, 'library': {'roof'}, 'marina': {'roof'}, 'mayor': {'roof'},
+    'prison': {'yellow'}, 'zoo': {'yellow'},
+}
+
+SEPIA = [hx(c) for c in ('#F6EEDC', '#D4C6A8', '#A49274', '#6C5C46')]
+STONE = [hx(c) for c in ('#C8BEAA', '#A89A82', '#82725A', '#5E4E3C')]
+ROOFS = [hx(c) for c in ('#B8AA92', '#94846C', '#72604A', '#4E4032')]
+SLATE = [hx(c) for c in ('#C4D2DC', '#8CA2B4', '#5E7488', '#3C4A5C')]
+ROAD = [hx(c) for c in ('#8E8272', '#786C5E', '#605648', '#483E34')]
+INK = hx('#2E241C')
+ZONE = {
+    'zr': [hx(c) for c in ('#8ECA68', '#3E8C36', '#28622C', '#1E4420')],
+    'zc': [hx(c) for c in ('#8AAAE8', '#3264B8', '#234686', '#182E62')],
+    'zi': [hx(c) for c in ('#F6DE78', '#E0BA42', '#B48A28', '#7C5C1C')],
 }
 
 
-def glyph2x(im, x, y, letter, color):
-    for row, bits in enumerate(GLYPHS[letter]):
-        for col, bit in enumerate(bits):
-            if bit == "#":
-                rect(im, x + col * 2, y + row * 2, 2, 2, color)
+def colour(name, mat, shade):
+    if mat == 'ink':
+        return INK
+    if mat in ZONE:
+        return ZONE[mat][shade]
+    if mat in ACCENTS[name]:
+        return mix(RAMPS[mat][shade], SEPIA[shade], 0.15)  # muted toward stone
+    if mat == 'asphalt':
+        return ROAD[shade]
+    if mat == 'glass':
+        return SLATE[shade]
+    if mat == 'roofs':
+        return ROOFS[shade]
+    if mat == 'stone':
+        return STONE[shade]
+    return SEPIA[shade]
 
 
-def _paint_shape(im, inside, fill, rim_hi, rim_mid, rim_lo):
-    mask = [[inside(x, y) for x in range(SIZE)] for y in range(SIZE)]
-    rim = [[0] * SIZE for _ in range(SIZE)]
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if not mask[y][x]:
+def render(name):
+    cv = SPRITES[name][0]()
+    img = Image.new('RGBA', (ICON, ICON), (0, 0, 0, 0))
+    for y in range(N):
+        for x in range(N):
+            p = cv.px[y][x]
+            if p is not None:
+                img.putpixel((x + 1, y + 1), colour(name, *p) + (255,))
+    for y in range(ICON):
+        for x in range(ICON):
+            sx, sy = x - 1, y - 1
+            if 0 <= sx < N and 0 <= sy < N and cv.px[sy][sx] is not None:
                 continue
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    nx, ny = x + dx, y + dy
-                    if not (0 <= nx < SIZE and 0 <= ny < SIZE and mask[ny][nx]):
-                        rim[y][x] = 1
-                        break
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if not mask[y][x] or rim[y][x]:
-                continue
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    nx, ny = x + dx, y + dy
-                    # Only the outer edge seeds the inner rim. Treating the
-                    # inner rim as an edge floods the whole badge.
-                    if 0 <= nx < SIZE and 0 <= ny < SIZE and rim[ny][nx] == 1:
-                        rim[y][x] = 2
-                        break
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if not mask[y][x]:
-                continue
-            if rim[y][x] == 1:
-                put(im, x, y, rim_hi if (x + y) < 40 else rim_lo)
-            elif rim[y][x] == 2:
-                put(im, x, y, rim_mid)
-            else:
-                put(im, x, y, fill)
-
-
-def _shield(x, y):
-    # Police shield: pointed bottom, and a bite out of each top corner
-    # deep enough that the 1px outline does not fill it back in.
-    if y < 4 or y > 34:
-        return False
-    if y <= 12:
-        half = 14
-    else:
-        half = int(round(14 * (34 - y) / 22.0))
-    if abs(x - 19) > half:
-        return False
-    if 5 <= y <= 8 and (x <= 19 - half + 4 or x >= 19 + half - 4):
-        return False
-    return True
-
-
-def _maltese(x, y):
-    # Fire badge: four arms, narrow at the waist and wider at a concave
-    # end. The tip is scooped, and the corners of that scoop are blunt.
-    dx = abs(x + 0.5 - 19.5)
-    dy = abs(y + 0.5 - 19.5)
-    along, across = (dx, dy) if dx >= dy else (dy, dx)
-    if min(dx, dy) > 6.2 and max(dx, dy) < min(dx, dy) * 1.85:
-        return False
-    if along > 17.2:
-        return False
-    half = 5.2 + along * 0.22
-    if half > 9.0:
-        half = 9.0
-    if across > half:
-        return False
-    edge = half * 0.82
-    if across >= edge:
-        reach = 15.6
-    else:
-        t = 0 if edge <= 0 else across / edge
-        reach = 17.2 - 1.8 * (1 - t * t)
-    return along <= reach
-
-
-def police(im):
-    # Blue field, gold rim. White PD sits in the field, not on the rim.
-    _paint_shape(im, _shield, "U", "y", "Y", "d")
-    glyph2x(im, 9, 12, "P", "W")
-    glyph2x(im, 21, 12, "D", "W")
-
-
-def fire(im):
-    # Red cross, gold outline, small red disc for the letters.
-    _paint_shape(im, _maltese, "R", "y", "Y", "d")
-    disc(im, 20, 20, 10, 8, "Y")
-    disc(im, 20, 20, 8, 6, "n")
-    disc(im, 20, 20, 7, 5, "R")
-    glyph2x(im, 10, 13, "F", "W")
-    glyph2x(im, 22, 13, "D", "W")
-
-
-def stadium(im):
-    # Side profile, facemask to the right. The jaw and the cage keep it
-    # from reading as a ball at 1x.
-    shell = {
-        4: (16, 22),
-        5: (13, 25),
-        6: (11, 27),
-        7: (9, 28),
-        8: (7, 29),
-        9: (6, 29),
-        10: (5, 28),
-        11: (5, 26),
-        12: (4, 24),
-        13: (4, 23),
-        14: (4, 22),
-        15: (4, 22),
-        16: (5, 22),
-        17: (5, 22),
-        18: (5, 22),
-        19: (5, 23),
-        20: (6, 24),
-        21: (6, 25),
-        22: (7, 26),
-        23: (8, 27),
-        24: (9, 27),
-        25: (11, 26),
-        26: (13, 24),
-        27: (15, 22),
-    }
-    for y, (x0, x1) in shell.items():
-        hline(im, x0, y, x1 - x0 + 1, "U")
-        put(im, x0, y, "u")
-        put(im, x1, y, "b")
-    # Stripe over the crown, from the back of the shell to the brow.
-    for y, x0, x1 in (
-        (4, 17, 21),
-        (5, 15, 23),
-        (6, 13, 25),
-        (7, 12, 26),
-        (8, 14, 24),
-        (9, 16, 22),
-    ):
-        hline(im, x0, y, x1 - x0 + 1, "W")
-    # Ear hole.
-    disc(im, 12, 17, 4, 4, "N")
-    disc(im, 12, 17, 2, 2, "B")
-    # Facemask: clips at the brow and the jaw, three bars, a vertical cage.
-    rect(im, 26, 9, 4, 3, "G")
-    rect(im, 24, 23, 4, 3, "G")
-    for y in (11, 16, 21):
-        rect(im, 28, y, 8, 2, "B")
-        hline(im, 28, y, 8, "W")
-    rect(im, 35, 11, 2, 12, "B")
-    vline(im, 36, 11, 12, "W")
-
-
-def seaport(im):
-    rect(im, 1, 22, 38, 16, "Q")
-    hline(im, 1, 22, 38, "q")
-    hline(im, 2, 26, 34, "u")
-    hline(im, 4, 32, 30, "b")
-    rect(im, 4, 16, 24, 10, "N")
-    hline(im, 6, 16, 20, "G")
-    hline(im, 4, 25, 24, "B")
-    put(im, 3, 20, "s")
-    put(im, 28, 20, "s")
-    rect(im, 6, 11, 7, 5, "R")
-    rect(im, 14, 11, 7, 5, "U")
-    hline(im, 6, 11, 7, "r")
-    hline(im, 14, 11, 7, "u")
-    rect(im, 22, 8, 7, 8, "W")
-    rect(im, 24, 10, 3, 3, "u")
-    rect(im, 24, 4, 3, 4, "O")
-    disc(im, 25, 3, 3, 2, "M")
-    put(im, 28, 2, "F")
-    vline(im, 34, 14, 16, "T")
-    vline(im, 37, 12, 18, "t")
-    hline(im, 32, 14, 6, "H")
-
-
-def power_hall(im):
-    # Shared factory. Stacks are drawn to the right of x=21, so this hall
-    # stays identical on the coal and nuclear icons.
-    rect(im, 1, 20, 20, 16, "s")
-    hline(im, 1, 20, 20, "G")
-    hline(im, 1, 35, 20, "B")
-    rect(im, 1, 16, 20, 4, "N")
-    hline(im, 1, 16, 20, "G")
-    hline(im, 1, 19, 20, "B")
-    rect(im, 3, 23, 5, 4, "Y")
-    hline(im, 3, 23, 5, "y")
-    rect(im, 10, 23, 5, 4, "o")
-    hline(im, 10, 23, 5, "Y")
-    rect(im, 15, 27, 4, 8, "T")
-    vline(im, 15, 27, 8, "t")
-    put(im, 17, 30, "y")
-
-
-def coal(im):
-    power_hall(im)
-    # Coal pile beside the stack. Stays on x >= 22 so the shared hall matches.
-    disc(im, 25, 33, 3, 2, "B")
-    disc(im, 27, 32, 3, 2, "N")
-    put(im, 24, 33, "s")
-    put(im, 26, 31, "s")
-    # Smokestack.
-    rect(im, 28, 10, 6, 24, "g")
-    vline(im, 28, 10, 24, "G")
-    vline(im, 33, 10, 24, "B")
-    rect(im, 27, 8, 8, 3, "N")
-    hline(im, 27, 8, 8, "G")
-    # Dark grey puffs, the same cloud shape as the nuclear steam.
-    disc(im, 31, 5, 4, 3, "s")
-    disc(im, 35, 2, 3, 2, "M")
-    disc(im, 26, 4, 3, 2, "N")
-    disc(im, 30, 1, 2, 1, "s")
-    put(im, 33, 4, "B")
-
-
-def nuclear(im):
-    power_hall(im)
-    # Cooling tower: wide lip, narrow waist, wide base. White steam on top.
-    halves = (8, 7, 6, 5, 5, 4, 4, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8)
-    for i, half in enumerate(halves):
-        y = 10 + i
-        color = "W" if i == 0 else "C" if i < 12 else "Z"
-        hline(im, 31 - half, y, half * 2, color)
-        put(im, 31 - half, y, "G")
-        put(im, 30 + half, y, "s")
-    hline(im, 23, 26, 16, "s")
-    hline(im, 22, 27, 18, "N")
-    rect(im, 26, 2, 9, 6, "W")
-    rect(im, 32, 0, 6, 4, "F")
-    rect(im, 23, 4, 5, 3, "W")
-    # Radiation mark to the left of the tower base, still off the shared hall.
-    for x, y in ((23, 22), (24, 21), (25, 22), (24, 23), (22, 23), (25, 24), (23, 24)):
-        put(im, x, y, "Y")
-    put(im, 24, 22, "B")
-
-
-def airport(im):
-    rect(im, 1, 1, 38, 38, "e")
-    rect(im, 3, 26, 34, 10, "g")
-    hline(im, 3, 26, 34, "G")
-    hline(im, 3, 35, 34, "N")
-    for x in (6, 13, 20, 27, 33):
-        rect(im, x, 30, 3, 2, "Y")
-    vline(im, 20, 26, 10, "W")
-    # Airplane, seen from above.
-    rect(im, 17, 4, 6, 20, "W")
-    vline(im, 17, 6, 16, "w")
-    vline(im, 22, 6, 16, "G")
-    disc(im, 20, 5, 3, 3, "W")
-    rect(im, 18, 6, 4, 3, "u")
-    rect(im, 3, 10, 34, 6, "W")
-    hline(im, 3, 10, 34, "q")
-    hline(im, 4, 15, 32, "G")
-    rect(im, 8, 12, 5, 3, "U")
-    rect(im, 27, 12, 5, 3, "U")
-    rect(im, 14, 20, 12, 4, "W")
-    hline(im, 14, 23, 12, "s")
-    rect(im, 18, 3, 4, 3, "R")
-
-
-def query(im):
-    disc(im, 15, 15, 12, 12, "S")
-    disc(im, 15, 15, 10, 10, "N")
-    disc(im, 15, 15, 7, 7, "q")
-    disc(im, 15, 15, 5, 5, "W")
-    put(im, 11, 11, "u")
-    put(im, 12, 11, "W")
-    put(im, 11, 12, "W")
-    for i in range(12):
-        put(im, 22 + i, 22 + i, "T")
-        put(im, 23 + i, 22 + i, "H")
-        put(im, 22 + i, 23 + i, "t")
-    put(im, 34, 34, "A")
-    put(im, 33, 34, "Y")
-
-
-def _in_star(x, y):
-    cx, cy = 19.5, 19.5
-    outer, inner = 17.2, 8.4
-    pts = []
-    for i in range(5):
-        outer_a = -math.pi / 2 + i * 2 * math.pi / 5
-        inner_a = outer_a + math.pi / 5
-        pts.append((cx + outer * math.cos(outer_a), cy + outer * math.sin(outer_a)))
-        pts.append((cx + inner * math.cos(inner_a), cy + inner * math.sin(inner_a)))
-    inside = False
-    j = len(pts) - 1
-    for i, (px, py) in enumerate(pts):
-        qx, qy = pts[j]
-        if ((py > y) != (qy > y)) and (x < (qx - px) * (y - py) / ((qy - py) or 1e-6) + px):
-            inside = not inside
-        j = i
-    return inside
-
-
-def special(im):
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if not _in_star(x + 0.5, y + 0.5):
-                continue
-            if y < 16 and x < 22:
-                put(im, x, y, "y")
-            elif y > 24:
-                put(im, x, y, "d")
-            else:
-                put(im, x, y, "Y")
-
-
-def zoo(im):
-    rect(im, 1, 22, 38, 16, "E")
-    hline(im, 1, 22, 38, "e")
-    rect(im, 4, 24, 32, 10, "D")
-    hline(im, 4, 28, 32, "T")
-    rect(im, 6, 16, 10, 12, "H")
-    hline(im, 6, 16, 10, "D")
-    rect(im, 8, 18, 5, 4, "u")
-    rect(im, 8, 24, 4, 4, "T")
-    # Elephant: body, head, trunk, ear. Blocky, not a circle.
-    rect(im, 18, 20, 12, 8, "g")
-    rect(im, 28, 18, 6, 6, "G")
-    rect(im, 30, 16, 3, 3, "S")
-    vline(im, 33, 22, 6, "s")
-    vline(im, 34, 24, 6, "N")
-    rect(im, 16, 18, 4, 5, "s")
-    rect(im, 20, 26, 2, 4, "N")
-    rect(im, 26, 26, 2, 4, "N")
-    rect(im, 22, 14, 6, 4, "e")
-    rect(im, 20, 12, 4, 3, "L")
-
-
-def bigpark(im):
-    rect(im, 1, 24, 38, 14, "E")
-    hline(im, 1, 24, 38, "e")
-    rect(im, 6, 28, 28, 3, "D")
-    rect(im, 8, 18, 4, 10, "T")
-    rect(im, 26, 16, 4, 12, "T")
-    rect(im, 2, 12, 14, 8, "E")
-    rect(im, 4, 8, 10, 6, "e")
-    rect(im, 10, 10, 6, 4, "L")
-    rect(im, 22, 8, 14, 8, "E")
-    rect(im, 24, 5, 8, 6, "e")
-    rect(im, 30, 10, 6, 4, "f")
-    rect(im, 18, 30, 4, 3, "T")
-    rect(im, 14, 26, 3, 2, "R")
-    rect(im, 32, 28, 3, 2, "Y")
-
-
-def library(im):
-    # Columned hall and a book. A triangular blue pediment read as the letter F.
-    rect(im, 0, 32, 40, 7, "E")
-    hline(im, 0, 32, 40, "e")
-    for x in range(2, 38, 7):
-        put(im, x, 35, "f")
-        put(im, x + 3, 37, "L")
-    rect(im, 5, 29, 30, 4, "G")
-    hline(im, 5, 29, 30, "W")
-    hline(im, 5, 32, 30, "s")
-    rect(im, 7, 17, 26, 13, "w")
-    hline(im, 7, 17, 26, "W")
-    for x in (8, 15, 22, 29):
-        rect(im, x, 18, 3, 12, "W")
-        vline(im, x, 18, 12, "G")
-        vline(im, x + 2, 18, 12, "s")
-    # Open book between the middle columns.
-    rect(im, 18, 19, 4, 6, "R")
-    vline(im, 18, 19, 6, "y")
-    hline(im, 19, 20, 3, "W")
-    hline(im, 19, 22, 3, "w")
-    hline(im, 19, 23, 3, "W")
-    rect(im, 18, 26, 4, 4, "T")
-    # Flat stone lintel and a flat blue roof. No tapering banner.
-    rect(im, 5, 14, 30, 3, "H")
-    hline(im, 5, 14, 30, "D")
-    hline(im, 5, 16, 30, "t")
-    rect(im, 7, 9, 26, 5, "U")
-    hline(im, 7, 9, 26, "u")
-    hline(im, 7, 13, 26, "b")
-    # Closed book standing on the roof.
-    rect(im, 16, 4, 8, 5, "n")
-    vline(im, 16, 4, 5, "y")
-    hline(im, 17, 5, 6, "W")
-    hline(im, 17, 6, 6, "w")
-    hline(im, 17, 7, 6, "W")
-
-
-ICONS = [
-    ("bulldozer", bulldozer),
-    ("road", road),
-    ("rail", rail),
-    ("wire", wire),
-    ("park", park),
-    ("residential", residential),
-    ("commercial", commercial),
-    ("industrial", industrial),
-    ("police", police),
-    ("fire", fire),
-    ("stadium", stadium),
-    ("seaport", seaport),
-    ("coal", coal),
-    ("nuclear", nuclear),
-    ("airport", airport),
-    ("special", special),
-    ("query", query),
-    ("zoo", zoo),
-    ("bigpark", bigpark),
-    ("library", library),
-]
-
-
-def write_png(path, width, height, rgba_rows):
-    def chunk(tag, payload):
-        body = tag + payload
-        return struct.pack(">I", len(payload)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
-
-    raw = b"".join(b"\x00" + row for row in rgba_rows)
-    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
-    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
-    path.write_bytes(png)
-
-
-def to_rgba(im):
-    rows = []
-    for y in range(SIZE):
-        row = bytearray()
-        for x in range(SIZE):
-            color = im[y][x]
-            if color == ".":
-                row += b"\x00\x00\x00\x00"
-            else:
-                r, g, b = PALETTE[color]
-                row += bytes((r, g, b, 255))
-        rows.append(bytes(row))
-    return rows
-
-
-# The Classic Zoo, Big Park and Library icons are cut 4..44 from the
-# hand-drawn Classic sheets in data/special-tiles/ (like the Mayor's House,
-# Casino and Amusement Park), so this script does not overwrite them.
-# The SVGA and Spooky icons, including bigpark-spooky.png, are cut from the
-# hand-authored sheets and are not written here either.
-CUT_FROM_SHEET = ("zoo", "bigpark", "library")
-# Prison, Marina, and Fountain icons are cut from the editor-approved sheets.
-HAND_AUTHORED = ("prison", "marina", "fountain")
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = sx + dx, sy + dy
+                if 0 <= nx < N and 0 <= ny < N and cv.px[ny][nx] is not None and (nx, ny) not in cv.hard:
+                    img.putpixel((x, y), INK + (255,))
+                    break
+    return img.resize((ICON * SCALE, ICON * SCALE), Image.NEAREST)
 
 
 def main():
-    drawn = {}
-    for name, draw in ICONS:
-        im = outlined(draw)
-        drawn[name] = im
-        if name in CUT_FROM_SHEET or name in HAND_AUTHORED:
-            continue
-        write_png(ROOT / f"{name}.png", SIZE, SIZE, to_rgba(im))
-    coal_im = drawn["coal"]
-    nuclear_im = drawn["nuclear"]
-    for y in range(SIZE):
-        for x in range(22):
-            if coal_im[y][x] != nuclear_im[y][x]:
-                raise SystemExit(f"power hall differs at {x},{y}: {coal_im[y][x]} vs {nuclear_im[y][x]}")
-    check_road_and_rail(drawn["road"], drawn["rail"])
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument('--out', type=pathlib.Path, help='write PNGs here instead of beside this script')
+    ap.add_argument('--check', action='store_true', help='fail if a committed PNG differs')
+    args = ap.parse_args()
+    out = args.out or ROOT
+    out.mkdir(parents=True, exist_ok=True)
+    bad = []
+    for name in TOOLBAR + LANDMARKS:
+        img = render(name)
+        if args.check:
+            path = ROOT / f'{name}.png'
+            try:
+                have = Image.open(path).convert('RGBA')
+            except OSError:
+                bad.append(name)
+                continue
+            if have.size != img.size or have.tobytes() != img.tobytes():
+                bad.append(name)
+        else:
+            img.save(out / f'{name}.png', optimize=True)
+    if bad:
+        print('icons differ from the generator: ' + ', '.join(bad), file=sys.stderr)
+        return 1
+    print(f'{len(TOOLBAR) + len(LANDMARKS)} icons ' + ('match' if args.check else f'written to {out}'))
+    return 0
 
 
-def check_road_and_rail(road, rail):
-    """The yellow dashes sit on the exact middle row of the road band."""
-    rows = sorted({y for y in range(SIZE) for x in range(SIZE) if road[y][x] == "Y"})
-    if len(rows) not in (1, 2) or rows[-1] - rows[0] != len(rows) - 1:
-        raise SystemExit(f"road centre line is not a 1-2px band: {rows}")
-    column = next(x for x in range(SIZE) if road[rows[0]][x] == "Y")
-    painted = [y for y in range(SIZE) if road[y][column] != "."]
-    above = rows[0] - painted[0]
-    below = painted[-1] - rows[-1]
-    if above != below or above < 1:
-        raise SystemExit(f"road centre line is off-centre: {above}px above, {below}px below")
-    def band(im):
-        ys = [y for y in range(SIZE) if any(im[y][x] != "." for x in range(SIZE))]
-        return ys[0], ys[-1]
-
-    road_top, road_bot = band(road)
-    rail_top, rail_bot = band(rail)
-    if road_bot - road_top != rail_bot - rail_top:
-        raise SystemExit(
-            f"road and rail bands differ: road {road_top}-{road_bot}, rail {rail_top}-{rail_bot}"
-        )
-    for name, im in (("road", road), ("rail", rail)):
-        if not any(im[y][0] != "." for y in range(SIZE)) or not any(im[y][SIZE - 1] != "." for y in range(SIZE)):
-            raise SystemExit(f"{name} does not run from the left edge to the right edge")
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    sys.exit(main())

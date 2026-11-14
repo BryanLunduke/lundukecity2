@@ -516,34 +516,9 @@ struct ChartPlate {
     bool night = false;
 };
 
-inline ChartPlate chart_plate(int look)
+inline ChartPlate chart_plate()
 {
     ChartPlate plate;
-    if (look == 2) {
-        plate.paper_r = 48.0 / 255.0;
-        plate.paper_g = 32.0 / 255.0;
-        plate.paper_b = 24.0 / 255.0;
-        plate.ink_r = 255.0 / 255.0;
-        plate.ink_g = 224.0 / 255.0;
-        plate.ink_b = 160.0 / 255.0;
-        plate.grid_r = 255.0 / 255.0;
-        plate.grid_g = 190.0 / 255.0;
-        plate.grid_b = 96.0 / 255.0;
-        plate.night = true;
-        return plate;
-    }
-    if (look == 1) {
-        plate.paper_r = 214.0 / 255.0;
-        plate.paper_g = 226.0 / 255.0;
-        plate.paper_b = 240.0 / 255.0;
-        plate.ink_r = 16.0 / 255.0;
-        plate.ink_g = 24.0 / 255.0;
-        plate.ink_b = 64.0 / 255.0;
-        plate.grid_r = 16.0 / 255.0;
-        plate.grid_g = 32.0 / 255.0;
-        plate.grid_b = 80.0 / 255.0;
-        return plate;
-    }
     plate.paper_r = 245.0 / 255.0;
     plate.paper_g = 236.0 / 255.0;
     plate.paper_b = 214.0 / 255.0;

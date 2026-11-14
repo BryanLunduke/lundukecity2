@@ -179,18 +179,10 @@ int main()
         return fail("population change should show both years");
     }
 
-    theme::set_chrome_look(0);
-    if (theme::enhanced_chrome()) {
-        return fail("Classic chrome must stay on the existing materials");
+    // Looks only change tiles; the interface keeps the standard selection.
+    if (theme::chrome_select_r() != theme::kSelectR || theme::chrome_select_b() != theme::kSelectB ||
+        theme::chrome_hover_b() != theme::kHoverB) {
+        return fail("interface chrome must stay on the standard materials");
     }
-    theme::set_chrome_look(1);
-    if (!theme::enhanced_chrome() || theme::chrome_select_r() != 0.0 || theme::chrome_select_b() != 170.0 / 255.0) {
-        return fail("SVGA chrome should use VGA blue");
-    }
-    theme::set_chrome_look(2);
-    if (!theme::enhanced_chrome() || theme::chrome_select_r() != 170.0 / 255.0 || theme::chrome_select_g() != 85.0 / 255.0) {
-        return fail("Spooky chrome should use VGA orange");
-    }
-    theme::set_chrome_look(0);
     return 0;
 }

@@ -327,9 +327,25 @@ int main()
     if (picked_svga.drawn(false, true) != 0 || picked_svga.setting() != 1) {
         return fail("picking SVGA with no sheet must not store Classic");
     }
-    const ui_scale::LookPreference picked_classic;
+    ui_scale::LookPreference picked_classic;
+    picked_classic.look = 0;
     if (picked_classic.setting() != 0 || picked_classic.drawn(true, true) != 0) {
         return fail("picking Classic must store Classic");
+    }
+    // A new install starts in SVGA. A saved choice, Classic included, stays.
+    const ui_scale::LookPreference fresh;
+    if (fresh.setting() != 1 || fresh.drawn(true, true) != 1) {
+        return fail("a new install must default to SVGA");
+    }
+    if (ui_scale::look_from_setting(-1) != ui_scale::Look::Svga ||
+        ui_scale::look_from_setting(0) != ui_scale::Look::Classic ||
+        ui_scale::look_from_setting(1) != ui_scale::Look::Svga ||
+        ui_scale::look_from_setting(2) != ui_scale::Look::Spooky) {
+        return fail("a stored look setting was not respected");
+    }
+    if (ui_scale::settings_parse("ui_scale=1\n").look != -1 ||
+        ui_scale::settings_parse("look=0\n").look != 0) {
+        return fail("look must stay absent unless the file names one");
     }
     if (stored_svga.drawn(true, false) != 1) {
         return fail("SVGA should be drawn when the sheet is ready");

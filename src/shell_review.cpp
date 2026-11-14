@@ -2418,17 +2418,10 @@ void Shell::run_review_checks()
             fail("a bridge without the funds was not marked short");
             return;
         }
-        theme::set_chrome_look(0);
-        if (theme::enhanced_chrome()) {
-            fail("Classic gained the enhanced chrome");
+        if (theme::chrome_select_b() != theme::kSelectB) {
+            fail("the interface chrome follows the tile look");
             return;
         }
-        theme::set_chrome_look(1);
-        if (!theme::enhanced_chrome() || theme::chrome_select_b() != 170.0 / 255.0) {
-            fail("SVGA chrome is not VGA blue");
-            return;
-        }
-        theme::set_chrome_look(drawn_look_);
         const civic::Advice crime = civic::advice_for(0);
         if (crime.layer != static_cast<int>(CitySession::MapLayer::Crime) ||
             std::string(crime.body).find("does not prove") == std::string::npos) {

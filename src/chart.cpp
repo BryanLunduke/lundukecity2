@@ -134,7 +134,7 @@ std::string chart_funds_line(CitySession *session)
 std::vector<ChartLegend> chart_legend(CitySession *session, bool long_scale)
 {
     SeriesSpec specs[kGraphSeriesCount];
-    fill_series(specs, chart_plate(theme::chrome_look()).night);
+    fill_series(specs, chart_plate().night);
     const auto scale = long_scale ? CitySession::HistoryScale::Long : CitySession::HistoryScale::Short;
     std::vector<ChartLegend> out;
     const std::int64_t census = session != nullptr ? session->evaluation().population : 0;
@@ -183,7 +183,7 @@ void draw_history_chart(cairo_t *cr, CitySession *session, bool long_scale, int 
     if (width < 20 || height < 20) {
         return;
     }
-    const ChartPlate plate = chart_plate(theme::chrome_look());
+    const ChartPlate plate = chart_plate();
     cairo_set_source_rgb(cr, plate.paper_r, plate.paper_g, plate.paper_b);
     cairo_rectangle(cr, 0, 0, width, height);
     cairo_fill(cr);

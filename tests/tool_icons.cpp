@@ -26,21 +26,10 @@ int fail(const std::string &message)
     return 1;
 }
 
-bool is_opaque(const unsigned char *pixel)
-{
-    return pixel[3] > 200;
-}
-
-// Cairo ARGB32 is native-endian B, G, R, A. The road dashes are yellow.
-bool is_yellow(const unsigned char *pixel)
-{
-    return pixel[3] > 200 && pixel[2] > 200 && pixel[1] > 140 && pixel[0] < 80;
-}
-
 const char *kNames[] = {
     "bulldozer", "road",    "rail",    "wire",     "park",      "residential", "commercial", "industrial",
     "police",    "fire",    "stadium", "seaport",  "coal",      "nuclear",     "airport",    "special",
-    "query",
+    "query", "zoo", "bigpark", "library", "mayor", "casino", "amusement", "prison", "marina", "fountain",
 };
 
 const char *kMenuIcons[] = {"zoo", "bigpark", "library"};
@@ -54,6 +43,11 @@ int main()
         const std::string path = ui_data_file(std::string("tool-icons/") + name + ".png");
         if (path.empty()) {
             return fail(std::string("missing toolbar icon ") + name);
+        }
+        for (const char *look : {"-svga", "-spooky"}) {
+            if (!ui_data_file(std::string("tool-icons/") + name + look + ".png").empty()) {
+                return fail(std::string("a per-look toolbar icon is still present for ") + name);
+            }
         }
         cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
         if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
@@ -95,8 +89,7 @@ int main()
             }
         }
         cairo_surface_destroy(surface);
-        // A glyph keeps a transparent margin. A full-bleed scene (the airport)
-        // covers the canvas instead, and still has to be more than one flat color.
+        // Outlined objects keep transparent space and several engraved shades.
         if (opaque < 400 || colors < 4 || (transparent < 8 && opaque < 1200)) {
             return fail(std::string(name) + " does not have a drawn silhouette");
         }
@@ -197,22 +190,6 @@ int main()
         }
         cairo_surface_destroy(surface);
     }
-    const char *kNewIcons[] = {"prison", "marina", "fountain"};
-    const char *kLooks[] = {"", "-svga", "-spooky"};
-    for (const char *name : kNewIcons) {
-        for (const char *look : kLooks) {
-            const std::string file = std::string(name) + look + ".png";
-            cairo_surface_t *surface = load_png(std::string("tool-icons/") + file);
-            if (surface == nullptr || cairo_image_surface_get_width(surface) != 40 ||
-                cairo_image_surface_get_height(surface) != 40) {
-                if (surface != nullptr) {
-                    cairo_surface_destroy(surface);
-                }
-                return fail(std::string("missing special-building icon ") + file);
-            }
-            cairo_surface_destroy(surface);
-        }
-    }
     struct SheetExpect {
         const char *name;
         int size;
@@ -244,184 +221,7 @@ int main()
         }
         cairo_surface_destroy(surface);
     }
-    cairo_surface_t *coal = load_png("tool-icons/coal.png");
-    cairo_surface_t *nuclear = load_png("tool-icons/nuclear.png");
-    if (coal == nullptr || nuclear == nullptr) {
-        if (coal != nullptr) {
-            cairo_surface_destroy(coal);
-        }
-        if (nuclear != nullptr) {
-            cairo_surface_destroy(nuclear);
-        }
-        return fail("coal and nuclear icons did not load together");
-    }
-    cairo_surface_flush(coal);
-    cairo_surface_flush(nuclear);
-    const unsigned char *coal_px = cairo_image_surface_get_data(coal);
-    const unsigned char *nuclear_px = cairo_image_surface_get_data(nuclear);
-    const int coal_stride = cairo_image_surface_get_stride(coal);
-    const int nuclear_stride = cairo_image_surface_get_stride(nuclear);
-    bool hall_matches = true;
-    for (int y = 0; y < 40 && hall_matches; ++y) {
-        for (int x = 0; x < 22; ++x) {
-            const unsigned char *a = coal_px + y * coal_stride + x * 4;
-            const unsigned char *b = nuclear_px + y * nuclear_stride + x * 4;
-            if (a[0] != b[0] || a[1] != b[1] || a[2] != b[2] || a[3] != b[3]) {
-                hall_matches = false;
-                break;
-            }
-        }
-    }
-    cairo_surface_destroy(coal);
-    cairo_surface_destroy(nuclear);
-    if (!hall_matches) {
-        return fail("coal and nuclear do not share the same power hall");
-    }
-    cairo_surface_t *road = load_png("tool-icons/road.png");
-    cairo_surface_t *rail = load_png("tool-icons/rail.png");
-    if (road == nullptr || rail == nullptr) {
-        if (road != nullptr) {
-            cairo_surface_destroy(road);
-        }
-        if (rail != nullptr) {
-            cairo_surface_destroy(rail);
-        }
-        return fail("road and rail icons did not load together");
-    }
-    cairo_surface_flush(road);
-    cairo_surface_flush(rail);
-    const unsigned char *road_px = cairo_image_surface_get_data(road);
-    const unsigned char *rail_px = cairo_image_surface_get_data(rail);
-    const int road_stride = cairo_image_surface_get_stride(road);
-    const int rail_stride = cairo_image_surface_get_stride(rail);
-    auto at = [](const unsigned char *px, int stride, int x, int y) { return px + y * stride + x * 4; };
-    int yellow_top = 40;
-    int yellow_bot = -1;
-    int yellow_col = -1;
-    for (int y = 0; y < 40; ++y) {
-        for (int x = 0; x < 40; ++x) {
-            if (!is_yellow(at(road_px, road_stride, x, y))) {
-                continue;
-            }
-            yellow_top = std::min(yellow_top, y);
-            yellow_bot = std::max(yellow_bot, y);
-            yellow_col = x;
-        }
-    }
-    const int yellow_h = yellow_bot - yellow_top + 1;
-    if (yellow_col < 0 || yellow_h < 1 || yellow_h > 2) {
-        cairo_surface_destroy(road);
-        cairo_surface_destroy(rail);
-        return fail("the road centre line is not a 1px or 2px yellow band");
-    }
-    int road_top = 40;
-    int road_bot = -1;
-    for (int y = 0; y < 40; ++y) {
-        if (!is_opaque(at(road_px, road_stride, yellow_col, y))) {
-            continue;
-        }
-        road_top = std::min(road_top, y);
-        road_bot = std::max(road_bot, y);
-    }
-    const int above = yellow_top - road_top;
-    const int below = road_bot - yellow_bot;
-    if (above != below || above < 1) {
-        std::cerr << "road centre above " << above << " below " << below << "\n";
-        cairo_surface_destroy(road);
-        cairo_surface_destroy(rail);
-        return fail("the road centre line is not vertically centred");
-    }
-    auto band = [&](const unsigned char *px, int stride, int &top, int &bot, bool &left, bool &right) {
-        top = 40;
-        bot = -1;
-        left = false;
-        right = false;
-        for (int y = 0; y < 40; ++y) {
-            for (int x = 0; x < 40; ++x) {
-                if (!is_opaque(at(px, stride, x, y))) {
-                    continue;
-                }
-                top = std::min(top, y);
-                bot = std::max(bot, y);
-                if (x == 0) {
-                    left = true;
-                }
-                if (x == 39) {
-                    right = true;
-                }
-            }
-        }
-    };
-    int road_band_top = 0;
-    int road_band_bot = 0;
-    int rail_band_top = 0;
-    int rail_band_bot = 0;
-    bool road_left = false;
-    bool road_right = false;
-    bool rail_left = false;
-    bool rail_right = false;
-    band(road_px, road_stride, road_band_top, road_band_bot, road_left, road_right);
-    band(rail_px, rail_stride, rail_band_top, rail_band_bot, rail_left, rail_right);
-    cairo_surface_destroy(road);
-    cairo_surface_destroy(rail);
-    if (!road_left || !road_right || !rail_left || !rail_right) {
-        return fail("road and rail icons do not both run from left to right");
-    }
-    if (road_band_bot - road_band_top != rail_band_bot - rail_band_top) {
-        return fail("road and rail icons are not the same width");
-    }
-    // PD and FD are the only near-white pixels. Each letter pixel keeps a
-    // one-pixel gap inside the gold rim and the dark outline, corners included.
-    auto same = [](const unsigned char *p, int r, int g, int b) {
-        return p[3] == 255 && p[2] == r && p[1] == g && p[0] == b;
-    };
-    auto is_letter = [&](const unsigned char *p) { return same(p, 248, 246, 240); };
-    auto is_rim = [&](const unsigned char *p) {
-        return same(p, 236, 184, 32) || same(p, 255, 226, 120) || same(p, 176, 120, 16) || same(p, 22, 16, 12);
-    };
-    for (const char *name : {"police", "fire"}) {
-        cairo_surface_t *badge = load_png(std::string("tool-icons/") + name + ".png");
-        if (badge == nullptr) {
-            return fail(std::string("missing badge icon ") + name);
-        }
-        cairo_surface_flush(badge);
-        const unsigned char *badge_px = cairo_image_surface_get_data(badge);
-        const int badge_stride = cairo_image_surface_get_stride(badge);
-        int letters = 0;
-        int min_x = 40;
-        int min_y = 40;
-        int max_x = -1;
-        int max_y = -1;
-        bool touches = false;
-        for (int y = 0; y < 40; ++y) {
-            for (int x = 0; x < 40; ++x) {
-                if (!is_letter(at(badge_px, badge_stride, x, y))) {
-                    continue;
-                }
-                ++letters;
-                min_x = std::min(min_x, x);
-                min_y = std::min(min_y, y);
-                max_x = std::max(max_x, x);
-                max_y = std::max(max_y, y);
-                for (int dy = -1; dy <= 1 && !touches; ++dy) {
-                    for (int dx = -1; dx <= 1; ++dx) {
-                        const int xx = x + dx;
-                        const int yy = y + dy;
-                        if (xx < 0 || yy < 0 || xx >= 40 || yy >= 40 || is_rim(at(badge_px, badge_stride, xx, yy))) {
-                            touches = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        cairo_surface_destroy(badge);
-        if (letters < 20 || touches) {
-            return fail(std::string(name) + " letters touch the badge rim");
-        }
-        if (max_x - min_x + 1 < 14 || max_y - min_y + 1 < 9) {
-            return fail(std::string(name) + " letters are smaller than 14x9");
-        }
-    }
+    // The previous set used matching halls, road/rail strips, and PD/FD letters.
+    // This set uses distinct objects; the generator check covers exact pixels.
     return 0;
 }

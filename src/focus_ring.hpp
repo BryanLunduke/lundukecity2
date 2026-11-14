@@ -6,8 +6,7 @@
 
 // Slider focus is a double ring. The dark outer stroke stays visible on the
 // light dialog body. The inner stroke stays visible on the coloured fill.
-// Classic and SVGA keep the orange inner stroke. Spooky uses white, because
-// an orange inner stroke would sit on the orange fill.
+// The standard blue fill and orange inner stroke are shared by all tile looks.
 
 struct Rgb8 {
     int r = 0;
@@ -25,22 +24,12 @@ inline Rgb8 dialog_body_rgb()
     return Rgb8{0xED, 0xEC, 0xEB};
 }
 
-inline Rgb8 slider_fill_rgb(int look)
+inline Rgb8 slider_fill_rgb()
 {
-    if (look == 2) {
-        return Rgb8{176, 96, 32};
-    }
     return Rgb8{0x4A, 0x7A, 0xBB};
 }
 
-inline SliderFocusRing slider_focus_ring(int look)
+inline SliderFocusRing slider_focus_ring()
 {
-    SliderFocusRing ring;
-    ring.outer = Rgb8{0, 0, 0};
-    if (look == 2) {
-        ring.inner = Rgb8{255, 255, 255};
-    } else {
-        ring.inner = Rgb8{0xE6, 0x6A, 0x00};
-    }
-    return ring;
+    return SliderFocusRing{Rgb8{0, 0, 0}, Rgb8{0xE6, 0x6A, 0x00}};
 }
