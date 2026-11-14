@@ -539,19 +539,19 @@ int main()
             return (left + 0.05) / (right + 0.05);
         };
         const Rgb8 body = dialog_body_rgb();
-        for (int look = 0; look < 3; ++look) {
-            const SliderFocusRing ring = slider_focus_ring(look);
-            const Rgb8 fill = slider_fill_rgb(look);
+        {
+            const SliderFocusRing ring = slider_focus_ring();
+            const Rgb8 fill = slider_fill_rgb();
             const double against_body = std::max(contrast(ring.outer, body), contrast(ring.inner, body));
             const double against_fill = std::max(contrast(ring.outer, fill), contrast(ring.inner, fill));
             if (against_body < 3.0 || against_fill < 3.0) {
-                std::fprintf(stderr, "look %d body %.2f fill %.2f\n", look, against_body, against_fill);
+                std::fprintf(stderr, "body %.2f fill %.2f\n", against_body, against_fill);
                 return fail(44, "the slider focus ring is below 3:1 on the dialog or the fill");
             }
         }
-        const SliderFocusRing spooky = slider_focus_ring(2);
-        if (spooky.outer.r > 40 || spooky.outer.g > 40 || spooky.outer.b > 40) {
-            return fail(44, "the Spooky focus ring has no dark outer stroke");
+        const SliderFocusRing standard = slider_focus_ring();
+        if (standard.outer.r > 40 || standard.outer.g > 40 || standard.outer.b > 40) {
+            return fail(44, "the slider focus ring has no dark outer stroke");
         }
         const FaceGlyphs playstation =
             face_glyphs(pad_is_playstation(SDL_GAMEPAD_TYPE_PS5, SDL_GAMEPAD_BUTTON_LABEL_A), true, SDL_GAMEPAD_TYPE_PS5);

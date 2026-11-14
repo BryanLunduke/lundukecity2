@@ -5,7 +5,6 @@
 #include "tool_palette.hpp"
 
 #include "assets.hpp"
-#include "tile_atlas.hpp"
 #include "tools.hpp"
 
 #include <algorithm>
@@ -234,7 +233,7 @@ cairo_surface_t *tool_icon_named(const char *stem)
         bool tried = false;
     };
     struct Cache {
-        // Nine specials times three looks, plus spare slots when the look changes.
+        // One original icon set, shared by all tile looks.
         Slot slots[48];
         ~Cache()
         {
@@ -249,8 +248,7 @@ cairo_surface_t *tool_icon_named(const char *stem)
     if (stem == nullptr || stem[0] == '\0') {
         return nullptr;
     }
-    const int look = tile_atlas().look();
-    const std::string key = std::string(stem) + "#" + std::to_string(look);
+    const std::string key = stem;
     Slot *free_slot = nullptr;
     for (Slot &slot : cache.slots) {
         if (slot.tried && slot.key == key) {
@@ -265,30 +263,16 @@ cairo_surface_t *tool_icon_named(const char *stem)
     }
     free_slot->tried = true;
     free_slot->key = key;
-    // Spooky prefers its own icon, then the SVGA drawing, then Classic.
-    const char *suffixes[3] = {"", "", ""};
-    int count = 0;
-    if (look == 2) {
-        suffixes[count++] = "-spooky";
-        suffixes[count++] = "-svga";
-    } else if (look == 1) {
-        suffixes[count++] = "-svga";
-    }
-    suffixes[count++] = "";
-    for (int i = 0; i < count; ++i) {
-        const std::string path = ui_data_file(std::string("tool-icons/") + stem + suffixes[i] + ".png");
-        if (path.empty()) {
-            continue;
-        }
+    const std::string path = ui_data_file(std::string("tool-icons/") + stem + ".png");
+    if (!path.empty()) {
         cairo_surface_t *surface = cairo_image_surface_create_from_png(path.c_str());
-        if (surface == nullptr || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
-            if (surface != nullptr) {
-                cairo_surface_destroy(surface);
-            }
-            continue;
+        if (surface != nullptr && cairo_surface_status(surface) == CAIRO_STATUS_SUCCESS) {
+            free_slot->image = surface;
+            return surface;
         }
-        free_slot->image = surface;
-        return surface;
+        if (surface != nullptr) {
+            cairo_surface_destroy(surface);
+        }
     }
     return nullptr;
 }
@@ -308,88 +292,50 @@ void ToolPalette::draw(cairo_t *cr) const
         const bool pressed = i == selected_;
         const bool hover = i == hover_ && !pressed;
         const bool down = i == pressed_;
-        const bool focused = i == focus_ && look_ != 0;
+        const bool focused = i == focus_;
 
-        if (look_ == 0) {
-            const double light = hover ? 1.0 : 0.96;
-            const double dark = 0.28;
-            const double face_r = pressed ? 1.0 : (hover ? 0.93 : 0.82);
-            const double face_g = pressed ? 0.86 : (hover ? 0.93 : 0.82);
-            const double face_b = pressed ? 0.15 : (hover ? 0.93 : 0.82);
-
-            if (pressed) {
-                box(cr, x, y, bs, bs, dark, dark, dark);
-                box(cr, x + 2, y + bs - 2, bs - 2, 2, light, light, light);
-                box(cr, x + bs - 2, y + 2, 2, bs - 4, light, light, light);
-                box(cr, x + 2, y + 2, bs - 4, bs - 4, face_r, face_g, face_b);
-                cairo_set_source_rgb(cr, 0.05, 0.05, 0.05);
-                cairo_set_line_width(cr, 1);
-                cairo_rectangle(cr, x + 2.5, y + 2.5, bs - 6, bs - 6);
-                cairo_stroke(cr);
-            } else {
-                box(cr, x, y, bs, bs, light, light, light);
-                box(cr, x, y + bs - 2, bs, 2, dark, dark, dark);
-                box(cr, x + bs - 2, y, 2, bs, dark, dark, dark);
-                box(cr, x + 1, y + bs - 3, bs - 3, 1, 0.50, 0.50, 0.50);
-                box(cr, x + bs - 3, y + 1, 1, bs - 3, 0.50, 0.50, 0.50);
-                box(cr, x + 2, y + 2, bs - 5, bs - 5, face_r, face_g, face_b);
-            }
+        // Engraved-stone buttons: one calm material in every tile look.
+        // Dimensions are screen pixels, aligned to the toolbar's scale.
+        const double unit = std::max(1.0, std::round(bs / 46.0));
+        auto slab = [&](double dx, double dy, double w, double h, unsigned rgb) {
+            box(cr, x + dx, y + dy, w, h, ((rgb >> 16) & 255) / 255.0,
+                ((rgb >> 8) & 255) / 255.0, (rgb & 255) / 255.0);
+        };
+        const bool sunk = pressed || down;
+        const bool hot = hover || focused;
+        slab(0, 0, bs, bs, hot && !sunk ? 0xB88C2E : 0x5E5242);
+        slab(unit, unit, bs - 2 * unit, bs - 2 * unit,
+             sunk ? 0xC9B892 : (hot ? 0xEBE3D5 : 0xDED4C2));
+        if (sunk) {
+            slab(unit, unit, bs - 2 * unit, 2 * unit, 0x8C634A);
+            slab(unit, unit, 2 * unit, bs - 2 * unit, 0x8C634A);
+            slab(3 * unit, 3 * unit, bs - 6 * unit, unit, 0xB59473);
+            slab(3 * unit, 3 * unit, unit, bs - 6 * unit, 0xB59473);
         } else {
-            // Face stays put. Hover brightens the keyline in two steps.
-            const double face_r = pressed ? 255.0 / 255.0 : 203.0 / 255.0;
-            const double face_g = pressed ? 255.0 / 255.0 : 203.0 / 255.0;
-            const double face_b = pressed ? 85.0 / 255.0 : 203.0 / 255.0;
-            const double hi = 227.0 / 255.0;
-            const double lo = 85.0 / 255.0;
-            const bool key_hot = hover || down;
-            const bool key_full = key_hot && edge_ms_ >= 40;
-            double key_r = lo;
-            double key_g = lo;
-            double key_b = lo;
-            if (key_full) {
-                if (look_ == 2) {
-                    key_r = 255.0 / 255.0;
-                    key_g = 190.0 / 255.0;
-                    key_b = 0.0;
-                } else {
-                    key_r = 85.0 / 255.0;
-                    key_g = 85.0 / 255.0;
-                    key_b = 255.0 / 255.0;
-                }
-            } else if (key_hot) {
-                key_r = 170.0 / 255.0;
-                key_g = 170.0 / 255.0;
-                key_b = 170.0 / 255.0;
-            }
-            if (pressed) {
-                box(cr, x, y, bs, bs, lo, lo, lo);
-                box(cr, x + 2, y + bs - 2, bs - 2, 2, hi, hi, hi);
-                box(cr, x + bs - 2, y + 2, 2, bs - 4, hi, hi, hi);
-                box(cr, x + 2, y + 2, bs - 4, bs - 4, face_r, face_g, face_b);
-            } else {
-                box(cr, x, y, bs, bs, hi, hi, hi);
-                box(cr, x, y + bs - 2, bs, 2, lo, lo, lo);
-                box(cr, x + bs - 2, y, 2, bs, lo, lo, lo);
-                box(cr, x + 2, y + 2, bs - 4, bs - 4, face_r, face_g, face_b);
-            }
-            cairo_set_source_rgb(cr, key_r, key_g, key_b);
-            cairo_set_line_width(cr, 1);
-            cairo_rectangle(cr, x + 0.5, y + 0.5, bs - 1, bs - 1);
-            cairo_stroke(cr);
-            if (focused) {
-                cairo_set_source_rgb(cr, 0, 0, 0);
-                cairo_rectangle(cr, x + 0.5, y + 0.5, bs - 1, bs - 1);
-                cairo_stroke(cr);
-                cairo_set_source_rgb(cr, 1, 1, 1);
-                cairo_rectangle(cr, x + 2.5, y + 2.5, bs - 5, bs - 5);
-                cairo_stroke(cr);
-            }
+            slab(unit, unit, bs - 2 * unit, 2 * unit, 0xF6F0E4);
+            slab(unit, unit, 2 * unit, bs - 2 * unit, 0xF6F0E4);
+            slab(unit, bs - 3 * unit, bs - 2 * unit, 2 * unit, 0x9E907A);
+            slab(bs - 3 * unit, unit, 2 * unit, bs - 2 * unit, 0x9E907A);
         }
 
-        const double shift = look_ == 0 ? (pressed ? 1.0 : 0.0) : (down ? 1.0 : 0.0);
+        const double shift = sunk ? unit : 0.0;
         cairo_surface_t *icon = (i >= 0 && i < 17) ? tool_icons().image[i] : nullptr;
-        // 3px inside the bevel. At the default 48px cell the slot is 40px,
-        // which is the authored sprite size, so the icon fills the face.
-        paint_icon(cr, icon, i, x + 3 + shift, y + 3 + shift, bs - 6);
+        // Authored at 20x20, pre-doubled to 40x40; integer scaling only.
+        paint_icon(cr, icon, i, x + 3 * unit + shift, y + 2 * unit + shift, bs - 6 * unit);
+        if (sunk || hot) {
+            slab(6 * unit, bs - (sunk ? 3 : 4) * unit, bs - 12 * unit, 2 * unit,
+                 sunk ? 0xB88C2E : 0xB59473);
+        }
+        // Keyboard / controller focus: a dark-and-cream double keyline that
+        // reads on the stone face and on the sunk tan face alike.
+        if (focused) {
+            cairo_set_line_width(cr, unit);
+            cairo_set_source_rgb(cr, 0x2E / 255.0, 0x24 / 255.0, 0x1C / 255.0);
+            cairo_rectangle(cr, x + 2.5 * unit, y + 2.5 * unit, bs - 5 * unit, bs - 5 * unit);
+            cairo_stroke(cr);
+            cairo_set_source_rgb(cr, 0xF6 / 255.0, 0xF0 / 255.0, 0xE4 / 255.0);
+            cairo_rectangle(cr, x + 3.5 * unit, y + 3.5 * unit, bs - 7 * unit, bs - 7 * unit);
+            cairo_stroke(cr);
+        }
     }
 }

@@ -233,7 +233,8 @@ inline Look look_from_setting(int look)
     if (look == static_cast<int>(Look::Spooky)) {
         return Look::Spooky;
     }
-    return Look::Classic;
+    // An absent setting is a new install. An explicit Classic stays Classic.
+    return look == 0 ? Look::Classic : Look::Svga;
 }
 
 inline int look_to_setting(Look look)
@@ -242,7 +243,7 @@ inline int look_to_setting(Look look)
 }
 
 struct LookPreference {
-    int look = 0;
+    int look = 1;
 
     int setting() const { return look; }
 
@@ -278,7 +279,7 @@ struct StoredSettings {
     int pause_unfocused = -1;
     // -1 absent, 0 scroll, 1 zoom.
     int wheel_zoom = -1;
-    // -1 absent (Classic), 0 Classic, 1 SVGA, 2 Spooky.
+    // -1 absent (SVGA default), 0 Classic, 1 SVGA, 2 Spooky.
     int look = -1;
     // -1 absent (show milestone notes), 0 off, 1 on.
     int milestone_notes = -1;

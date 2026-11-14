@@ -533,7 +533,6 @@ void Shell::set_look_preference(Look look)
     look_pref_.look = which;
     tile_atlas().set_look(which);
     drawn_look_ = tile_atlas().look();
-    theme::set_chrome_look(drawn_look_);
     if (look_change_fades(look_live_, before, drawn_look_)) {
         map_.invalidate_all();
         begin_scene_fade();

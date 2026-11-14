@@ -655,3 +655,16 @@ test(
   timeout: 120,
   is_parallel: false,
 )
+
+# Compare decoded pixels so the single icon set stays reproducible. Like the
+# atlas tests, skip on builders without Pillow and never rewrite source art.
+test(
+  'tool_icons_generator',
+  python,
+  args: [
+    atlas_test,
+    meson.project_source_root() / 'data' / 'tool-icons' / 'make_icons.py',
+    '--check',
+  ],
+  env: ['PYTHONDONTWRITEBYTECODE=1'],
+)

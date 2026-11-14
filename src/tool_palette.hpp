@@ -93,7 +93,6 @@ public:
     void clear_pressed();
     void motion(double x, double y);
     void leave();
-    void set_look(int look) { look_ = look; }
     void set_focus(int index) { focus_ = index; }
     void advance(int elapsed_ms);
     int hover_ms() const { return hover_ms_; }
@@ -110,7 +109,6 @@ private:
     int hover_ = -1;
     int pressed_ = -1;
     int focus_ = -1;
-    int look_ = 0;
     int edge_ms_ = 0;
     int hover_ms_ = 0;
 };
