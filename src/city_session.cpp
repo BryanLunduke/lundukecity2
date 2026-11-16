@@ -2489,6 +2489,39 @@ void CitySession::remember_civic_year()
     civic::remember_year(ledger_, votes, report.population);
 }
 
+bool CitySession::building_footprint(int center_x, int center_y, int &left, int &top, int &width, int &height) const
+{
+    if (!ready_ || !Micropolis::testBounds(center_x, center_y)) {
+        return false;
+    }
+    const int raw = map_value(center_x, center_y);
+    if ((raw & ZONEBIT) == 0) {
+        return false;
+    }
+    const int center = raw & LOMASK;
+    const int special = special_index_for_tile(center);
+    if (special >= 0) {
+        const SpecialBuilding &building = special_building(special);
+        left = center_x - building.anchor_x;
+        top = center_y - building.anchor_y;
+        width = building.width;
+        height = building.height;
+        return width > 0 && height > 0;
+    }
+    int span = 3;
+    if (center >= AIRPORTBASE && center < COALBASE) {
+        span = 6;
+    } else if ((center >= PORTBASE && center < AIRPORTBASE) || (center >= COALBASE && center < FIRESTBASE) ||
+               (center >= STADIUMBASE && center < INDBASE2)) {
+        span = 4;
+    }
+    left = center_x - 1;
+    top = center_y - 1;
+    width = span;
+    height = span;
+    return true;
+}
+
 CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
 {
     TileInspect card;
@@ -2552,59 +2585,38 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     } else {
         card.condition = "Quiet";
     }
+    // The building under the tile: the nearest zone centre whose whole
+    // footprint covers (x, y). Every engine building sits one tile up and
+    // left of its centre (putBuilding's ZONEBIT is at dx=1, dy=1 for 3x3,
+    // 4x4 and 6x6 alike); landmarks use their own anchor.
     int center_x = x;
     int center_y = y;
-    bool found = (raw & ZONEBIT) != 0;
-    if (!found) {
-        for (int radius = 1; radius <= 4 && !found; ++radius) {
-            for (int dy = -radius; dy <= radius && !found; ++dy) {
-                for (int dx = -radius; dx <= radius; ++dx) {
-                    if (std::abs(dx) != radius && std::abs(dy) != radius) {
-                        continue;
-                    }
-                    if (!Micropolis::testBounds(x + dx, y + dy)) {
-                        continue;
-                    }
-                    const int around = map_value(x + dx, y + dy);
-                    if ((around & ZONEBIT) != 0) {
-                        center_x = x + dx;
-                        center_y = y + dy;
-                        found = true;
-                        break;
-                    }
+    bool found = false;
+    for (int radius = 0; radius <= 5 && !found; ++radius) {
+        for (int dy = -radius; dy <= radius && !found; ++dy) {
+            for (int dx = -radius; dx <= radius && !found; ++dx) {
+                if (std::abs(dx) != radius && std::abs(dy) != radius) {
+                    continue;
                 }
+                int left = 0;
+                int top = 0;
+                int width = 0;
+                int height = 0;
+                if (!building_footprint(x + dx, y + dy, left, top, width, height)) {
+                    continue;
+                }
+                if (x < left || y < top || x >= left + width || y >= top + height) {
+                    continue;
+                }
+                found = true;
+                center_x = x + dx;
+                center_y = y + dy;
+                card.zone = true;
+                card.left = left;
+                card.top = top;
+                card.width = width;
+                card.height = height;
             }
-        }
-    }
-    if (found) {
-        const int center = map_value(center_x, center_y) & LOMASK;
-        const int special = special_index_for_tile(center);
-        int span = 3;
-        if (special >= 0) {
-            const SpecialBuilding &building = special_building(special);
-            card.zone = true;
-            card.width = building.width;
-            card.height = building.height;
-            card.left = center_x - building.anchor_x;
-            card.top = center_y - building.anchor_y;
-        } else {
-            if (center >= AIRPORTBASE && center < COALBASE) {
-                span = 6;
-            } else if ((center >= PORTBASE && center < AIRPORTBASE) || (center >= COALBASE && center < FIRESTBASE) ||
-                       (center >= STADIUMBASE && center < INDBASE2)) {
-                span = 4;
-            }
-            card.zone = true;
-            card.width = span;
-            card.height = span;
-            card.left = center_x - span / 2;
-            card.top = center_y - span / 2;
-        }
-        if (card.left < 0) {
-            card.left = 0;
-        }
-        if (card.top < 0) {
-            card.top = 0;
         }
     }
     const bool inside = card.zone && card.width > 0 && card.height > 0 && x >= card.left && y >= card.top &&

@@ -596,6 +596,39 @@ test(
   timeout: 180,
 )
 
+# The Inspect outline covers the whole building footprint. Built on
+# Windows too.
+footprint = executable(
+  'footprint',
+  'footprint.cpp',
+  '../src/assets.cpp',
+  '../src/city_glance.cpp',
+  '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
+  '../src/messages.cpp',
+  '../src/overlay_map.cpp',
+  '../src/sound_player.cpp',
+  '../src/special_buildings.cpp',
+  '../src/sprite_art.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep, cairo_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'footprint',
+  footprint,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+  timeout: 120,
+)
+
 # Slate skin, grouped toolbar, Inspect card, smooth heat map, night light
 # layer and the handheld layout switch. Pure helpers; built on Windows too.
 polish = executable(
@@ -603,7 +636,8 @@ polish = executable(
   'polish.cpp',
   '../src/night_light.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep],
+  dependencies: [micropolis_dep, cairo_dep],
+  cpp_args: ['-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"'],
 )
 
 test('polish', polish)

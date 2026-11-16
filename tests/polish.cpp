@@ -15,8 +15,12 @@
 
 #include "micropolis.h"
 
+#include <cairo.h>
+
 #include <cmath>
 #include <cstdint>
+#include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -184,8 +188,9 @@ int main()
         check(a > 0.5f && a < 0.8f && r > 0.9f && g < 0.2f, "full heat is red and still shows the city");
     }
 
-    // Night light layer: a powered zone glows, an unpowered one stays dark,
-    // and a road gets lamps. The layer is its own buffer.
+    // Night light layers: a powered zone's windows light, an unpowered one
+    // stays dark, a road gets lamps, and window light lands only on window
+    // pixels of the mask. The layers are their own buffers.
     {
         const int w = 12;
         const int h = 6;
@@ -202,10 +207,15 @@ int main()
         for (int x = 0; x < w; ++x) {
             map[static_cast<std::size_t>(5 * w + x)] = ROADBASE + 2;
         }
+        // A sparse made-up mask: every third pixel on even rows.
+        std::vector<night_light::MaskRows> masks(static_cast<std::size_t>(TILE_COUNT * night_light::kTile), 0);
+        for (int y = 0; y < night_light::kTile; y += 2) {
+            masks[static_cast<std::size_t>((COMBASE + 20) * night_light::kTile + y)] = 0x4924; // bits 2,5,8,11,14
+        }
         const int lw = w * night_light::kPx;
         const int lh = h * night_light::kPx;
         std::vector<std::uint32_t> pixels(static_cast<std::size_t>(lw * lh), 0xDEADBEEFu);
-        night_light::build(map, w, h, reinterpret_cast<unsigned char *>(pixels.data()), lw * 4);
+        night_light::build(map, w, h, reinterpret_cast<unsigned char *>(pixels.data()), lw * 4, &masks);
         auto light_in = [&](int tx0, int ty0, int tx1, int ty1) {
             int sum = 0;
             for (int py = ty0 * night_light::kPx; py < (ty1 + 1) * night_light::kPx; ++py) {
@@ -215,9 +225,143 @@ int main()
             }
             return sum;
         };
-        check(light_in(1, 1, 3, 3) > 0, "a powered zone has lit windows");
+        check(light_in(1, 1, 3, 3) > 0, "a powered zone's windows glow");
         check(light_in(7, 1, 9, 3) == 0, "an unpowered zone is dark");
         check(light_in(0, 5, w - 1, 5) > 0, "a road has street lamps");
+
+        const int ww = w * night_light::kTile;
+        const int wh = h * night_light::kTile;
+        std::vector<std::uint32_t> windows(static_cast<std::size_t>(ww * wh), 0xDEADBEEFu);
+        std::vector<int> keys;
+        const int painted = night_light::build_windows(map, w, h, masks, reinterpret_cast<unsigned char *>(windows.data()),
+                                                       ww * 4, &keys);
+        check(painted == w * h, "the first window pass paints every tile");
+        int lit = 0;
+        int stray = 0;
+        int dark_zone = 0;
+        for (int py = 0; py < wh; ++py) {
+            for (int px = 0; px < ww; ++px) {
+                if ((windows[static_cast<std::size_t>(py * ww + px)] >> 24) == 0) {
+                    continue;
+                }
+                const int tx = px / night_light::kTile;
+                const int ty = py / night_light::kTile;
+                const int tile = map[static_cast<std::size_t>(ty * w + tx)] & LOMASK;
+                const night_light::MaskRows row =
+                    masks[static_cast<std::size_t>(tile * night_light::kTile + py % night_light::kTile)];
+                if ((row & (1u << (px % night_light::kTile))) == 0) {
+                    ++stray;
+                }
+                if (tx >= 7) {
+                    ++dark_zone;
+                }
+                ++lit;
+            }
+        }
+        check(lit > 0, "a powered zone has lit windows");
+        check(stray == 0, "window light lands only on mask pixels");
+        check(dark_zone == 0, "an unpowered zone has no lit windows");
+        // Not every window: each building lights a share of them.
+        check(lit < 9 * 8 * 5, "some windows stay dark");
+        check(night_light::build_windows(map, w, h, masks, reinterpret_cast<unsigned char *>(windows.data()), ww * 4,
+                                         &keys) == 0,
+              "an unchanged map repaints no window tiles");
+        map[static_cast<std::size_t>(2 * w + 2)] &= ~PWRBIT;
+        check(night_light::build_windows(map, w, h, masks, reinterpret_cast<unsigned char *>(windows.data()), ww * 4,
+                                         &keys) == 9,
+              "losing power repaints the zone's nine tiles");
+        bool any = false;
+        for (std::uint32_t p : windows) {
+            any = any || (p >> 24) != 0;
+        }
+        check(!any, "an unpowered city has no lit windows");
+
+        // Mask detection on made-up art: a dark pane in a grey facade is a
+        // window; a dark line, a pane on grass and the flat facade are not.
+        std::vector<std::uint32_t> art(256, 0xFF909098u);
+        art[5 * 16 + 5] = 0xFF303040u;      // pane
+        for (int x = 2; x < 12; ++x) {
+            art[10 * 16 + x] = 0xFF202020u; // roof edge line
+        }
+        for (int y = 12; y < 16; ++y) {
+            for (int x = 10; x < 16; ++x) {
+                art[y * 16 + x] = 0xFF30A030u; // grass
+            }
+        }
+        art[14 * 16 + 13] = 0xFF105010u;    // dark leaf in the grass
+        night_light::MaskRows rows[night_light::kTile];
+        night_light::window_mask(art.data(), rows);
+        int bits = 0;
+        for (int y = 0; y < night_light::kTile; ++y) {
+            for (int x = 0; x < night_light::kTile; ++x) {
+                bits += (rows[y] >> x) & 1;
+            }
+        }
+        check(bits == 1 && (rows[5] & (1u << 5)) != 0, "only the pane is a window");
+        check(night_light::wants_windows(COMBASE + 20) && !night_light::wants_windows(ROADBASE) &&
+                  !night_light::wants_windows(DIRT) && !night_light::wants_windows(INDBASE2 + 3),
+              "only building art gets windows");
+
+#ifdef LUNDUKE_CITY_ASSET_DIR
+        // The real sheets: buildings have windows, and none sit on grass.
+        for (const char *name : {"tiles.png", "tiles-svga.png"}) {
+            const std::string path = std::string(LUNDUKE_CITY_ASSET_DIR) + "/images/micropolisEngine/" + name;
+            if (!std::ifstream(path).good()) {
+                std::cout << "skip: no " << path << "\n";
+                continue;
+            }
+            cairo_surface_t *sheet = cairo_image_surface_create_from_png(path.c_str());
+            if (cairo_surface_status(sheet) != CAIRO_STATUS_SUCCESS) {
+                cairo_surface_destroy(sheet);
+                check(false, "a tile sheet loads");
+                continue;
+            }
+            const int cols = cairo_image_surface_get_width(sheet) / 16;
+            const int tiles = cols * (cairo_image_surface_get_height(sheet) / 16);
+            const unsigned char *data = cairo_image_surface_get_data(sheet);
+            const int stride = cairo_image_surface_get_stride(sheet);
+            std::vector<std::uint32_t> packed(static_cast<std::size_t>(tiles) * 256);
+            for (int t = 0; t < tiles; ++t) {
+                for (int y = 0; y < 16; ++y) {
+                    const auto *src = reinterpret_cast<const std::uint32_t *>(data + ((t / cols) * 16 + y) * stride) +
+                                      (t % cols) * 16;
+                    for (int x = 0; x < 16; ++x) {
+                        packed[static_cast<std::size_t>(t) * 256 + y * 16 + x] = src[x];
+                    }
+                }
+            }
+            std::vector<night_light::MaskRows> real;
+            night_light::window_masks(packed.data(), tiles, real);
+            int windowed = 0;
+            int on_grass = 0;
+            for (int t = COMBASE + 9; t < INDBASE; ++t) {
+                int count = 0;
+                for (int y = 0; y < 16; ++y) {
+                    for (int x = 0; x < 16; ++x) {
+                        if ((real[static_cast<std::size_t>(t) * 16 + y] >> x) & 1) {
+                            ++count;
+                            const std::uint32_t p = packed[static_cast<std::size_t>(t) * 256 + y * 16 + x];
+                            const int r = (p >> 16) & 0xFF;
+                            const int g = (p >> 8) & 0xFF;
+                            const int b = p & 0xFF;
+                            if (g > r + 25 && g > b + 25) {
+                                ++on_grass;
+                            }
+                        }
+                    }
+                }
+                windowed += count > 0 ? 1 : 0;
+            }
+            check(windowed > 60, "most commercial tiles have windows in their art");
+            check(on_grass == 0, "no window sits on grass");
+            int road_bits = 0;
+            for (int y = 0; y < 16; ++y) {
+                road_bits += real[static_cast<std::size_t>(ROADBASE + 2) * 16 + y] != 0 ? 1 : 0;
+            }
+            check(road_bits == 0, "roads have no windows");
+            cairo_surface_destroy(sheet);
+        }
+#endif
         check(night_light::glow_for_tile(DIRT) == night_light::Glow::None, "dirt does not glow");
         check(night_light::glow_for_tile(RESBASE) == night_light::Glow::None, "an empty lot has no windows");
         check(night_light::hash(3, 4, 5) == night_light::hash(3, 4, 5) && night_light::hash(3, 4, 5) != night_light::hash(4, 3, 5),

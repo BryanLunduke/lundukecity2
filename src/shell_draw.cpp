@@ -3168,7 +3168,13 @@ void Shell::draw_dialog(cairo_t *cr)
         const double width = std::min(static_cast<double>(dp(360)), std::max(1.0, win_w_ - 2.0 * margin));
         const double inner = width - 2.0 * margin;
         const double row_h = dp(22);
-        const double title_h = static_cast<double>(measure_text(cr, title_font(), facts.kind_name, -1).height);
+        // The status pill sits right of the title; a long name ("Amusement
+        // Park" beside "Needs attention") wraps under itself instead of
+        // running into the pill.
+        const TextMetrics status_metrics = measure_text(cr, bold_font(), report.status, -1);
+        const double title_line_h = static_cast<double>(measure_text(cr, title_font(), facts.kind_name, -1).height);
+        const double title_w = std::max(1.0, inner - (status_metrics.width + dp(18)) - dp(10));
+        const double title_h = std::max(title_line_h, static_cast<double>(line_height(title_font(), facts.kind_name, title_w)));
         const double chip_h = dp(26);
         std::string reasons_head;
         if (!report.reasons.empty()) {
@@ -3232,14 +3238,14 @@ void Shell::draw_dialog(cairo_t *cr)
             place_line(tag_font(), "INSPECT", x + margin, y + margin - dp(2), inner, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0);
         }
         double cy = y + top_pad;
-        place_line(title_font(), facts.kind_name, x + margin, cy, inner * 0.62, ink_r, ink_g, ink_b);
-        // Status pill on the right of the title.
+        place_line(title_font(), facts.kind_name, x + margin, cy, title_w, ink_r, ink_g, ink_b);
+        // Status pill on the right of the title's first line.
         {
-            const TextMetrics pill = measure_text(cr, bold_font(), report.status, -1);
+            const TextMetrics &pill = status_metrics;
             const double pw = pill.width + dp(18);
             const double ph = pill.height + dp(6);
             const double px = x + panel.w - margin - pw;
-            const double py = cy + std::max(0.0, (title_h - ph) / 2.0);
+            const double py = cy + std::max(0.0, (title_line_h - ph) / 2.0);
             double pr = 0.45;
             double pg = 0.50;
             double pb = 0.58;
@@ -3654,10 +3660,29 @@ void Shell::draw(cairo_t *cr)
         int query_x = 0;
         int query_y = 0;
         if (dialog_ == Dialog::Query && session_.query_tile(query_x, query_y)) {
+            // Outline the whole building the card describes (a 3x3 zone, a
+            // 4x4 plant, a landmark), or the single tile when it is not
+            // part of one.
             const int ts = std::max(1, map_.tile_size());
+            const CitySession::TileInspect card = session_.inspect_tile(query_x, query_y);
+            int left = query_x;
+            int top = query_y;
+            int width = 1;
+            int height = 1;
+            if (card.zone && card.width > 0 && card.height > 0) {
+                left = card.left;
+                top = card.top;
+                width = card.width;
+                height = card.height;
+            }
+            const double line = std::max(2.0, ts / 5.0);
+            const double inset = line / 2.0;
+            cairo_rectangle(live.cr, left * ts + inset, top * ts + inset, width * ts - line, height * ts - line);
+            cairo_set_source_rgba(live.cr, 0.0, 0.0, 0.0, 0.45);
+            cairo_set_line_width(live.cr, line + 2.0);
+            cairo_stroke_preserve(live.cr);
             cairo_set_source_rgb(live.cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
-            cairo_set_line_width(live.cr, std::max(2.0, ts / 5.0));
-            cairo_rectangle(live.cr, query_x * ts, query_y * ts, ts, ts);
+            cairo_set_line_width(live.cr, line);
             cairo_stroke(live.cr);
         }
     }

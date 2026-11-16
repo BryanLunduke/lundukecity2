@@ -279,6 +279,9 @@ public:
         int height = 1;
     };
     TileInspect inspect_tile(int x, int y) const;
+    // The tiles a building covers, given its zone centre (the ZONEBIT
+    // tile). False when (center_x, center_y) is not a zone centre.
+    bool building_footprint(int center_x, int center_y, int &left, int &top, int &width, int &height) const;
     // Read-only facts for the Inspect card: the tile's kind, power, road
     // access and the simulator map values under it, plus the demand for
     // its zone type. kind_name is the card title.
