@@ -216,9 +216,10 @@ inline Placement clamp_saved_window(int x, int y, int w, int h, int ax, int ay, 
     return place;
 }
 
-// The choice written to settings.txt. Classic is 0, SVGA is 1, Spooky is 2.
-// Drawing can still be Classic when the chosen sheet is missing. That
-// fallback is not a new choice.
+// The choice written to settings.txt. Classic is 0, SVGA is 1. 2 was the
+// Spooky look, which is off the menu until it is polished; its sheet stays
+// in the tree. Drawing can still be Classic when the chosen sheet is
+// missing. That fallback is not a new choice.
 enum class Look {
     Classic = 0,
     Svga = 1,
@@ -227,14 +228,15 @@ enum class Look {
 
 inline Look look_from_setting(int look)
 {
-    if (look == static_cast<int>(Look::Svga)) {
-        return Look::Svga;
-    }
-    if (look == static_cast<int>(Look::Spooky)) {
-        return Look::Spooky;
-    }
     // An absent setting is a new install. An explicit Classic stays Classic.
+    // A saved Spooky (2), or anything unknown, loads as SVGA.
     return look == 0 ? Look::Classic : Look::Svga;
+}
+
+// Spooky is not offered. Every request for it becomes SVGA.
+inline Look offered_look(Look look)
+{
+    return look == Look::Spooky ? Look::Svga : look;
 }
 
 inline int look_to_setting(Look look)
@@ -279,7 +281,7 @@ struct StoredSettings {
     int pause_unfocused = -1;
     // -1 absent, 0 scroll, 1 zoom.
     int wheel_zoom = -1;
-    // -1 absent (SVGA default), 0 Classic, 1 SVGA, 2 Spooky.
+    // -1 absent (SVGA default), 0 Classic, 1 SVGA. 2 (Spooky) loads as SVGA.
     int look = -1;
     // -1 absent (show milestone notes), 0 off, 1 on.
     int milestone_notes = -1;

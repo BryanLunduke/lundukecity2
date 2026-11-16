@@ -3495,7 +3495,7 @@ def main() -> int:
             f"OK 8px atlas: {sheet8.size[0]}x{sheet8.size[1]}, VGA plus dirt B, "
             f"{snapped_off}/{overview_pixels} box-average pixels moved to the nearest entry"
         )
-    atlas_sha = "251bfc0e38773f950ba524d08eab38e9bd40c772c09c7b57565e357eeeaa9ee3"
+    atlas_sha = "d08ea4dbff73089e6c76b6268b6ff33fc1e8eba32b92c60ff0c932cd57708389"
     painted_sha = digest_all.hexdigest()
     dirt_off_vga = bool(_dirt_unlocked() - palette)
     if painted_sha != atlas_sha and not dirt_off_vga:

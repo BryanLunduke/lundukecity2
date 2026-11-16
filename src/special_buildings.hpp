@@ -61,11 +61,18 @@ struct SpecialBuilding {
     bool needs_road = false;
     // Placement fails unless a conductive tile touches the footprint. The
     // crime reduction waits until the power scan actually powers the center.
+    // (Whether the building conducts and takes power is open_air below;
+    // this is only the stricter placement rule the prison has.)
     bool needs_power = false;
     // The south row may cover shoreline. Open water must still sit
     // immediately south of the footprint. Bulldoze puts that shoreline
     // back, including after a disaster has erased the footprint.
     bool needs_south_water = false;
+    // An open-air landmark (a park or a plaza) uses no electricity. It does
+    // not conduct, never shows a power state, and the engine leaves it out
+    // of the powered/unpowered zone count. Every other special conducts
+    // like a zone and needs power to count as powered.
+    bool open_air = false;
 };
 
 // Shared non-center tile. The center tile id says which building it is.
@@ -76,6 +83,15 @@ int special_building_count();
 const SpecialBuilding &special_building(int index);
 // -1 when the tile is not a center id from the table.
 int special_index_for_tile(int tile);
+// True for a special centre tile that never takes power (the open-air
+// landmarks: Big Park and Fountain). Like a park, it has no power state.
+bool special_tile_skips_power(int tile);
+// True when the building at this table index uses electricity.
+bool special_uses_power(int index);
+// Gives every placed special that uses power its conductive footprint (a
+// city saved before landmarks conducted has none) and takes it off an
+// open-air one. Returns the number of tiles changed. Call after a load.
+int wire_special_buildings(Micropolis *sim);
 
 int special_annual_income(const Micropolis *sim);
 void boost_special_land_value(Micropolis *sim);
@@ -102,6 +118,9 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y);
 // Empty when the tile is not part of a special building.
 std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y);
 
+// True when the tile is part of a special building that never takes power.
+bool special_skips_power_at(const Micropolis *sim, int tile_x, int tile_y);
+
 // Status line for the selected building, including its cost.
 std::string special_status_text(int index);
 // Same line, plus the unlock or cap sentence when the city cannot buy it.
@@ -123,7 +142,8 @@ std::string special_requirement_at(int index, int left, int top, SpecialWordFn w
 bool special_auto_clearable(int raw);
 
 // The lightning bolt replaces an unpowered special's centre tile while the
-// zone blink is on. Body tiles and a powered centre stay on the sheet.
+// zone blink is on. Body tiles, a powered centre, and an open-air landmark
+// stay on the sheet.
 bool special_center_needs_bolt(int raw, int index, int cell, bool blink_on);
 
 // True when (x, y) is inside a special. cell is the row-major sheet index.

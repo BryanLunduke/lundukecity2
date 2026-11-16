@@ -32,6 +32,10 @@ const ToolDef kTools[] = {
 
 const int kToolCount = static_cast<int>(sizeof(kTools) / sizeof(kTools[0]));
 const int kDefaultToolIndex = 16; // Query. A first click reports the tile and does not build.
+// Query has no toolbar button. It is the inspect mode with no build tool
+// picked: the hover card shows what is under the pointer, Q and the pad
+// shoulder buttons still reach it, and nothing is built.
+const int kPaletteToolCount = kToolCount - 1;
 
 const ToolDef *tool_by_index(int index)
 {
@@ -81,6 +85,11 @@ const char *tool_click_phrase(int engine_id)
     default:
         return "Click to build";
     }
+}
+
+bool tool_has_status_hint(int engine_id)
+{
+    return engine_id != TOOL_QUERY;
 }
 
 std::string tool_press_phrase(int engine_id, const char *button)

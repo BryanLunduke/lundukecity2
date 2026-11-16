@@ -4,8 +4,8 @@
 
 #pragma once
 
-// The message bar shows an engine notice for a few seconds, then the tool
-// hint. A later event with the same words is a new serial, so it shows again.
+// An engine notice shows as an alert over the map for a few seconds. A later
+// event with the same words is a new serial, so it shows again.
 struct NoticeDecision {
     bool show_notice = false;
     bool show_hint = false;

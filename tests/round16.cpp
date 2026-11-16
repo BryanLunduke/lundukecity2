@@ -58,8 +58,8 @@ int fail(int code, const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 53) {
-        return fail(1, "the menu does not have 53 actionable rows");
+    if (menu_table::actionable_count() != 52) {
+        return fail(1, "the menu does not have 52 actionable rows");
     }
     if (kDefaultToolIndex != 16 || kToolCount != 17) {
         return fail(2, "a new city does not start on Query");
@@ -514,8 +514,13 @@ int main()
             return fail(43, "the win dialog repeats the goal or disagrees with Time is up");
         }
     }
-    if (about_text().find("Version 2.0.0") == std::string::npos || about_text().find("Lunduke City 2 2") != std::string::npos ||
-        about_text().find("Will Wright") == std::string::npos || about_text().find("Don Hopkins") == std::string::npos ||
+    const std::string about_expected =
+        "Lunduke City version 2.0.0.\n\n"
+        "Original game design by Will Wright, first published by Maxis.\n\n"
+        "Some artwork and engine based on GPL'd release of Micropolis, by Electronic arts.\n\n"
+        "Not affiliated with Electronic Arts.\n\n"
+        "Lunduke City 2 is copyright Bryan Lunduke and is available under the GPL.";
+    if (about_text() != about_expected ||
         how_to_play_text().find("budget") == std::string::npos || how_to_play_text().find("power") == std::string::npos) {
         return fail(38, "about or how to play copy is missing");
     }

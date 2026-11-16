@@ -12,7 +12,8 @@ the whole cycle is redrawn in the same fire colours. Each frame keeps
 its own silhouette.
 
 The residential R on the empty lot is embossed: a light upper-left edge,
-a deep-green body, and the existing black shadow. C and I are not touched.
+a deep-green body, and the existing black shadow. The empty C and I lots
+get a flat blue and a flat yellow border (their letters were already flat).
 """
 
 from __future__ import annotations
@@ -179,8 +180,37 @@ def paint_explosion(classic: Image.Image, index: int) -> Image.Image:
     return out
 
 
+# Empty commercial and industrial lots (3x3 blocks 423-431 and 612-620).
+# The sheet is painted one tile at a time, so the 3x3 lot-frame pass never
+# saw these borders and they came out as a dithered two-tone line. Every
+# classic border pixel takes the flat zone colour, like the green R lot:
+# C is an even blue and I is a solid yellow.
+COM_LOT = range(423, 432)
+IND_LOT = range(612, 621)
+COM_LINE = (125, 125, 255)
+IND_LINE = (255, 255, 85)
+SRC_LBLUE = (102, 102, 230)
+SRC_YELLOW = (255, 255, 0)
+
+
+def flat_lot_border(classic: Image.Image, image: Image.Image, source: tuple[int, int, int], solid: tuple[int, int, int]) -> Image.Image:
+    """Repaint the classic lot-border colour as one flat line."""
+    out = image.copy()
+    src = classic.load()
+    dst = out.load()
+    for y in range(classic.size[1]):
+        for x in range(classic.size[0]):
+            if src[x, y] == source:
+                dst[x, y] = solid
+    return out
+
+
 def polish_tile(index: int, classic: Image.Image, painted: Image.Image) -> Image.Image:
     image = painted
+    if index in COM_LOT:
+        image = flat_lot_border(classic, image, SRC_LBLUE, COM_LINE)
+    if index in IND_LOT:
+        image = flat_lot_border(classic, image, SRC_YELLOW, IND_LINE)
     if 249 <= index <= 260:
         image = lift_roofs(image)
     if 868 <= index <= 883:

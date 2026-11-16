@@ -26,7 +26,7 @@ void box(cairo_t *cr, double x, double y, double w, double h, double r, double g
 // size, and a smaller slot (UI scale under 1) is the only case that shrinks.
 struct ToolIcons {
     bool tried = false;
-    cairo_surface_t *image[17] = {};
+    cairo_surface_t *image[16] = {};
 
     ~ToolIcons()
     {
@@ -45,12 +45,11 @@ ToolIcons &tool_icons()
         return icons;
     }
     icons.tried = true;
-    static const char *names[17] = {
+    static const char *names[16] = {
         "bulldozer", "road",     "rail",     "wire",    "park",       "residential", "commercial", "industrial",
         "police",    "fire",     "stadium",  "seaport", "coal",       "nuclear",     "airport",    "special",
-        "query",
     };
-    for (int i = 0; i < 17; ++i) {
+    for (int i = 0; i < 16; ++i) {
         const std::string path = ui_data_file(std::string("tool-icons/") + names[i] + ".png");
         if (path.empty()) {
             continue;
@@ -127,7 +126,7 @@ int ToolPalette::height_for(int cell, int columns)
     if (columns < 2) {
         columns = 2;
     }
-    const int rows = (kToolCount + columns - 1) / columns;
+    const int rows = (kPaletteToolCount + columns - 1) / columns;
     return kPad * 2 + rows * cell;
 }
 
@@ -153,7 +152,7 @@ int ToolPalette::index_at(double x, double y) const
         return -1;
     }
     const int index = row * columns_ + col;
-    if (index < 0 || index >= kToolCount) {
+    if (index < 0 || index >= kPaletteToolCount) {
         return -1;
     }
     return index;
@@ -280,10 +279,10 @@ cairo_surface_t *tool_icon_named(const char *stem)
 void ToolPalette::draw(cairo_t *cr) const
 {
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
-    const int rows = (kToolCount + columns_ - 1) / columns_;
+    const int rows = (kPaletteToolCount + columns_ - 1) / columns_;
     box(cr, 0, 0, kPad * 2 + columns_ * cell_, kPad * 2 + rows * cell_, 0xED / 255.0, 0xEC / 255.0, 0xEB / 255.0);
 
-    for (int i = 0; i < kToolCount; ++i) {
+    for (int i = 0; i < kPaletteToolCount; ++i) {
         const int col = i % columns_;
         const int row = i / columns_;
         const double x = kPad + col * cell_ + 1;
@@ -319,7 +318,7 @@ void ToolPalette::draw(cairo_t *cr) const
         }
 
         const double shift = sunk ? unit : 0.0;
-        cairo_surface_t *icon = (i >= 0 && i < 17) ? tool_icons().image[i] : nullptr;
+        cairo_surface_t *icon = (i >= 0 && i < 16) ? tool_icons().image[i] : nullptr;
         // Authored at 20x20, pre-doubled to 40x40; integer scaling only.
         paint_icon(cr, icon, i, x + 3 * unit + shift, y + 2 * unit + shift, bs - 6 * unit);
         if (sunk || hot) {

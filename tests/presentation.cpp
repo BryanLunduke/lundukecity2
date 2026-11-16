@@ -264,11 +264,40 @@ int main()
     }
     const SpecialBuilding &zoo_row = special_building(zoo);
     const int zoo_cell = zoo_row.anchor_y * zoo_row.width + zoo_row.anchor_x;
-    const int bare = zoo_row.center_tile | ZONEBIT | BURNBIT | BULLBIT;
+    const int bare = zoo_row.center_tile | ZONEBIT | BURNBIT | BULLBIT | CONDBIT;
+    // Landmarks that use electricity (zoo, prison, ...) conduct, so their
+    // centre flashes while unpowered and only during the blink-on half.
+    const SpecialBuilding &prison_row = special_building(prison);
+    const int prison_cell = prison_row.anchor_y * prison_row.width + prison_row.anchor_x;
+    const int prison_bare = prison_row.center_tile | ZONEBIT | BURNBIT | BULLBIT | CONDBIT;
     if (!special_center_needs_bolt(bare, zoo, zoo_cell, true) || special_center_needs_bolt(bare, zoo, zoo_cell, false) ||
         special_center_needs_bolt(bare | PWRBIT, zoo, zoo_cell, true) ||
-        special_center_needs_bolt(bare, zoo, 0, true)) {
-        return fail(15, "the bolt should blink only on an unpowered special centre");
+        special_tile_skips_power(zoo_row.center_tile) || special_tile_skips_power(prison_row.center_tile) ||
+        !special_center_needs_bolt(prison_bare, prison, prison_cell, true) ||
+        special_center_needs_bolt(prison_bare, prison, prison_cell, false) ||
+        special_center_needs_bolt(prison_bare | PWRBIT, prison, prison_cell, true) ||
+        (prison_cell != 0 && special_center_needs_bolt(prison_bare, prison, 0, true))) {
+        return fail(15, "the bolt should blink only on an unpowered centre of a landmark that uses power");
+    }
+    // Query (inspect, no tool picked) leaves the status line's right side
+    // empty; every real tool keeps its name, cost and click hint.
+    if (tool_has_status_hint(TOOL_QUERY) || !tool_has_status_hint(TOOL_BULLDOZER) ||
+        !tool_has_status_hint(TOOL_ROAD) || !tool_has_status_hint(TOOL_RESIDENTIAL) ||
+        !tool_has_status_hint(kSpecialEngineId)) {
+        return fail(15, "only Query should drop the status-line hint");
+    }
+    // Open-air landmarks never take power, so they never flash.
+    for (const char *name : {"Big Park", "Fountain"}) {
+        const int open = index_named(name);
+        if (open < 0) {
+            return fail(15, "an open-air landmark is missing from the table");
+        }
+        const SpecialBuilding &row = special_building(open);
+        const int cell = row.anchor_y * row.width + row.anchor_x;
+        const int raw = row.center_tile | ZONEBIT | BURNBIT | BULLBIT;
+        if (special_center_needs_bolt(raw, open, cell, true) || !special_tile_skips_power(row.center_tile)) {
+            return fail(15, std::string(name) + " should never flash for power");
+        }
     }
 
     Micropolis sim;
@@ -322,7 +351,6 @@ int main()
 
     CitySession session;
     session.new_city("Edge Road", 7);
-    const SpecialBuilding &prison_row = special_building(prison);
     int origin_x = -1;
     int origin_y = -1;
     for (int y = 2; y < CitySession::kWorldH - prison_row.height - 2 && origin_x < 0; ++y) {

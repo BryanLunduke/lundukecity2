@@ -651,7 +651,8 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
             const int raw = engine_->sim.map[qx][qy];
             const bool powered = (raw & PWRBIT) != 0;
             message_ += ", Power: ";
-            message_ += powered ? "on" : "off";
+            const bool needless = special_skips_power_at(&engine_->sim, qx, qy);
+            message_ += needless ? "not needed" : (powered ? "on" : "off");
             message_ += ", Pollution level: " + std::to_string(layer_value(MapLayer::Pollution, qx, qy));
             message_ += ", Crime level: " + std::to_string(layer_value(MapLayer::Crime, qx, qy));
         }
@@ -1035,6 +1036,9 @@ bool CitySession::load_city(const std::string &path)
     if (scenario_map) {
         raise_unspecified_funding(sim);
     }
+    // Landmarks saved before they conducted get their wiring back, so a
+    // connected one powers up on the next scan.
+    wire_special_buildings(&sim);
     int loaded_speed = static_cast<int>(sim.simSpeed);
     if (loaded_speed < 0) {
         loaded_speed = 0;
@@ -2608,8 +2612,12 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     if (inside || ((raw & ZONEBIT) != 0 && tile != DIRT)) {
         const int sample = inside ? map_value(center_x, center_y) : raw;
         const bool powered = (sample & PWRBIT) != 0;
-        card.power = powered ? "Power: on" : "Power: off";
-        card.offer_power = !powered;
+        if (special_tile_skips_power(sample & LOMASK)) {
+            card.power = "Power: not needed";
+        } else {
+            card.power = powered ? "Power: on" : "Power: off";
+            card.offer_power = !powered;
+        }
     } else if ((raw & CONDBIT) != 0) {
         card.power = "Power: line";
     } else {
@@ -2733,6 +2741,9 @@ int CitySession::layer_value(MapLayer layer, int x, int y) const
             return 0;
         }
         if ((raw & ZONEBIT) != 0) {
+            if (special_tile_skips_power(tile)) {
+                return 0;
+            }
             return (raw & PWRBIT) != 0 ? 3 : 2;
         }
         if ((raw & CONDBIT) != 0) {

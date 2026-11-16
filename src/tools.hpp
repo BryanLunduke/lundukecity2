@@ -18,10 +18,15 @@ struct ToolDef {
 extern const ToolDef kTools[];
 extern const int kToolCount;
 extern const int kDefaultToolIndex;
+// Buttons in the toolbar grid: every tool but Query (the last entry).
+extern const int kPaletteToolCount;
 
 const ToolDef *tool_by_index(int index);
 // Short instruction for the selected tool, such as "Bulldozer: click to clear".
 const char *tool_click_phrase(int engine_id);
+// False for Query, the inspect mode with no tool picked: the status line
+// shows no click hint and no tool name for it, so its right side is empty.
+bool tool_has_status_hint(int engine_id);
 // Same instruction with a pad or touch verb, such as "Query: A inspects".
 // An empty button keeps the mouse "click to" wording.
 std::string tool_press_phrase(int engine_id, const char *button);

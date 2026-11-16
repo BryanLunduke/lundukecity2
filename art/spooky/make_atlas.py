@@ -106,7 +106,7 @@ CHANGED = (
 # Locked after the sheet is committed. 16px tile bytes, then the snapped
 # 8px overview, in tile order. PARK_SHA is the hand-authored big-park
 # sprite's RGBA bytes.
-ATLAS_SHA = "c87721b0c12634bbfbe8dd03b37a6d6606168ada2db0fd1886fe8ebf73827988"
+ATLAS_SHA = "83bc21513ffc841ebe66dabfe6734d48f54e785105dad9949b7c48db6520557e"
 PARK_SHA = "9fefff85da8edaf60db7eb4c75f6a513612198b4b8194963c414252271dce630"
 
 GRASS = (0, 113, 0)

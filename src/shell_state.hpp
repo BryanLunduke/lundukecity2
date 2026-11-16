@@ -390,7 +390,6 @@ private:
     int cell_ = 48;
     int menu_h_ = 34;
     int status_h_ = 34;
-    int message_h_ = 42;
     int pal_y_ = 0;
     int mini_y_ = 0;
     int mini_h_ = 80;
@@ -619,8 +618,29 @@ private:
     bool key_cursor_ = false;
     std::string notice_text_;
     std::chrono::steady_clock::time_point notice_until_{};
+    // The sticky notice is drawn as the first alert in the map corner. Its
+    // rectangle, for the click or tap that dismisses it.
+    double notice_bar_x_ = -1;
     double notice_bar_y_ = -1;
+    double notice_bar_w_ = 0;
     double notice_bar_h_ = 0;
+    // Alerts in the bottom-right corner of the map. Each one lasts about five
+    // seconds and fades out. A repeat of the newest refreshes it instead of
+    // stacking, and at most three stack at once.
+    struct Toast {
+        std::string text;
+        bool disaster = false;
+        std::chrono::steady_clock::time_point until{};
+    };
+    std::vector<Toast> toasts_;
+    std::chrono::steady_clock::time_point toast_seen_until_{};
+    std::string toast_last_text_;
+    static constexpr int kToastMs = 5000;
+    static constexpr int kToastFadeMs = 700;
+    static constexpr std::size_t kToastMax = 3;
+    void sync_toasts(std::chrono::steady_clock::time_point now);
+    void draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now);
+    int toast_wake_ms(std::chrono::steady_clock::time_point now) const;
     std::string file_target_;
     int quake_strength_ = 0;
     std::chrono::steady_clock::time_point quake_until_{};

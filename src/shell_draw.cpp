@@ -211,12 +211,12 @@ void Shell::layout()
     }
     menu_h_ = dp(36);
     status_h_ = dp(36);
-    message_h_ = dp(44);
-    const int body = win_h_ - menu_h_ - status_h_ - message_h_;
+    // No message bar under the status line. Alerts are drawn over the map.
+    const int body = win_h_ - menu_h_ - status_h_;
     cell_ = ui_scale::toolbar_cell(ui_scale_, std::max(1, body));
     side_x_ = dp(6);
     pal_y_ = menu_h_ + dp(6);
-    const int status_top = win_h_ - status_h_ - message_h_;
+    const int status_top = win_h_ - status_h_;
     const int gap = dp(8);
     const int mini_ok = dp(64);
     const int demand_ok = dp(64);
@@ -260,16 +260,9 @@ void Shell::layout()
             }
         }
     }
-    if (mini_h > 0) {
-        const int side = ToolPalette::width_for(cell_, columns);
-        const int spare = status_top - (demand_y + demand_h);
-        const int cap = std::max(side, dp(160)) * 2;
-        if (spare > 0 && mini_h < cap) {
-            const int grow = std::min(spare, cap - mini_h);
-            mini_h += grow;
-            demand_y += grow;
-        }
-    }
+    // The minimap keeps its own 6:5 height and the demand meters sit right
+    // under it. The tool card that used to fill the space between them is
+    // gone; the tool name and cost are on the status line and the hover tip.
     palette_.set_columns(columns);
     palette_.set_cell(cell_);
     side_w_ = ToolPalette::width_for(cell_, columns);
@@ -285,7 +278,7 @@ void Shell::layout()
     view_x_ = side_x_ + side_w_ + dp(8);
     view_y_ = menu_h_;
     view_w_ = std::max(dp(32), win_w_ - view_x_ - dp(8));
-    view_h_ = std::max(dp(32), win_h_ - view_y_ - status_h_ - message_h_);
+    view_h_ = std::max(dp(32), win_h_ - view_y_ - status_h_);
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
     cursor_y_ = std::max(0.0f, std::min(cursor_y_, static_cast<float>(win_h_ - 1)));
     fit_map_to_view();
@@ -343,8 +336,16 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         cairo_set_source(cr, shade);
         cairo_fill_preserve(cr);
         cairo_pattern_destroy(shade);
-        cairo_set_source_rgb(cr, enabled ? gold_r : 0.62, enabled ? gold_g : 0.58, enabled ? gold_b : 0.48);
-        cairo_set_line_width(cr, selected ? std::max(3.0, h / 12.0) : std::max(2.0, h / 16.0));
+        const bool ring = focused && w > 18 && h > 18;
+        if (ring) {
+            // Focus follows the button's own outline: the edge itself turns
+            // focus blue, a little heavier than the gold edge it replaces.
+            cairo_set_source_rgb(cr, 0.10, 0.35, 0.78);
+            cairo_set_line_width(cr, std::max(3.0, h / 10.0));
+        } else {
+            cairo_set_source_rgb(cr, enabled ? gold_r : 0.62, enabled ? gold_g : 0.58, enabled ? gold_b : 0.48);
+            cairo_set_line_width(cr, selected ? std::max(3.0, h / 12.0) : std::max(2.0, h / 16.0));
+        }
         cairo_stroke(cr);
         if (selected && enabled && w > 22 && h > 16) {
             const double mark = std::min(h * 0.42, 14.0);
@@ -357,16 +358,14 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
             cairo_line_to(cr, mx + mark, my + mark * 0.15);
             cairo_stroke(cr);
         }
-        if (focused && w > 18 && h > 18) {
-            // Primary stays blue. Any other focused button keeps the paper
-            // fill and a thick blue ring, so focus is not a second primary.
-            round_dialog_rect(cr, x + 8, y + 8, w - 16, h - 16, 3);
-            if (primary && !selected) {
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-            } else {
-                cairo_set_source_rgb(cr, 0.10, 0.35, 0.78);
-            }
-            cairo_set_line_width(cr, 3.0);
+        if (ring && primary && !selected) {
+            // A blue edge on the blue primary needs a light line just inside
+            // it to read as focus. It hugs the same rounded outline.
+            const double inset = std::max(3.0, h / 10.0);
+            round_dialog_rect(cr, x + inset, y + inset, w - 2.0 * inset, h - 2.0 * inset,
+                              std::max(1.0, std::min(6.0, h / 2.0) - inset / 2.0));
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_set_line_width(cr, 1.5);
             cairo_stroke(cr);
         }
         const std::string plain = strip_mnemonic(label);
@@ -403,9 +402,10 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
     cairo_pattern_destroy(pattern);
     stroke_rect(cr, x, y, w, h, theme::kButtonEdgeR, theme::kButtonEdgeG, theme::kButtonEdgeB);
     if (!suppressed && focus_id_ == id && (gamepad_nav_ || dialog_ != Dialog::None)) {
+        // On the button's own edge, not an inner box.
         cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
         cairo_set_line_width(cr, 2);
-        cairo_rectangle(cr, x + 2, y + 2, w - 4, h - 4);
+        cairo_rectangle(cr, x + 1, y + 1, w - 2, h - 2);
         cairo_stroke(cr);
     }
     const std::string plain = strip_mnemonic(label);
@@ -591,7 +591,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     }
     double avail = std::max(80.0, static_cast<double>(win_h_ - menu_h_ - 4));
     if (deck_) {
-        const double bars = static_cast<double>(status_h_ + message_h_);
+        const double bars = static_cast<double>(status_h_);
         avail = std::max(120.0, static_cast<double>(win_h_ - menu_h_) - bars - 4.0);
     }
     const int label_h = measure_text(cr, menu_font(), "Ag", -1).height;
@@ -938,9 +938,9 @@ void Shell::draw_dialog(cairo_t *cr)
     } settle_shift(this, cr);
     const double margin = dp(16);
     text_spans_.clear();
-    // Dialogs stay above the status and message bars. Centering them in the
-    // full window let a tall Load City panel cover "Funds" and the city name.
-    const double band_h = std::max(1.0, static_cast<double>(win_h_ - status_h_ - message_h_));
+    // Dialogs stay above the status line. Centering them in the full window
+    // let a tall Load City panel cover "Funds" and the city name.
+    const double band_h = std::max(1.0, static_cast<double>(win_h_ - status_h_));
     const double large_w = std::min(static_cast<double>(dp(860)), std::max(1.0, win_w_ - 2.0 * margin));
     const double large_h = std::min(static_cast<double>(dp(640)), std::max(1.0, band_h - 2.0 * margin));
     auto buttons_at = [&](double px, double pw, double by, const std::vector<std::pair<const char *, int>> &buttons,
@@ -1817,13 +1817,43 @@ void Shell::draw_dialog(cairo_t *cr)
         return;
     }
     if (dialog_ == Dialog::HowToPlay) {
-        const std::string body = how_to_play_text();
-        const double width = message_width(win_w_, margin, dp(460), dp(640));
-        const double body_h = text_block_height(body, width - 2 * margin);
+        // A heading in the title colour over each topic, the same rule the
+        // Controls window uses, so the two help windows read as a pair.
+        const std::vector<HowToPlaySection> sections = how_to_play_sections();
+        const double width = message_width(win_w_, margin, dp(460), dp(880));
+        const double inner = width - 2 * margin;
+        const double head_gap = dp(4);
+        const double section_gap = dp(14);
+        // Two columns when the window is wide enough, so it never needs to scroll.
+        const bool split = inner >= dp(640);
+        const double col_gap = dp(28);
+        const double col_w = split ? (inner - col_gap) / 2.0 : inner;
+        const std::size_t per_col = split ? (sections.size() + 1) / 2 : sections.size();
+        auto lay = [&](double x, double y, bool paint) {
+            double tallest = 0;
+            for (std::size_t first = 0; first < sections.size(); first += per_col) {
+                const double cx = x + (first / per_col) * (col_w + col_gap);
+                double cy = y;
+                const std::size_t last = std::min(sections.size(), first + per_col);
+                for (std::size_t i = first; i < last; ++i) {
+                    const double head_h = line_height(bold_font(), sections[i].heading, col_w);
+                    const double body_h = line_height(body_font(), sections[i].body, col_w);
+                    if (paint) {
+                        paint_text(cr, bold_font(), sections[i].heading, cx, cy, 0.45, 0.04, 0.02, static_cast<int>(col_w));
+                        paint_text(cr, body_font(), sections[i].body, cx, cy + head_h + head_gap, theme::kTextR,
+                                   theme::kTextG, theme::kTextB, static_cast<int>(col_w));
+                    }
+                    cy += head_h + head_gap + body_h + (i + 1 < last ? section_gap : 0.0);
+                }
+                tallest = std::max(tallest, cy - y);
+            }
+            return tallest;
+        };
+        const double body_h = lay(0, 0, false);
         const double height = dp(40) + margin + body_h + dp(16) + dp(36) + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "How to play");
-        label(cr, body_font(), body, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
+        lay(panel.x + margin, panel.y + dp(48), true);
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kClose}});
         return;
     }
@@ -2160,31 +2190,108 @@ void Shell::draw_dialog(cairo_t *cr)
         pad_names.l3 = named(glyph_for(PadOverlay));
         pad_names.r3 = named(glyph_for(PadCenter));
         const ControlsKeyText key_text = controls_keys();
-        const std::string intro = std::string(heading) + "\n" + controls_page_body(controls_page_, deck_, pad_names, key_text);
-        const bool tools = controls_page_has_tools(controls_page_, deck_);
-        const std::string col_a = tools ? controls_tool_column(0, 9, &key_text) : std::string();
-        const std::string col_b = tools ? controls_tool_column(9, 17, &key_text) : std::string();
-        const double width = message_width(win_w_, margin, dp(520), dp(860));
+        const double width = message_width(win_w_, margin, dp(520), dp(1000));
         const double inner = width - 2 * margin;
-        const double intro_h = text_block_height(intro, inner);
-        const double col_w = tools ? (inner - dp(16)) / 2.0 : inner;
-        const double col_h = tools ? std::max(text_block_height(col_a, col_w), text_block_height(col_b, col_w)) : 0.0;
-        const double content_h = intro_h + (tools ? dp(8) + col_h : 0.0);
+        // Sections in a two-column grid, each a heading over aligned rows: the
+        // key in a bold chip, its action beside it. A narrow window stacks
+        // the sections in one column.
+        const double chip_pad = dp(6);
+        const double row_gap = dp(4);
+        const double section_gap = dp(12);
+        const double col_gap = dp(24);
+        auto lay_page = [&](const std::vector<ControlsSection> &sections, double x0, double y0, bool paint) {
+            const bool split = inner >= dp(560);
+            bool has_band = false;
+            for (const ControlsSection &section : sections) {
+                has_band = has_band || section.side == 2;
+            }
+            // Wide enough for three columns: the tool keys get one of their own.
+            const bool three = has_band && inner >= dp(860);
+            const int grid = three ? 3 : split ? 2 : 1;
+            std::vector<const ControlsSection *> column[3];
+            std::vector<const ControlsSection *> band;
+            for (const ControlsSection &section : sections) {
+                if (section.side == 2 && !three) {
+                    band.push_back(&section);
+                } else {
+                    column[std::min(section.side, grid - 1)].push_back(&section);
+                }
+            }
+            auto section_block = [&](const ControlsSection &section, double x, double y, double w, int columns) {
+                double cy = y;
+                const double head_h = line_height(bold_font(), section.heading, w);
+                if (paint) {
+                    paint_text(cr, bold_font(), section.heading, x, cy, 0.45, 0.04, 0.02, static_cast<int>(w));
+                    fill(cr, x, cy + head_h + dp(2), w, 1.0, 0.72, 0.55, 0.18);
+                }
+                cy += head_h + dp(8);
+                const double sub_gap = dp(16);
+                const double sub_w = (w - sub_gap * (columns - 1)) / columns;
+                const int count = static_cast<int>(section.rows.size());
+                const int per = (count + columns - 1) / columns;
+                double bottom = cy;
+                for (int c = 0; c < columns; ++c) {
+                    const int begin = c * per;
+                    const int end = std::min(count, begin + per);
+                    double key_w = 0;
+                    for (int i = begin; i < end; ++i) {
+                        key_w = std::max(key_w, static_cast<double>(
+                                                    measure_text(cr, bold_font(), section.rows[static_cast<std::size_t>(i)].key, -1).width));
+                    }
+                    key_w = std::min(key_w + 2 * chip_pad, sub_w * 0.5);
+                    const double sx = x + c * (sub_w + sub_gap);
+                    const double action_x = sx + key_w + dp(10);
+                    const double action_w = std::max(1.0, sub_w - key_w - dp(10));
+                    double ry = cy;
+                    for (int i = begin; i < end; ++i) {
+                        const ControlsRow &row = section.rows[static_cast<std::size_t>(i)];
+                        const double key_h = line_height(bold_font(), row.key, key_w - 2 * chip_pad);
+                        const double act_h = line_height(body_font(), row.action, action_w);
+                        const double chip_h = key_h + dp(2);
+                        const double h = std::max(chip_h, act_h);
+                        if (paint) {
+                            cairo_save(cr);
+                            round_dialog_rect(cr, sx + 0.5, ry + 0.5, key_w - 1, chip_h - 1, dp(4));
+                            cairo_set_source_rgb(cr, 0.93, 0.87, 0.72);
+                            cairo_fill_preserve(cr);
+                            cairo_set_source_rgb(cr, 0.72, 0.55, 0.18);
+                            cairo_set_line_width(cr, 1.0);
+                            cairo_stroke(cr);
+                            cairo_restore(cr);
+                            paint_text(cr, bold_font(), row.key, sx + chip_pad, ry + dp(1), theme::kTextR, theme::kTextG,
+                                       theme::kTextB, static_cast<int>(std::max(1.0, key_w - 2 * chip_pad)));
+                            paint_text(cr, body_font(), row.action, action_x, ry + (chip_h - std::min(chip_h, act_h)) / 2.0,
+                                       theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(action_w));
+                        }
+                        ry += h + row_gap;
+                    }
+                    bottom = std::max(bottom, ry);
+                }
+                return bottom - y;
+            };
+            const double col_w = (inner - col_gap * (grid - 1)) / grid;
+            double y = y0;
+            for (int c = 0; c < grid; ++c) {
+                double cy = y0;
+                for (const ControlsSection *section : column[c]) {
+                    cy += section_block(*section, x0 + c * (col_w + col_gap), cy, col_w, 1) + section_gap;
+                }
+                y = std::max(y, cy);
+            }
+            for (const ControlsSection *section : band) {
+                y += section_block(*section, x0, y, inner, split ? 4 : 2) + section_gap;
+            }
+            return std::max(0.0, y - y0 - section_gap);
+        };
+        // The page name rides in the title band, so the rows get the room.
+        const std::vector<ControlsSection> sections = controls_page_sections(controls_page_, deck_, pad_names, key_text);
+        const double content_h = lay_page(sections, 0, 0, false);
         double tallest = content_h;
         for (int page = 0; page < 3; ++page) {
             if (page == controls_page_) {
                 continue;
             }
-            const std::string page_intro =
-                std::string(controls_page_title(page, deck_)) + "\n" + controls_page_body(page, deck_, pad_names, key_text);
-            const bool page_tools = controls_page_has_tools(page, deck_);
-            const std::string page_a = page_tools ? controls_tool_column(0, 9, &key_text) : std::string();
-            const std::string page_b = page_tools ? controls_tool_column(9, 17, &key_text) : std::string();
-            const double page_intro_h = text_block_height(page_intro, inner);
-            const double page_col_w = page_tools ? (inner - dp(16)) / 2.0 : inner;
-            const double page_col_h =
-                page_tools ? std::max(text_block_height(page_a, page_col_w), text_block_height(page_b, page_col_w)) : 0.0;
-            tallest = std::max(tallest, page_intro_h + (page_tools ? dp(8) + page_col_h : 0.0));
+            tallest = std::max(tallest, lay_page(controls_page_sections(page, deck_, pad_names, key_text), 0, 0, false));
         }
         const double footer_h = dp(32);
         const double buttons_h = dp(36);
@@ -2193,7 +2300,8 @@ void Shell::draw_dialog(cairo_t *cr)
         const double view_h = std::max(static_cast<double>(dp(48)), std::min(tallest, max_h - chrome));
         const double height = chrome + view_h;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
-        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Controls");
+        const std::string panel_title = std::string("Controls \u2014 ") + heading;
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, panel_title.c_str());
         const double body_top = panel.y + dp(48);
         controls_scroll_max_ = std::max(0, static_cast<int>(std::ceil(content_h - view_h)));
         if (controls_scroll_ < 0) {
@@ -2206,12 +2314,7 @@ void Shell::draw_dialog(cairo_t *cr)
         cairo_rectangle(cr, panel.x + margin, body_top, panel.w - 2 * margin, view_h);
         cairo_clip(cr);
         const double origin = body_top - controls_scroll_;
-        label(cr, body_font(), intro, panel.x + margin, origin, static_cast<int>(panel.w - 2 * margin));
-        if (tools) {
-            const double cols_y = origin + intro_h + dp(8);
-            label(cr, body_font(), col_a, panel.x + margin, cols_y, static_cast<int>(col_w));
-            label(cr, body_font(), col_b, panel.x + margin + col_w + dp(16), cols_y, static_cast<int>(col_w));
-        }
+        lay_page(sections, panel.x + margin, origin, true);
         cairo_restore(cr);
         if (controls_scroll_max_ > 0) {
             const double track_w = std::max(4.0, static_cast<double>(dp(6)));
@@ -2767,7 +2870,7 @@ void Shell::draw_dialog(cairo_t *cr)
         if (query_anchored_) {
             panel = place_near(win_w_, band_h, panel.w, panel.h, query_anchor_x_, query_anchor_y_, margin);
         }
-        const double query_floor = static_cast<double>(win_h_ - status_h_ - message_h_) - margin;
+        const double query_floor = static_cast<double>(win_h_ - status_h_) - margin;
         if (panel.y + panel.h > query_floor) {
             panel.y = std::max(static_cast<double>(menu_h_) + margin, query_floor - panel.h);
         }
@@ -2857,8 +2960,8 @@ void Shell::draw_special_menu(cairo_t *cr)
     }
     double drop_y = anchor_y;
     const double drop_h = 8 + count * row_h;
-    if (drop_y + drop_h > win_h_ - status_h_ - message_h_ - 4) {
-        drop_y = std::max(static_cast<double>(menu_h_ + 4), win_h_ - status_h_ - message_h_ - 4 - drop_h);
+    if (drop_y + drop_h > win_h_ - status_h_ - 4) {
+        drop_y = std::max(static_cast<double>(menu_h_ + 4), win_h_ - status_h_ - 4 - drop_h);
     }
     fill(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
     stroke_rect(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
@@ -2929,10 +3032,6 @@ void Shell::draw(cairo_t *cr)
     push_hot(side_x_, pal_y_, side_w_, ToolPalette::height_for(cell_, palette_.columns()), kPaletteId);
     if (mini_h_ > 0) {
         minimap_.set_pin_top(false);
-        const AspectBox probe = minimap_.content_box(side_w_, mini_h_);
-        if (static_cast<double>(mini_h_) - probe.height >= 32.0) {
-            minimap_.set_pin_top(true);
-        }
         const AspectBox land = minimap_.content_box(side_w_, mini_h_);
         {
             TargetCr live(cr);
@@ -2941,42 +3040,6 @@ void Shell::draw(cairo_t *cr)
             minimap_.draw(live.cr, side_w_, mini_h_);
         }
         push_hot(side_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
-        const double card_top = mini_y_ + land.y + land.height + 4.0;
-        const double card_bottom = static_cast<double>(mini_y_ + mini_h_);
-        if (card_bottom - card_top >= 28.0) {
-            const ToolDef *card_tool = tool_by_index(tool_index_);
-            std::string card_name = card_tool != nullptr ? card_tool->name : "Tool";
-            std::string card_cost;
-            if (card_tool != nullptr && card_tool->engine_id == kSpecialEngineId && special_choice_ >= 0 &&
-                special_choice_ < special_building_count()) {
-                card_name = special_building(special_choice_).name;
-                card_cost = session_.special_menu_detail(special_choice_);
-            } else if (card_tool != nullptr && card_tool->cost > 0) {
-                card_cost = graph_money(card_tool->cost);
-            } else {
-                card_cost = "No charge";
-            }
-            if (!deck_ && !gamepad_nav_ && tool_index_ >= 0 && tool_index_ < 17) {
-                const std::string key_name = chord_label(binds_.key[KeyTool0 + tool_index_]);
-                if (!key_name.empty() && key_name != "None") {
-                    card_cost += "  [" + key_name + "]";
-                }
-            }
-            fill(cr, side_x_, card_top, side_w_, card_bottom - card_top, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
-            stroke_rect(cr, side_x_, card_top, side_w_, card_bottom - card_top, theme::kMenuFrameR, theme::kMenuFrameG,
-                        theme::kMenuFrameB);
-            paint_text(cr, bold_font(), card_name, side_x_ + 6, card_top + 4, theme::kTextR, theme::kTextG, theme::kTextB,
-                       side_w_ - 12);
-            paint_text(cr, ui_font(), card_cost, side_x_ + 6, card_top + dp(20), theme::kTextR, theme::kTextG, theme::kTextB,
-                       side_w_ - 12);
-            if ((gamepad_nav_ || deck_) && card_bottom - card_top >= 52.0) {
-                const char *use = glyph_for(PadConfirm);
-                if (use[0] != '\0') {
-                    paint_text(cr, ui_font(), std::string(use) + " uses", side_x_ + 6, card_top + dp(36), theme::kAccelR,
-                               theme::kAccelG, theme::kAccelB, side_w_ - 12);
-                }
-            }
-        }
     }
     {
         TargetCr live(cr);
@@ -3122,43 +3185,11 @@ void Shell::draw(cairo_t *cr)
         const double by = view_y_ + (view_h_ - bh) * (scroll_y_ / max_y);
         fill(cr, view_x_ + view_w_ - 8, by, 6, bh, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     }
-    const int status_y = win_h_ - status_h_ - message_h_;
+    const int status_y = win_h_ - status_h_;
     fill(cr, 0, status_y, win_w_, status_h_, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);
-    const std::string hint = context_hint();
-    const std::string clock = session_.scenario_clock_text();
-    const std::string meter = session_.scenario_meter();
-    // Funds, the name, the speed, the date, the clock, then the goal meter.
-    // The meter used to be dropped so a long hint could stay. The hint is
-    // what gives way, and it moves to the message line when that line is idle.
-    std::string status = session_.funds_text() + "    " + session_.city_name() + "    " +
-                         speed_word(welcome_gate_ ? 0 : speed_);
-    const int full_room = std::max(1, win_w_ - 16);
-    auto width_of = [&](const std::string &text) { return measure_text(cr, ui_font(), text, -1).width; };
-    auto fits_in = [&](const std::string &text, int room) { return width_of(text) <= room; };
-    if (fits_in(status + "    " + session_.date_text(), full_room)) {
-        status += "    " + session_.date_text();
-    }
-    if (!clock.empty() && fits_in(status + "    " + clock, full_room)) {
-        status += "    " + clock;
-    }
-    if (!meter.empty() && fits_in(status + "    " + meter, full_room)) {
-        status += "    " + meter;
-    }
-    int hint_w = hint.empty() ? 0 : width_of(hint);
-    // Pad hints stay on the message line. The status bar keeps funds, the
-    // date, and the goal, which otherwise run into the edge on a Deck.
-    const bool pad_hints_below = gamepad_nav_ || deck_;
-    const bool hint_fits = !pad_hints_below && !hint.empty() && width_of(status) + 24 + hint_w <= win_w_;
-    const int status_room = hint_fits ? std::max(1, win_w_ - hint_w - 24) : full_room;
-    paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, status_room);
-    if (hint_fits) {
-        paint_text(cr, ui_font(), hint, win_w_ - hint_w - 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB,
-                   -1);
-    }
     const auto now = std::chrono::steady_clock::now();
     const bool expired = !notice_sticky_ && (hint_until_.time_since_epoch().count() == 0 || now >= hint_until_);
     const NoticeDecision notice = decide_notice(session_.message_serial(), shown_message_serial_, expired, query_pinned_);
-    std::string bar;
     if (notice.show_notice && session_.message().empty() && !notice_sticky_) {
         // A stroke that went on to build retracted "Cannot build here."
         shown_message_serial_ = session_.message_serial();
@@ -3169,84 +3200,111 @@ void Shell::draw(cairo_t *cr)
     if (notice.show_notice && !session_.message().empty()) {
         shown_message_serial_ = session_.message_serial();
         shown_message_ = session_.message();
-        hint_until_ = now + std::chrono::seconds(4);
+        hint_until_ = now + std::chrono::milliseconds(kToastMs);
         query_pinned_ = false;
-        bar = shown_message_;
-    } else if (!expired && !shown_message_.empty()) {
-        bar = shown_message_;
-    } else {
-        const int hover = palette_.hover();
-        const int special = special_tool_index();
+    }
+    sync_toasts(now);
+    const std::string hint = context_hint();
+    const std::string clock = session_.scenario_clock_text();
+    const std::string meter = session_.scenario_meter();
+    // Funds, the name, the speed, the date, the clock, then the goal meter on
+    // the left. On the right: the tool under the pointer (or the current
+    // tool) with its cost, and before it the hint for what a click does. The
+    // hint gives way first when the line is short.
+    std::string status = session_.funds_text() + "    " + session_.city_name() + "    " +
+                         speed_word(welcome_gate_ ? 0 : speed_);
+    const int full_room = std::max(1, win_w_ - 16);
+    auto width_of = [&](const char *font, const std::string &text) { return measure_text(cr, font, text, -1).width; };
+    auto fits_in = [&](const std::string &text, int room) { return width_of(ui_font(), text) <= room; };
+    if (fits_in(status + "    " + session_.date_text(), full_room)) {
+        status += "    " + session_.date_text();
+    }
+    if (!clock.empty() && fits_in(status + "    " + clock, full_room)) {
+        status += "    " + clock;
+    }
+    if (!meter.empty() && fits_in(status + "    " + meter, full_room)) {
+        status += "    " + meter;
+    }
+    std::string tool_text;
+    {
         const bool show_keys = !deck_ && !gamepad_nav_;
-        if (hover >= 0 && palette_.hover_ms() >= 350 && (hover == special || tool_by_index(hover) != nullptr)) {
-            if (hover == special) {
-                bar = session_.special_status_line(special_choice_);
-            } else {
-                const char *tip = palette_.tooltip();
-                bar = tip != nullptr ? tip : "";
+        const int special = special_tool_index();
+        int shown_tool = tool_index_;
+        const int hover = palette_.hover();
+        const bool hovering =
+            hover >= 0 && palette_.hover_ms() >= 350 && (hover == special || tool_by_index(hover) != nullptr);
+        if (hovering) {
+            shown_tool = hover;
+        } else if (palette_.focus() >= 0) {
+            shown_tool = palette_.focus();
+        }
+        if (shown_tool == special) {
+            tool_text = (hovering || special_choice_ < 0) ? std::string(tool_by_index(special)->hint)
+                                                          : session_.special_status_line(special_choice_);
+        } else if (shown_tool == kToolCount - 1) {
+            // Query is the no-tool inspect mode: nothing to name or price.
+            tool_text.clear();
+        } else if (const ToolDef *tool = tool_by_index(shown_tool)) {
+            tool_text = tool->hint;
+        }
+        if (show_keys && !tool_text.empty() && shown_tool >= 0 && shown_tool < 17 && dialog_ == Dialog::None) {
+            const std::string key_name = chord_label(binds_.key[KeyTool0 + shown_tool]);
+            if (!key_name.empty() && key_name != "None") {
+                tool_text += "  [" + key_name + "]";
             }
-            if (show_keys && hover >= 0 && hover < 17) {
-                const std::string key_name = chord_label(binds_.key[KeyTool0 + hover]);
-                if (!key_name.empty() && key_name != "None") {
-                    if (!bar.empty()) {
-                        bar += "  ";
-                    }
-                    bar += "[" + key_name + "]";
+        }
+        if (dialog_ != Dialog::None || menu_.open()) {
+            tool_text.clear();
+        }
+    }
+    const int status_w = width_of(ui_font(), status);
+    int right_x = win_w_ - 8;
+    const int tool_w = tool_text.empty() ? 0 : width_of(bold_font(), tool_text);
+    const bool tool_fits = tool_w > 0 && status_w + 24 + tool_w <= win_w_ - 16;
+    if (tool_fits) {
+        right_x -= tool_w;
+        paint_text(cr, bold_font(), tool_text, right_x, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, -1);
+        right_x -= dp(20);
+    }
+    std::string hint_line = hint;
+    const int hint_room = right_x - (8 + status_w + 24);
+    if (!hint_line.empty() && width_of(ui_font(), hint_line) > hint_room) {
+        // Shorten the hint to the room left, or drop it when only a stub fits.
+        if (hint_room < dp(120)) {
+            hint_line.clear();
+        } else {
+            const std::string dots = "\u2026";
+            while (!hint_line.empty() && width_of(ui_font(), hint_line + dots) > hint_room) {
+                // Drop one whole UTF-8 character: its continuation bytes, then its lead byte.
+                while (!hint_line.empty() && (static_cast<unsigned char>(hint_line.back()) & 0xC0) == 0x80) {
+                    hint_line.pop_back();
+                }
+                if (!hint_line.empty()) {
+                    hint_line.pop_back();
                 }
             }
-        } else if (!hint_fits && !hint.empty()) {
-            bar = hint;
-        } else {
-            bar = idle_message();
+            hint_line += dots;
         }
     }
-    double bar_r = 0;
-    double bar_g = 0;
-    double bar_b = 0;
-    double ink_r = 0;
-    double ink_g = 0;
-    double ink_b = 0;
-    theme::banner_fill(bar_r, bar_g, bar_b);
-    theme::banner_ink(ink_r, ink_g, ink_b);
-    const BannerColors look_bar{bar_r, bar_g, bar_b, ink_r, ink_g, ink_b};
-    const bool disaster_bar = notice_is_disaster(bar);
-    const BannerColors message_bar = message_bar_colors(disaster_bar, look_bar);
-    const BannerColors goal_bar = goal_banner_colors(look_bar);
-    bar_r = message_bar.r;
-    bar_g = message_bar.g;
-    bar_b = message_bar.b;
-    ink_r = message_bar.ink_r;
-    ink_g = message_bar.ink_g;
-    ink_b = message_bar.ink_b;
-    fill(cr, 0, win_h_ - message_h_, win_w_, message_h_, bar_r, bar_g, bar_b);
-    if (disaster_bar) {
-        fill(cr, 0, win_h_ - message_h_, win_w_, 3, 1.0, 0.85, 0.2);
+    paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, full_room);
+    if (!hint_line.empty()) {
+        const int hint_w = width_of(ui_font(), hint_line);
+        paint_text(cr, ui_font(), hint_line, right_x - hint_w, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB,
+                   -1);
     }
-    std::string bar_line = bar;
-    const int bar_limit = std::max(8, win_w_ - 16);
-    if (measure_text(cr, body_font(), bar_line, -1).width > bar_limit) {
-        const std::string dots = "...";
-        while (!bar_line.empty() && measure_text(cr, body_font(), bar_line + dots, -1).width > bar_limit) {
-            bar_line.pop_back();
-        }
-        bar_line += dots;
+    if (notice_sticky_ && !notice_text_.empty() && now >= notice_until_) {
+        dismiss_background_notice();
     }
-    paint_text(cr, body_font(), bar_line, 8, win_h_ - message_h_ + 10, ink_r, ink_g, ink_b, win_w_ - 16);
-    notice_bar_y_ = -1;
-    notice_bar_h_ = 0;
-    if (notice_sticky_ && !notice_text_.empty()) {
-        if (now >= notice_until_) {
-            dismiss_background_notice();
-        } else {
-            const int notice_wrap = std::max(8, win_w_ - 16);
-            const TextMetrics notice_m = measure_text(cr, ui_font(), notice_text_, notice_wrap);
-            notice_bar_h_ = static_cast<double>(notice_m.height + dp(10));
-            notice_bar_y_ = static_cast<double>(status_y) - notice_bar_h_;
-            fill(cr, 0, notice_bar_y_, win_w_, notice_bar_h_, 1.0, 0.96, 0.72);
-            stroke_rect(cr, 0, notice_bar_y_, win_w_, notice_bar_h_, 0.55, 0.32, 0.08);
-            paint_text(cr, ui_font(), notice_text_, 8, notice_bar_y_ + dp(4), 0.25, 0.12, 0.04, notice_wrap);
-        }
-    }
+    draw_toasts(cr, now);
+    double look_r = 0;
+    double look_g = 0;
+    double look_b = 0;
+    double look_ink_r = 0;
+    double look_ink_g = 0;
+    double look_ink_b = 0;
+    theme::banner_fill(look_r, look_g, look_b);
+    theme::banner_ink(look_ink_r, look_ink_g, look_ink_b);
+    const BannerColors goal_bar = goal_banner_colors(BannerColors{look_r, look_g, look_b, look_ink_r, look_ink_g, look_ink_b});
     const std::string goal = session_.scenario_progress();
     if (session_.scenario_id() != goal_scenario_) {
         goal_scenario_ = session_.scenario_id();
@@ -3520,6 +3578,147 @@ std::string Shell::dialog_title_hint() const
     return pad ? hint_join({hint_button(a, "confirms"), hint_button(b, "closes")}) : "Enter confirms. Esc closes";
 }
 
+void Shell::sync_toasts(std::chrono::steady_clock::time_point now)
+{
+    // shown_message_ and hint_until_ still say what the latest alert is.
+    // A new deadline means a new alert (or the same one again); a deadline
+    // already passed means the alert was taken back, so its toast goes too.
+    if (hint_until_ != toast_seen_until_) {
+        toast_seen_until_ = hint_until_;
+        if (hint_until_ > now && !shown_message_.empty()) {
+            const auto until = now + std::chrono::milliseconds(kToastMs);
+            if (!toasts_.empty() && toasts_.back().text == shown_message_) {
+                toasts_.back().until = until;
+            } else {
+                toasts_.push_back(Toast{shown_message_, notice_is_disaster(shown_message_), until});
+                if (toasts_.size() > kToastMax) {
+                    toasts_.erase(toasts_.begin());
+                }
+            }
+        } else if (!toasts_.empty() && toasts_.back().text == toast_last_text_) {
+            toasts_.pop_back();
+        }
+        toast_last_text_ = shown_message_;
+    }
+    toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(), [&](const Toast &toast) { return toast.until <= now; }),
+                  toasts_.end());
+}
+
+int Shell::toast_wake_ms(std::chrono::steady_clock::time_point now) const
+{
+    // Sleep until the next fade starts, then redraw at about 30 Hz while it runs.
+    int wake = 500;
+    for (const Toast &toast : toasts_) {
+        const auto fade_at = toast.until - std::chrono::milliseconds(kToastFadeMs);
+        if (now >= fade_at) {
+            return 33;
+        }
+        wake = std::min(wake, static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(fade_at - now).count()));
+    }
+    return std::max(1, wake);
+}
+
+void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
+{
+    notice_bar_x_ = -1;
+    notice_bar_y_ = -1;
+    notice_bar_w_ = 0;
+    notice_bar_h_ = 0;
+    const bool sticky = notice_sticky_ && !notice_text_.empty();
+    if ((toasts_.empty() && !sticky) || view_w_ < dp(64) || view_h_ < dp(48)) {
+        return;
+    }
+    // Bottom-right of the map, clear of the scroll bars, stacking upward:
+    // the sticky notice nearest the corner, then the newest alert. The map
+    // clip keeps them off the toolbar and the status line.
+    const double edge = dp(16);
+    const double max_w = std::min(static_cast<double>(dp(460)), std::max(static_cast<double>(dp(160)), view_w_ * 0.6));
+    const double pad_x = dp(12);
+    const double pad_y = dp(8);
+    const double gap = dp(8);
+    double bottom = view_y_ + view_h_ - edge;
+    if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging()) {
+        bottom -= dp(78) + gap;
+    }
+    const double top_limit = view_y_ + dp(8);
+    double look_r = 0;
+    double look_g = 0;
+    double look_b = 0;
+    double ink_r = 0;
+    double ink_g = 0;
+    double ink_b = 0;
+    theme::banner_fill(look_r, look_g, look_b);
+    theme::banner_ink(ink_r, ink_g, ink_b);
+    const BannerColors look{look_r, look_g, look_b, ink_r, ink_g, ink_b};
+    cairo_save(cr);
+    cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
+    cairo_clip(cr);
+    auto plate = [&](const std::string &text, const BannerColors &colors, double frame_r, double frame_g, double frame_b,
+                     bool stripe, double alpha, double &x_out, double &y_out, double &w_out, double &h_out) {
+        const int wrap = static_cast<int>(max_w - 2 * pad_x);
+        const TextMetrics metrics = measure_text(cr, body_font(), text, wrap);
+        const double w = std::min(max_w, metrics.width + 2 * pad_x);
+        const double h = metrics.height + 2 * pad_y;
+        const double x = view_x_ + view_w_ - edge - w;
+        const double y = bottom - h;
+        if (y < top_limit) {
+            return false;
+        }
+        cairo_push_group(cr);
+        cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
+        round_dialog_rect(cr, x + 2, y + 3, w, h, dp(6));
+        cairo_fill(cr);
+        round_dialog_rect(cr, x, y, w, h, dp(6));
+        cairo_set_source_rgb(cr, colors.r, colors.g, colors.b);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgb(cr, frame_r, frame_g, frame_b);
+        cairo_set_line_width(cr, 1.5);
+        cairo_stroke(cr);
+        if (stripe) {
+            cairo_save(cr);
+            round_dialog_rect(cr, x, y, w, h, dp(6));
+            cairo_clip(cr);
+            fill(cr, x, y, dp(4), h, 1.0, 0.85, 0.2);
+            cairo_restore(cr);
+        }
+        paint_text(cr, body_font(), text, x + pad_x, y + pad_y, colors.ink_r, colors.ink_g, colors.ink_b, wrap);
+        cairo_pop_group_to_source(cr);
+        cairo_paint_with_alpha(cr, alpha);
+        x_out = x;
+        y_out = y;
+        w_out = w;
+        h_out = h;
+        bottom = y - gap;
+        return true;
+    };
+    double x = 0;
+    double y = 0;
+    double w = 0;
+    double h = 0;
+    if (sticky) {
+        const BannerColors cream{1.0, 0.96, 0.72, 0.25, 0.12, 0.04};
+        if (plate(notice_text_, cream, 0.55, 0.32, 0.08, false, 1.0, x, y, w, h)) {
+            notice_bar_x_ = x;
+            notice_bar_y_ = y;
+            notice_bar_w_ = w;
+            notice_bar_h_ = h;
+        }
+    }
+    for (auto it = toasts_.rbegin(); it != toasts_.rend(); ++it) {
+        const double left_ms =
+            static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(it->until - now).count());
+        const double alpha = std::max(0.0, std::min(1.0, left_ms / kToastFadeMs));
+        if (alpha <= 0.0) {
+            continue;
+        }
+        const BannerColors colors = message_bar_colors(it->disaster, look);
+        if (!plate(it->text, colors, 0, 0, 0, it->disaster, alpha, x, y, w, h)) {
+            break;
+        }
+    }
+    cairo_restore(cr);
+}
+
 std::string Shell::context_hint() const
 {
     const bool pad = gamepad_nav_ || deck_;
@@ -3545,7 +3744,13 @@ std::string Shell::context_hint() const
     }
     const ToolDef *tool = tool_by_index(tool_index_);
     const int engine = tool != nullptr ? tool->engine_id : TOOL_QUERY;
+    // With Query (no tool picked) the map hint is left out entirely; the
+    // status line's right side stays empty.
+    const bool tool_hint = tool_has_status_hint(engine);
     if (overlay_on_) {
+        if (!tool_hint) {
+            return pad ? hint_join({hint_button(b, "closes the map"), "D-pad scrolls"}) : "Esc closes the map";
+        }
         return pad ? hint_join({tool_press_phrase(engine, a.c_str()), hint_button(b, "closes the map"), "D-pad scrolls"})
                    : std::string(tool_click_phrase(engine)) + ". Esc closes the map";
     }
@@ -3571,11 +3776,17 @@ std::string Shell::context_hint() const
         if (cursor_y_ < static_cast<float>(menu_h_) || cursor_x_ < static_cast<float>(view_x_)) {
             return hint_join({"Pointing at the panel", hint_button(a, "uses it"), hint_button(menu, "menu")});
         }
+        if (!tool_hint) {
+            return {};
+        }
         const std::string query = glyph_for(PadQuery);
         const std::string pause = glyph_for(PadPause);
         return hint_join({tool_press_phrase(engine, a.c_str()), hint_button(query, "query"),
                           hint_button(pause, speed_ <= 0 ? "resumes" : "pauses"), hint_pair(left, right, "tool"),
                           hint_button(menu, "menu")});
+    }
+    if (!tool_hint) {
+        return {};
     }
     if (finger) {
         std::string phrase = tool_click_phrase(engine);
@@ -4069,19 +4280,20 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         cairo_set_source(cr, shade);
         cairo_fill_preserve(cr);
         cairo_pattern_destroy(shade);
-        cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);
-        cairo_set_line_width(cr, std::max(2.0, static_cast<double>(dp(2))));
+        const bool focused = focus_id_ == id;
+        if (focused) {
+            // Focus is the button's own outline in blue, like the dialog buttons.
+            cairo_set_source_rgb(cr, 0.10, 0.35, 0.78);
+            cairo_set_line_width(cr, std::max(3.0, static_cast<double>(dp(3))));
+        } else {
+            cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);
+            cairo_set_line_width(cr, std::max(2.0, static_cast<double>(dp(2))));
+        }
         cairo_stroke(cr);
         round_rect(cr, x + 2.5, y + 2.5, w - 5, h - 5, dp(4));
-        cairo_set_source_rgba(cr, 1, 1, 1, primary ? 0.28 : 0.45);
-        cairo_set_line_width(cr, 1);
+        cairo_set_source_rgba(cr, 1, 1, 1, focused && primary ? 1.0 : (primary ? 0.28 : 0.45));
+        cairo_set_line_width(cr, focused && primary ? 1.5 : 1);
         cairo_stroke(cr);
-        if (focus_id_ == id) {
-            round_rect(cr, x + 4, y + 4, w - 8, h - 8, dp(3));
-            cairo_set_source_rgb(cr, primary ? 1.0 : 0.15, primary ? 1.0 : 0.12, primary ? 1.0 : 0.08);
-            cairo_set_line_width(cr, 1.5);
-            cairo_stroke(cr);
-        }
         const std::string plain = strip_mnemonic(label);
         const TextMetrics metrics = measure_text(cr, ui_font(), plain, -1);
         const double tx = x + (w - metrics.width) / 2.0;
