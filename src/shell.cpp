@@ -528,7 +528,7 @@ void Shell::apply_loaded_settings()
 
 void Shell::set_look_preference(Look look)
 {
-    const int which = look_to_setting(look);
+    const int which = look_to_setting(ui_scale::offered_look(look));
     const int before = drawn_look_;
     look_pref_.look = which;
     tile_atlas().set_look(which);
@@ -685,7 +685,9 @@ void Shell::dismiss_background_notice()
     notice_sticky_ = false;
     autosave_warned_ = false;
     notice_text_.clear();
+    notice_bar_x_ = -1;
     notice_bar_y_ = -1;
+    notice_bar_w_ = 0;
     notice_bar_h_ = 0;
 }
 
@@ -1192,6 +1194,7 @@ void Shell::loop()
                         std::chrono::duration_cast<std::chrono::milliseconds>(hint_until_ - now_wait).count());
                     timeout = std::max(1, std::min(timeout, ms));
                 }
+                timeout = std::max(1, std::min(timeout, toast_wake_ms(now_wait)));
                 if (notice_sticky_ && notice_until_ > now_wait) {
                     const int ms = static_cast<int>(
                         std::chrono::duration_cast<std::chrono::milliseconds>(notice_until_ - now_wait).count());
@@ -2173,9 +2176,9 @@ void Shell::handle_event(const SDL_Event &event)
             pointer_down_ = true;
             break;
         }
-        if (notice_sticky_ &&
-            ((notice_bar_h_ > 0 && pointer_y_ >= notice_bar_y_ && pointer_y_ < notice_bar_y_ + notice_bar_h_) ||
-             pointer_y_ >= win_h_ - message_h_)) {
+        if (notice_sticky_ && notice_bar_h_ > 0 && pointer_x_ >= notice_bar_x_ &&
+            pointer_x_ < notice_bar_x_ + notice_bar_w_ && pointer_y_ >= notice_bar_y_ &&
+            pointer_y_ < notice_bar_y_ + notice_bar_h_) {
             dismiss_background_notice();
             break;
         }
@@ -2796,8 +2799,8 @@ void Shell::handle_event(const SDL_Event &event)
         touch_used_ = true;
         const float x = event.tfinger.x * static_cast<float>(win_w_);
         const float y = event.tfinger.y * static_cast<float>(win_h_);
-        if (event.type == SDL_EVENT_FINGER_DOWN && notice_sticky_ && notice_bar_h_ > 0 &&
-            y >= notice_bar_y_ && y < notice_bar_y_ + notice_bar_h_) {
+        if (event.type == SDL_EVENT_FINGER_DOWN && notice_sticky_ && notice_bar_h_ > 0 && x >= notice_bar_x_ &&
+            x < notice_bar_x_ + notice_bar_w_ && y >= notice_bar_y_ && y < notice_bar_y_ + notice_bar_h_) {
             dismiss_background_notice();
             break;
         }

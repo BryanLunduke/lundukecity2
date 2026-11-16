@@ -18,6 +18,8 @@ struct ToolDef {
 extern const ToolDef kTools[];
 extern const int kToolCount;
 extern const int kDefaultToolIndex;
+// Buttons in the toolbar grid: every tool but Query (the last entry).
+extern const int kPaletteToolCount;
 
 const ToolDef *tool_by_index(int index);
 // Short instruction for the selected tool, such as "Bulldozer: click to clear".

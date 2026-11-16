@@ -752,7 +752,7 @@ void Shell::drive_ui_test()
             tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return menu_.open_menu == column; });
         }
         if (menu_.open_menu != 3) {
-            fail("gamepad could not reach the Windows menu");
+            fail("gamepad could not reach the Analysis menu");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return dialog_ == Dialog::None; });

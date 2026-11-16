@@ -7,6 +7,7 @@
 #include "tool_keys.hpp"
 
 #include <string>
+#include <vector>
 
 inline char controls_letter(char key)
 {
@@ -45,24 +46,45 @@ inline int controls_page_count()
     return 3;
 }
 
-// One screen on first launch: zones, power, roads, the demand meters, and the budget.
+struct HowToPlaySection {
+    const char *heading;
+    const char *body;
+};
+
+// One screen on first launch: zones, power, roads, the demand meters, and the
+// budget. Each topic is a short heading over a sentence or two.
+inline std::vector<HowToPlaySection> how_to_play_sections()
+{
+    return {
+        {"Zones and roads",
+         "Place residential, commercial, and industrial zones. That is where the city grows. Connect them with roads."},
+        {"Power", "Build a coal or nuclear plant, and run power lines from it to every zone."},
+        {"Demand", "The R, C, and I meters show demand. A bar above the middle means the city wants more of that zone."},
+        {"Budget",
+         "Each January the budget opens. Set the tax and the road, police, and fire funding, then collect taxes. "
+         "Auto budget does this for you. Police and fire stations need that funding, or they stop covering the "
+         "blocks around them."},
+        {"Finding your way",
+         "A scenario names a goal and a deadline. Right-click the map, or press Q, to switch to Query, then click "
+         "a tile to see what is there. The minimap jumps across the city."},
+        {"Touch",
+         "A tap builds one tile. A drag pans the map. Hold still, then drag, to lay a line. Two fingers pan or pinch "
+         "to zoom."},
+    };
+}
+
 inline std::string how_to_play_text()
 {
-    return "Place residential, commercial, and industrial zones. That is where the city grows.\n"
-           "\n"
-           "Connect them with roads, and run power lines from a coal or nuclear plant to every zone.\n"
-           "\n"
-           "The R, C, and I meters show demand. A bar above the middle means the city wants more of that zone.\n"
-           "\n"
-           "Each January the budget opens. Set the tax and the road, police, and fire funding, then collect taxes. "
-           "Auto budget does this for you.\n"
-           "\n"
-           "Police and fire stations need that funding, or they stop covering the blocks around them.\n"
-           "\n"
-           "A scenario names a goal and a deadline. Query explains a tile. The minimap jumps across the city.\n"
-           "\n"
-           "On a touchscreen, a tap builds one tile. A drag pans the map. Hold still, then drag, to lay a line. "
-           "Two fingers pan or pinch to zoom.";
+    std::string text;
+    for (const HowToPlaySection &section : how_to_play_sections()) {
+        if (!text.empty()) {
+            text += "\n\n";
+        }
+        text += section.heading;
+        text += "\n";
+        text += section.body;
+    }
+    return text;
 }
 
 inline std::string controls_page_indicator(int page)
@@ -131,33 +153,6 @@ struct ControlsKeyText {
     }
 };
 
-inline std::string controls_tool_column(int begin, int end, const ControlsKeyText *keys = nullptr)
-{
-    static const char *names[] = {"Bulldozer", "Roads", "Rail", "Power lines", "Park", "Residential",
-                                  "Commercial", "Industrial", "Police", "Fire dept", "Stadium", "Seaport",
-                                  "Coal power", "Nuclear", "Airport", "Special", "Query"};
-    std::string text;
-    if (begin < 0) {
-        begin = 0;
-    }
-    if (end > 17) {
-        end = 17;
-    }
-    for (int i = begin; i < end; ++i) {
-        if (keys != nullptr && !keys->tool[i].empty()) {
-            text += keys->tool[i];
-        } else {
-            text.push_back(controls_letter(tool_hotkey(i)));
-        }
-        text += "  ";
-        text += names[i];
-        if (i + 1 < end) {
-            text += "\n";
-        }
-    }
-    return text;
-}
-
 // Names come from Shell::glyph so a Deck says L1 and a PlayStation pad says
 // its own face symbols. The back grips and the Guide button are not mapped,
 // so this page does not mention them.
@@ -174,76 +169,139 @@ struct ControlsPadNames {
     const char *r3 = "RS";
 };
 
-inline std::string controls_page_body(int page, bool deck, const ControlsPadNames &pad = {},
-                                      const ControlsKeyText &keys = {})
+// One row of the Controls window: the key or button on the left, what it
+// does on the right. A section is a heading over its rows.
+struct ControlsRow {
+    std::string key;
+    std::string action;
+};
+
+struct ControlsSection {
+    std::string heading;
+    std::vector<ControlsRow> rows;
+    // Which column of the window the section sits in: 0 left, 1 middle or
+    // right. Side 2 is a column of its own when the window is wide enough,
+    // otherwise a full-width band below, split into a few side-by-side runs.
+    int side = 0;
+};
+
+inline const char *controls_tool_name(int index)
 {
-    switch (controls_page_index(page, deck)) {
-    case 1: {
-        std::string body;
-        body += pad.confirm;
-        body += " confirms, builds, or opens the highlighted row.\n";
-        body += pad.cancel;
-        body += " cancels or closes. On a field, ";
-        body += pad.cancel;
-        body += " deletes a letter. When nothing is left to delete, ";
-        body += pad.cancel;
-        body += " leaves the field, and the next ";
-        body += pad.cancel;
-        body += " closes the window.\n";
-        body += pad.view;
-        body += " does the same as ";
-        body += pad.cancel;
-        body += ".\n";
-        body += pad.west;
-        body += " is Query on the map, and deletes a letter while a field is active.\n";
-        body += pad.north;
-        body += " pauses and resumes the previous speed. Hold ";
-        body += pad.north;
-        body += " to cycle slow, medium, and fast. On the on-screen keyboard it types a space. On the land page it draws new terrain.\n";
-        body += pad.menu;
-        body += " opens the menu. In a window it confirms OK when that window has one. On a field or a keyboard key, ";
-        body += pad.menu;
-        body += " confirms that page.\n";
-        body += "Hold ";
-        body += pad.confirm;
-        body += " and move the D-pad or the left stick to drag a line of the current tool.\n";
-        body += "The left stick moves the cursor. The D-pad moves one step, then repeats while held. It scrolls a list, adjusts a slider, or pans the map.\n";
-        body += pad.left;
-        body += " and ";
-        body += pad.right;
-        body += " change tools when no window is open, and take a larger step on a slider.\n";
-        body += pad.l3;
-        body += " toggles the map overlay. ";
-        body += pad.r3;
-        body += " centers the view on the cursor.\n";
-        body += "The right stick pans. Each trigger press zooms one step.\n";
-        body += pad.cancel;
-        body += " closes a map overlay.";
-        return body;
+    static const char *names[] = {"Bulldozer", "Roads", "Rail", "Power lines", "Park", "Residential",
+                                  "Commercial", "Industrial", "Police", "Fire dept", "Stadium", "Seaport",
+                                  "Coal power", "Nuclear", "Airport", "Special buildings", "Query (inspect a tile)"};
+    if (index < 0 || index >= 17) {
+        return "";
     }
+    return names[index];
+}
+
+// The key shown for a tool: the remapped key when there is one.
+inline std::string controls_tool_key(int index, const ControlsKeyText &keys)
+{
+    if (index >= 0 && index < 17 && !keys.tool[index].empty()) {
+        return keys.tool[index];
+    }
+    const char key = tool_hotkey(index);
+    return key == 0 ? std::string() : std::string(1, controls_letter(key));
+}
+
+inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, const ControlsPadNames &pad = {},
+                                                           const ControlsKeyText &keys = {})
+{
+    std::vector<ControlsSection> sections;
+    const std::string a = pad.confirm;
+    const std::string b = pad.cancel;
+    switch (controls_page_index(page, deck)) {
+    case 1:
+        sections.push_back({"Buttons",
+                            {
+                                {a, "Confirm, build, or open the highlighted row"},
+                                {b + " or " + pad.view, "Cancel or close. In a field, delete a letter first"},
+                                {pad.west, "Switch to Query. In a field, delete a letter"},
+                                {pad.north, "Pause or resume. Hold to cycle slow, medium, and fast"},
+                                {pad.menu, "Open the menu. In a window, press OK"},
+                                {std::string(pad.left) + " / " + pad.right, "Previous or next tool. A bigger slider step"},
+                                {pad.l3, "Show or hide the map overlay"},
+                                {pad.r3, "Center the view on the cursor"},
+                            }, 0});
+        sections.push_back({"Moving around",
+                            {
+                                {"Left stick", "Move the cursor"},
+                                {"D-pad", "Step and repeat: scroll a list, adjust a slider, or pan"},
+                                {"Right stick", "Pan the map"},
+                                {"Triggers", "Zoom one step per press"},
+                                {"Hold " + a + " and move", "Drag a line with the current tool"},
+                            }, 1});
+        sections.push_back({"New City window",
+                            {
+                                {pad.north, "On the keyboard, type a space. On the land page, draw new terrain"},
+                                {pad.menu, "Confirm the keyboard or the field"},
+                            }, 1});
+        return sections;
     case 2:
-        return std::string("Tap a tool, a menu, or a button to use it. Buttons and menu rows are sized for a finger.\n"
-               "\n"
-               "A tap on the map builds one tile when the finger lifts. A drag pans. Hold still for a moment, then drag, to lay a line with the current tool.\n"
-               "\n"
-               "A second finger pans or pinches to zoom. Drag a slider, the minimap, or a list with one finger.\n"
-               "\n"
-               "The on-screen keyboard types into the name and seed fields. Random fills a city name and does not repeat the last one.\n"
-               "\n"
-               "Confirming the page does not type the highlighted key.");
+        sections.push_back({"Map",
+                            {
+                                {"Tap", "Build one tile when the finger lifts"},
+                                {"Drag", "Pan the map"},
+                                {"Hold, then drag", "Lay a line with the current tool"},
+                                {"Two fingers", "Pan, or pinch to zoom"},
+                            }, 0});
+        sections.push_back({"Windows and lists",
+                            {
+                                {"Tap", "Use a tool, a menu, or a button"},
+                                {"One-finger drag", "Move a slider, the minimap, or a list"},
+                                {"Keyboard", "Types into the name and seed fields"},
+                                {"Random", "Picks a new city name"},
+                            }, 1});
+        return sections;
     default:
         break;
     }
-    return "Enter confirms. Esc closes a window, and closes a map overlay when no window is open.\n" + keys.pause +
-           " pauses. Ctrl+P pauses. " + keys.slow + " slow, " + keys.medium + " medium, " + keys.fast + " fast.\n" +
-           keys.neu + " new city. " + keys.load + " load. " + keys.save + " save. " + keys.save_as + " save as. " +
-           keys.quit + " quit.\n"
-           "Arrow keys pan. Hold Ctrl and press an arrow to move a build cursor. Enter builds with it. Esc clears it.\n" +
-           keys.zoom_in + " and " + keys.zoom_out +
-           " zoom. " + keys.fullscreen +
-           " or Alt+Enter toggles fullscreen.\n"
-           "The wheel scrolls the map. Hold Ctrl and roll the wheel to zoom. Settings can make the wheel zoom by itself.\n"
-           "Left drag builds. Right or middle drag pans. A short right-click switches to Query.\n"
-           "In Graphs, Left and Right read the values under the chart.\n"
-           "Tool keys:";
+    sections.push_back({"Game",
+                        {
+                            {"Enter", "Confirm, or build at the cursor"},
+                            {"Esc", "Close a window or overlay"},
+                            {keys.pause, "Pause or resume"},
+                            {"Ctrl+P", "Pause"},
+                            {keys.slow, "Slow speed"},
+                            {keys.medium, "Medium speed"},
+                            {keys.fast, "Fast speed"},
+                            {keys.fullscreen, "Fullscreen"},
+                            {"Alt+Enter", "Fullscreen"},
+                        }, 0});
+    sections.push_back({"Map",
+                        {
+                            {"Arrow keys", "Pan"},
+                            {"Ctrl+Arrow", "Move the build cursor"},
+                            {keys.zoom_in, "Zoom in"},
+                            {keys.zoom_out, "Zoom out"},
+                            {"Wheel", "Scroll the map"},
+                            {"Ctrl+Wheel", "Zoom"},
+                            {"Left drag", "Build with the current tool"},
+                            {"Right drag", "Pan"},
+                            {"Middle drag", "Pan"},
+                            {"Right-click", "Switch to Query"},
+                        }, 1});
+    sections.push_back({"Analysis",
+                        {
+                            {keys.budget, "Budget"},
+                            {keys.graphs, "Graphs"},
+                            {keys.evaluation, "Evaluation"},
+                            {"Left / Right", "Read a graph"},
+                        }, 1});
+    sections.push_back({"City",
+                        {
+                            {keys.neu, "New city"},
+                            {keys.load, "Load a city"},
+                            {keys.save, "Save"},
+                            {keys.save_as, "Save as"},
+                            {keys.quit, "Quit"},
+                        }, 0});
+    ControlsSection tools{"Tool keys", {}, 2};
+    for (int i = 0; i < 17; ++i) {
+        tools.rows.push_back({controls_tool_key(i, keys), controls_tool_name(i)});
+    }
+    sections.push_back(tools);
+    return sections;
 }

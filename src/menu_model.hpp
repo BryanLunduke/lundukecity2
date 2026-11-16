@@ -4,10 +4,11 @@
 
 #pragma once
 
-// Menu model for the SDL shell. 53 actionable rows: 8 System, 17 Options,
-// 6 Disasters, 19 Windows, 3 Help. Fullscreen, the zone and coverage
+// Menu model for the SDL shell. 52 actionable rows: 8 System, 16 Options,
+// 6 Disasters, 19 Analysis, 3 Help. Fullscreen, the zone and coverage
 // maps, the single-zone and transportation maps, and Messages are the
-// rows past the original 37. The look trio sits at the bottom of Options.
+// rows past the original 37. The Classic and SVGA looks sit at the bottom
+// of Options. Spooky is off the menu until it is polished.
 // Hidden zoom accelerators are extra bindings, not extra rows.
 
 #include <algorithm>
@@ -136,7 +137,6 @@ inline constexpr MenuEntry kOptions[] = {
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Classic look", nullptr, ItemKind::Radio, Action::ClassicLook, AccelKey::None, 0, 2},
     {"SVGA loo_k", nullptr, ItemKind::Radio, Action::SvgaLook, AccelKey::None, 0, 2},
-    {"Spook_y look", nullptr, ItemKind::Radio, Action::SpookyLook, AccelKey::None, 0, 2},
 };
 
 inline constexpr MenuEntry kDisasters[] = {
@@ -148,7 +148,7 @@ inline constexpr MenuEntry kDisasters[] = {
     {"_Meltdown…", nullptr, ItemKind::Normal, Action::Meltdown, AccelKey::None, 0, 0},
 };
 
-inline constexpr MenuEntry kWindows[] = {
+inline constexpr MenuEntry kAnalysis[] = {
     {"_Budget", "Ctrl+B", ItemKind::Normal, Action::Budget, AccelKey::B, static_cast<int>(AccelMod::Ctrl), 0},
     {"_Graphs", "Ctrl+G", ItemKind::Normal, Action::Graphs, AccelKey::G, static_cast<int>(AccelMod::Ctrl), 0},
     {"_Evaluation", "Ctrl+E", ItemKind::Normal, Action::Evaluation, AccelKey::E, static_cast<int>(AccelMod::Ctrl), 0},
@@ -189,7 +189,7 @@ inline int column_count(int index)
     case 2:
         return static_cast<int>(sizeof(kDisasters) / sizeof(kDisasters[0]));
     case 3:
-        return static_cast<int>(sizeof(kWindows) / sizeof(kWindows[0]));
+        return static_cast<int>(sizeof(kAnalysis) / sizeof(kAnalysis[0]));
     case 4:
         return static_cast<int>(sizeof(kHelp) / sizeof(kHelp[0]));
     default:
@@ -207,7 +207,7 @@ inline const MenuEntry *column_items(int index)
     case 2:
         return kDisasters;
     case 3:
-        return kWindows;
+        return kAnalysis;
     case 4:
         return kHelp;
     default:
@@ -225,7 +225,7 @@ inline const char *column_title(int index)
     case 2:
         return "_Disasters";
     case 3:
-        return "_Windows";
+        return "_Analysis";
     case 4:
         return "_Help";
     default:

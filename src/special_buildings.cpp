@@ -42,6 +42,11 @@ bool special_center_needs_bolt(int raw, int index, int cell, bool blink_on)
         return false;
     }
     const SpecialBuilding &building = special_building(index);
+    // Only a building that conducts (the prison) can ever be powered. The
+    // park-like landmarks never take power, so they never flash for it.
+    if (!building.needs_power) {
+        return false;
+    }
     const int center = building.anchor_y * building.width + building.anchor_x;
     return cell == center;
 }
@@ -320,6 +325,55 @@ void settle_cell(Micropolis *sim, int x, int y, bool rubble_rest)
     sim->map[x][y] = static_cast<unsigned short>(RUBBLE | BULLBIT);
 }
 
+// Shoreline art on the water row just south of a marina. Water edge tiles
+// carry a strip of beach on every side that faced land when the map was
+// made. A marina built on the beach left that strip between its docks and
+// the open water. This is the engine's smoothRiver table (west, south, east,
+// north), with the docks above counted as water, so
+// open water now meets the docks. The edge variant (+1) is kept so the
+// water does not reshuffle. Bulldozing runs it again with the real tile
+// above, which puts the beach back.
+// The engine's test: anything but dirt and woods counts as water.
+bool shore_water_at(const Micropolis *sim, int x, int y)
+{
+    if (!in_bounds(x, y)) {
+        return false;
+    }
+    const int tile = static_cast<int>(sim->map[x][y] & LOMASK);
+    return tile != DIRT && !(tile >= WOODS_LOW && tile <= WOODS_HIGH);
+}
+
+void reedge_below(Micropolis *sim, int left, int top, int width, int height, bool docks_above)
+{
+    static const int kEdgeTable[16] = {13, 13, 17, 15, 5, RIVER, 19, 17, 9, 11, RIVER, 13, 7, 9, 5, RIVER};
+    const int y = top + height;
+    for (int x = left; x < left + width; ++x) {
+        if (!in_bounds(x, y)) {
+            continue;
+        }
+        const int tile = static_cast<int>(sim->map[x][y] & LOMASK);
+        if (tile < FIRSTRIVEDGE || tile > LASTRIVEDGE) {
+            continue;
+        }
+        int bits = 0;
+        bits = (bits << 1) | (shore_water_at(sim, x - 1, y) ? 1 : 0);
+        bits = (bits << 1) | (shore_water_at(sim, x, y + 1) ? 1 : 0);
+        bits = (bits << 1) | (shore_water_at(sim, x + 1, y) ? 1 : 0);
+        // Above is the old footprint. After a bulldoze only real water there
+        // (the restored shoreline) counts. Rubble is the beach again.
+        bits = (bits << 1) | ((docks_above || (in_bounds(x, y - 1) && is_water_tile(tile_of(sim, x, y - 1)))) ? 1 : 0);
+        int next = kEdgeTable[bits & 15];
+        if (next == RIVER) {
+            sim->map[x][y] = static_cast<unsigned short>(RIVER);
+            continue;
+        }
+        if (((tile - FIRSTRIVEDGE) & 1) != 0) {
+            ++next;
+        }
+        sim->map[x][y] = static_cast<unsigned short>(next | BULLBIT);
+    }
+}
+
 bool live_center_at(const Micropolis *sim, int x, int y)
 {
     if (!in_bounds(x, y)) {
@@ -591,6 +645,7 @@ bool bulldoze_dock_wreck(Micropolis *sim, int tile_x, int tile_y)
             settle_cell(sim, best_left + dx, best_top + dy, true);
         }
     }
+    reedge_below(sim, best_left, best_top, best_width, best_height, false);
     sim->spend(1);
     sim->invalidateMaps();
     return true;
@@ -609,6 +664,12 @@ const SpecialBuilding &special_building(int index)
         return kBuildings[0];
     }
     return kBuildings[index];
+}
+
+bool special_tile_skips_power(int tile)
+{
+    const int index = special_index_for_tile(tile);
+    return index >= 0 && !special_building(index).needs_power;
 }
 
 int special_index_for_tile(int tile)
@@ -972,6 +1033,9 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
             sim->map[x][y] = static_cast<unsigned short>(tile | bits);
         }
     }
+    if (building.needs_south_water) {
+        reedge_below(sim, left, top, building.width, building.height, true);
+    }
     sim->spend(building.cost);
     sim->invalidateMaps();
     return true;
@@ -996,6 +1060,9 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y)
             for (int dx = 0; dx < building.width; ++dx) {
                 settle_cell(sim, left + dx, top + dy, true);
             }
+        }
+        if (building.needs_south_water) {
+            reedge_below(sim, left, top, building.width, building.height, false);
         }
         sim->spend(1);
         sim->invalidateMaps();
@@ -1023,6 +1090,17 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y)
     // Every body tile is gone. A marina that covered shoreline can still
     // be named by the dock notes, including while the explosion plays.
     return bulldoze_dock_wreck(sim, tile_x, tile_y);
+}
+
+bool special_skips_power_at(const Micropolis *sim, int tile_x, int tile_y)
+{
+    int cx = 0;
+    int cy = 0;
+    int index = -1;
+    if (sim == nullptr || !find_center(sim, tile_x, tile_y, cx, cy, index)) {
+        return false;
+    }
+    return !kBuildings[index].needs_power;
 }
 
 std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y)

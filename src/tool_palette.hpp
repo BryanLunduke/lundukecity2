@@ -9,7 +9,8 @@
 #include <algorithm>
 #include <functional>
 
-// Two-by-nine tool grid. Icons are original drawings, not imported artwork.
+// Toolbar grid of the 16 build tools (Query has no button). Icons are
+// original drawings, not imported artwork.
 
 // Nearest-neighbor scale for a square sprite. A slot smaller than the sprite
 // (UI scale below 1) shrinks to fit. A larger slot uses the biggest whole
@@ -94,6 +95,7 @@ public:
     void motion(double x, double y);
     void leave();
     void set_focus(int index) { focus_ = index; }
+    int focus() const { return focus_; }
     void advance(int elapsed_ms);
     int hover_ms() const { return hover_ms_; }
     void draw(cairo_t *cr) const;

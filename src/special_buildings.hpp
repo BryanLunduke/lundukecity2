@@ -76,6 +76,9 @@ int special_building_count();
 const SpecialBuilding &special_building(int index);
 // -1 when the tile is not a center id from the table.
 int special_index_for_tile(int tile);
+// True for a special centre tile that never takes power (every landmark
+// but the prison). Like a park, it has no power state to show.
+bool special_tile_skips_power(int tile);
 
 int special_annual_income(const Micropolis *sim);
 void boost_special_land_value(Micropolis *sim);
@@ -102,6 +105,9 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y);
 // Empty when the tile is not part of a special building.
 std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y);
 
+// True when the tile is part of a special building that never takes power.
+bool special_skips_power_at(const Micropolis *sim, int tile_x, int tile_y);
+
 // Status line for the selected building, including its cost.
 std::string special_status_text(int index);
 // Same line, plus the unlock or cap sentence when the city cannot buy it.
@@ -123,7 +129,8 @@ std::string special_requirement_at(int index, int left, int top, SpecialWordFn w
 bool special_auto_clearable(int raw);
 
 // The lightning bolt replaces an unpowered special's centre tile while the
-// zone blink is on. Body tiles and a powered centre stay on the sheet.
+// zone blink is on. Body tiles, a powered centre, and a building that never
+// takes power stay on the sheet.
 bool special_center_needs_bolt(int raw, int index, int cell, bool blink_on);
 
 // True when (x, y) is inside a special. cell is the row-major sheet index.

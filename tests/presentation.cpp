@@ -265,10 +265,18 @@ int main()
     const SpecialBuilding &zoo_row = special_building(zoo);
     const int zoo_cell = zoo_row.anchor_y * zoo_row.width + zoo_row.anchor_x;
     const int bare = zoo_row.center_tile | ZONEBIT | BURNBIT | BULLBIT;
-    if (!special_center_needs_bolt(bare, zoo, zoo_cell, true) || special_center_needs_bolt(bare, zoo, zoo_cell, false) ||
-        special_center_needs_bolt(bare | PWRBIT, zoo, zoo_cell, true) ||
-        special_center_needs_bolt(bare, zoo, 0, true)) {
-        return fail(15, "the bolt should blink only on an unpowered special centre");
+    // The zoo never conducts, so it never takes power and never flashes for
+    // it. The prison conducts, so its centre flashes while it is unpowered.
+    const SpecialBuilding &prison_row = special_building(prison);
+    const int prison_cell = prison_row.anchor_y * prison_row.width + prison_row.anchor_x;
+    const int prison_bare = prison_row.center_tile | ZONEBIT | BURNBIT | BULLBIT | CONDBIT;
+    if (special_center_needs_bolt(bare, zoo, zoo_cell, true) || special_center_needs_bolt(bare, zoo, zoo_cell, false) ||
+        !special_tile_skips_power(zoo_row.center_tile) || special_tile_skips_power(prison_row.center_tile) ||
+        !special_center_needs_bolt(prison_bare, prison, prison_cell, true) ||
+        special_center_needs_bolt(prison_bare, prison, prison_cell, false) ||
+        special_center_needs_bolt(prison_bare | PWRBIT, prison, prison_cell, true) ||
+        (prison_cell != 0 && special_center_needs_bolt(prison_bare, prison, 0, true))) {
+        return fail(15, "the bolt should blink only on an unpowered prison centre, never on a landmark");
     }
 
     Micropolis sim;
@@ -322,7 +330,6 @@ int main()
 
     CitySession session;
     session.new_city("Edge Road", 7);
-    const SpecialBuilding &prison_row = special_building(prison);
     int origin_x = -1;
     int origin_y = -1;
     for (int y = 2; y < CitySession::kWorldH - prison_row.height - 2 && origin_x < 0; ++y) {

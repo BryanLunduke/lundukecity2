@@ -340,8 +340,12 @@ int main()
     if (ui_scale::look_from_setting(-1) != ui_scale::Look::Svga ||
         ui_scale::look_from_setting(0) != ui_scale::Look::Classic ||
         ui_scale::look_from_setting(1) != ui_scale::Look::Svga ||
-        ui_scale::look_from_setting(2) != ui_scale::Look::Spooky) {
-        return fail("a stored look setting was not respected");
+        ui_scale::look_from_setting(2) != ui_scale::Look::Svga) {
+        return fail("a stored look setting was not respected (a saved Spooky look loads as SVGA)");
+    }
+    if (ui_scale::offered_look(ui_scale::Look::Spooky) != ui_scale::Look::Svga ||
+        ui_scale::offered_look(ui_scale::Look::Classic) != ui_scale::Look::Classic) {
+        return fail("Spooky is no longer offered and must map to SVGA");
     }
     if (ui_scale::settings_parse("ui_scale=1\n").look != -1 ||
         ui_scale::settings_parse("look=0\n").look != 0) {

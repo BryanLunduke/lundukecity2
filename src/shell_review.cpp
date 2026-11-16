@@ -468,9 +468,9 @@ void Shell::run_review_checks()
         }
     }
 
-    // Spooky changes the park tile and the night ground. A missing Spooky
-    // sheet is Classic on screen. The stored choice stays Spooky, the same
-    // way a missing SVGA sheet stays stored as SVGA. Blank tile 956 matches.
+    // The Spooky sheet still builds and still changes the park tile and the
+    // night ground (blank tile 956 matches), but the player can no longer
+    // pick it: Spooky is SVGA on screen and in settings.
     {
         if (!tile_atlas().spooky_available() || !tile_atlas().set_look(1)) {
             fail("SVGA sheet was not ready for the Spooky compare");
@@ -515,19 +515,20 @@ void Shell::run_review_checks()
             fail("Spooky look did not persist");
             return;
         }
-        tile_atlas().forget_spooky();
+        // Spooky is no longer offered. A saved or requested Spooky look is
+        // SVGA on screen and in settings.txt. The art stays on disk.
         set_look_preference(Look::Spooky);
-        if (drawn_look_ != 0 || tile_atlas().use_spooky() || look_pref_.setting() != 2) {
-            fail("a missing Spooky sheet stored Classic");
+        if (drawn_look_ != 1 || tile_atlas().use_spooky() || look_pref_.setting() != 1) {
+            fail("a requested Spooky look did not become SVGA");
             return;
         }
         apply_action(Action::SpookyLook);
-        if (drawn_look_ != 0 || tile_atlas().use_spooky() || look_pref_.setting() != 2) {
-            fail("picking Spooky with no sheet stored Classic");
+        if (drawn_look_ != 1 || tile_atlas().use_spooky() || look_pref_.setting() != 1) {
+            fail("the old Spooky action did not become SVGA");
             return;
         }
-        if (!tile_atlas().recall_spooky() || !tile_atlas().spooky_available()) {
-            fail("Spooky sheet could not be restored");
+        if (look_from_setting(2) != Look::Svga) {
+            fail("a saved Spooky look did not load as SVGA");
             return;
         }
         set_look_preference(Look::Classic);
@@ -1854,7 +1855,7 @@ void Shell::run_review_checks()
                     return;
                 }
                 if (column == 1 && size[0] == 1024 && size[1] == 640 && !row_visible(column, last)) {
-                    fail("Spooky Look is off the Options menu at 1024x640");
+                    fail("SVGA Look is off the Options menu at 1024x640");
                     menu_.close();
                     SDL_SetWindowSize(window_, saved_w, saved_h);
                     render();
@@ -2497,11 +2498,13 @@ void Shell::run_review_checks()
                 button_bottom = spot.y + spot.h;
             }
         }
-        const double status_top = static_cast<double>(win_h_ - status_h_ - message_h_);
+        const double status_top = static_cast<double>(win_h_ - status_h_);
         // An empty year is short. The row follows that text, and it stays
-        // above the status bar. A panel pinned near 720 px put the row much
-        // lower on this 800 px window.
-        if (button_top < 0 || button_bottom >= status_top - 8.0 || button_top > static_cast<double>(win_h_) * 0.72) {
+        // above the status bar: within 0.8 of the band above it. The old
+        // limit, 0.72 of the window, was that same fraction while a message
+        // bar sat under the status line. A panel pinned near 720 px put the
+        // row much lower on this 800 px window.
+        if (button_top < 0 || button_bottom >= status_top - 8.0 || button_top > status_top * 0.8) {
             fail("the year card clipped the buttons or left a tall empty band (button at " +
                  std::to_string(static_cast<int>(button_top)) + ")");
             return;

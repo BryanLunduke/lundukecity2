@@ -29,7 +29,7 @@ int fail(const std::string &message)
 const char *kNames[] = {
     "bulldozer", "road",    "rail",    "wire",     "park",      "residential", "commercial", "industrial",
     "police",    "fire",    "stadium", "seaport",  "coal",      "nuclear",     "airport",    "special",
-    "query", "zoo", "bigpark", "library", "mayor", "casino", "amusement", "prison", "marina", "fountain",
+    "zoo", "bigpark", "library", "mayor", "casino", "amusement", "prison", "marina", "fountain",
 };
 
 const char *kMenuIcons[] = {"zoo", "bigpark", "library"};

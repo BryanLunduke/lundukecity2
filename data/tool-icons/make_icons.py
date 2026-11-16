@@ -260,49 +260,6 @@ def police():
     return c
 
 
-def query():
-    c = Canvas()
-    Y, B, T = 'gold', 'glass', 'wood'
-    ring = [
-        ".....yyyy.....",
-        "...yYYYYYYy...",
-        "..yYgggggYYd..",
-        ".yYgGGggggYYd.",
-        ".yYgGgggggg Yd",
-        "yYgGgggggggYYd",
-        "yYggggggggbYYd",
-        "yYggggggggbYYd",
-        "yYgggggggbbYYd",
-        ".yYgggggbbYYd.",
-        ".dYYgggbbYYdd.",
-        "..dYYYYYYYdd..",
-        "...ddYYYYdd...",
-        ".....dddd.....",
-    ]
-    leg = {'y': (Y, 0), 'Y': (Y, 1), 'd': (Y, 3), 'g': (B, 1), 'G': (B, 0),
-           'b': (B, 2), ' ': (Y, 1), '.': None}
-    c.rows(0, 0, ring, leg)
-    # handle from lower right, 45 degrees, chunky
-    for k in range(5):
-        x, y = 12 + k, 12 + k
-        c.put(x, y, T, 1)
-        c.put(x + 1, y, T, 2) if x + 1 < 18 else None
-        c.put(x, y + 1, T, 3) if y + 1 < 18 else None
-        c.put(x - 1, y, T, 0) if k else None
-    c.put(11, 12, Y, 3); c.put(12, 11, Y, 3)  # collar
-    c.put(12, 12, Y, 2)
-    # a little ? glint inside the lens (reads as Query)
-    c.rows(4, 3, [
-        ".WW.",
-        "W..W",
-        "..W.",
-        ".W..",
-        "....",
-        ".W..",
-    ], {'W': ('paint', 0)})
-    return c
-
-
 GLYPH = {
     'R': ["###.", "#..#", "#..#", "###.", "#.#.", "#..#"],
     'C': [".###", "#...", "#...", "#...", "#...", ".###"],
@@ -899,20 +856,20 @@ SPRITES = {
     'commercial': (commercial, 'com'), 'industrial': (industrial, 'ind'), 'police': (police, 'service'),
     'fire': (fire, 'service'), 'stadium': (stadium, 'landmark'), 'seaport': (seaport, 'landmark'),
     'coal': (coal, 'utility'), 'nuclear': (nuclear, 'utility'), 'airport': (airport, 'landmark'),
-    'special': (special, 'landmark'), 'query': (query, 'tool'),
+    'special': (special, 'landmark'),
     'amusement': (amusement, 'landmark'), 'bigpark': (bigpark, 'landmark'), 'casino': (casino, 'landmark'),
     'fountain': (fountain, 'landmark'), 'library': (library, 'landmark'), 'marina': (marina, 'landmark'),
     'mayor': (mayor, 'landmark'), 'prison': (prison, 'landmark'), 'zoo': (zoo, 'landmark'),
 }
 TOOLBAR = ['bulldozer', 'road', 'rail', 'wire', 'park', 'residential', 'commercial', 'industrial',
-           'police', 'fire', 'stadium', 'seaport', 'coal', 'nuclear', 'airport', 'special', 'query']
+           'police', 'fire', 'stadium', 'seaport', 'coal', 'nuclear', 'airport', 'special']
 LANDMARKS = ['zoo', 'fountain', 'library', 'mayor', 'casino', 'amusement', 'prison', 'marina', 'bigpark']
 ACCENTS = {
     'bulldozer': {'yellow'}, 'road': {'line', 'cone'}, 'rail': {'cone'}, 'wire': {'gold'},
     'park': {'grass'}, 'residential': {'zr'}, 'commercial': {'zc'}, 'industrial': {'zi'},
     'police': {'navy', 'roof'}, 'fire': {'roof'}, 'stadium': {'wood'}, 'seaport': {'navy'},
     'coal': {'gold', 'brick'}, 'nuclear': {'gold'}, 'airport': {'navy'}, 'special': {'gold'},
-    'query': {'gold'}, 'amusement': {'roof'}, 'bigpark': {'grass'}, 'casino': {'roof'},
+    'amusement': {'roof'}, 'bigpark': {'grass'}, 'casino': {'roof'},
     'fountain': {'glass'}, 'library': {'roof'}, 'marina': {'roof'}, 'mayor': {'roof'},
     'prison': {'yellow'}, 'zoo': {'yellow'},
 }
