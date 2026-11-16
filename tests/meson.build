@@ -507,6 +507,19 @@ new_specials_test = executable(
 
 test('new_specials', new_specials_test, timeout: 120)
 
+# Landmarks that use electricity take power, flash, and count for the score.
+landmark_power_test = executable(
+  'landmark_power',
+  'landmark_power.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  cpp_args: ['-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"'],
+)
+
+test('landmark_power', landmark_power_test, timeout: 120)
+
 # Thumbnails painted from the scenario files themselves.
 scenario_preview_test = executable(
   'scenario_preview',

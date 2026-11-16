@@ -78,6 +78,15 @@
  */
 void Micropolis::doZone(const Position &pos)
 {
+    // The open-air City 2 landmarks (big park, fountain) use no power. Like
+    // an ordinary park they are not counted as powered or unpowered zones,
+    // so they neither help nor hurt the power share in the score.
+    const MapTile openAir = map[pos.posX][pos.posY] & LOMASK;
+    if (openAir == SPECIAL_PARK || openAir == SPECIAL_FOUNTAIN) {
+        map[pos.posX][pos.posY] &= ~PWRBIT;
+        return;
+    }
+
     // Set Power Bit in Map from powerGridMap
     bool zonePowerFlag = setZonePower(pos);
 

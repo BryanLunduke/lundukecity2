@@ -42,9 +42,9 @@ bool special_center_needs_bolt(int raw, int index, int cell, bool blink_on)
         return false;
     }
     const SpecialBuilding &building = special_building(index);
-    // Only a building that conducts (the prison) can ever be powered. The
-    // park-like landmarks never take power, so they never flash for it.
-    if (!building.needs_power) {
+    // An open-air landmark (Big Park, Fountain) never takes power, so it
+    // never flashes for it. Every other special conducts like a zone.
+    if (building.open_air) {
         return false;
     }
     const int center = building.anchor_y * building.width + building.anchor_x;
@@ -71,10 +71,13 @@ namespace {
 // Prison, Marina, and Fountain are a later first pass. Their center ids
 // are the unused gap after the tiny explosions. Anchor 1 matches the
 // stadium click (one tile down and right of the top-left). The fountain
-// click is the tile itself, like a park.
+// click is the tile itself, like a park. Big Park and Fountain are the
+// open-air landmarks: no power. Everything else uses electricity, conducts
+// like a zone, and needs a powered grid.
 const SpecialBuilding kBuildings[] = {
     {1020, "Zoo", "zoo", "zoo", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
-    {1021, "Big Park", "bigpark", "big-park", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
+    {1021, "Big Park", "bigpark", "big-park", 100, 0, 3, 3, 6, 48, "Raises nearby land value", 0, 0, 0, -1, 0, 1, 1,
+     false, false, false, true},
     {1022, "Library", "library", "library", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
     {53, "Mayor's House", "mayor", "mayor", 100, 0, 3, 3, 6, 48,
      "Raises nearby land value. Best near residential", 0, 0, 2000, 1, 1},
@@ -89,7 +92,7 @@ const SpecialBuilding kBuildings[] = {
     {SPECIAL_MARINA, "Marina", "marina", "marina", 1000, 0, 3, 3, 6, 48,
      "Raises nearby land value. The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
     {SPECIAL_FOUNTAIN, "Fountain", "fountain", "fountain", 20, 0, 1, 1, 4, 16, "Raises nearby land value", 0, 0, 0, -1,
-     0, 0, 0, false, false, false},
+     0, 0, 0, false, false, false, true},
 };
 
 bool in_bounds(int x, int y)
@@ -669,7 +672,12 @@ const SpecialBuilding &special_building(int index)
 bool special_tile_skips_power(int tile)
 {
     const int index = special_index_for_tile(tile);
-    return index >= 0 && !special_building(index).needs_power;
+    return index >= 0 && special_building(index).open_air;
+}
+
+bool special_uses_power(int index)
+{
+    return index >= 0 && index < special_building_count() && !special_building(index).open_air;
 }
 
 int special_index_for_tile(int tile)
@@ -1027,7 +1035,7 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
             const bool center = dx == building.anchor_x && dy == building.anchor_y;
             const unsigned short tile = static_cast<unsigned short>(center ? building.center_tile : kSpecialBodyTile);
             unsigned short bits = static_cast<unsigned short>(BURNBIT | BULLBIT | (center ? ZONEBIT : 0));
-            if (building.needs_power) {
+            if (!building.open_air) {
                 bits = static_cast<unsigned short>(bits | CONDBIT);
             }
             sim->map[x][y] = static_cast<unsigned short>(tile | bits);
@@ -1100,7 +1108,45 @@ bool special_skips_power_at(const Micropolis *sim, int tile_x, int tile_y)
     if (sim == nullptr || !find_center(sim, tile_x, tile_y, cx, cy, index)) {
         return false;
     }
-    return !kBuildings[index].needs_power;
+    return kBuildings[index].open_air;
+}
+
+int wire_special_buildings(Micropolis *sim)
+{
+    if (sim == nullptr) {
+        return 0;
+    }
+    int changed = 0;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const int raw = static_cast<int>(sim->map[x][y]);
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int index = special_index_for_tile(raw & LOMASK);
+            if (index < 0 || !special_building_intact(sim, x, y)) {
+                continue;
+            }
+            const SpecialBuilding &building = kBuildings[index];
+            const int left = x - building.anchor_x;
+            const int top = y - building.anchor_y;
+            for (int dy = 0; dy < building.height; ++dy) {
+                for (int dx = 0; dx < building.width; ++dx) {
+                    unsigned short &cell = sim->map[left + dx][top + dy];
+                    const unsigned short want = static_cast<unsigned short>(
+                        building.open_air ? (cell & ~CONDBIT) : (cell | CONDBIT));
+                    if (want != cell) {
+                        cell = want;
+                        ++changed;
+                    }
+                }
+            }
+        }
+    }
+    if (changed > 0) {
+        sim->invalidateMaps();
+    }
+    return changed;
 }
 
 std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y)

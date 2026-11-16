@@ -3242,11 +3242,12 @@ void Shell::draw(cairo_t *cr)
             tool_text = (hovering || special_choice_ < 0) ? std::string(tool_by_index(special)->hint)
                                                           : session_.special_status_line(special_choice_);
         } else if (shown_tool == kToolCount - 1) {
-            tool_text = "Query";
+            // Query is the no-tool inspect mode: nothing to name or price.
+            tool_text.clear();
         } else if (const ToolDef *tool = tool_by_index(shown_tool)) {
             tool_text = tool->hint;
         }
-        if (show_keys && shown_tool >= 0 && shown_tool < 17 && dialog_ == Dialog::None) {
+        if (show_keys && !tool_text.empty() && shown_tool >= 0 && shown_tool < 17 && dialog_ == Dialog::None) {
             const std::string key_name = chord_label(binds_.key[KeyTool0 + shown_tool]);
             if (!key_name.empty() && key_name != "None") {
                 tool_text += "  [" + key_name + "]";
@@ -3743,7 +3744,13 @@ std::string Shell::context_hint() const
     }
     const ToolDef *tool = tool_by_index(tool_index_);
     const int engine = tool != nullptr ? tool->engine_id : TOOL_QUERY;
+    // With Query (no tool picked) the map hint is left out entirely; the
+    // status line's right side stays empty.
+    const bool tool_hint = tool_has_status_hint(engine);
     if (overlay_on_) {
+        if (!tool_hint) {
+            return pad ? hint_join({hint_button(b, "closes the map"), "D-pad scrolls"}) : "Esc closes the map";
+        }
         return pad ? hint_join({tool_press_phrase(engine, a.c_str()), hint_button(b, "closes the map"), "D-pad scrolls"})
                    : std::string(tool_click_phrase(engine)) + ". Esc closes the map";
     }
@@ -3769,11 +3776,17 @@ std::string Shell::context_hint() const
         if (cursor_y_ < static_cast<float>(menu_h_) || cursor_x_ < static_cast<float>(view_x_)) {
             return hint_join({"Pointing at the panel", hint_button(a, "uses it"), hint_button(menu, "menu")});
         }
+        if (!tool_hint) {
+            return {};
+        }
         const std::string query = glyph_for(PadQuery);
         const std::string pause = glyph_for(PadPause);
         return hint_join({tool_press_phrase(engine, a.c_str()), hint_button(query, "query"),
                           hint_button(pause, speed_ <= 0 ? "resumes" : "pauses"), hint_pair(left, right, "tool"),
                           hint_button(menu, "menu")});
+    }
+    if (!tool_hint) {
+        return {};
     }
     if (finger) {
         std::string phrase = tool_click_phrase(engine);

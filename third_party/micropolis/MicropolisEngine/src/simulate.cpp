@@ -1110,7 +1110,12 @@ void Micropolis::mapScan(int x1, int x2)
                 // Tiles 53-55 are civic centres sitting in the radiation gap.
                 // doRadTile would turn the centre into dirt and the yearly
                 // payout would stop. Real radiation is still tile 52.
+                // They still take power and count as zones, like the
+                // other landmarks (doZone returns before any growth).
                 if (civicGapTile(tile)) {
+                    if (mapVal & ZONEBIT) {
+                        doZone(pos);
+                    }
                     continue;
                 }
 

@@ -378,8 +378,15 @@ void Shell::run_review_checks()
     }
 
     // The look toggle repaints the map from the other sheet and round-trips
-    // through the settings text. Classic pixels come back unchanged.
+    // through the settings text. Classic pixels come back unchanged. A fresh
+    // settings file now opens in SVGA, so force Classic before sampling.
     {
+        if (!tile_atlas().set_look(0)) {
+            fail("Classic tiles did not load");
+            return;
+        }
+        drawn_look_ = 0;
+        map_.invalidate_all();
         unsigned char classic_px[16 * 16 * 4];
         tile_atlas().blit(0, classic_px, 16 * 4);
         map_.sync();
@@ -1744,10 +1751,19 @@ void Shell::run_review_checks()
         return;
     }
     note_keyboard_input();
+    const int hint_tool = tool_index_;
+    tool_index_ = 1;
     if (context_hint().find("click to") == std::string::npos) {
         fail("a key did not restore the keyboard hint");
         return;
     }
+    // Query (no tool picked) shows no hint at all on the status line.
+    tool_index_ = kToolCount - 1;
+    if (!context_hint().empty()) {
+        fail("Query still shows a status hint: " + context_hint());
+        return;
+    }
+    tool_index_ = hint_tool;
     int key_count = 0;
     const OskKey *keys = osk_keys(key_count);
     int random_key = -1;

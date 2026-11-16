@@ -326,9 +326,15 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
     }
     if (ui_step_ == 18 && dialog_ == Dialog::Unsaved) {
         auto sample = [&](const Hotspot *hot, int &r, int &g, int &b) {
-            // Top-left padding, so the sample is the button fill and not the label.
-            return hot != nullptr &&
-                   channel_at(surface, static_cast<int>(hot->x + 8), static_cast<int>(hot->y + 4), r, g, b);
+            // Left padding a quarter of the way down: inside the fill (the
+            // gradient is still light there), clear of the
+            // label and of the focus ring's inner line, which hugs the
+            // outline a few pixels in from every edge. (A sample near the
+            // top-left corner landed on that line whenever the hotspot sat
+            // on a fractional pixel, so the result depended on font metrics
+            // and scale, which differ under Wine.)
+            return hot != nullptr && channel_at(surface, static_cast<int>(std::floor(hot->x + 10.0)),
+                                                static_cast<int>(std::floor(hot->y + std::max(8.0, hot->h / 4.0))), r, g, b);
         };
         const Hotspot *cancel = find_hot(hot_, kCancel, 0);
         const Hotspot *save = find_hot(hot_, kSave, 0);
@@ -352,9 +358,21 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
             quitting_ = true;
             return;
         }
-        if (sb < sr + 20) {
+        // Focus comes from the model; the pixels then have to show it. The
+        // fill stays the primary blue, and the ring is the button's own edge
+        // turned focus blue (an unfocused edge is gold). The edge stroke is
+        // at least 3px wide, centred on the outline, so the pixel half a
+        // pixel inside the top edge is ring at any fractional position.
+        int er = 0;
+        int eg = 0;
+        int eb = 0;
+        const bool edge_ok = channel_at(surface, static_cast<int>(std::floor(save->x + save->w / 2.0)),
+                                        static_cast<int>(std::floor(save->y + 0.5)), er, eg, eb);
+        if (focus_id_ != kSave || sb < sr + 20 || !edge_ok || eb < er + 20) {
             ran_ok_ = false;
-            smoke_error_ = "Save is not the focused button";
+            smoke_error_ = "Save is not the focused button (focus " + std::to_string(focus_id_) + ", fill " +
+                           std::to_string(sr) + "," + std::to_string(sg) + "," + std::to_string(sb) + ", ring " +
+                           std::to_string(er) + "," + std::to_string(eg) + "," + std::to_string(eb) + ")";
             quitting_ = true;
             return;
         }

@@ -87,6 +87,11 @@ const char *tool_click_phrase(int engine_id)
     }
 }
 
+bool tool_has_status_hint(int engine_id)
+{
+    return engine_id != TOOL_QUERY;
+}
+
 std::string tool_press_phrase(int engine_id, const char *button)
 {
     if (button == nullptr || button[0] == '\0') {

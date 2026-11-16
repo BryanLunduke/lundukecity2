@@ -1036,6 +1036,9 @@ bool CitySession::load_city(const std::string &path)
     if (scenario_map) {
         raise_unspecified_funding(sim);
     }
+    // Landmarks saved before they conducted get their wiring back, so a
+    // connected one powers up on the next scan.
+    wire_special_buildings(&sim);
     int loaded_speed = static_cast<int>(sim.simSpeed);
     if (loaded_speed < 0) {
         loaded_speed = 0;
