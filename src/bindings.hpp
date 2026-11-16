@@ -204,7 +204,7 @@ inline const char *key_act_label(int act)
     if (act >= KeyTool0 && act < KeyActCount) {
         static const char *names[] = {"Bulldozer", "Roads", "Rail", "Power lines", "Park", "Residential",
                                       "Commercial", "Industrial", "Police", "Fire dept", "Stadium", "Seaport",
-                                      "Coal power", "Nuclear", "Airport", "Special", "Query"};
+                                      "Coal power", "Nuclear", "Airport", "Special", "Inspect"};
         return names[act - KeyTool0];
     }
     return "";
@@ -800,7 +800,7 @@ inline BindRow bind_row(int index)
         {"Nuclear", KeyTool0 + 13, -1},
         {"Airport", KeyTool0 + 14, -1},
         {"Special", KeyTool0 + 15, -1},
-        {"Query", KeyTool0 + 16, PadQuery},
+        {"Inspect", KeyTool0 + 16, PadQuery},
     };
     static_assert(sizeof(rows) / sizeof(rows[0]) == 40, "bind row count");
     if (index < 0 || index >= 40) {

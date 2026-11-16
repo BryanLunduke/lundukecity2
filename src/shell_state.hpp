@@ -117,6 +117,13 @@ private:
     void layout();
     void draw(cairo_t *cr);
     void draw_menubar(cairo_t *cr);
+    void draw_info_band(cairo_t *cr);
+    void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
+    void draw_handheld_hud(cairo_t *cr);
+    void draw_hover_card(cairo_t *cr);
+    void refresh_continue_card();
+    void apply_skin();
+    bool handheld_device() const;
     void draw_menu_dropdown(cairo_t *cr);
     void draw_special_menu(cairo_t *cr);
     void draw_dialog(cairo_t *cr);
@@ -395,6 +402,43 @@ private:
     int mini_h_ = 80;
     int demand_y_ = 0;
     int demand_h_ = 100;
+    // Interface skin. Slate is the default; Light is the earlier cream chrome.
+    bool slate_ = true;
+    bool open_slate_ = true;
+    // Night lighting over the map. Off unless the player turns it on.
+    bool night_ = false;
+    bool open_night_ = false;
+    // 0 Auto (handheld on a Steam Deck), 1 Desktop, 2 Handheld.
+    int layout_pref_ = 0;
+    int open_layout_pref_ = 0;
+    // Resolved by layout(): the full-screen map with the quick bar.
+    bool handheld_ = false;
+    // Slate info band under the menu bar (desktop layout only).
+    int band_y_ = 0;
+    int band_h_ = 0;
+    bool band_goal_shown_ = false; // the Slate band drew its GOAL segment
+    // Minimap rectangle. The desktop tray uses side_x_/side_w_.
+    int mini_x_ = 0;
+    int mini_w_ = 0;
+    // Handheld HUD: space the map keeps clear at each edge for chrome.
+    int hud_top_ = 0;
+    int hud_bottom_ = 0;
+    int hud_right_ = 0;
+    int quick_y_ = 0;
+    double quick_x_ = 0;
+    double quick_slot_ = 0;
+    int quick_h_ = 0;
+    int hint_h_ = 0;
+    // Continue card on the title screen: the last city's glance, cached.
+    std::string continue_path_;
+    bool continue_ok_ = false;
+    std::string continue_name_;
+    std::string continue_detail_;
+    std::vector<std::uint32_t> continue_thumb_; // 120x100 ARGB, empty when unreadable
+    // Small caps for the Slate labels, rebuilt when the UI scale changes.
+    const char *tag_font() const;
+    mutable std::string font_tag_;
+    mutable float font_tag_scale_ = -1.0f;
 
     double scroll_x_ = 0;
     double scroll_y_ = 0;

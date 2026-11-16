@@ -27,7 +27,7 @@ const ToolDef kTools[] = {
     {TOOL_NUCLEARPOWER, "Nuclear power", 5000, "Nuclear power: $5,000"},
     {TOOL_AIRPORT, "Airport", 10000, "Airport: $10,000"},
     {kSpecialEngineId, "Special buildings", 0, "Special buildings"},
-    {TOOL_QUERY, "Query", 0, "Query"},
+    {TOOL_QUERY, "Inspect", 0, "Inspect"},
 };
 
 const int kToolCount = static_cast<int>(sizeof(kTools) / sizeof(kTools[0]));
@@ -81,7 +81,7 @@ const char *tool_click_phrase(int engine_id)
     case kSpecialEngineId:
         return "Special: click to place";
     case TOOL_QUERY:
-        return "Query: click to inspect";
+        return "Inspect: click a tile";
     default:
         return "Click to build";
     }
@@ -165,7 +165,7 @@ std::string tool_press_phrase(int engine_id, const char *button)
         verb = "places";
         break;
     case TOOL_QUERY:
-        name = "Query";
+        name = "Inspect";
         verb = "inspects";
         break;
     default:

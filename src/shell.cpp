@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "layout_mode.hpp"
 
 #include "assets.hpp"
 #include "atomic_write.hpp"
@@ -449,6 +450,9 @@ void Shell::save_window_settings()
     stored.look = look_pref_.setting();
     stored.milestone_notes = milestone_notes_ ? 1 : 0;
     stored.autosave = std::max(0, autosave_seconds_);
+    stored.skin = slate_ ? 0 : 1;
+    stored.night = night_ ? 1 : 0;
+    stored.layout = layout_mode::clamp_choice(layout_pref_);
     keep_required_pad(binds_);
     stored.binds = binds_override_text(binds_);
     {
@@ -512,6 +516,16 @@ void Shell::apply_loaded_settings()
     if (stored.autosave >= 0) {
         autosave_seconds_ = stored.autosave;
     }
+    if (stored.skin >= 0) {
+        slate_ = stored.skin == 0;
+    }
+    if (stored.night >= 0) {
+        night_ = stored.night != 0;
+    }
+    if (stored.layout >= 0) {
+        layout_pref_ = layout_mode::clamp_choice(stored.layout);
+    }
+    map_.set_night(night_);
     if (!stored.binds.empty()) {
         binds_ = binds_from_text(stored.binds);
     }
@@ -1063,7 +1077,8 @@ std::string Shell::visual_stamp() const
         << menu_.open_menu << ' ' << menu_.cursor << ' ' << menu_.recent_open << ' ' << menu_.recent_cursor << ' '
         << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
         << special_open_ << ' ' << special_cursor_ << ' ' << special_choice_ << ' '
-        << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << session_.map_serial()
+        << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << slate_ << night_
+        << layout_pref_ << handheld_ << ' ' << session_.map_serial()
         << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
         << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
         << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_gate_ << ' ' << shown_message_ << ' '
@@ -2196,7 +2211,7 @@ void Shell::handle_event(const SDL_Event &event)
         } else if (id == kPaletteId && dialog_ == Dialog::None) {
             press_palette(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         } else if (id == kMinimapId && dialog_ == Dialog::None) {
-            minimap_.press(pointer_x_ - side_x_, pointer_y_ - mini_y_, side_w_, mini_h_);
+            minimap_.press(pointer_x_ - mini_x_, pointer_y_ - mini_y_, mini_w_, mini_h_);
         } else {
             on_hotspot(id, pointer_x_, pointer_y_);
         }
@@ -2932,7 +2947,7 @@ void Shell::handle_event(const SDL_Event &event)
                     touch_pending_ = false;
                     touch_armed_ = false;
                     touch_minimap_ = true;
-                    minimap_.press(pointer_x_ - side_x_, pointer_y_ - mini_y_, side_w_, mini_h_);
+                    minimap_.press(pointer_x_ - mini_x_, pointer_y_ - mini_y_, mini_w_, mini_h_);
                 } else if (id == kMapId && dialog_ == Dialog::None) {
                     touch_minimap_ = false;
                     touch_pending_ = true;
@@ -2966,7 +2981,7 @@ void Shell::handle_event(const SDL_Event &event)
                 touch_pan_y_ = pointer_y_;
                 clamp_scroll();
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_minimap_) {
-                minimap_.press(pointer_x_ - side_x_, pointer_y_ - mini_y_, side_w_, mini_h_);
+                minimap_.press(pointer_x_ - mini_x_, pointer_y_ - mini_y_, mini_w_, mini_h_);
             } else if (event.type == SDL_EVENT_FINGER_MOTION &&
                        (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages) &&
                        list_touch_y_ >= 0.0f) {

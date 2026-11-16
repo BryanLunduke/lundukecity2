@@ -58,8 +58,8 @@ int fail(int code, const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 52) {
-        return fail(1, "the menu does not have 52 actionable rows");
+    if (menu_table::actionable_count() != 53) {
+        return fail(1, "the menu does not have 53 actionable rows");
     }
     if (kDefaultToolIndex != 16 || kToolCount != 17) {
         return fail(2, "a new city does not start on Query");

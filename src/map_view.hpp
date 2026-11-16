@@ -11,6 +11,7 @@
 #include <chrono>
 #include <functional>
 #include <string>
+#include <cstdint>
 #include <vector>
 
 // Overlay for the tool under the pointer. The geometry is the tool footprint.
@@ -90,6 +91,14 @@ public:
     int blink_remaining_ms() const;
 
     void draw(cairo_t *cr);
+    // Night mode: darken the map and add the light layer (lit windows,
+    // street lamps, fires). The tile art is not touched. hold hides it for
+    // a frame, for example under a data map.
+    void set_night(bool on);
+    void set_night_hold(bool hold) { night_hold_ = hold; }
+    bool night() const { return night_; }
+    // Slate look for the price and reason tag at the cursor.
+    void set_slate_tags(bool on) { slate_tags_ = on; }
 
     // Coordinates are map-local pixels (after subtracting the scroll origin).
     bool press(double x, double y);
@@ -152,4 +161,32 @@ private:
     std::vector<int> cached_raw_;
     std::vector<int> cached_shown_;
     cairo_surface_t *map_pixels_ = nullptr;
+    void draw_night(cairo_t *cr, int source);
+    void tint_sprites(cairo_t *cr, double sprite_to_source);
+    bool night_ = false;
+    bool night_hold_ = false;
+    bool slate_tags_ = false;
+    bool light_dirty_ = true;
+    std::chrono::steady_clock::time_point light_built_{};
+    cairo_surface_t *light_pixels_ = nullptr;
+    // Lit windows at full art resolution, from window masks found in the
+    // active tile sheet (the sheet itself is never changed).
+    cairo_surface_t *window_pixels_ = nullptr;
+    // The day map times the dusk tint, kept tile by tile beside map_pixels_
+    // so night costs a plain copy instead of a full-view MULTIPLY.
+    cairo_surface_t *night_pixels_ = nullptr;
+    // Glow and windows flattened at art resolution after each rebuild, so
+    // a frame adds one surface.
+    cairo_surface_t *lamp_pixels_ = nullptr;
+    // Next art row to flatten after a throttled rebuild; the work is spread
+    // over a few frames. -1 when the flattened layer is current.
+    int flatten_row_ = -1;
+    bool night_stale_ = true;
+    std::vector<int> night_dirty_;
+    void refresh_night_base();
+    void tint_tile(int x, int y);
+    std::vector<std::uint16_t> window_masks_;
+    std::vector<int> window_keys_;
+    int window_masks_generation_ = -1;
+    bool window_masks_loaded_ = false;
 };

@@ -7,6 +7,7 @@
 #include "osk_layout.hpp"
 #include "special_buildings.hpp"
 
+#include <cstdlib>
 #include <SDL3/SDL.h>
 
 #include <cairo.h>
@@ -241,7 +242,7 @@ void Shell::gamepad_use_cursor(bool press)
         return;
     }
     if (id == kMinimapId && dialog_ == Dialog::None && !menu_.open()) {
-        minimap_.press(pointer_x_ - side_x_, pointer_y_ - mini_y_, side_w_, mini_h_);
+        minimap_.press(pointer_x_ - mini_x_, pointer_y_ - mini_y_, mini_w_, mini_h_);
         return;
     }
     on_hotspot(id, pointer_x_, pointer_y_);
@@ -285,7 +286,15 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
             int r = 0;
             int g = 0;
             int b = 0;
-            if (!channel_at(surface, sx, sy, r, g, b) || r <= 170 || g <= 170 || b <= 170) {
+            // The Slate skin draws dark menus: a row reads as its plain or
+            // highlighted fill instead of the light paper.
+            auto near_ink = [&](int ir, int ig, int ib) {
+                return std::abs(r - ir) <= 8 && std::abs(g - ig) <= 8 && std::abs(b - ib) <= 8;
+            };
+            const bool read_ok = channel_at(surface, sx, sy, r, g, b);
+            const bool row_ok = (slate_ || handheld_) ? (near_ink(0x23, 0x2C, 0x38) || near_ink(0x3A, 0x4B, 0x63))
+                                                      : (r > 170 && g > 170 && b > 170);
+            if (!read_ok || !row_ok) {
                 ran_ok_ = false;
                 smoke_error_ = "menu row drawn under the map: column " + std::to_string(column) + " index " +
                                std::to_string(i) + " pixel " + std::to_string(r) + "," + std::to_string(g) + "," +
@@ -465,7 +474,7 @@ void Shell::drive_ui_test()
             quitting_ = true;
             return;
         }
-        if (view_y_ != menu_h_) {
+        if (view_y_ != menu_h_ + band_h_) {
             fail("the welcome bar still reserves a row of the map");
             return;
         }
@@ -1051,7 +1060,7 @@ void Shell::drive_ui_test()
         return;
     }
     case 19:
-        if (view_y_ != menu_h_) {
+        if (view_y_ != menu_h_ + band_h_) {
             fail("the welcome bar still reserves a row of the map");
             return;
         }
@@ -1254,6 +1263,24 @@ void Shell::drive_ui_test()
             fail("a running scenario has no goal text");
             return;
         }
+        if (slate_ && !handheld_) {
+            // The Slate desktop shows the goal in the info band above the map.
+            int br = 0;
+            int bg = 0;
+            int bb = 0;
+            if (band_h_ <= 0 || !band_goal_shown_ ||
+                !channel_at(frame_surface_, win_w_ - 4, band_y_ + band_h_ / 2, br, bg, bb) || br > 60 || bg > 60 || bb > 70) {
+                fail("the Slate info band does not show the scenario goal");
+                return;
+            }
+            session_.new_city("New City");
+            if (session_.needs_save_prompt()) {
+                fail("an untouched generated city still wants to be saved");
+                return;
+            }
+            ui_step_ = 27;
+            return;
+        }
         int pr = 0;
         int pg = 0;
         int pb = 0;
@@ -1296,9 +1323,11 @@ void Shell::drive_ui_test()
     case 27: {
         const int slot = special_tool_index();
         const int cell = palette_.cell();
-        const int columns = std::max(2, palette_.columns());
-        const double x = side_x_ + 4 + (slot % columns) * cell + cell / 2.0;
-        const double y = pal_y_ + 4 + (slot / columns) * cell + cell / 2.0;
+        double cx = 0;
+        double cy = 0;
+        palette_.cell_origin(slot, cx, cy);
+        const double x = side_x_ + cx + cell / 2.0;
+        const double y = pal_y_ + cy + cell / 2.0;
         click_at(x, y);
         if (tool_index_ != slot || !special_open_) {
             fail("the special buildings button did not open the list");
