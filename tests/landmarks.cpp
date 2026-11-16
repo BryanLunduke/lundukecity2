@@ -224,7 +224,7 @@ int main()
         if (line.text.find("Fire reported") != std::string::npos && line.text.find("3 times") != std::string::npos) {
             saw_fire = true;
         }
-        if (line.text.find("Town") != std::string::npos) {
+        if (line.text == "Grew into a town (2,000 people)") {
             saw_town = true;
         }
         if (line.text.find("Cannot build here") != std::string::npos) {

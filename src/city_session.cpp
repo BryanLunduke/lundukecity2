@@ -15,6 +15,7 @@
 #include "special_buildings.hpp"
 
 #include "micropolis.h"
+#include "tile_kind.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -2535,40 +2536,8 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     if (!special.empty()) {
         const auto dash = special.find(" — ");
         card.name = dash == std::string::npos ? special : special.substr(0, dash);
-    } else if (tile >= RESBASE && tile < COMBASE) {
-        card.name = "Residential";
-    } else if (tile >= COMBASE && tile < INDBASE) {
-        card.name = "Commercial";
-    } else if (tile >= INDBASE && tile < PORTBASE) {
-        card.name = "Industrial";
-    } else if (tile >= PORTBASE && tile < AIRPORTBASE) {
-        card.name = "Seaport";
-    } else if (tile >= AIRPORTBASE && tile < COALBASE) {
-        card.name = "Airport";
-    } else if (tile >= COALBASE && tile < FIRESTBASE) {
-        card.name = "Coal power";
-    } else if (tile >= NUCLEARBASE && tile < INDBASE2) {
-        card.name = "Nuclear power";
-    } else if (tile >= STADIUMBASE && tile < NUCLEARBASE) {
-        card.name = "Stadium";
-    } else if (tile >= FIRESTBASE && tile < POLICESTBASE) {
-        card.name = "Fire dept";
-    } else if (tile >= POLICESTBASE && tile < STADIUMBASE) {
-        card.name = "Police";
-    } else if ((tile >= ROADBASE && tile <= LASTROAD) || tile == HBRIDGE || tile == VBRIDGE) {
-        card.name = "Road";
-    } else if (tile >= RAILBASE && tile <= LASTRAIL) {
-        card.name = "Rail";
-    } else if (tile >= POWERBASE && tile <= LASTPOWER) {
-        card.name = "Power line";
-    } else if (tile >= RIVER && tile <= WATER_HIGH) {
-        card.name = "Water";
-    } else if (tile >= WOODS_LOW && tile <= WOODS5) {
-        card.name = "Park";
-    } else if (tile == DIRT) {
-        card.name = "Clear";
     } else {
-        card.name = "Land";
+        card.name = tile_kind::name(tile);
     }
     bool road = false;
     bool rail = false;
@@ -2765,6 +2734,12 @@ CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
         facts.kind = Kind::Building;
     } else if (card.name == "Road" || card.name == "Rail" || card.name == "Power line") {
         facts.kind = Kind::Network;
+    } else if (card.name == "Park") {
+        facts.kind = Kind::Park;
+    } else if (card.name == "Water") {
+        facts.kind = Kind::Water;
+    } else if (card.name == "Rubble" || card.name == "Flood" || card.name == "Radiation" || card.name == "Fire") {
+        facts.kind = Kind::Hazard;
     } else {
         facts.kind = Kind::Land;
     }

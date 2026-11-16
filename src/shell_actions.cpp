@@ -2737,10 +2737,7 @@ void Shell::on_hotspot(int id, double x, double y)
         if (menu_.open()) {
             menu_.close();
         } else {
-            menu_.open_menu = 0;
-            menu_.cursor = 0;
-            menu_.alt_shown = true;
-            menu_.recent_open = false;
+            menu_.open_by_pointer(0);
         }
         return;
     }
@@ -2760,10 +2757,7 @@ void Shell::on_hotspot(int id, double x, double y)
         if (menu_.open_menu == column) {
             menu_.close();
         } else {
-            menu_.open_menu = column;
-            menu_.cursor = 0;
-            menu_.alt_shown = true;
-            menu_.recent_open = false;
+            menu_.open_by_pointer(column);
         }
         return;
     }

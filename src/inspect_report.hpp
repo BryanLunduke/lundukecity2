@@ -13,7 +13,7 @@
 // classic query reports), so it changes nothing about the simulation.
 namespace inspect_report {
 
-enum class Kind { Land, Residential, Commercial, Industrial, Building, Network };
+enum class Kind { Land, Residential, Commercial, Industrial, Building, Network, Park, Water, Hazard };
 
 enum class Tone { Good, Neutral, Bad };
 
@@ -102,8 +102,26 @@ inline Report make(const Facts &facts)
             report.status = report.reasons.empty() ? "Working" : "Needs attention";
             report.tone = report.reasons.empty() ? Tone::Good : Tone::Bad;
         } else {
-            report.status = facts.kind == Kind::Network ? "Network" : "Open land";
             report.tone = Tone::Neutral;
+            switch (facts.kind) {
+            case Kind::Network:
+                report.status = "Network";
+                break;
+            case Kind::Park:
+                report.status = "Park";
+                report.tone = Tone::Good;
+                break;
+            case Kind::Water:
+                report.status = "Water";
+                break;
+            case Kind::Hazard:
+                report.status = "Clear it";
+                report.tone = Tone::Bad;
+                break;
+            default:
+                report.status = "Open land";
+                break;
+            }
         }
         return report;
     }
@@ -147,6 +165,25 @@ inline Report make(const Facts &facts)
         report.status = "Steady";
     }
     return report;
+}
+
+// Where the Inspect card's bars go. Every row starts its bar after the
+// widest label plus a gap and ends before the widest value ("100%", "Down")
+// plus a gap, so all bars line up and none touches its text.
+struct BarLayout {
+    double bar_offset = 0.0; // from the left text edge
+    double bar_width = 0.0;
+};
+
+inline BarLayout bar_layout(double inner, double widest_label, double widest_value, double gap)
+{
+    BarLayout layout;
+    layout.bar_offset = widest_label + gap;
+    layout.bar_width = inner - layout.bar_offset - widest_value - gap;
+    if (layout.bar_width < gap) {
+        layout.bar_width = gap;
+    }
+    return layout;
 }
 
 } // namespace inspect_report

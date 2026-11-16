@@ -169,14 +169,16 @@ int main()
     const civic::YearCard collected =
         civic::make_year_card(20000, 21400, true, false, 1800, fresh, now_votes, "Crime", 21, 0, 5, true);
     if (collected.closing_label.find("when collected") == std::string::npos ||
-        collected.population.find("1,500") == std::string::npos || collected.improvement.find("not a proven cause") == std::string::npos ||
+        collected.population != "Population 1,800" || collected.population_change != "Up 300 since last year" ||
+        collected.improvement.find("not a proven cause") == std::string::npos ||
         collected.problem.find("Crime") == std::string::npos) {
         std::fprintf(stderr, "close '%s' pop '%s' imp '%s'\n", collected.closing_label.c_str(),
                      collected.population.c_str(), collected.improvement.c_str());
         return fail("the year card should separate collected results from the poll");
     }
-    if (collected.population.find("\u2192") == std::string::npos) {
-        return fail("population change should show both years");
+    if (collected.problem != "Top complaint: Crime (21% of citizens)" ||
+        collected.intention.find("Tip:") != 0) {
+        return fail("the top complaint should read plainly with a short tip");
     }
 
     // Looks only change tiles; the interface keeps the standard selection.

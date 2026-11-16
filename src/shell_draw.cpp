@@ -46,6 +46,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <initializer_list>
 #include <cmath>
 #include <string>
 
@@ -794,10 +795,10 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         }
         const int id = kMenuItem + column * 40 + i;
         push_hot(drop_x + 2, y, row_w, h, id);
-        const bool selected = menu_.cursor == i || hover_id_ == id;
+        const bool selected = menu_.shows_cursor_at(i) || hover_id_ == id;
         if (selected) {
             fill(cr, drop_x + 3, y, drop_w - 6, row_h, ink_hover.r, ink_hover.g, ink_hover.b);
-            if (gamepad_nav_ && menu_.cursor == i) {
+            if (gamepad_nav_ && menu_.shows_cursor_at(i)) {
                 cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
                 cairo_set_line_width(cr, 2);
                 const double inset = h >= 28.0 ? 2.0 : 1.0;
@@ -3303,9 +3304,23 @@ void Shell::draw_dialog(cairo_t *cr)
             text_spans_.push_back(TextSpan{x + margin, cy, inner, chip_h});
         }
         cy += chip_h + dp(12);
-        const double label_w = dp(96);
-        const double bar_x = x + margin + label_w;
-        const double bar_w = inner - label_w - dp(40);
+        // Bars start after the widest label and stop before the widest
+        // value, with the same gap on both sides, at every UI scale.
+        double widest_label = 0.0;
+        for (const Bar &bar : bars) {
+            widest_label = std::max(widest_label, static_cast<double>(measure_text(cr, ui_font(), bar.label, -1).width));
+        }
+        if (zone) {
+            widest_label = std::max(widest_label, static_cast<double>(measure_text(cr, ui_font(), "Growth", -1).width));
+        }
+        double widest_value = 0.0;
+        for (const char *value : {"100%", "Down", "Flat"}) {
+            widest_value = std::max(widest_value, static_cast<double>(measure_text(cr, ui_font(), value, -1).width));
+        }
+        const inspect_report::BarLayout bar_layout =
+            inspect_report::bar_layout(inner, widest_label, widest_value, static_cast<double>(dp(12)));
+        const double bar_x = x + margin + bar_layout.bar_offset;
+        const double bar_w = bar_layout.bar_width;
         for (const Bar &bar : bars) {
             paint_text(cr, ui_font(), bar.label, x + margin, cy + dp(2), dim_r, dim_g, dim_b, -1);
             const double track_y = cy + row_h / 2.0 - dp(4);
@@ -4610,54 +4625,14 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     };
     const std::string pop_line = "Population " + plain_number(report.population);
     const std::string tax_line = "Tax " + std::to_string(digest.tax_percent) + "%";
-    const std::int64_t delta = digest.closing_funds - digest.opening_funds;
-    const std::string flow =
-        std::string(delta >= 0 ? "Surplus " : "Deficit ") + civic::dollars(delta >= 0 ? delta : -delta);
-    const std::string funds_body = "Open " + civic::dollars(digest.opening_funds) + "\nClose " +
-                                   civic::dollars(digest.closing_funds) + "\n" + flow;
-    std::string people_body = digest.card.population;
-    const auto paren = people_body.rfind(" (");
-    if (paren != std::string::npos) {
-        people_body.replace(paren, 2, "\n(");
-    }
     const CitySession::CensusMix mix = session_.census_mix();
-    const int mix_total = mix.homes + mix.shops + mix.jobs;
-    if (mix_total > 0) {
-        const int homes = mix.homes * 100 / mix_total;
-        const int shops = mix.shops * 100 / mix_total;
-        const int jobs = 100 - homes - shops;
-        people_body += "\nR " + std::to_string(homes) + "%   C " + std::to_string(shops) + "%   I " +
-                       std::to_string(jobs) + "%";
-    }
-    std::string standing = report.no_residents ? "No residents yet, so there is no poll."
-                                               : report.category + ". Score " + std::to_string(report.score) + ".";
-    if (!report.no_residents) {
-        standing += "\n" + std::to_string(report.yes_percent) + "% in favor.";
-    }
-    std::string highlights;
-    int shown = 0;
-    for (const civic::DigestLine &event : digest.events) {
-        if (event.text.find("No disaster") != std::string::npos) {
-            continue;
-        }
-        if (!highlights.empty()) {
-            highlights += "\n";
-        }
-        highlights += event.text;
-        if (++shown >= 4) {
-            break;
-        }
-    }
-    if (highlights.empty()) {
-        highlights = "A quiet year. No disaster or milestone was recorded.";
-    }
-    std::string challenges = digest.card.problem;
-    if (!digest.card.intention.empty()) {
-        if (!challenges.empty()) {
-            challenges += "\n";
-        }
-        challenges += digest.card.intention;
-    }
+    const civic::ReviewText review = civic::make_review_text(digest, mix.homes, mix.shops, mix.jobs, report.no_residents,
+                                                             report.category, report.score, report.yes_percent);
+    const std::string &funds_body = review.funds;
+    const std::string &people_body = review.people;
+    const std::string &standing = review.standing;
+    const std::string &highlights = review.highlights;
+    const std::string &challenges = review.challenges;
     // A short window used to shrink the top boxes and drop Deficit and the
     // census line. Try the natural card, then a shorter header and tighter
     // padding, then the message strip, then one step down in type. The boxes

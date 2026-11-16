@@ -513,6 +513,10 @@ class MenuNav {
 public:
     int open_menu = -1;
     int cursor = 0;
+    // False while a menu opened with the pointer has not been stepped
+    // through with keys yet: no row is highlighted until the pointer is
+    // over one. Keyboard and pad menus show their cursor at once.
+    bool cursor_shown = true;
     bool alt_shown = false;
     bool recent_open = false;
     int recent_cursor = 0;
@@ -529,14 +533,29 @@ public:
         alt_shown = false;
         activated = Action::None;
         activated_recent = -1;
+        cursor_shown = true;
     }
 
     bool open() const { return open_menu >= 0; }
+
+    // Opened by a click or by sliding onto a title: nothing highlighted.
+    void open_by_pointer(int column)
+    {
+        open_menu = column;
+        cursor = first_enabled(column);
+        cursor_shown = false;
+        recent_open = false;
+        alt_shown = true;
+    }
+
+    // Whether row i draws as the keyboard cursor.
+    bool shows_cursor_at(int row) const { return cursor_shown && cursor == row; }
 
     void open_first()
     {
         open_menu = 0;
         cursor = first_enabled(0);
+        cursor_shown = true;
         recent_open = false;
         alt_shown = true;
     }
@@ -555,6 +574,7 @@ public:
                 if (mnemonic_of(menu_table::column_title(c)) == letter) {
                     open_menu = c;
                     cursor = first_enabled(c);
+                    cursor_shown = true;
                     alt_shown = true;
                     recent_open = false;
                     return true;
@@ -572,6 +592,19 @@ public:
             }
             close();
             return true;
+        }
+        if (!cursor_shown && (key == AccelKey::Up || key == AccelKey::Down || key == AccelKey::Return)) {
+            // The first key in a pointer-opened menu shows the cursor on the
+            // first row (Down, Return) or the last (Up) instead of acting on
+            // a row the player never saw highlighted.
+            cursor_shown = true;
+            if (key == AccelKey::Up && !recent_open) {
+                cursor = step(open_menu, cursor, -1, true);
+            }
+            return true;
+        }
+        if (key == AccelKey::Left || key == AccelKey::Right) {
+            cursor_shown = true;
         }
         if (key == AccelKey::Left) {
             if (recent_open) {
