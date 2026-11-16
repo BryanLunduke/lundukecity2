@@ -65,8 +65,8 @@ inline std::vector<HowToPlaySection> how_to_play_sections()
          "Auto budget does this for you. Police and fire stations need that funding, or they stop covering the "
          "blocks around them."},
         {"Finding your way",
-         "A scenario names a goal and a deadline. Right-click the map, or press Q, to switch to Query, then click "
-         "a tile to see what is there. The minimap jumps across the city."},
+         "A scenario names a goal and a deadline. Right-click the map, or press Q, to switch to Inspect, then click "
+         "a tile for its card: power, road, and why it is or is not growing. The minimap jumps across the city."},
         {"Touch",
          "A tap builds one tile. A drag pans the map. Hold still, then drag, to lay a line. Two fingers pan or pinch "
          "to zoom."},
@@ -189,7 +189,7 @@ inline const char *controls_tool_name(int index)
 {
     static const char *names[] = {"Bulldozer", "Roads", "Rail", "Power lines", "Park", "Residential",
                                   "Commercial", "Industrial", "Police", "Fire dept", "Stadium", "Seaport",
-                                  "Coal power", "Nuclear", "Airport", "Special buildings", "Query (inspect a tile)"};
+                                  "Coal power", "Nuclear", "Airport", "Special buildings", "Inspect (a tile's card)"};
     if (index < 0 || index >= 17) {
         return "";
     }
@@ -218,7 +218,7 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                             {
                                 {a, "Confirm, build, or open the highlighted row"},
                                 {b + " or " + pad.view, "Cancel or close. In a field, delete a letter first"},
-                                {pad.west, "Switch to Query. In a field, delete a letter"},
+                                {pad.west, "Switch to Inspect. In a field, delete a letter"},
                                 {pad.north, "Pause or resume. Hold to cycle slow, medium, and fast"},
                                 {pad.menu, "Open the menu. In a window, press OK"},
                                 {std::string(pad.left) + " / " + pad.right, "Previous or next tool. A bigger slider step"},
@@ -281,7 +281,7 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                             {"Left drag", "Build with the current tool"},
                             {"Right drag", "Pan"},
                             {"Middle drag", "Pan"},
-                            {"Right-click", "Switch to Query"},
+                            {"Right-click", "Switch to Inspect"},
                         }, 1});
     sections.push_back({"Analysis",
                         {

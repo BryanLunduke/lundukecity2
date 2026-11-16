@@ -4,9 +4,12 @@
 
 #include "overlay_map.hpp"
 
+#include "heat_field.hpp"
+
 #include "micropolis.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -14,6 +17,8 @@ namespace {
 
 constexpr int kW = CitySession::kWorldW;
 constexpr int kH = CitySession::kWorldH;
+// Smooth heat picture: pixels per tile before the bilinear scale to the map.
+constexpr int kSmoothPx = 4;
 
 // A fully funded, powered station deposits MAX_POLICE_STATION_EFFECT (1000)
 // into one coverage cluster. The engine then smooths that map three times.
@@ -170,6 +175,101 @@ void OverlayMap::sync()
     }
     map_serial_ = serial;
     rebuild();
+    rebuild_smooth();
+}
+
+bool OverlayMap::smooth() const
+{
+    if (!smooth_enabled_) {
+        return false;
+    }
+    switch (layer_) {
+    case CitySession::MapLayer::Pollution:
+    case CitySession::MapLayer::Crime:
+    case CitySession::MapLayer::LandValue:
+    case CitySession::MapLayer::Traffic:
+    case CitySession::MapLayer::Police:
+    case CitySession::MapLayer::Fire:
+    case CitySession::MapLayer::Population:
+    case CitySession::MapLayer::Growth:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void OverlayMap::rebuild_smooth()
+{
+    if (!smooth() || session_ == nullptr) {
+        return;
+    }
+    const int sw = kW * kSmoothPx;
+    const int sh = kH * kSmoothPx;
+    if (smooth_ == nullptr) {
+        smooth_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, sw, sh);
+    }
+    cairo_surface_flush(smooth_);
+    unsigned char *data = cairo_image_surface_get_data(smooth_);
+    const int stride = cairo_image_surface_get_stride(smooth_);
+    std::vector<float> field(static_cast<std::size_t>(kW * kH), 0.0f);
+    const bool signed_field = layer_ == CitySession::MapLayer::Growth;
+    for (int y = 0; y < kH; ++y) {
+        for (int x = 0; x < kW; ++x) {
+            const int value = session_->layer_value(layer_, x, y);
+            double t = 0.0;
+            if (signed_field) {
+                t = static_cast<double>(value) / 200.0;
+            } else if (layer_ == CitySession::MapLayer::Police || layer_ == CitySession::MapLayer::Fire) {
+                t = static_cast<double>(value) / static_cast<double>(kStationCoverageFull);
+            } else {
+                t = static_cast<double>(value) / 255.0;
+            }
+            field[static_cast<std::size_t>(y * kW + x)] = static_cast<float>(std::max(-1.0, std::min(1.0, t)));
+        }
+    }
+    heat_field::blur(field, kW, kH, 1.1);
+    std::vector<float> fine(static_cast<std::size_t>(sw * sh), 0.0f);
+    for (int py = 0; py < sh; ++py) {
+        for (int px = 0; px < sw; ++px) {
+            fine[static_cast<std::size_t>(py * sw + px)] =
+                heat_field::sample(field, kW, kH, (px + 0.5) / kSmoothPx, (py + 0.5) / kSmoothPx);
+        }
+    }
+    constexpr int kLevels = 5;
+    for (int py = 0; py < sh; ++py) {
+        auto *row = reinterpret_cast<std::uint32_t *>(data + py * stride);
+        for (int px = 0; px < sw; ++px) {
+            const float v = fine[static_cast<std::size_t>(py * sw + px)];
+            const float t = std::fabs(v);
+            float r = 0.0f;
+            float g = 0.0f;
+            float b = 0.0f;
+            float a = 0.0f;
+            if (v < 0.0f) {
+                heat_field::cool_ramp(t, r, g, b, a);
+            } else {
+                heat_field::ramp(t, r, g, b, a);
+            }
+            if (a > 0.0f) {
+                const int here = heat_field::band(t, kLevels);
+                const float right = px + 1 < sw ? std::fabs(fine[static_cast<std::size_t>(py * sw + px + 1)]) : t;
+                const float below = py + 1 < sh ? std::fabs(fine[static_cast<std::size_t>((py + 1) * sw + px)]) : t;
+                if (here > 0 && (heat_field::band(right, kLevels) != here || heat_field::band(below, kLevels) != here)) {
+                    // Contour line: the same hue, darker and nearly opaque.
+                    r *= 0.55f;
+                    g *= 0.45f;
+                    b *= 0.45f;
+                    a = std::min(1.0f, a + 0.35f);
+                }
+            }
+            const auto c = [&](float channel) {
+                return static_cast<std::uint32_t>(std::min(255.0f, channel * a * 255.0f + 0.5f));
+            };
+            row[px] = (static_cast<std::uint32_t>(std::min(255.0f, a * 255.0f + 0.5f)) << 24) | (c(r) << 16) |
+                      (c(g) << 8) | c(b);
+        }
+    }
+    cairo_surface_mark_dirty(smooth_);
 }
 
 void OverlayMap::rebuild()
@@ -291,6 +391,10 @@ OverlayMap::~OverlayMap()
         cairo_surface_destroy(image_);
         image_ = nullptr;
     }
+    if (smooth_ != nullptr) {
+        cairo_surface_destroy(smooth_);
+        smooth_ = nullptr;
+    }
 }
 
 void OverlayMap::draw_at(cairo_t *cr, int tile_size)
@@ -300,6 +404,21 @@ void OverlayMap::draw_at(cairo_t *cr, int tile_size)
     }
     if (image_ == nullptr || tile_size < 1) {
         return;
+    }
+    if (smooth()) {
+        if (smooth_ == nullptr) {
+            rebuild_smooth();
+        }
+        if (smooth_ != nullptr) {
+            cairo_save(cr);
+            const double up = static_cast<double>(tile_size) / kSmoothPx;
+            cairo_scale(cr, up, up);
+            cairo_set_source_surface(cr, smooth_, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+            cairo_paint(cr);
+            cairo_restore(cr);
+            return;
+        }
     }
     cairo_save(cr);
     cairo_scale(cr, static_cast<double>(tile_size), static_cast<double>(tile_size));

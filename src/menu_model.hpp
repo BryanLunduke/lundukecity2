@@ -53,6 +53,7 @@ enum class Action {
     Zones, ZoneResidential, ZoneCommercial, ZoneIndustrial, Transportation,
     PoliceMap, FireMap, Population, Growth, Messages,
     ClassicLook, SvgaLook, SpookyLook,
+    NightMode,
     RecentIndex
 };
 
@@ -124,6 +125,7 @@ inline constexpr MenuEntry kOptions[] = {
     {"Auto-_goto", nullptr, ItemKind::Check, Action::AutoGoto, AccelKey::None, 0, 0},
     {"_Mute sound", nullptr, ItemKind::Check, Action::Mute, AccelKey::None, 0, 0},
     {"Fu_llscreen", "F11", ItemKind::Check, Action::Fullscreen, AccelKey::None, 0, 0},
+    {"_Night mode", nullptr, ItemKind::Check, Action::NightMode, AccelKey::None, 0, 0},
     {"_Settings…", nullptr, ItemKind::Normal, Action::Settings, AccelKey::None, 0, 0},
     {"_Remap controls…", nullptr, ItemKind::Normal, Action::RemapControls, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},

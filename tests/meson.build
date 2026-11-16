@@ -596,6 +596,18 @@ test(
   timeout: 180,
 )
 
+# Slate skin, grouped toolbar, Inspect card, smooth heat map, night light
+# layer and the handheld layout switch. Pure helpers; built on Windows too.
+polish = executable(
+  'polish',
+  'polish.cpp',
+  '../src/night_light.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+)
+
+test('polish', polish)
+
 # Headless checks for the numbered review fixes. The binary drives itself.
 # Release builds omit the self-test, so this test is not registered there.
 if lunduke_review_checks_on

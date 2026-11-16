@@ -16,6 +16,10 @@
 #include "file_list.hpp"
 #include "text_edit.hpp"
 #include "graph_legend.hpp"
+#include "heat_field.hpp"
+#include "inspect_report.hpp"
+#include "layout_mode.hpp"
+#include "tool_groups.hpp"
 #include "list_scroll.hpp"
 #include "messages.hpp"
 #include "notice_bar.hpp"
@@ -211,74 +215,139 @@ void Shell::layout()
     }
     menu_h_ = dp(36);
     status_h_ = dp(36);
-    // No message bar under the status line. Alerts are drawn over the map.
-    const int body = win_h_ - menu_h_ - status_h_;
-    cell_ = ui_scale::toolbar_cell(ui_scale_, std::max(1, body));
-    side_x_ = dp(6);
-    pal_y_ = menu_h_ + dp(6);
-    const int status_top = win_h_ - status_h_;
-    const int gap = dp(8);
-    const int mini_ok = dp(64);
-    const int demand_ok = dp(64);
-    // Two columns until the minimap or the demand meters would be squeezed.
-    // Three columns shorten the toolbar. The minimap is dropped only when
-    // even that cannot keep the meters readable. 960x600 stays usable.
-    auto measure = [&](int columns, bool want_mini, int &mini_h, int &demand_y, int &demand_h) {
-        const int side = ToolPalette::width_for(cell_, columns);
-        const int pal_h = ToolPalette::height_for(cell_, columns);
-        const int mini_y = pal_y_ + pal_h + gap;
-        if (!want_mini) {
-            mini_h = 0;
-            demand_y = mini_y;
-            demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
-            return demand_h >= demand_ok;
+    handheld_ = layout_mode::use_handheld(layout_pref_, deck_, handheld_device());
+    band_y_ = menu_h_;
+    band_h_ = 0;
+    hud_top_ = 0;
+    hud_bottom_ = 0;
+    hud_right_ = 0;
+    quick_y_ = 0;
+    quick_h_ = 0;
+    hint_h_ = 0;
+    palette_.set_style(slate_ || handheld_, 0);
+    if (handheld_) {
+        // Handheld: the map is the whole screen. The menu bar shows only
+        // while a menu is open; a quick bar and a hint strip sit at the
+        // bottom and a compact info pill at the top, all over the map.
+        status_h_ = 0;
+        cell_ = ui_scale::toolbar_cell(ui_scale_, std::max(1, win_h_));
+        side_x_ = 0;
+        side_w_ = 0;
+        pal_y_ = win_h_;
+        palette_.set_columns(2);
+        palette_.set_cell(cell_);
+        hint_h_ = dp(28);
+        quick_h_ = std::min(dp(66), std::max(dp(44), (win_w_ - dp(40)) / 17));
+        quick_y_ = win_h_ - hint_h_ - quick_h_ - dp(6);
+        hud_top_ = dp(54);
+        hud_bottom_ = win_h_ - quick_y_ + dp(6);
+        hud_right_ = dp(70);
+        mini_w_ = std::min(dp(200), std::max(dp(120), win_w_ / 6));
+        mini_h_ = mini_w_ * 5 / 6;
+        mini_x_ = win_w_ - mini_w_ - dp(10);
+        mini_y_ = dp(10);
+        demand_y_ = 0;
+        demand_h_ = 0;
+        view_x_ = 0;
+        view_y_ = 0;
+        view_w_ = std::max(dp(32), win_w_);
+        view_h_ = std::max(dp(32), win_h_);
+    } else {
+        if (slate_) {
+            band_h_ = dp(46);
         }
-        mini_h = std::max(dp(64), side * 5 / 6);
-        demand_y = mini_y + mini_h + gap;
-        const int demand_floor = dp(72);
-        if (demand_y + demand_floor > status_top) {
-            const int overflow = demand_y + demand_floor - status_top;
-            mini_h = std::max(dp(36), mini_h - overflow);
+        // No message bar under the status line. Alerts are drawn over the map.
+        const int body = win_h_ - menu_h_ - band_h_ - status_h_;
+        cell_ = ui_scale::toolbar_cell(ui_scale_, std::max(1, body));
+        side_x_ = dp(6);
+        pal_y_ = menu_h_ + band_h_ + dp(6);
+        const int status_top = win_h_ - status_h_;
+        const int gap = dp(8);
+        const int mini_ok = dp(64);
+        const int demand_ok = dp(64);
+        const int header = slate_ ? dp(18) : 0;
+        auto pal_height = [&](int columns) {
+            return header > 0 ? ToolPalette::grouped_height_for(cell_, columns, header)
+                              : ToolPalette::height_for(cell_, columns);
+        };
+        // Two columns until the minimap or the demand meters would be squeezed.
+        // Three columns shorten the toolbar. The minimap is dropped only when
+        // even that cannot keep the meters readable. 960x600 stays usable.
+        // Slate keeps the demand meters in the info band, so the tray only
+        // needs room for the minimap.
+        auto measure = [&](int columns, bool want_mini, int &mini_h, int &demand_y, int &demand_h) {
+            const int side = ToolPalette::width_for(cell_, columns);
+            const int pal_h = pal_height(columns);
+            const int mini_y = pal_y_ + pal_h + gap;
+            if (!want_mini) {
+                mini_h = 0;
+                demand_y = mini_y;
+                if (slate_) {
+                    demand_h = 0;
+                    return mini_y <= status_top;
+                }
+                demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
+                return demand_h >= demand_ok;
+            }
+            mini_h = std::max(dp(64), side * 5 / 6);
             demand_y = mini_y + mini_h + gap;
-        }
-        demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
-        return mini_h >= mini_ok && demand_h >= demand_ok;
-    };
-    int columns = 3;
-    int mini_h = 0;
-    int demand_y = 0;
-    int demand_h = 0;
-    // Three columns once the window is tall enough. Two columns made the
-    // toolbar tall and the minimap a postage stamp as the window grew.
-    if (!measure(3, true, mini_h, demand_y, demand_h)) {
-        columns = 2;
-        if (!measure(2, true, mini_h, demand_y, demand_h)) {
-            columns = 3;
-            if (!measure(3, false, mini_h, demand_y, demand_h)) {
-                columns = 2;
-                measure(2, false, mini_h, demand_y, demand_h);
+            if (slate_) {
+                if (mini_y + mini_h + gap > status_top) {
+                    mini_h = std::max(0, status_top - gap - mini_y);
+                }
+                demand_y = mini_y + mini_h + gap;
+                demand_h = 0;
+                return mini_h >= mini_ok;
+            }
+            const int demand_floor = dp(72);
+            if (demand_y + demand_floor > status_top) {
+                const int overflow = demand_y + demand_floor - status_top;
+                mini_h = std::max(dp(36), mini_h - overflow);
+                demand_y = mini_y + mini_h + gap;
+            }
+            demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
+            return mini_h >= mini_ok && demand_h >= demand_ok;
+        };
+        int columns = 3;
+        int mini_h = 0;
+        int demand_y = 0;
+        int demand_h = 0;
+        // Three columns once the window is tall enough. Two columns made the
+        // toolbar tall and the minimap a postage stamp as the window grew.
+        if (!measure(3, true, mini_h, demand_y, demand_h)) {
+            columns = 2;
+            if (!measure(2, true, mini_h, demand_y, demand_h)) {
+                columns = 3;
+                if (!measure(3, false, mini_h, demand_y, demand_h)) {
+                    columns = 2;
+                    measure(2, false, mini_h, demand_y, demand_h);
+                }
             }
         }
+        // The minimap keeps its own 6:5 height and the demand meters sit right
+        // under it. The tool card that used to fill the space between them is
+        // gone; the tool name and cost are on the status line and the hover tip.
+        palette_.set_columns(columns);
+        palette_.set_cell(cell_);
+        palette_.set_style(slate_, header);
+        side_w_ = ToolPalette::width_for(cell_, columns);
+        mini_y_ = pal_y_ + pal_height(columns) + gap;
+        if (mini_h <= 0) {
+            mini_y_ = pal_y_ + pal_height(columns);
+            demand_y = mini_y_ + gap;
+            demand_h = slate_ ? 0 : std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
+        }
+        mini_x_ = side_x_;
+        mini_w_ = side_w_;
+        mini_h_ = mini_h;
+        demand_y_ = demand_y;
+        demand_h_ = demand_h;
+        view_x_ = side_x_ + side_w_ + dp(8);
+        view_y_ = menu_h_ + band_h_;
+        view_w_ = std::max(dp(32), win_w_ - view_x_ - dp(8));
+        view_h_ = std::max(dp(32), win_h_ - view_y_ - status_h_);
     }
-    // The minimap keeps its own 6:5 height and the demand meters sit right
-    // under it. The tool card that used to fill the space between them is
-    // gone; the tool name and cost are on the status line and the hover tip.
-    palette_.set_columns(columns);
-    palette_.set_cell(cell_);
-    side_w_ = ToolPalette::width_for(cell_, columns);
-    mini_y_ = pal_y_ + ToolPalette::height_for(cell_, columns) + gap;
-    if (mini_h <= 0) {
-        mini_y_ = pal_y_ + ToolPalette::height_for(cell_, columns);
-        demand_y = mini_y_ + gap;
-        demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
-    }
-    mini_h_ = mini_h;
-    demand_y_ = demand_y;
-    demand_h_ = demand_h;
-    view_x_ = side_x_ + side_w_ + dp(8);
-    view_y_ = menu_h_;
-    view_w_ = std::max(dp(32), win_w_ - view_x_ - dp(8));
-    view_h_ = std::max(dp(32), win_h_ - view_y_ - status_h_);
+    map_.set_slate_tags(slate_ || handheld_);
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
     cursor_y_ = std::max(0.0f, std::min(cursor_y_, static_cast<float>(win_h_ - 1)));
     fit_map_to_view();
@@ -521,13 +590,25 @@ void Shell::draw_osk(cairo_t *cr, double x, double y, double w, double max_h)
 
 void Shell::draw_menubar(cairo_t *cr)
 {
+    const bool dark = slate_ || handheld_;
     cairo_pattern_t *bar = cairo_pattern_create_linear(0, 0, 0, menu_h_);
-    cairo_pattern_add_color_stop_rgb(bar, 0, theme::kMenuTopR, theme::kMenuTopG, theme::kMenuTopB);
-    cairo_pattern_add_color_stop_rgb(bar, 1, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);
+    if (dark) {
+        cairo_pattern_add_color_stop_rgb(bar, 0, 0x1D / 255.0, 0x25 / 255.0, 0x30 / 255.0);
+        cairo_pattern_add_color_stop_rgb(bar, 1, 0x15 / 255.0, 0x1B / 255.0, 0x23 / 255.0);
+    } else {
+        cairo_pattern_add_color_stop_rgb(bar, 0, theme::kMenuTopR, theme::kMenuTopG, theme::kMenuTopB);
+        cairo_pattern_add_color_stop_rgb(bar, 1, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);
+    }
     cairo_set_source(cr, bar);
     cairo_rectangle(cr, 0, 0, win_w_, menu_h_);
     cairo_fill(cr);
     cairo_pattern_destroy(bar);
+    if (dark) {
+        fill(cr, 0, menu_h_ - 1, win_w_, 1, 0x2E / 255.0, 0x38 / 255.0, 0x46 / 255.0);
+    }
+    const double ink_r = dark ? 0xEE / 255.0 : theme::kTextR;
+    const double ink_g = dark ? 0xE8 / 255.0 : theme::kTextG;
+    const double ink_b = dark ? 0xDA / 255.0 : theme::kTextB;
     double x = 4;
     for (int c = 0; c < menu_table::kColumnCount; ++c) {
         const char *title = menu_table::column_title(c);
@@ -540,24 +621,42 @@ void Shell::draw_menubar(cairo_t *cr)
         // While a menu is open, only that title is lit. A hover left on
         // System used to stay blue after the keyboard moved to Options.
         const bool lit = dialog_ == Dialog::None && (open || (hover_id_ == id && !menu_.open()));
-        if (lit) {
+        if (lit && dark) {
+            fill(cr, x, 3, w, menu_h_ - 6, 0x30 / 255.0, 0x3D / 255.0, 0x50 / 255.0);
+            fill(cr, x + 6, menu_h_ - 6, w - 12, 2, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0);
+        } else if (lit) {
             fill(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
             stroke_rect(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_edge_r(), theme::chrome_select_edge_g(), theme::chrome_select_edge_b());
         }
-        paint_mnemonic(cr, menu_font(), title, x + 10, 9, menu_.alt_shown || menu_.open(),
-                       lit ? 1 : theme::kTextR, lit ? 1 : theme::kTextG, lit ? 1 : theme::kTextB);
+        paint_mnemonic(cr, menu_font(), title, x + 10, 9, menu_.alt_shown || menu_.open(), lit && !dark ? 1 : ink_r,
+                       lit && !dark ? 1 : ink_g, lit && !dark ? 1 : ink_b);
         x += w + 2;
     }
     const std::string zoom = zoom_menu_label(map_.tile_size());
     const TextMetrics zoom_metrics = measure_text(cr, menu_font(), zoom, -1);
     const double zoom_x = static_cast<double>(win_w_) - zoom_metrics.width - 12.0;
     if (zoom_x > x + 8.0) {
-        paint_text(cr, menu_font(), zoom, zoom_x, 9, theme::kTextR, theme::kTextG, theme::kTextB, -1);
+        paint_text(cr, menu_font(), zoom, zoom_x, 9, dark ? 0x9A / 255.0 : theme::kTextR, dark ? 0xA6 / 255.0 : theme::kTextG,
+                   dark ? 0xB8 / 255.0 : theme::kTextB, -1);
     }
 }
 
 void Shell::draw_menu_dropdown(cairo_t *cr)
 {
+    struct Ink {
+        double r;
+        double g;
+        double b;
+    };
+    const bool dark = slate_ || handheld_;
+    const Ink ink_bg = dark ? Ink{0x23 / 255.0, 0x2C / 255.0, 0x38 / 255.0} : Ink{theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB};
+    const Ink ink_frame =
+        dark ? Ink{0x4A / 255.0, 0x56 / 255.0, 0x6A / 255.0} : Ink{theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB};
+    const Ink ink_text = dark ? Ink{0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0} : Ink{theme::kTextR, theme::kTextG, theme::kTextB};
+    const Ink ink_accel = dark ? Ink{0x9A / 255.0, 0xA6 / 255.0, 0xB8 / 255.0} : Ink{theme::kAccelR, theme::kAccelG, theme::kAccelB};
+    const Ink ink_hover = dark ? Ink{0x3A / 255.0, 0x4B / 255.0, 0x63 / 255.0}
+                               : Ink{theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b()};
+    const Ink ink_track = dark ? Ink{0x2E / 255.0, 0x38 / 255.0, 0x46 / 255.0} : Ink{0.86, 0.86, 0.86};
     if (!menu_.open() || dialog_ != Dialog::None) {
         menu_scroll_menu_ = -2;
         menu_thumb_drag_ = false;
@@ -670,8 +769,8 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
     cairo_rectangle(cr, drop_x + 3, menu_h_ + 4, drop_w, drop_h);
     cairo_fill(cr);
-    fill(cr, drop_x, menu_h_, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
-    stroke_rect(cr, drop_x, menu_h_, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+    fill(cr, drop_x, menu_h_, drop_w, drop_h, ink_bg.r, ink_bg.g, ink_bg.b);
+    stroke_rect(cr, drop_x, menu_h_, drop_w, drop_h, ink_frame.r, ink_frame.g, ink_frame.b);
     cairo_save(cr);
     cairo_rectangle(cr, drop_x, menu_h_, drop_w, drop_h);
     cairo_clip(cr);
@@ -687,7 +786,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             continue;
         }
         if (item.kind == ItemKind::Separator) {
-            cairo_set_source_rgb(cr, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+            cairo_set_source_rgb(cr, ink_frame.r, ink_frame.g, ink_frame.b);
             cairo_move_to(cr, drop_x + 4, y + 4);
             cairo_line_to(cr, drop_x + drop_w - 4, y + 4);
             cairo_stroke(cr);
@@ -697,7 +796,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         push_hot(drop_x + 2, y, row_w, h, id);
         const bool selected = menu_.cursor == i || hover_id_ == id;
         if (selected) {
-            fill(cr, drop_x + 3, y, drop_w - 6, row_h, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
+            fill(cr, drop_x + 3, y, drop_w - 6, row_h, ink_hover.r, ink_hover.g, ink_hover.b);
             if (gamepad_nav_ && menu_.cursor == i) {
                 cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
                 cairo_set_line_width(cr, 2);
@@ -720,6 +819,8 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
                 on = !session_.sound_enabled();
             } else if (item.action == Action::Fullscreen) {
                 on = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
+            } else if (item.action == Action::NightMode) {
+                on = night_;
             } else if (item.action == Action::Power) {
                 on = overlay_on_ && overlay_.layer() == CitySession::MapLayer::Power;
             } else if (item.action == Action::Zones) {
@@ -763,7 +864,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             } else if (item.action == Action::SpookyLook) {
                 on = drawn_look_ == 2;
             }
-            cairo_set_source_rgb(cr, theme::kTextR, theme::kTextG, theme::kTextB);
+            cairo_set_source_rgb(cr, ink_text.r, ink_text.g, ink_text.b);
             const double mark_x = drop_x + 8;
             const double mark_y = y + pitch.mark_dy;
             const double mark = pitch.mark;
@@ -795,11 +896,11 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         }
         const double text_y = y + pitch.text_dy;
         const double text_x = (deck_ || touch_used_) ? drop_x + 12.0 + pitch.mark : drop_x + 28.0;
-        paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, theme::kTextR, theme::kTextG,
-                       theme::kTextB);
+        paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, ink_text.r, ink_text.g,
+                       ink_text.b);
         if (item.kind == ItemKind::Submenu) {
-            paint_text(cr, menu_font(), ">", drop_x + drop_w - dp(28), text_y, theme::kTextR, theme::kTextG,
-                       theme::kTextB, -1);
+            paint_text(cr, menu_font(), ">", drop_x + drop_w - dp(28), text_y, ink_text.r, ink_text.g,
+                       ink_text.b, -1);
         }
         if (item.action == Action::Recent) {
             recent_row_y = y;
@@ -814,7 +915,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
             const TextMetrics accel = measure_text(cr, menu_font(), accel_shown, -1);
             const double accel_pad = menu_scrolls ? 22.0 : 12.0;
             paint_text(cr, menu_font(), accel_shown, drop_x + drop_w - accel.width - accel_pad, y + pitch.text_dy,
-                       theme::kAccelR, theme::kAccelG, theme::kAccelB, -1);
+                       ink_accel.r, ink_accel.g, ink_accel.b, -1);
         }
     }
     if (menu_scrolls) {
@@ -822,7 +923,7 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         const double thumb_h = std::max(16.0, drop_h * (drop_h / content_h));
         const double max_scroll = std::max(1.0, content_h - avail);
         const double thumb_y = menu_h_ + (drop_h - thumb_h) * (scroll / max_scroll);
-        fill(cr, track_x, menu_h_ + 2, 8, drop_h - 4, 0.86, 0.86, 0.86);
+        fill(cr, track_x, menu_h_ + 2, 8, drop_h - 4, ink_track.r, ink_track.g, ink_track.b);
         fill(cr, track_x, thumb_y, 8, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(),
              theme::chrome_select_b());
         push_hot(track_x - 4, menu_h_, 16, drop_h, kMenuScroll);
@@ -848,12 +949,12 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
     cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
     cairo_rectangle(cr, sub.x + 3, sub.y + 3, sub.w, sub.h);
     cairo_fill(cr);
-    fill(cr, sub.x, sub.y, sub.w, sub.h, 1, 1, 1);
-    stroke_rect(cr, sub.x, sub.y, sub.w, sub.h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+    fill(cr, sub.x, sub.y, sub.w, sub.h, dark ? ink_bg.r : 1.0, dark ? ink_bg.g : 1.0, dark ? ink_bg.b : 1.0);
+    stroke_rect(cr, sub.x, sub.y, sub.w, sub.h, ink_frame.r, ink_frame.g, ink_frame.b);
     const int text_w = static_cast<int>(std::max(40.0, sub.w - dp(20)));
     if (recent_.empty()) {
-        paint_text(cr, menu_font(), "No recent cities", sub.x + 10, sub.y + 8, theme::kTextR, theme::kTextG,
-                   theme::kTextB, text_w);
+        paint_text(cr, menu_font(), "No recent cities", sub.x + 10, sub.y + 8, ink_text.r, ink_text.g,
+                   ink_text.b, text_w);
         return;
     }
     for (int i = 0; i < static_cast<int>(recent_.size()); ++i) {
@@ -861,12 +962,12 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         const int id = kRecentItem + i;
         push_hot(sub.x + 2, ry, std::max(1.0, sub.w - 4), row_h, id);
         if (menu_.recent_cursor == i || hover_id_ == id) {
-            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), row_h, theme::chrome_hover_r(), theme::chrome_hover_g(), theme::chrome_hover_b());
+            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), row_h, ink_hover.r, ink_hover.g, ink_hover.b);
         }
         const std::string shown = recent_[static_cast<std::size_t>(i)];
         const auto slash = shown.find_last_of("/\\");
         paint_text(cr, menu_font(), slash == std::string::npos ? shown : shown.substr(slash + 1), sub.x + 10, ry + 7,
-                   theme::kTextR, theme::kTextG, theme::kTextB, text_w);
+                   ink_text.r, ink_text.g, ink_text.b, text_w);
     }
 }
 
@@ -1060,11 +1161,17 @@ void Shell::draw_dialog(cairo_t *cr)
     };
     if (dialog_ == Dialog::Welcome) {
         const std::string continued = welcome_continue_label();
+        refresh_continue_card();
+        const bool dark = slate_ || handheld_;
         const double bh = dp(34);
         const double gap = dp(6);
-        const int rows = continued.empty() ? 4 : 5;
-        const double plaque_h = dp(16) + rows * bh + (rows - 1) * gap + dp(14);
-        const double plaque_w = std::min(static_cast<double>(dp(420)), std::max(1.0, win_w_ - static_cast<double>(dp(48))));
+        // The last city gets a card with its map, date, people and funds
+        // above the four plain choices.
+        const double card_h = continued.empty() ? 0.0 : static_cast<double>(dp(92));
+        const int rows = 4;
+        const double plaque_h = dp(16) + (card_h > 0 ? card_h + dp(10) : 0.0) + rows * bh + (rows - 1) * gap + dp(14);
+        const double plaque_w = std::min(static_cast<double>(card_h > 0 ? dp(480) : dp(420)),
+                                         std::max(1.0, win_w_ - static_cast<double>(dp(48))));
         const double px = std::max(0.0, (win_w_ - plaque_w) / 2.0);
         double py = win_h_ - plaque_h - dp(22);
         // The title and the downtown towers live in the upper part of the art.
@@ -1074,8 +1181,8 @@ void Shell::draw_dialog(cairo_t *cr)
             py = std::max(win_h_ * 0.40, win_h_ - plaque_h - dp(8));
         }
         const double radius = dp(12);
-        auto round_box = [&](double x, double y, double w, double h) {
-            const double rr = std::min(radius, std::min(w, h) / 2.0);
+        auto round_box = [&](double x, double y, double w, double h, double r) {
+            const double rr = std::min(r, std::min(w, h) / 2.0);
             cairo_new_path(cr);
             cairo_arc(cr, x + w - rr, y + rr, rr, -1.5708, 0);
             cairo_arc(cr, x + w - rr, y + h - rr, rr, 0, 1.5708);
@@ -1083,28 +1190,148 @@ void Shell::draw_dialog(cairo_t *cr)
             cairo_arc(cr, x + rr, y + rr, rr, 3.1416, 4.7124);
             cairo_close_path(cr);
         };
-        round_box(px + dp(3), py + dp(4), plaque_w, plaque_h);
+        round_box(px + dp(3), py + dp(4), plaque_w, plaque_h, radius);
         cairo_set_source_rgba(cr, 0.05, 0.08, 0.16, 0.40);
         cairo_fill(cr);
-        round_box(px, py, plaque_w, plaque_h);
-        cairo_set_source_rgba(cr, 0.99, 0.96, 0.88, 0.90);
-        cairo_fill_preserve(cr);
-        cairo_set_source_rgba(cr, 0.45, 0.32, 0.10, 0.95);
+        round_box(px, py, plaque_w, plaque_h, radius);
+        if (dark) {
+            cairo_set_source_rgba(cr, 0x1B / 255.0, 0x22 / 255.0, 0x2C / 255.0, 0.92);
+            cairo_fill_preserve(cr);
+            cairo_set_source_rgba(cr, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0, 0.85);
+        } else {
+            cairo_set_source_rgba(cr, 0.99, 0.96, 0.88, 0.90);
+            cairo_fill_preserve(cr);
+            cairo_set_source_rgba(cr, 0.45, 0.32, 0.10, 0.95);
+        }
         cairo_set_line_width(cr, 2.0);
         cairo_stroke(cr);
         const double bw = plaque_w - dp(28);
+        const double bx = px + dp(14);
         double by = py + dp(12);
-        if (!continued.empty()) {
-            button(cr, px + dp(14), by, bw, bh, continued.c_str(), kWelcomeContinue, false);
-            by += bh + gap;
+        if (card_h > 0) {
+            push_hot(bx, by, bw, card_h, kWelcomeContinue);
+            push_focus(kWelcomeContinue);
+            const bool focused = focus_id_ == kWelcomeContinue;
+            const bool lit = focused || hover_id_ == kWelcomeContinue;
+            round_box(bx, by, bw, card_h, dp(8));
+            cairo_pattern_t *shade = cairo_pattern_create_linear(bx, by, bx, by + card_h);
+            const double lift = lit ? 0.05 : 0.0;
+            cairo_pattern_add_color_stop_rgb(shade, 0, std::min(1.0, 0.89 + lift), std::min(1.0, 0.76 + lift), 0.40 + lift);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0.80 + lift, 0.64 + lift, 0.27 + lift);
+            cairo_set_source(cr, shade);
+            cairo_fill_preserve(cr);
+            cairo_pattern_destroy(shade);
+            if (focused) {
+                if (dark) {
+                    cairo_set_source_rgb(cr, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
+                } else {
+                    cairo_set_source_rgb(cr, 0.10, 0.35, 0.78);
+                }
+                cairo_set_line_width(cr, 3.0);
+            } else {
+                cairo_set_source_rgb(cr, 0.45, 0.32, 0.10);
+                cairo_set_line_width(cr, 1.5);
+            }
+            cairo_stroke(cr);
+            const double pad = dp(10);
+            const double thumb_h = card_h - pad * 2;
+            const double thumb_w = std::floor(thumb_h * 1.2);
+            double text_x = bx + pad;
+            if (continue_thumb_.size() == static_cast<std::size_t>(120 * 100)) {
+                cairo_surface_t *thumb = cairo_image_surface_create_for_data(
+                    reinterpret_cast<unsigned char *>(continue_thumb_.data()), CAIRO_FORMAT_RGB24, 120, 100, 120 * 4);
+                cairo_save(cr);
+                round_box(bx + pad, by + pad, thumb_w, thumb_h, dp(4));
+                cairo_clip(cr);
+                cairo_translate(cr, bx + pad, by + pad);
+                cairo_scale(cr, thumb_w / 120.0, thumb_h / 100.0);
+                cairo_set_source_surface(cr, thumb, 0, 0);
+                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+                cairo_paint(cr);
+                cairo_restore(cr);
+                cairo_surface_destroy(thumb);
+                round_box(bx + pad, by + pad, thumb_w, thumb_h, dp(4));
+                cairo_set_source_rgba(cr, 0.25, 0.17, 0.05, 0.8);
+                cairo_set_line_width(cr, 1.0);
+                cairo_stroke(cr);
+                text_x += thumb_w + pad * 1.4;
+            }
+            const int text_w = std::max(1, static_cast<int>(bx + bw - pad - text_x));
+            const double ink_r = 0.16;
+            const double ink_g = 0.11;
+            const double ink_b = 0.03;
+            const TextMetrics tag_m = measure_text(cr, tag_font(), "CONTINUE", -1);
+            double ty = by + pad - dp(1);
+            paint_text(cr, tag_font(), "CONTINUE", text_x, ty, 0.42, 0.29, 0.06, -1);
+            ty += tag_m.height;
+            std::string name = continue_name_.empty() ? strip_mnemonic(continued.c_str()) : continue_name_;
+            const TextMetrics name_m = measure_text(cr, title_font(), name, -1);
+            if (name_m.width > text_w) {
+                while (name.size() > 1 && measure_text(cr, title_font(), name + "\u2026", -1).width > text_w) {
+                    name.pop_back();
+                    while (!name.empty() && (static_cast<unsigned char>(name.back()) & 0xC0) == 0x80) {
+                        name.pop_back();
+                    }
+                }
+                name += "\u2026";
+            }
+            paint_text(cr, title_font(), name, text_x, ty, ink_r, ink_g, ink_b, -1);
+            ty += measure_text(cr, title_font(), name, -1).height + dp(2);
+            std::string detail = continue_ok_ ? continue_detail_ : std::string("Saved city");
+            if (measure_text(cr, ui_font(), detail, -1).width > text_w) {
+                while (detail.size() > 1 && measure_text(cr, ui_font(), detail + "\u2026", -1).width > text_w) {
+                    detail.pop_back();
+                    while (!detail.empty() && (static_cast<unsigned char>(detail.back()) & 0xC0) == 0x80) {
+                        detail.pop_back();
+                    }
+                }
+                detail += "\u2026";
+            }
+            paint_text(cr, ui_font(), detail, text_x, ty, 0.30, 0.21, 0.06, -1);
+            by += card_h + dp(10);
         }
-        button(cr, px + dp(14), by, bw, bh, "_Start a new city", kWelcomeNew, false);
+        if (dark) {
+            const struct {
+                const char *label;
+                int id;
+            } rows_list[] = {{"_Start a new city", kWelcomeNew},
+                             {"_Load a saved city", kWelcomeLoad},
+                             {"Select a _scenario", kWelcomeScenario},
+                             {"_Quit", kWelcomeQuit}};
+            for (const auto &row : rows_list) {
+                push_hot(bx, by, bw, bh, row.id);
+                push_focus(row.id);
+                const bool focused = focus_id_ == row.id;
+                const bool lit = focused || hover_id_ == row.id;
+                round_box(bx, by, bw, bh, dp(6));
+                if (lit) {
+                    cairo_set_source_rgb(cr, 0x3A / 255.0, 0x4B / 255.0, 0x63 / 255.0);
+                } else {
+                    cairo_set_source_rgb(cr, 0x26 / 255.0, 0x30 / 255.0, 0x3D / 255.0);
+                }
+                cairo_fill_preserve(cr);
+                if (focused) {
+                    cairo_set_source_rgb(cr, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0);
+                    cairo_set_line_width(cr, 2.5);
+                } else {
+                    cairo_set_source_rgb(cr, 0x3A / 255.0, 0x45 / 255.0, 0x55 / 255.0);
+                    cairo_set_line_width(cr, 1.0);
+                }
+                cairo_stroke(cr);
+                const TextMetrics m = measure_text(cr, ui_font(), strip_mnemonic(row.label), -1);
+                paint_mnemonic(cr, ui_font(), row.label, bx + (bw - m.width) / 2.0, by + (bh - m.height) / 2.0,
+                               menu_.alt_shown, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
+                by += bh + gap;
+            }
+            return;
+        }
+        button(cr, bx, by, bw, bh, "_Start a new city", kWelcomeNew, false);
         by += bh + gap;
-        button(cr, px + dp(14), by, bw, bh, "_Load a saved city", kWelcomeLoad, false);
+        button(cr, bx, by, bw, bh, "_Load a saved city", kWelcomeLoad, false);
         by += bh + gap;
-        button(cr, px + dp(14), by, bw, bh, "Select a _scenario", kWelcomeScenario, false);
+        button(cr, bx, by, bw, bh, "Select a _scenario", kWelcomeScenario, false);
         by += bh + gap;
-        button(cr, px + dp(14), by, bw, bh, "_Quit", kWelcomeQuit, false);
+        button(cr, bx, by, bw, bh, "_Quit", kWelcomeQuit, false);
         return;
     }
     if (dialog_ == Dialog::QuitConfirm) {
@@ -2092,10 +2319,14 @@ void Shell::draw_dialog(cairo_t *cr)
         const double stack_gap = static_cast<double>(dp(12));
         const SettingsStack volume_row = settings_stack(0, text_h, bar_h, stack_gap);
         const SettingsStack scale_row = settings_stack(volume_row.next_caption, text_h, bar_h, stack_gap);
-        const double toggles = (bh + stack_gap) * 4.0;
+        // Seven switches in one column when the window is tall enough, else
+        // two columns of four so the dialog still fits a 960x600 window.
+        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 7.0 + dp(8) + bh + margin;
+        const bool paired = one_column > win_h_ - 2.0 * margin;
+        const double toggles = (bh + stack_gap) * (paired ? 4.0 : 7.0);
         const double rows = scale_row.next_caption + toggles;
         const double height = dp(48) + margin + rows + dp(8) + bh + margin;
-        const DialogRect panel = place_dialog(win_w_, band_h, dp(640), height, margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, paired ? dp(760) : dp(640), height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
@@ -2144,6 +2375,25 @@ void Shell::draw_dialog(cairo_t *cr)
                        static_cast<int>(switch_x - x - margin - dp(8)));
             button(cr, switch_x, sy, switch_w, bh, state, id, false);
         };
+        // Right-hand column in the paired layout: label at the middle.
+        const double pair_w = std::min(switch_w, (dw - 2 * margin) / 2.0 - dp(150));
+        const double pair_label_x = x + dw / 2.0 + dp(8);
+        const double pair_switch_x = x + dw - margin - pair_w;
+        auto pair_row = [&](const char *label, const char *state, int id, double sy) {
+            paint_text(cr, ui_font(), label, pair_label_x, sy + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(std::max(1.0, pair_switch_x - pair_label_x - dp(8))));
+            button(cr, pair_switch_x, sy, pair_w, bh, state, id, false);
+        };
+        auto left_row = [&](const char *label, const char *state, int id, double sy) {
+            if (!paired) {
+                switch_row(label, state, id, sy);
+                return;
+            }
+            const double left_switch = x + dw / 2.0 - dp(8) - pair_w;
+            paint_text(cr, ui_font(), label, x + margin, sy + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(std::max(1.0, left_switch - x - margin - dp(8))));
+            button(cr, left_switch, sy, pair_w, bh, state, id, false);
+        };
         const bool scale_auto = scale_percent_ <= 0;
         const std::string scale_text = scale_auto ? "Auto" : std::to_string(scale_percent_) + "%";
         slider(1, "Volume", std::to_string(volume_) + "%", volume_, 0, 100, volume_row, true, false);
@@ -2153,12 +2403,13 @@ void Shell::draw_dialog(cairo_t *cr)
         button(cr, switch_x, content + scale_row.caption, switch_w, auto_h, scale_auto ? "Auto" : "Manual", kScaleAuto,
                false);
         double sy = content + scale_row.next_caption;
-        switch_row("Pause when unfocused", pause_unfocused_ ? "On" : "Off", kReset, sy);
+        const double first_row = sy;
+        left_row("Pause when unfocused", pause_unfocused_ ? "On" : "Off", kReset, sy);
         sy += bh + stack_gap;
-        switch_row("Mouse wheel", wheel_zooms_ ? "Zoom" : "Scroll", kWheelZoom, sy);
+        left_row("Mouse wheel", wheel_zooms_ ? "Zoom" : "Scroll", kWheelZoom, sy);
         sy += bh + stack_gap;
         const bool full = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
-        switch_row("Fullscreen", full ? "On" : "Off", kFullscreenBox, sy);
+        left_row("Fullscreen", full ? "On" : "Off", kFullscreenBox, sy);
         sy += bh + stack_gap;
         const char *autosave_state = "Off";
         std::string autosave_owned;
@@ -2171,7 +2422,26 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             autosave_state = autosave_owned.c_str();
         }
-        switch_row("Autosave", autosave_state, kAutosave, sy);
+        left_row("Autosave", autosave_state, kAutosave, sy);
+        sy += bh + stack_gap;
+        std::string layout_state = layout_mode::choice_label(layout_pref_);
+        if (layout_mode::clamp_choice(layout_pref_) == layout_mode::Auto) {
+            layout_state += handheld_ ? " (handheld)" : " (desktop)";
+        }
+        if (paired) {
+            double py = first_row;
+            pair_row("Interface", slate_ ? "Slate" : "Light", kSkinBox, py);
+            py += bh + stack_gap;
+            pair_row("Night lighting", night_ ? "On" : "Off", kNightBox, py);
+            py += bh + stack_gap;
+            pair_row("Layout", layout_state.c_str(), kLayoutBox, py);
+        } else {
+            switch_row("Interface", slate_ ? "Slate" : "Light", kSkinBox, sy);
+            sy += bh + stack_gap;
+            switch_row("Night lighting", night_ ? "On" : "Off", kNightBox, sy);
+            sy += bh + stack_gap;
+            switch_row("Layout", layout_state.c_str(), kLayoutBox, sy);
+        }
         buttons_at(x, dw, y + panel.h - margin - bh, {{"_Cancel", kCancel}, {"_OK", kOk}});
         return;
     }
@@ -2862,7 +3132,244 @@ void Shell::draw_dialog(cairo_t *cr)
         buttons_at(x, dw, buttons_y, {{"_Close", kClose}});
         return;
     }
-    if (dialog_ == Dialog::Query) {
+    int inspect_x = 0;
+    int inspect_y = 0;
+    if (dialog_ == Dialog::Query && session_.query_tile(inspect_x, inspect_y)) {
+        // The Inspect card: what the tile is, power and road, the simulator
+        // readings as bars, and why a zone is not growing.
+        const CitySession::InspectFacts facts = session_.inspect_facts(inspect_x, inspect_y);
+        const inspect_report::Report report = inspect_report::make(facts.facts);
+        const bool dark = slate_ || handheld_;
+        const double ink_r = dark ? 0xEE / 255.0 : theme::kTextR;
+        const double ink_g = dark ? 0xE8 / 255.0 : theme::kTextG;
+        const double ink_b = dark ? 0xDA / 255.0 : theme::kTextB;
+        const double dim_r = dark ? 0x9A / 255.0 : 0.38;
+        const double dim_g = dark ? 0xA6 / 255.0 : 0.36;
+        const double dim_b = dark ? 0xB8 / 255.0 : 0.32;
+        const bool zone = inspect_report::is_zone(facts.facts.kind);
+        const bool with_bars = facts.facts.kind != inspect_report::Kind::Network;
+        struct Bar {
+            const char *label;
+            int value;
+            double r;
+            double g;
+            double b;
+        };
+        std::vector<Bar> bars;
+        if (with_bars) {
+            if (zone) {
+                bars.push_back(Bar{"Density", facts.facts.density, 0.36, 0.61, 0.90});
+            }
+            bars.push_back(Bar{"Land value", facts.facts.land_value, 0.42, 0.80, 0.48});
+            bars.push_back(Bar{"Crime", facts.facts.crime, 0.90, 0.40, 0.35});
+            bars.push_back(Bar{"Pollution", facts.facts.pollution, 0.78, 0.55, 0.25});
+            bars.push_back(Bar{"Traffic", facts.facts.traffic, 0.95, 0.66, 0.25});
+        }
+        const double width = std::min(static_cast<double>(dp(360)), std::max(1.0, win_w_ - 2.0 * margin));
+        const double inner = width - 2.0 * margin;
+        const double row_h = dp(22);
+        const double title_h = static_cast<double>(measure_text(cr, title_font(), facts.kind_name, -1).height);
+        const double chip_h = dp(26);
+        std::string reasons_head;
+        if (!report.reasons.empty()) {
+            reasons_head = zone ? (report.tone == inspect_report::Tone::Good ? "Could slow it down" : "Why it is not growing")
+                                : "Needs";
+        }
+        double reasons_h = 0;
+        for (const std::string &reason : report.reasons) {
+            reasons_h += line_height(ui_font(), "\u2022  " + reason, inner) + dp(4);
+        }
+        const double bh = static_cast<double>(control_px(36, 44));
+        const double top_pad = dark ? static_cast<double>(margin + dp(18)) : static_cast<double>(dp(52));
+        double height = top_pad + title_h + dp(10) + chip_h + dp(12);
+        if (!bars.empty()) {
+            height += bars.size() * row_h + dp(8);
+        }
+        if (zone) {
+            height += row_h;
+        }
+        if (!reasons_head.empty()) {
+            height += line_height(tag_font(), reasons_head, inner) + dp(6) + reasons_h + dp(4);
+        }
+        height += dp(8) + bh + margin;
+        double floor_y = static_cast<double>(win_h_ - status_h_) - margin;
+        if (handheld_) {
+            floor_y = static_cast<double>(quick_y_) - margin;
+        }
+        DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        if (query_anchored_) {
+            panel = place_near(win_w_, band_h, panel.w, panel.h, query_anchor_x_, query_anchor_y_, margin);
+        }
+        // Stay under the menu bar and the info band (or the handheld chips).
+        const double ceiling_y = static_cast<double>(handheld_ ? hud_top_ : menu_h_ + band_h_ + margin);
+        if (panel.y + panel.h > floor_y) {
+            panel.y = floor_y - panel.h;
+        }
+        if (panel.y < ceiling_y) {
+            panel.y = ceiling_y;
+        }
+        const double x = panel.x;
+        const double y = panel.y;
+        if (dark) {
+            // Modal like every dialog: a light dim and a catcher under the card.
+            cairo_set_source_rgba(cr, 0, 0, 0, 0.22);
+            cairo_rectangle(cr, 0, 0, win_w_, win_h_);
+            cairo_fill(cr);
+            push_hot(0, 0, win_w_, win_h_, 0);
+            cairo_set_source_rgba(cr, 0, 0, 0, 0.45);
+            round_dialog_rect(cr, x + 3, y + 5, panel.w, panel.h, dp(10));
+            cairo_fill(cr);
+            round_dialog_rect(cr, x, y, panel.w, panel.h, dp(10));
+            cairo_set_source_rgb(cr, 0x1E / 255.0, 0x26 / 255.0, 0x31 / 255.0);
+            cairo_fill_preserve(cr);
+            cairo_set_source_rgb(cr, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0);
+            cairo_set_line_width(cr, 1.5);
+            cairo_stroke(cr);
+        } else {
+            frame_panel(cr, x, y, panel.w, panel.h, "Inspect");
+        }
+        if (dark) {
+            place_line(tag_font(), "INSPECT", x + margin, y + margin - dp(2), inner, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0);
+        }
+        double cy = y + top_pad;
+        place_line(title_font(), facts.kind_name, x + margin, cy, inner * 0.62, ink_r, ink_g, ink_b);
+        // Status pill on the right of the title.
+        {
+            const TextMetrics pill = measure_text(cr, bold_font(), report.status, -1);
+            const double pw = pill.width + dp(18);
+            const double ph = pill.height + dp(6);
+            const double px = x + panel.w - margin - pw;
+            const double py = cy + std::max(0.0, (title_h - ph) / 2.0);
+            double pr = 0.45;
+            double pg = 0.50;
+            double pb = 0.58;
+            if (report.tone == inspect_report::Tone::Good) {
+                pr = 0.26;
+                pg = 0.62;
+                pb = 0.34;
+            } else if (report.tone == inspect_report::Tone::Bad) {
+                pr = 0.78;
+                pg = 0.27;
+                pb = 0.22;
+            }
+            round_dialog_rect(cr, px, py, pw, ph, ph / 2.0);
+            cairo_set_source_rgb(cr, pr, pg, pb);
+            cairo_fill(cr);
+            paint_text(cr, bold_font(), report.status, px + dp(9), py + dp(3), 1, 1, 1, -1);
+        }
+        cy += title_h + dp(10);
+        // Power and road chips.
+        {
+            auto chip = [&](double cx, const std::string &text, int state) {
+                const TextMetrics m = measure_text(cr, ui_font(), text, -1);
+                const double cw = m.width + dp(30);
+                round_dialog_rect(cr, cx, cy, cw, chip_h, dp(6));
+                if (dark) {
+                    cairo_set_source_rgb(cr, 0x29 / 255.0, 0x32 / 255.0, 0x3F / 255.0);
+                } else {
+                    cairo_set_source_rgb(cr, 0.95, 0.92, 0.84);
+                }
+                cairo_fill(cr);
+                const double dot_r = dp(4);
+                cairo_new_sub_path(cr);
+                cairo_arc(cr, cx + dp(12), cy + chip_h / 2.0, dot_r, 0, 6.2832);
+                if (state > 0) {
+                    cairo_set_source_rgb(cr, 0.36, 0.80, 0.45);
+                } else if (state == 0) {
+                    cairo_set_source_rgb(cr, 0.90, 0.32, 0.26);
+                } else {
+                    cairo_set_source_rgb(cr, 0.55, 0.58, 0.62);
+                }
+                cairo_fill(cr);
+                paint_text(cr, ui_font(), text, cx + dp(22), cy + (chip_h - m.height) / 2.0, ink_r, ink_g, ink_b, -1);
+                return cw;
+            };
+            std::string power_text = "No power needed";
+            if (facts.facts.power == 1) {
+                power_text = "Powered";
+            } else if (facts.facts.power == 0) {
+                power_text = "No power";
+            }
+            const double used = chip(x + margin, power_text, facts.facts.power);
+            if (zone || facts.facts.kind == inspect_report::Kind::Building) {
+                chip(x + margin + used + dp(8), facts.facts.access ? "Road access" : "No road", facts.facts.access ? 1 : 0);
+            }
+            text_spans_.push_back(TextSpan{x + margin, cy, inner, chip_h});
+        }
+        cy += chip_h + dp(12);
+        const double label_w = dp(96);
+        const double bar_x = x + margin + label_w;
+        const double bar_w = inner - label_w - dp(40);
+        for (const Bar &bar : bars) {
+            paint_text(cr, ui_font(), bar.label, x + margin, cy + dp(2), dim_r, dim_g, dim_b, -1);
+            const double track_y = cy + row_h / 2.0 - dp(4);
+            round_dialog_rect(cr, bar_x, track_y, bar_w, dp(8), dp(4));
+            if (dark) {
+                cairo_set_source_rgb(cr, 0x2B / 255.0, 0x34 / 255.0, 0x42 / 255.0);
+            } else {
+                cairo_set_source_rgb(cr, 0.88, 0.85, 0.78);
+            }
+            cairo_fill(cr);
+            const double t = std::max(0.0, std::min(1.0, bar.value / 255.0));
+            if (t > 0.0) {
+                round_dialog_rect(cr, bar_x, track_y, std::max(static_cast<double>(dp(8)), bar_w * t), dp(8), dp(4));
+                cairo_set_source_rgb(cr, bar.r, bar.g, bar.b);
+                cairo_fill(cr);
+            }
+            const std::string percent = std::to_string(static_cast<int>(std::lround(t * 100.0))) + "%";
+            const TextMetrics pm = measure_text(cr, ui_font(), percent, -1);
+            paint_text(cr, ui_font(), percent, x + panel.w - margin - pm.width, cy + dp(2), ink_r, ink_g, ink_b, -1);
+            text_spans_.push_back(TextSpan{x + margin, cy, inner, row_h});
+            cy += row_h;
+        }
+        if (zone) {
+            // Growth is signed: shrinking fills left of the middle in blue.
+            paint_text(cr, ui_font(), "Growth", x + margin, cy + dp(2), dim_r, dim_g, dim_b, -1);
+            const double track_y = cy + row_h / 2.0 - dp(4);
+            round_dialog_rect(cr, bar_x, track_y, bar_w, dp(8), dp(4));
+            if (dark) {
+                cairo_set_source_rgb(cr, 0x2B / 255.0, 0x34 / 255.0, 0x42 / 255.0);
+            } else {
+                cairo_set_source_rgb(cr, 0.88, 0.85, 0.78);
+            }
+            cairo_fill(cr);
+            const double mid = bar_x + bar_w / 2.0;
+            const double g = std::max(-1.0, std::min(1.0, facts.facts.growth / 200.0));
+            // Any change shows at least a sliver, so a slow climb still reads.
+            const double reach = std::max(static_cast<double>(dp(4)), bar_w / 2.0 * std::fabs(g));
+            if (g > 0.0) {
+                fill(cr, mid, track_y, reach, dp(8), 0.36, 0.80, 0.45);
+            } else if (g < 0.0) {
+                fill(cr, mid - reach, track_y, reach, dp(8), 0.36, 0.55, 0.95);
+            }
+            fill(cr, mid - 0.5, track_y - dp(2), 1.0, dp(12), ink_r, ink_g, ink_b);
+            const char *trend = g > 0.0 ? "Up" : (g < 0.0 ? "Down" : "Flat");
+            const TextMetrics tm = measure_text(cr, ui_font(), trend, -1);
+            paint_text(cr, ui_font(), trend, x + panel.w - margin - tm.width, cy + dp(2), ink_r, ink_g, ink_b, -1);
+            text_spans_.push_back(TextSpan{x + margin, cy, inner, row_h});
+            cy += row_h;
+        }
+        if (!bars.empty()) {
+            cy += dp(8);
+        }
+        if (!reasons_head.empty()) {
+            std::string head = reasons_head;
+            for (char &ch : head) {
+                ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            }
+            cy += place_line(tag_font(), head, x + margin, cy, inner, dark ? 0xF2 / 255.0 : 0.55, dark ? 0xC1 / 255.0 : 0.38,
+                             dark ? 0x4E / 255.0 : 0.05) +
+                  dp(6);
+            for (const std::string &reason : report.reasons) {
+                cy += place_line(ui_font(), "\u2022  " + reason, x + margin, cy, inner, ink_r, ink_g, ink_b) + dp(4);
+            }
+        }
+        if (facts.offer_power) {
+            buttons_at(x, panel.w, y + panel.h - margin - bh, {{"Show _power", kInspectPower}, {"_Close", kClose}});
+        } else {
+            buttons_at(x, panel.w, y + panel.h - margin - bh, {{"_Close", kClose}});
+        }
+    } else if (dialog_ == Dialog::Query) {
         const double width = message_width(win_w_, margin, dp(320), dp(480));
         const double body_h = text_block_height(info_body_.empty() ? " " : info_body_, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
@@ -2874,7 +3381,7 @@ void Shell::draw_dialog(cairo_t *cr)
         if (panel.y + panel.h > query_floor) {
             panel.y = std::max(static_cast<double>(menu_h_) + margin, query_floor - panel.h);
         }
-        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Query");
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Inspect");
         {
             std::string body = info_body_;
             const auto split = body.find('\n');
@@ -2929,11 +3436,12 @@ void Shell::draw_special_menu(cairo_t *cr)
     // Clicks outside the list close it. Rows are pushed after this catcher.
     push_hot(0, menu_h_, win_w_, std::max(0, win_h_ - menu_h_), 0);
     const int slot = special_tool_index();
-    const int columns = std::max(2, palette_.columns());
-    const int col = slot % columns;
-    const int row = slot / columns;
-    const double anchor_x = side_x_ + 4 + (col + 1) * cell_ + 6;
-    const double anchor_y = pal_y_ + 4 + row * cell_;
+    double cell_x = 0;
+    double cell_y = 0;
+    palette_.cell_origin(slot, cell_x, cell_y);
+    const double anchor_x = side_x_ + cell_x + cell_ + 6;
+    const double anchor_y = pal_y_ + cell_y;
+    const bool dark = slate_ || handheld_;
     int name_h = 1;
     int cost_h = 1;
     for (int i = 0; i < count; ++i) {
@@ -2960,16 +3468,29 @@ void Shell::draw_special_menu(cairo_t *cr)
     }
     double drop_y = anchor_y;
     const double drop_h = 8 + count * row_h;
-    if (drop_y + drop_h > win_h_ - status_h_ - 4) {
+    if (handheld_) {
+        // Open upward from the Landmarks slot on the quick bar.
+        drop_x = std::max(4.0, std::min(quick_x_ + slot * quick_slot_ + quick_slot_ - drop_w, win_w_ - drop_w - 4.0));
+        drop_y = std::max(4.0, quick_y_ - drop_h - dp(8));
+    } else if (drop_y + drop_h > win_h_ - status_h_ - 4) {
         drop_y = std::max(static_cast<double>(menu_h_ + 4), win_h_ - status_h_ - 4 - drop_h);
     }
-    fill(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
-    stroke_rect(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+    if (dark) {
+        fill(cr, drop_x + 3, drop_y + 4, drop_w, drop_h, 0.0, 0.0, 0.0);
+        fill(cr, drop_x, drop_y, drop_w, drop_h, 0x23 / 255.0, 0x2C / 255.0, 0x38 / 255.0);
+        stroke_rect(cr, drop_x, drop_y, drop_w, drop_h, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0);
+    } else {
+        fill(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
+        stroke_rect(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+    }
     for (int i = 0; i < count; ++i) {
         const SpecialBuilding &building = special_building(i);
         const double y = drop_y + 4 + i * row_h;
         const bool lit = i == special_cursor_;
-        if (lit) {
+        if (lit && dark) {
+            fill(cr, drop_x + 3, y, drop_w - 6, row_h - 2, 0x3A / 255.0, 0x4B / 255.0, 0x63 / 255.0);
+            fill(cr, drop_x + 3, y, dp(3), row_h - 2, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0);
+        } else if (lit) {
             fill(cr, drop_x + 3, y, drop_w - 6, row_h - 2, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         }
         cairo_surface_t *sprite = tool_icon_named(building.icon);
@@ -2988,9 +3509,9 @@ void Shell::draw_special_menu(cairo_t *cr)
         const std::string name = building.name;
         const std::string cost = session_.special_menu_detail(i);
         const double text_x = drop_x + 8 + icon + dp(8);
-        const double text_r = lit ? 0.05 : theme::kTextR;
-        const double text_g = lit ? 0.05 : theme::kTextG;
-        const double text_b = lit ? 0.05 : theme::kTextB;
+        const double text_r = dark ? 0xEE / 255.0 : (lit ? 0.05 : theme::kTextR);
+        const double text_g = dark ? 0xE8 / 255.0 : (lit ? 0.05 : theme::kTextG);
+        const double text_b = dark ? 0xDA / 255.0 : (lit ? 0.05 : theme::kTextB);
         const double text_y = y + std::max(4.0, (row_h - text_block) / 2.0);
         paint_text(cr, bold_font(), name, text_x, text_y, text_r, text_g, text_b,
                    static_cast<int>(drop_w - icon - dp(24)));
@@ -3022,32 +3543,45 @@ void Shell::draw(cairo_t *cr)
         palette_.set_focus(-1);
     }
     menu_.recent_count = static_cast<int>(recent_.size());
-    fill(cr, 0, 0, win_w_, win_h_, theme::kWindowR, theme::kWindowG, theme::kWindowB);
-    draw_menubar(cr);
-    {
-        TargetCr live(cr);
-        cairo_translate(live.cr, side_x_, pal_y_);
-        palette_.draw(live.cr);
+    if (slate_ && !handheld_) {
+        fill(cr, 0, 0, win_w_, win_h_, 0x17 / 255.0, 0x1D / 255.0, 0x26 / 255.0);
+    } else {
+        fill(cr, 0, 0, win_w_, win_h_, theme::kWindowR, theme::kWindowG, theme::kWindowB);
     }
-    push_hot(side_x_, pal_y_, side_w_, ToolPalette::height_for(cell_, palette_.columns()), kPaletteId);
-    if (mini_h_ > 0) {
-        minimap_.set_pin_top(false);
-        const AspectBox land = minimap_.content_box(side_w_, mini_h_);
+    if (!handheld_) {
+        draw_menubar(cr);
+        if (band_h_ > 0) {
+            draw_info_band(cr);
+        }
         {
             TargetCr live(cr);
-            cairo_translate(live.cr, side_x_, mini_y_);
-            minimap_.sync();
-            minimap_.draw(live.cr, side_w_, mini_h_);
+            cairo_translate(live.cr, side_x_, pal_y_);
+            palette_.draw(live.cr);
         }
-        push_hot(side_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
+        push_hot(side_x_, pal_y_, side_w_, palette_.height(), kPaletteId);
+        if (mini_h_ > 0) {
+            minimap_.set_pin_top(false);
+            const AspectBox land = minimap_.content_box(mini_w_, mini_h_);
+            {
+                TargetCr live(cr);
+                cairo_translate(live.cr, mini_x_, mini_y_);
+                minimap_.sync();
+                minimap_.draw(live.cr, mini_w_, mini_h_);
+            }
+            push_hot(mini_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
+        }
+        if (demand_h_ > 0) {
+            TargetCr live(cr);
+            cairo_translate(live.cr, side_x_, demand_y_);
+            demand_.draw(live.cr, side_w_, demand_h_, ui_scale_);
+        }
+        if (slate_) {
+            stroke_rect(cr, view_x_ - 1, view_y_ - 1, view_w_ + 2, view_h_ + 2, 0x3A / 255.0, 0x46 / 255.0, 0x58 / 255.0);
+        } else {
+            stroke_rect(cr, view_x_ - 1, view_y_ - 1, view_w_ + 2, view_h_ + 2, theme::kMenuFrameR, theme::kMenuFrameG,
+                        theme::kMenuFrameB);
+        }
     }
-    {
-        TargetCr live(cr);
-        cairo_translate(live.cr, side_x_, demand_y_);
-        demand_.draw(live.cr, side_w_, demand_h_, ui_scale_);
-    }
-    stroke_rect(cr, view_x_ - 1, view_y_ - 1, view_w_ + 2, view_h_ + 2, theme::kMenuFrameR, theme::kMenuFrameG,
-                theme::kMenuFrameB);
     cairo_save(cr);
     cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
     cairo_clip(cr);
@@ -3072,6 +3606,8 @@ void Shell::draw(cairo_t *cr)
             }
         }
         refresh_place_cue();
+        // Night lighting steps aside under a data map; the colours there carry meaning.
+        map_.set_night_hold(overlay_on_);
         map_.sync();
         map_.set_dust(puff_on_, puff_ms_, puff_tx_, puff_ty_);
         map_.draw(live.cr);
@@ -3102,6 +3638,17 @@ void Shell::draw(cairo_t *cr)
         }
         if (overlay_on_) {
             overlay_.sync();
+            if (overlay_.smooth()) {
+                // Mute the city's colours under a heat map so the heat reads
+                // first and the streets still show through.
+                cairo_save(live.cr);
+                cairo_rectangle(live.cr, 0, 0, map_.pixel_width(), map_.pixel_height());
+                cairo_clip(live.cr);
+                cairo_set_operator(live.cr, CAIRO_OPERATOR_HSL_SATURATION);
+                cairo_set_source_rgb(live.cr, 0.5, 0.5, 0.5);
+                cairo_paint_with_alpha(live.cr, 0.6);
+                cairo_restore(live.cr);
+            }
             overlay_.draw_at(live.cr, map_.tile_size());
         }
         int query_x = 0;
@@ -3123,47 +3670,22 @@ void Shell::draw(cairo_t *cr)
         paint_dim_plate(cr, view_x_ + view_w_ - edge, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
     }
     push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
-    if (dialog_ == Dialog::None && !menu_.open() && tool_index_ == kToolCount - 1) {
-        int hx = 0;
-        int hy = 0;
-        if (map_.hover_tile(hx, hy)) {
-            const CitySession::TileInspect card = session_.inspect_tile(hx, hy);
-            if (card.valid) {
-                const double card_w = std::min(static_cast<double>(dp(220)), std::max(80.0, view_w_ * 0.34));
-                const double card_h = card.offer_power ? dp(132) : dp(96);
-                inspect_card_shown_ = true;
-                inspect_card_w_ = card_w;
-                inspect_card_h_ = card_h;
-                const double card_x = view_x_ + view_w_ - card_w - dp(12);
-                const double card_y = view_y_ + dp(8);
-                fill(cr, card_x, card_y, card_w, card_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
-                stroke_rect(cr, card_x, card_y, card_w, card_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-                paint_text(cr, bold_font(), card.name, card_x + 8, card_y + 6, theme::kTextR, theme::kTextG, theme::kTextB,
-                           static_cast<int>(card_w - 16));
-                paint_text(cr, ui_font(), card.power, card_x + 8, card_y + dp(26), theme::kTextR, theme::kTextG, theme::kTextB,
-                           static_cast<int>(card_w - 16));
-                paint_text(cr, ui_font(), card.access, card_x + 8, card_y + dp(44), theme::kTextR, theme::kTextG, theme::kTextB,
-                           static_cast<int>(card_w - 16));
-                paint_text(cr, ui_font(), card.condition, card_x + 8, card_y + dp(62), theme::kTextR, theme::kTextG,
-                           theme::kTextB, static_cast<int>(card_w - 16));
-                if (card.offer_power) {
-                    button(cr, card_x + 8, card_y + card_h - dp(34), card_w - 16, dp(26), "Show _power", kInspectPower, false);
-                }
-            }
-        }
+    if (handheld_) {
+        draw_handheld_hud(cr);
     }
+    draw_hover_card(cr);
     if (overlay_on_ && overlay_return_eval_ && dialog_ == Dialog::None) {
         const double chip_w = dp(180);
         const double chip_h = dp(28);
         const double chip_x = view_x_ + dp(8);
-        const double chip_y = view_y_ + view_h_ - chip_h - dp(16);
+        const double chip_y = view_y_ + view_h_ - hud_bottom_ - chip_h - dp(16);
         button(cr, chip_x, chip_y, chip_w, chip_h, "Back to Evaluation", kEvalShow, false);
     }
     if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging()) {
         const double card_w = std::min(static_cast<double>(dp(280)), std::max(120.0, view_w_ * 0.4));
         const double card_h = dp(78);
-        const double card_x = view_x_ + view_w_ - card_w - dp(12);
-        const double card_y = view_y_ + view_h_ - card_h - dp(16);
+        const double card_x = view_x_ + view_w_ - hud_right_ - card_w - dp(12);
+        const double card_y = view_y_ + view_h_ - hud_bottom_ - card_h - dp(16);
         fill(cr, card_x + 2, card_y + 2, card_w, card_h, 0, 0, 0);
         fill(cr, card_x, card_y, card_w, card_h, 255.0 / 255.0, 255.0 / 255.0, 85.0 / 255.0);
         stroke_rect(cr, card_x, card_y, card_w, card_h, 0, 0, 0);
@@ -3175,18 +3697,16 @@ void Shell::draw(cairo_t *cr)
     }
     const double max_x = std::max(0, map_.pixel_width() - view_w_);
     const double max_y = std::max(0, map_.pixel_height() - view_h_);
-    if (max_x > 0) {
+    if (max_x > 0 && !handheld_) {
         const double bw = std::max(20.0, view_w_ * (view_w_ / static_cast<double>(map_.pixel_width())));
         const double bx = view_x_ + (view_w_ - bw) * (scroll_x_ / max_x);
         fill(cr, bx, view_y_ + view_h_ - 8, bw, 6, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     }
-    if (max_y > 0) {
+    if (max_y > 0 && !handheld_) {
         const double bh = std::max(20.0, view_h_ * (view_h_ / static_cast<double>(map_.pixel_height())));
         const double by = view_y_ + (view_h_ - bh) * (scroll_y_ / max_y);
         fill(cr, view_x_ + view_w_ - 8, by, 6, bh, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     }
-    const int status_y = win_h_ - status_h_;
-    fill(cr, 0, status_y, win_w_, status_h_, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);
     const auto now = std::chrono::steady_clock::now();
     const bool expired = !notice_sticky_ && (hint_until_.time_since_epoch().count() == 0 || now >= hint_until_);
     const NoticeDecision notice = decide_notice(session_.message_serial(), shown_message_serial_, expired, query_pinned_);
@@ -3205,26 +3725,6 @@ void Shell::draw(cairo_t *cr)
     }
     sync_toasts(now);
     const std::string hint = context_hint();
-    const std::string clock = session_.scenario_clock_text();
-    const std::string meter = session_.scenario_meter();
-    // Funds, the name, the speed, the date, the clock, then the goal meter on
-    // the left. On the right: the tool under the pointer (or the current
-    // tool) with its cost, and before it the hint for what a click does. The
-    // hint gives way first when the line is short.
-    std::string status = session_.funds_text() + "    " + session_.city_name() + "    " +
-                         speed_word(welcome_gate_ ? 0 : speed_);
-    const int full_room = std::max(1, win_w_ - 16);
-    auto width_of = [&](const char *font, const std::string &text) { return measure_text(cr, font, text, -1).width; };
-    auto fits_in = [&](const std::string &text, int room) { return width_of(ui_font(), text) <= room; };
-    if (fits_in(status + "    " + session_.date_text(), full_room)) {
-        status += "    " + session_.date_text();
-    }
-    if (!clock.empty() && fits_in(status + "    " + clock, full_room)) {
-        status += "    " + clock;
-    }
-    if (!meter.empty() && fits_in(status + "    " + meter, full_room)) {
-        status += "    " + meter;
-    }
     std::string tool_text;
     {
         const bool show_keys = !deck_ && !gamepad_nav_;
@@ -3257,40 +3757,68 @@ void Shell::draw(cairo_t *cr)
             tool_text.clear();
         }
     }
-    const int status_w = width_of(ui_font(), status);
-    int right_x = win_w_ - 8;
-    const int tool_w = tool_text.empty() ? 0 : width_of(bold_font(), tool_text);
-    const bool tool_fits = tool_w > 0 && status_w + 24 + tool_w <= win_w_ - 16;
-    if (tool_fits) {
-        right_x -= tool_w;
-        paint_text(cr, bold_font(), tool_text, right_x, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, -1);
-        right_x -= dp(20);
-    }
-    std::string hint_line = hint;
-    const int hint_room = right_x - (8 + status_w + 24);
-    if (!hint_line.empty() && width_of(ui_font(), hint_line) > hint_room) {
-        // Shorten the hint to the room left, or drop it when only a stub fits.
-        if (hint_room < dp(120)) {
-            hint_line.clear();
-        } else {
-            const std::string dots = "\u2026";
-            while (!hint_line.empty() && width_of(ui_font(), hint_line + dots) > hint_room) {
-                // Drop one whole UTF-8 character: its continuation bytes, then its lead byte.
-                while (!hint_line.empty() && (static_cast<unsigned char>(hint_line.back()) & 0xC0) == 0x80) {
-                    hint_line.pop_back();
-                }
-                if (!hint_line.empty()) {
-                    hint_line.pop_back();
-                }
-            }
-            hint_line += dots;
+    const int status_y = win_h_ - status_h_;
+    if (handheld_) {
+        // The hint strip and the quick bar in the handheld HUD carry these.
+    } else if (slate_) {
+        draw_news_line(cr, tool_text, hint);
+    } else {
+        fill(cr, 0, status_y, win_w_, status_h_, theme::kMenuBotR, theme::kMenuBotG, theme::kMenuBotB);
+        const std::string clock = session_.scenario_clock_text();
+        const std::string meter = session_.scenario_meter();
+        // Funds, the name, the speed, the date, the clock, then the goal meter on
+        // the left. On the right: the tool under the pointer (or the current
+        // tool) with its cost, and before it the hint for what a click does. The
+        // hint gives way first when the line is short.
+        std::string status = session_.funds_text() + "    " + session_.city_name() + "    " +
+                             speed_word(welcome_gate_ ? 0 : speed_);
+        const int full_room = std::max(1, win_w_ - 16);
+        auto width_of = [&](const char *font, const std::string &text) { return measure_text(cr, font, text, -1).width; };
+        auto fits_in = [&](const std::string &text, int room) { return width_of(ui_font(), text) <= room; };
+        if (fits_in(status + "    " + session_.date_text(), full_room)) {
+            status += "    " + session_.date_text();
         }
-    }
-    paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, full_room);
-    if (!hint_line.empty()) {
-        const int hint_w = width_of(ui_font(), hint_line);
-        paint_text(cr, ui_font(), hint_line, right_x - hint_w, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB,
-                   -1);
+        if (!clock.empty() && fits_in(status + "    " + clock, full_room)) {
+            status += "    " + clock;
+        }
+        if (!meter.empty() && fits_in(status + "    " + meter, full_room)) {
+            status += "    " + meter;
+        }
+        const int status_w = width_of(ui_font(), status);
+        int right_x = win_w_ - 8;
+        const int tool_w = tool_text.empty() ? 0 : width_of(bold_font(), tool_text);
+        const bool tool_fits = tool_w > 0 && status_w + 24 + tool_w <= win_w_ - 16;
+        if (tool_fits) {
+            right_x -= tool_w;
+            paint_text(cr, bold_font(), tool_text, right_x, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, -1);
+            right_x -= dp(20);
+        }
+        std::string hint_line = hint;
+        const int hint_room = right_x - (8 + status_w + 24);
+        if (!hint_line.empty() && width_of(ui_font(), hint_line) > hint_room) {
+            // Shorten the hint to the room left, or drop it when only a stub fits.
+            if (hint_room < dp(120)) {
+                hint_line.clear();
+            } else {
+                const std::string dots = "\u2026";
+                while (!hint_line.empty() && width_of(ui_font(), hint_line + dots) > hint_room) {
+                    // Drop one whole UTF-8 character: its continuation bytes, then its lead byte.
+                    while (!hint_line.empty() && (static_cast<unsigned char>(hint_line.back()) & 0xC0) == 0x80) {
+                        hint_line.pop_back();
+                    }
+                    if (!hint_line.empty()) {
+                        hint_line.pop_back();
+                    }
+                }
+                hint_line += dots;
+            }
+        }
+        paint_text(cr, ui_font(), status, 8, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, full_room);
+        if (!hint_line.empty()) {
+            const int hint_w = width_of(ui_font(), hint_line);
+            paint_text(cr, ui_font(), hint_line, right_x - hint_w, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB,
+                       -1);
+        }
     }
     if (notice_sticky_ && !notice_text_.empty() && now >= notice_until_) {
         dismiss_background_notice();
@@ -3315,14 +3843,19 @@ void Shell::draw(cairo_t *cr)
     double goal_bottom = 0;
     double goal_left = 0;
     double goal_right = 0;
-    if (goal_visible && dialog_ == Dialog::None && view_w_ > dp(32)) {
+    // The Slate info band shows the goal all the time, so the desktop
+    // Slate layout has no banner to repeat it.
+    if (goal_visible && dialog_ == Dialog::None && view_w_ > dp(32) && (handheld_ || !slate_)) {
         const int pad = dp(8);
         double room = 0;
         const bool beside = goal_banner_room(view_w_, pad, inspect_card_w_, inspect_card_shown_, room);
-        double gy = view_y_ + pad;
+        double gy = view_y_ + pad + hud_top_;
         if (!beside) {
-            gy = view_y_ + pad + inspect_card_h_ + pad;
+            gy = view_y_ + pad + hud_top_ + inspect_card_h_ + pad;
             room = std::max(0.0, static_cast<double>(view_w_) - pad * 2.0);
+        }
+        if (handheld_) {
+            room = std::min(room, static_cast<double>(view_w_ - mini_w_ - hud_right_ - pad * 4));
         }
         const int wrap = std::max(1, static_cast<int>(room) - pad * 2);
         const TextMetrics metrics = measure_text(cr, ui_font(), goal, wrap);
@@ -3333,9 +3866,20 @@ void Shell::draw(cairo_t *cr)
         double edge_g = 0;
         double edge_b = 0;
         theme::banner_edge(edge_r, edge_g, edge_b);
-        fill(cr, gx, gy, gw, gh, goal_bar.r, goal_bar.g, goal_bar.b);
-        stroke_rect(cr, gx, gy, gw, gh, edge_r, edge_g, edge_b);
-        paint_text(cr, ui_font(), goal, gx + pad, gy + pad, goal_bar.ink_r, goal_bar.ink_g, goal_bar.ink_b, wrap);
+        if (handheld_) {
+            // Same chip style as the rest of the handheld HUD.
+            round_dialog_rect(cr, gx, gy, gw, gh, dp(8));
+            cairo_set_source_rgba(cr, 0x12 / 255.0, 0x17 / 255.0, 0x1F / 255.0, 0.9);
+            cairo_fill_preserve(cr);
+            cairo_set_source_rgb(cr, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0);
+            cairo_set_line_width(cr, 1.0);
+            cairo_stroke(cr);
+            paint_text(cr, ui_font(), goal, gx + pad, gy + pad, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0, wrap);
+        } else {
+            fill(cr, gx, gy, gw, gh, goal_bar.r, goal_bar.g, goal_bar.b);
+            stroke_rect(cr, gx, gy, gw, gh, edge_r, edge_g, edge_b);
+            paint_text(cr, ui_font(), goal, gx + pad, gy + pad, goal_bar.ink_r, goal_bar.ink_g, goal_bar.ink_b, wrap);
+        }
         goal_bottom = gy + gh;
         goal_left = gx;
         goal_right = gx + gw;
@@ -3346,7 +3890,7 @@ void Shell::draw(cairo_t *cr)
         const double sw = stamp_m.width + dp(16);
         const double sh = stamp_m.height + dp(10);
         const double sx = view_x_ + (view_w_ - sw) / 2.0;
-        double sy = view_y_ + dp(28);
+        double sy = view_y_ + dp(28) + hud_top_;
         if (goal_bottom > 0 && sx < goal_right && sx + sw > goal_left && sy < goal_bottom) {
             sy = goal_bottom + dp(6);
         }
@@ -3365,8 +3909,8 @@ void Shell::draw(cairo_t *cr)
         const TextMetrics metrics = measure_text(cr, ui_font(), legend, wrap);
         const double lw = metrics.width + pad * 2;
         const double lh = metrics.height + pad * 2 + dp(14);
-        const double lx = view_x_ + view_w_ - lw - pad;
-        const double ly = view_y_ + pad;
+        const double lx = view_x_ + view_w_ - lw - pad - (handheld_ ? hud_right_ : 0);
+        const double ly = view_y_ + pad + (handheld_ ? mini_y_ + mini_h_ : 0);
         double legend_r = 0;
         double legend_g = 0;
         double legend_b = 0;
@@ -3379,6 +3923,17 @@ void Shell::draw(cairo_t *cr)
         theme::banner_fill(legend_r, legend_g, legend_b);
         theme::banner_ink(legend_ink_r, legend_ink_g, legend_ink_b);
         theme::banner_edge(legend_edge_r, legend_edge_g, legend_edge_b);
+        if (slate_ || handheld_) {
+            legend_r = 0x1E / 255.0;
+            legend_g = 0x26 / 255.0;
+            legend_b = 0x31 / 255.0;
+            legend_ink_r = 0xEE / 255.0;
+            legend_ink_g = 0xE8 / 255.0;
+            legend_ink_b = 0xDA / 255.0;
+            legend_edge_r = 0xC9 / 255.0;
+            legend_edge_g = 0xA6 / 255.0;
+            legend_edge_b = 0x46 / 255.0;
+        }
         fill(cr, lx, ly, lw, lh, legend_r, legend_g, legend_b);
         stroke_rect(cr, lx, ly, lw, lh, legend_edge_r, legend_edge_g, legend_edge_b);
         paint_text(cr, ui_font(), legend, lx + pad, ly + pad, legend_ink_r, legend_ink_g, legend_ink_b, wrap);
@@ -3391,6 +3946,18 @@ void Shell::draw(cairo_t *cr)
             fill(cr, lx + pad, ramp_y, dp(28), dp(6), 220 / 255.0, 40 / 255.0, 32 / 255.0);
             fill(cr, lx + pad + dp(34), ramp_y, dp(28), dp(6), 240 / 255.0, 140 / 255.0, 24 / 255.0);
             fill(cr, lx + pad + dp(68), ramp_y, dp(28), dp(6), 250 / 255.0, 220 / 255.0, 40 / 255.0);
+        } else if (!on_off && overlay_.smooth()) {
+            // The smooth map's own ramp, at full strength so it reads.
+            for (int i = 0; i < 16; ++i) {
+                float r = 0;
+                float g = 0;
+                float b = 0;
+                float a = 0;
+                heat_field::ramp(0.06f + 0.94f * static_cast<float>(i) / 15.0f, r, g, b, a);
+                cairo_set_source_rgba(cr, r, g, b, std::min(1.0f, a + 0.3f));
+                cairo_rectangle(cr, lx + pad + i * ((lw - pad * 2) / 16.0), ramp_y, (lw - pad * 2) / 16.0 + 0.5, dp(6));
+                cairo_fill(cr);
+            }
         } else if (!on_off) {
             for (int i = 0; i < 8; ++i) {
                 const double t = i / 7.0;
@@ -3446,6 +4013,11 @@ void Shell::draw(cairo_t *cr)
         cross(tile <= kMapTileOverview ? 1.0 : 2.0);
     }
     // Drop-down last, above the map, palette, dialog, and gamepad cursor.
+    if (handheld_ && menu_.open()) {
+        // The handheld layout hides the menu bar until a menu is open, so the
+        // titles show which menu the shoulder buttons have reached.
+        draw_menubar(cr);
+    }
     draw_menu_dropdown(cr);
     draw_special_menu(cr);
 }
@@ -3636,11 +4208,11 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
     const double pad_x = dp(12);
     const double pad_y = dp(8);
     const double gap = dp(8);
-    double bottom = view_y_ + view_h_ - edge;
+    double bottom = view_y_ + view_h_ - edge - hud_bottom_;
     if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging()) {
         bottom -= dp(78) + gap;
     }
-    const double top_limit = view_y_ + dp(8);
+    const double top_limit = view_y_ + dp(8) + hud_top_;
     double look_r = 0;
     double look_g = 0;
     double look_b = 0;
@@ -3649,6 +4221,14 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
     double ink_b = 0;
     theme::banner_fill(look_r, look_g, look_b);
     theme::banner_ink(ink_r, ink_g, ink_b);
+    if (slate_ || handheld_) {
+        look_r = 0x1E / 255.0;
+        look_g = 0x26 / 255.0;
+        look_b = 0x31 / 255.0;
+        ink_r = 0xEE / 255.0;
+        ink_g = 0xE8 / 255.0;
+        ink_b = 0xDA / 255.0;
+    }
     const BannerColors look{look_r, look_g, look_b, ink_r, ink_g, ink_b};
     cairo_save(cr);
     cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
@@ -3659,7 +4239,7 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
         const TextMetrics metrics = measure_text(cr, body_font(), text, wrap);
         const double w = std::min(max_w, metrics.width + 2 * pad_x);
         const double h = metrics.height + 2 * pad_y;
-        const double x = view_x_ + view_w_ - edge - w;
+        const double x = view_x_ + view_w_ - edge - w - hud_right_;
         const double y = bottom - h;
         if (y < top_limit) {
             return false;
@@ -3781,7 +4361,7 @@ std::string Shell::context_hint() const
         }
         const std::string query = glyph_for(PadQuery);
         const std::string pause = glyph_for(PadPause);
-        return hint_join({tool_press_phrase(engine, a.c_str()), hint_button(query, "query"),
+        return hint_join({tool_press_phrase(engine, a.c_str()), hint_button(query, "inspects"),
                           hint_button(pause, speed_ <= 0 ? "resumes" : "pauses"), hint_pair(left, right, "tool"),
                           hint_button(menu, "menu")});
     }
@@ -4466,4 +5046,739 @@ void Shell::render()
     presented_ = true;
     window_exposed_ = false;
     ++redraws_;
+}
+
+// ---------------------------------------------------------------------------
+// Slate skin and handheld layout chrome.
+
+namespace {
+
+struct SlateInk {
+    double r;
+    double g;
+    double b;
+};
+
+constexpr SlateInk kSlateBand{0x1E / 255.0, 0x26 / 255.0, 0x31 / 255.0};
+constexpr SlateInk kSlateDeep{0x15 / 255.0, 0x1B / 255.0, 0x23 / 255.0};
+constexpr SlateInk kSlatePanel{0x29 / 255.0, 0x32 / 255.0, 0x3F / 255.0};
+constexpr SlateInk kSlateEdge{0x3A / 255.0, 0x46 / 255.0, 0x58 / 255.0};
+constexpr SlateInk kSlateGold{0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0};
+constexpr SlateInk kSlateGoldDim{0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0};
+constexpr SlateInk kSlateInk{0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0};
+constexpr SlateInk kSlateDim{0x9A / 255.0, 0xA6 / 255.0, 0xB8 / 255.0};
+constexpr SlateInk kSlateGood{0x6C / 255.0, 0xCB / 255.0, 0x7A / 255.0};
+constexpr SlateInk kSlateBad{0xE5 / 255.0, 0x67 / 255.0, 0x5A / 255.0};
+
+void slate_fill(cairo_t *cr, double x, double y, double w, double h, const SlateInk &ink, double alpha = 1.0)
+{
+    cairo_set_source_rgba(cr, ink.r, ink.g, ink.b, alpha);
+    cairo_rectangle(cr, x, y, w, h);
+    cairo_fill(cr);
+}
+
+void slate_round(cairo_t *cr, double x, double y, double w, double h, double radius, const SlateInk &ink, double alpha = 1.0)
+{
+    round_dialog_rect(cr, x, y, w, h, radius);
+    cairo_set_source_rgba(cr, ink.r, ink.g, ink.b, alpha);
+    cairo_fill(cr);
+}
+
+void slate_text(cairo_t *cr, const char *font, const std::string &text, double x, double y, const SlateInk &ink)
+{
+    paint_text(cr, font, text, x, y, ink.r, ink.g, ink.b, -1);
+}
+
+std::string plain_count(std::int64_t value)
+{
+    std::string money = civic::dollars(value);
+    if (!money.empty() && money[0] == '-') {
+        money.erase(0, 1);
+        if (!money.empty() && money[0] == '$') {
+            money.erase(0, 1);
+        }
+        return "-" + money;
+    }
+    if (!money.empty() && money[0] == '$') {
+        money.erase(0, 1);
+    }
+    return money;
+}
+
+// Cut a line to `room` pixels with an ellipsis, one UTF-8 character at a time.
+std::string fit_text(cairo_t *cr, const char *font, std::string text, int room)
+{
+    if (room <= 0) {
+        return std::string();
+    }
+    if (measure_text(cr, font, text, -1).width <= room) {
+        return text;
+    }
+    const std::string dots = "\u2026";
+    while (!text.empty() && measure_text(cr, font, text + dots, -1).width > room) {
+        while (!text.empty() && (static_cast<unsigned char>(text.back()) & 0xC0) == 0x80) {
+            text.pop_back();
+        }
+        if (!text.empty()) {
+            text.pop_back();
+        }
+    }
+    return text.empty() ? std::string() : text + dots;
+}
+
+// Pause, slow, normal and fast drawn as shapes so no font needs the glyphs.
+void speed_glyph(cairo_t *cr, int speed, double cx, double cy, double size, const SlateInk &ink)
+{
+    cairo_set_source_rgb(cr, ink.r, ink.g, ink.b);
+    if (speed <= 0) {
+        const double bar = size * 0.22;
+        cairo_rectangle(cr, cx - size * 0.32, cy - size * 0.38, bar, size * 0.76);
+        cairo_rectangle(cr, cx + size * 0.10, cy - size * 0.38, bar, size * 0.76);
+        cairo_fill(cr);
+        return;
+    }
+    const double tri = size * 0.42;
+    const double step = tri * 0.85;
+    double start = cx - (speed - 1) * step / 2.0 - tri / 2.0;
+    for (int i = 0; i < speed; ++i) {
+        cairo_move_to(cr, start, cy - tri * 0.6);
+        cairo_line_to(cr, start + tri, cy);
+        cairo_line_to(cr, start, cy + tri * 0.6);
+        cairo_close_path(cr);
+        start += step;
+    }
+    cairo_fill(cr);
+}
+
+const char *month_short(int month)
+{
+    static const char *names[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    return names[month < 0 || month > 11 ? 0 : month];
+}
+
+} // namespace
+
+const char *Shell::tag_font() const
+{
+    if (std::fabs(font_tag_scale_ - ui_scale_) > 0.001f || font_tag_.empty()) {
+        font_tag_ = ui_scale::scaled_font("Sans Bold", 9, ui_scale_);
+        font_tag_scale_ = ui_scale_;
+    }
+    return font_tag_.c_str();
+}
+
+void Shell::draw_info_band(cairo_t *cr)
+{
+    const double y = band_y_;
+    const double h = band_h_;
+    {
+        cairo_pattern_t *grad = cairo_pattern_create_linear(0, y, 0, y + h);
+        cairo_pattern_add_color_stop_rgb(grad, 0, kSlateBand.r, kSlateBand.g, kSlateBand.b);
+        cairo_pattern_add_color_stop_rgb(grad, 1, 0x19 / 255.0, 0x20 / 255.0, 0x2A / 255.0);
+        cairo_set_source(cr, grad);
+        cairo_rectangle(cr, 0, y, win_w_, h);
+        cairo_fill(cr);
+        cairo_pattern_destroy(grad);
+    }
+    slate_fill(cr, 0, y + h - 1, win_w_, 1, kSlateGoldDim, 0.55);
+    const double label_y = y + dp(6);
+    const double value_y = y + dp(20);
+    const double gap = dp(16);
+    const int speed = welcome_gate_ ? 0 : speed_;
+    const std::string funds = civic::dollars(session_.funds());
+    const std::string date = session_.date_text();
+    const std::string people = plain_count(session_.population());
+    const std::string name = session_.city_name();
+    std::string goal;
+    if (session_.scenario_id() != 0) {
+        goal = session_.scenario_meter();
+        const std::string clock = session_.scenario_clock_text();
+        if (!clock.empty()) {
+            goal += goal.empty() ? clock : "  \u00b7  " + clock;
+        }
+    }
+    const std::int64_t flow = session_.plot_cash_flow(CitySession::HistoryScale::Short, 0);
+    enum Kind { City, Funds, Date, Speed, People, Demand, Goal, KindCount };
+    const char *labels[KindCount] = {"CITY", "FUNDS", "DATE", "SPEED", "POPULATION", "DEMAND", "GOAL"};
+    const std::string values[KindCount] = {name, funds, date, "", people, "", goal};
+    const double pill = dp(26);
+    const double pill_gap = dp(3);
+    double widths[KindCount] = {};
+    for (int k = 0; k < KindCount; ++k) {
+        const double label_w = measure_text(cr, tag_font(), labels[k], -1).width;
+        double value_w = values[k].empty() ? 0 : measure_text(cr, bold_font(), values[k], -1).width;
+        if (k == Funds) {
+            value_w += dp(14);
+        }
+        if (k == Speed) {
+            value_w = pill * 4 + pill_gap * 3;
+        }
+        if (k == Demand) {
+            value_w = dp(66);
+        }
+        widths[k] = std::max(label_w, value_w);
+    }
+    // Most useful first. The goal may be shortened to the room that is left;
+    // the city name is the first to go on a narrow window.
+    bool shown[KindCount] = {};
+    const int order[] = {Funds, Date, Speed, People, Demand, Goal, City};
+    double used = dp(12);
+    const double room = win_w_ - dp(12);
+    for (int k : order) {
+        if (k == Goal && values[Goal].empty()) {
+            continue;
+        }
+        double need = widths[k] + gap * 2;
+        if (k == Goal) {
+            need = std::min(need, static_cast<double>(dp(160)));
+        }
+        if (used + need <= room) {
+            shown[k] = true;
+            used += std::min(need, widths[k] + gap * 2);
+        }
+    }
+    band_goal_shown_ = shown[Goal];
+    double goal_room = 0;
+    if (shown[Goal]) {
+        double others = dp(12);
+        for (int k = 0; k < KindCount; ++k) {
+            if (shown[k] && k != Goal) {
+                others += widths[k] + gap * 2;
+            }
+        }
+        goal_room = std::max(0.0, room - others - gap * 2);
+    }
+    double x = dp(12);
+    bool first = true;
+    for (int k = 0; k < KindCount; ++k) {
+        if (!shown[k]) {
+            continue;
+        }
+        if (!first) {
+            slate_fill(cr, x - gap, y + dp(9), 1, h - dp(18), kSlateEdge);
+        }
+        first = false;
+        slate_text(cr, tag_font(), labels[k], x, label_y, kSlateDim);
+        double w = widths[k];
+        switch (k) {
+        case Funds: {
+            const bool broke = session_.funds() < 0;
+            slate_text(cr, bold_font(), funds, x, value_y, broke ? kSlateBad : kSlateGold);
+            const double tx = x + measure_text(cr, bold_font(), funds, -1).width + dp(6);
+            const double ty = value_y + dp(8);
+            if (flow != 0) {
+                const SlateInk &trend = flow > 0 ? kSlateGood : kSlateBad;
+                cairo_set_source_rgb(cr, trend.r, trend.g, trend.b);
+                const double t = dp(5);
+                if (flow > 0) {
+                    cairo_move_to(cr, tx, ty + t * 0.6);
+                    cairo_line_to(cr, tx + t, ty - t * 0.6);
+                    cairo_line_to(cr, tx + t * 2, ty + t * 0.6);
+                } else {
+                    cairo_move_to(cr, tx, ty - t * 0.6);
+                    cairo_line_to(cr, tx + t, ty + t * 0.6);
+                    cairo_line_to(cr, tx + t * 2, ty - t * 0.6);
+                }
+                cairo_close_path(cr);
+                cairo_fill(cr);
+            }
+            break;
+        }
+        case Speed:
+            for (int i = 0; i < 4; ++i) {
+                const double px = x + i * (pill + pill_gap);
+                const double py = value_y - dp(1);
+                const double ph = dp(20);
+                const bool on = speed == i;
+                const int id = kSpeedPill + i;
+                const bool hot = hover_id_ == id && dialog_ == Dialog::None && !menu_.open();
+                slate_round(cr, px, py, pill, ph, dp(5), on ? kSlateGold : (hot ? kSlateEdge : kSlatePanel));
+                speed_glyph(cr, i, px + pill / 2.0, py + ph / 2.0, dp(12), on ? kSlateDeep : kSlateInk);
+                push_hot(px, py, pill, ph, id);
+            }
+            break;
+        case Demand: {
+            const double values_d[3] = {session_.res_demand(), session_.com_demand(), session_.ind_demand()};
+            const SlateInk colors[3] = {{0x6C / 255.0, 0xCB / 255.0, 0x7A / 255.0},
+                                        {0x5B / 255.0, 0x9B / 255.0, 0xE6 / 255.0},
+                                        {0xE8 / 255.0, 0xC2 / 255.0, 0x4A / 255.0}};
+            const char *letters[3] = {"R", "C", "I"};
+            const double mid = value_y + dp(8);
+            for (int i = 0; i < 3; ++i) {
+                const double bx = x + i * dp(23);
+                slate_text(cr, tag_font(), letters[i], bx, value_y + dp(1), kSlateDim);
+                const double bar_x = bx + dp(9);
+                slate_fill(cr, bar_x, mid - dp(8), dp(9), dp(16), kSlateEdge);
+                const double v = std::max(-1.0, std::min(1.0, values_d[i]));
+                const double bar_h = v == 0.0 ? 0.0 : std::max(2.0, std::fabs(v) * dp(8));
+                if (v >= 0) {
+                    slate_fill(cr, bar_x, mid - bar_h, dp(9), bar_h, colors[i]);
+                } else {
+                    slate_fill(cr, bar_x, mid, dp(9), bar_h, kSlateBad);
+                }
+                slate_fill(cr, bar_x - 1, mid, dp(11), 1, kSlateDim);
+            }
+            break;
+        }
+        case Goal: {
+            const std::string shown_goal = fit_text(cr, bold_font(), goal, static_cast<int>(goal_room));
+            slate_text(cr, bold_font(), shown_goal, x, value_y, kSlateInk);
+            w = std::min(w, goal_room);
+            break;
+        }
+        default:
+            slate_text(cr, bold_font(), values[k], x, value_y, kSlateInk);
+            break;
+        }
+        x += w + gap * 2;
+    }
+}
+
+void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint)
+{
+    const double y = win_h_ - status_h_;
+    slate_fill(cr, 0, y, win_w_, status_h_, kSlateDeep);
+    slate_fill(cr, 0, y, win_w_, 1, kSlateEdge);
+    const double text_y = y + (status_h_ - measure_text(cr, ui_font(), "Ag", -1).height) / 2.0;
+    double right = win_w_ - dp(10);
+    // Right: the tool and its price, then what a click does.
+    if (!tool_text.empty()) {
+        const int w = measure_text(cr, bold_font(), tool_text, -1).width;
+        if (w < win_w_ / 2) {
+            right -= w;
+            slate_text(cr, bold_font(), tool_text, right, text_y, kSlateGold);
+            right -= dp(18);
+        }
+    }
+    // Left: the newest city notice with its month, behind a NEWS tag.
+    const TextMetrics tag = measure_text(cr, tag_font(), "NEWS", -1);
+    const double tag_w = tag.width + dp(14);
+    const double tag_h = tag.height + dp(6);
+    const double tag_y = y + (status_h_ - tag_h) / 2.0;
+    slate_round(cr, dp(10), tag_y, tag_w, tag_h, dp(4), kSlateGold);
+    slate_text(cr, tag_font(), "NEWS", dp(10) + dp(7), tag_y + dp(3), kSlateDeep);
+    const double news_x = dp(10) + tag_w + dp(10);
+    std::string news = "No news yet.";
+    const auto &notices = session_.notices();
+    if (!notices.empty()) {
+        const CitySession::CityNotice &latest = notices.front();
+        news = latest.text + "   " + month_short(latest.month) + " " + std::to_string(latest.year);
+    }
+    std::string hint_line = hint;
+    const int news_w = measure_text(cr, ui_font(), news, -1).width;
+    const int hint_room = static_cast<int>(right - (news_x + std::min(news_w, dp(360)) + dp(24)));
+    hint_line = hint_room < dp(120) ? std::string() : fit_text(cr, ui_font(), hint_line, hint_room);
+    if (!hint_line.empty()) {
+        const int w = measure_text(cr, ui_font(), hint_line, -1).width;
+        right -= w;
+        slate_text(cr, ui_font(), hint_line, right, text_y, kSlateDim);
+        right -= dp(24);
+    }
+    const std::string shown_news = fit_text(cr, ui_font(), news, static_cast<int>(right - news_x));
+    slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() ? kSlateDim : kSlateInk);
+}
+
+void Shell::draw_hover_card(cairo_t *cr)
+{
+    if (dialog_ != Dialog::None || menu_.open() || tool_index_ != kToolCount - 1) {
+        return;
+    }
+    int hx = 0;
+    int hy = 0;
+    if (!map_.hover_tile(hx, hy)) {
+        return;
+    }
+    const CitySession::TileInspect card = session_.inspect_tile(hx, hy);
+    if (!card.valid) {
+        return;
+    }
+    const double card_w = std::min(static_cast<double>(dp(220)), std::max(80.0, view_w_ * 0.34));
+    const double card_h = card.offer_power ? dp(132) : dp(96);
+    inspect_card_shown_ = true;
+    inspect_card_w_ = card_w;
+    inspect_card_h_ = card_h;
+    const double card_x = view_x_ + view_w_ - card_w - dp(12) - hud_right_;
+    const double card_y = view_y_ + dp(8) + (handheld_ ? mini_y_ + mini_h_ : 0);
+    if (!slate_ && !handheld_) {
+        fill(cr, card_x, card_y, card_w, card_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
+        stroke_rect(cr, card_x, card_y, card_w, card_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+        paint_text(cr, bold_font(), card.name, card_x + 8, card_y + 6, theme::kTextR, theme::kTextG, theme::kTextB,
+                   static_cast<int>(card_w - 16));
+        paint_text(cr, ui_font(), card.power, card_x + 8, card_y + dp(26), theme::kTextR, theme::kTextG, theme::kTextB,
+                   static_cast<int>(card_w - 16));
+        paint_text(cr, ui_font(), card.access, card_x + 8, card_y + dp(44), theme::kTextR, theme::kTextG, theme::kTextB,
+                   static_cast<int>(card_w - 16));
+        paint_text(cr, ui_font(), card.condition, card_x + 8, card_y + dp(62), theme::kTextR, theme::kTextG,
+                   theme::kTextB, static_cast<int>(card_w - 16));
+    } else {
+        cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
+        round_dialog_rect(cr, card_x + 2, card_y + 3, card_w, card_h, dp(8));
+        cairo_fill(cr);
+        slate_round(cr, card_x, card_y, card_w, card_h, dp(8), kSlateBand, 0.96);
+        round_dialog_rect(cr, card_x, card_y, card_w, card_h, dp(8));
+        cairo_set_source_rgb(cr, kSlateEdge.r, kSlateEdge.g, kSlateEdge.b);
+        cairo_set_line_width(cr, 1.0);
+        cairo_stroke(cr);
+        const int wrap = static_cast<int>(card_w - 20);
+        paint_text(cr, bold_font(), card.name, card_x + 10, card_y + 7, kSlateGold.r, kSlateGold.g, kSlateGold.b, wrap);
+        const bool off = card.power == "Power: off";
+        const bool on = card.power == "Power: on";
+        auto dot_line = [&](const std::string &text, double ly, int state) {
+            cairo_new_sub_path(cr);
+            cairo_arc(cr, card_x + 14, ly + dp(8), dp(3.5), 0, 6.2832);
+            const SlateInk &ink = state > 0 ? kSlateGood : (state == 0 ? kSlateBad : kSlateDim);
+            cairo_set_source_rgb(cr, ink.r, ink.g, ink.b);
+            cairo_fill(cr);
+            paint_text(cr, ui_font(), text, card_x + 24, ly, kSlateInk.r, kSlateInk.g, kSlateInk.b, wrap - 14);
+        };
+        dot_line(card.power, card_y + dp(26), on ? 1 : (off ? 0 : -1));
+        const bool access = card.access == "Road access" || card.access == "Rail access";
+        dot_line(card.access, card_y + dp(44), access ? 1 : (card.access == "No direct road" ? 0 : -1));
+        paint_text(cr, ui_font(), card.condition, card_x + 10, card_y + dp(62), kSlateDim.r, kSlateDim.g, kSlateDim.b, wrap);
+    }
+    if (card.offer_power) {
+        button(cr, card_x + 8, card_y + card_h - dp(34), card_w - 16, dp(26), "Show _power", kInspectPower, false);
+    }
+}
+
+void Shell::draw_handheld_hud(cairo_t *cr)
+{
+    const bool open_ui = dialog_ != Dialog::None;
+    // Minimap, top right.
+    if (mini_h_ > 0) {
+        slate_round(cr, mini_x_ - dp(4), mini_y_ - dp(4), mini_w_ + dp(8), mini_h_ + dp(8), dp(8), kSlateBand, 0.92);
+        minimap_.set_pin_top(false);
+        const AspectBox land = minimap_.content_box(mini_w_, mini_h_);
+        {
+            TargetCr live(cr);
+            cairo_translate(live.cr, mini_x_, mini_y_);
+            minimap_.sync();
+            minimap_.draw(live.cr, mini_w_, mini_h_);
+        }
+        push_hot(mini_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
+    }
+    // Menu chip and the compact info pill, top left.
+    const double top = dp(10);
+    const double chip_h = dp(40);
+    double x = dp(10);
+    {
+        const std::string menu_label = "Menu";
+        const TextMetrics m = measure_text(cr, bold_font(), menu_label, -1);
+        const double w = m.width + dp(44);
+        const bool hot = hover_id_ == kHudMenu || menu_.open();
+        slate_round(cr, x, top, w, chip_h, dp(10), hot ? kSlateEdge : kSlateBand, 0.94);
+        for (int i = 0; i < 3; ++i) {
+            slate_fill(cr, x + dp(12), top + chip_h / 2.0 - dp(6) + i * dp(5), dp(14), dp(2), kSlateGold);
+        }
+        slate_text(cr, bold_font(), menu_label, x + dp(34), top + (chip_h - m.height) / 2.0, kSlateInk);
+        push_hot(x, top, w, chip_h, kHudMenu);
+        x += w + dp(8);
+    }
+    {
+        const int speed = welcome_gate_ ? 0 : speed_;
+        const std::string funds = civic::dollars(session_.funds());
+        const std::string date = session_.date_text();
+        const std::string people = plain_count(session_.population()) + " people";
+        const double pad = dp(12);
+        const double sep = dp(14);
+        const double fw = measure_text(cr, bold_font(), funds, -1).width;
+        const double dw = measure_text(cr, bold_font(), date, -1).width;
+        const double pw = measure_text(cr, ui_font(), people, -1).width;
+        const double speed_w = dp(22);
+        const double demand_w = dp(40);
+        double w = pad + fw + sep + dw + sep + speed_w + sep + pw + sep + demand_w + pad;
+        const double limit = mini_x_ - dp(16) - x;
+        const bool with_people = w <= limit;
+        if (!with_people) {
+            w -= pw + sep;
+        }
+        slate_round(cr, x, top, w, chip_h, dp(10), kSlateBand, 0.94);
+        const double ty = top + (chip_h - measure_text(cr, bold_font(), "Ag", -1).height) / 2.0;
+        double cx = x + pad;
+        slate_text(cr, bold_font(), funds, cx, ty, session_.funds() < 0 ? kSlateBad : kSlateGold);
+        cx += fw + sep;
+        slate_text(cr, bold_font(), date, cx, ty, kSlateInk);
+        cx += dw + sep;
+        speed_glyph(cr, speed, cx + speed_w / 2.0, top + chip_h / 2.0, dp(14), speed == 0 ? kSlateBad : kSlateInk);
+        push_hot(cx - dp(4), top, speed_w + dp(8), chip_h, kSpeedPill + (speed == 0 ? 2 : 0));
+        cx += speed_w + sep;
+        if (with_people) {
+            slate_text(cr, ui_font(), people, cx, ty, kSlateDim);
+            cx += pw + sep;
+        }
+        const double values_d[3] = {session_.res_demand(), session_.com_demand(), session_.ind_demand()};
+        const SlateInk colors[3] = {{0x6C / 255.0, 0xCB / 255.0, 0x7A / 255.0},
+                                    {0x5B / 255.0, 0x9B / 255.0, 0xE6 / 255.0},
+                                    {0xE8 / 255.0, 0xC2 / 255.0, 0x4A / 255.0}};
+        const double mid = top + chip_h / 2.0;
+        for (int i = 0; i < 3; ++i) {
+            const double bx = cx + i * dp(13);
+            slate_fill(cr, bx, mid - dp(10), dp(9), dp(20), kSlatePanel);
+            const double v = std::max(-1.0, std::min(1.0, values_d[i]));
+            const double bar_h = std::fabs(v) * dp(10);
+            if (v >= 0) {
+                slate_fill(cr, bx, mid - bar_h, dp(9), bar_h, colors[i]);
+            } else {
+                slate_fill(cr, bx, mid, dp(9), bar_h, kSlateBad);
+            }
+        }
+    }
+    // Touch buttons on the right edge: zoom in, zoom out, centre.
+    {
+        const double size = dp(50);
+        const double bx = win_w_ - size - dp(10);
+        const double span = size * 3 + dp(10) * 2;
+        double by = mini_y_ + mini_h_ + (quick_y_ - (mini_y_ + mini_h_) - span) / 2.0;
+        by = std::max(by, static_cast<double>(mini_y_ + mini_h_ + dp(12)));
+        const int ids[3] = {kHudZoomIn, kHudZoomOut, kHudCenter};
+        for (int i = 0; i < 3; ++i) {
+            const double cy = by + i * (size + dp(10));
+            const bool hot = hover_id_ == ids[i];
+            cairo_new_sub_path(cr);
+            cairo_arc(cr, bx + size / 2.0, cy + size / 2.0, size / 2.0, 0, 6.2832);
+            cairo_set_source_rgba(cr, hot ? kSlateEdge.r : kSlateBand.r, hot ? kSlateEdge.g : kSlateBand.g,
+                                  hot ? kSlateEdge.b : kSlateBand.b, 0.92);
+            cairo_fill_preserve(cr);
+            cairo_set_source_rgb(cr, kSlateGoldDim.r, kSlateGoldDim.g, kSlateGoldDim.b);
+            cairo_set_line_width(cr, 1.5);
+            cairo_stroke(cr);
+            cairo_set_source_rgb(cr, kSlateInk.r, kSlateInk.g, kSlateInk.b);
+            cairo_set_line_width(cr, dp(3));
+            const double mx = bx + size / 2.0;
+            const double my = cy + size / 2.0;
+            const double arm = size * 0.22;
+            if (i == 0 || i == 1) {
+                cairo_move_to(cr, mx - arm, my);
+                cairo_line_to(cr, mx + arm, my);
+                if (i == 0) {
+                    cairo_move_to(cr, mx, my - arm);
+                    cairo_line_to(cr, mx, my + arm);
+                }
+                cairo_stroke(cr);
+            } else {
+                cairo_set_line_width(cr, dp(2));
+                cairo_new_sub_path(cr);
+                cairo_arc(cr, mx, my, arm * 0.9, 0, 6.2832);
+                cairo_stroke(cr);
+                cairo_move_to(cr, mx - arm * 1.5, my);
+                cairo_line_to(cr, mx - arm * 0.5, my);
+                cairo_move_to(cr, mx + arm * 0.5, my);
+                cairo_line_to(cr, mx + arm * 1.5, my);
+                cairo_move_to(cr, mx, my - arm * 1.5);
+                cairo_line_to(cr, mx, my - arm * 0.5);
+                cairo_move_to(cr, mx, my + arm * 0.5);
+                cairo_line_to(cr, mx, my + arm * 1.5);
+                cairo_stroke(cr);
+            }
+            push_hot(bx, cy, size, size, ids[i]);
+        }
+    }
+    // Quick bar: every build tool plus Inspect, the chosen one raised
+    // with its price.
+    {
+        const int count = kToolCount;
+        const double slot = std::min(static_cast<double>(quick_h_), (win_w_ - dp(140)) / static_cast<double>(count));
+        const double bar_w = slot * count + dp(16);
+        const double bar_x = (win_w_ - bar_w) / 2.0;
+        quick_x_ = bar_x + dp(8);
+        quick_slot_ = slot;
+        const double lift = dp(8);
+        slate_round(cr, bar_x, quick_y_, bar_w, quick_h_ + dp(4), dp(12), kSlateBand, 0.94);
+        int shown_tool = palette_.focus() >= 0 ? palette_.focus() : tool_index_;
+        if (shown_tool < 0 || shown_tool >= count) {
+            shown_tool = -1;
+        }
+        const double icon = std::max(16.0, slot - dp(12));
+        for (int i = 0; i < count; ++i) {
+            const bool chosen = i == tool_index_;
+            const double sx = quick_x_ + i * slot;
+            const double sy = quick_y_ + dp(4) - (chosen ? lift : 0);
+            if (chosen) {
+                slate_round(cr, sx + 1, sy, slot - 2, slot - 2, dp(8), kSlatePanel);
+                round_dialog_rect(cr, sx + 1, sy, slot - 2, slot - 2, dp(8));
+                cairo_set_source_rgb(cr, kSlateGold.r, kSlateGold.g, kSlateGold.b);
+                cairo_set_line_width(cr, 2.0);
+                cairo_stroke(cr);
+            } else if (hover_id_ == kQuickTool + i) {
+                slate_round(cr, sx + 1, sy, slot - 2, slot - 2, dp(8), kSlateEdge);
+            }
+            const double ix = std::floor(sx + (slot - icon) / 2.0);
+            const double iy = std::floor(sy + (slot - 2 - icon) / 2.0);
+            if (i == kToolCount - 1) {
+                // Inspect has no toolbar icon; draw a magnifier.
+                const double r = icon * 0.26;
+                const double cx = ix + icon * 0.42;
+                const double cy = iy + icon * 0.42;
+                cairo_save(cr);
+                cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+                cairo_new_path(cr);
+                cairo_arc(cr, cx, cy, r, 0, 6.2832);
+                cairo_set_source_rgba(cr, 0.55, 0.72, 0.85, 0.35);
+                cairo_fill_preserve(cr);
+                cairo_set_source_rgb(cr, kSlateInk.r, kSlateInk.g, kSlateInk.b);
+                cairo_set_line_width(cr, std::max(2.0, icon * 0.09));
+                cairo_stroke(cr);
+                cairo_move_to(cr, cx + r * 0.72, cy + r * 0.72);
+                cairo_line_to(cr, ix + icon * 0.86, iy + icon * 0.86);
+                cairo_set_source_rgb(cr, kSlateGold.r, kSlateGold.g, kSlateGold.b);
+                cairo_set_line_width(cr, std::max(3.0, icon * 0.14));
+                cairo_stroke(cr);
+                cairo_restore(cr);
+                if (palette_.focus() == i) {
+                    round_dialog_rect(cr, sx + 3, sy + 2, slot - 6, slot - 6, dp(6));
+                    cairo_set_source_rgb(cr, kSlateInk.r, kSlateInk.g, kSlateInk.b);
+                    cairo_set_line_width(cr, 2.0);
+                    cairo_stroke(cr);
+                }
+                push_hot(sx, quick_y_ - lift, slot, quick_h_ + lift + dp(4), kQuickTool + i);
+                continue;
+            }
+            cairo_surface_t *image = tool_icon_named(i == 0    ? "bulldozer"
+                                                     : i == 1  ? "road"
+                                                     : i == 2  ? "rail"
+                                                     : i == 3  ? "wire"
+                                                     : i == 4  ? "park"
+                                                     : i == 5  ? "residential"
+                                                     : i == 6  ? "commercial"
+                                                     : i == 7  ? "industrial"
+                                                     : i == 8  ? "police"
+                                                     : i == 9  ? "fire"
+                                                     : i == 10 ? "stadium"
+                                                     : i == 11 ? "seaport"
+                                                     : i == 12 ? "coal"
+                                                     : i == 13 ? "nuclear"
+                                                     : i == 14 ? "airport"
+                                                               : "special");
+            if (image != nullptr) {
+                const int iw = cairo_image_surface_get_width(image);
+                const int ih = cairo_image_surface_get_height(image);
+                const double scale = icon_pixel_scale(std::max(iw, ih), static_cast<int>(icon));
+                cairo_save(cr);
+                cairo_translate(cr, std::floor(ix + (icon - iw * scale) / 2.0), std::floor(iy + (icon - ih * scale) / 2.0));
+                cairo_scale(cr, scale, scale);
+                cairo_set_source_surface(cr, image, 0, 0);
+                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+                cairo_paint(cr);
+                cairo_restore(cr);
+            } else {
+                paint_tool_fallback(cr, i, ix, iy, icon);
+            }
+            if (palette_.focus() == i) {
+                round_dialog_rect(cr, sx + 3, sy + 2, slot - 6, slot - 6, dp(6));
+                cairo_set_source_rgb(cr, kSlateInk.r, kSlateInk.g, kSlateInk.b);
+                cairo_set_line_width(cr, 2.0);
+                cairo_stroke(cr);
+            }
+            push_hot(sx, quick_y_ - lift, slot, quick_h_ + lift + dp(4), kQuickTool + i);
+        }
+        // L1/R1 glyphs at the bar ends.
+        const std::string prev = glyph_for(PadPrevTool);
+        const std::string next = glyph_for(PadNextTool);
+        if (!prev.empty()) {
+            const TextMetrics m = measure_text(cr, tag_font(), prev, -1);
+            const double kw = m.width + dp(12);
+            const double ky = quick_y_ + (quick_h_ - m.height - dp(6)) / 2.0;
+            slate_round(cr, bar_x - kw - dp(8), ky, kw, m.height + dp(6), dp(4), kSlatePanel, 0.95);
+            slate_text(cr, tag_font(), prev, bar_x - kw - dp(8) + dp(6), ky + dp(3), kSlateInk);
+        }
+        if (!next.empty()) {
+            const TextMetrics m = measure_text(cr, tag_font(), next, -1);
+            const double kw = m.width + dp(12);
+            const double ky = quick_y_ + (quick_h_ - m.height - dp(6)) / 2.0;
+            slate_round(cr, bar_x + bar_w + dp(8), ky, kw, m.height + dp(6), dp(4), kSlatePanel, 0.95);
+            slate_text(cr, tag_font(), next, bar_x + bar_w + dp(8) + dp(6), ky + dp(3), kSlateInk);
+        }
+        // Tool name and price above the raised slot.
+        if (tool_index_ >= 0 && tool_index_ < count && !open_ui && !special_open_) {
+            const ToolDef *tool = tool_by_index(tool_index_);
+            std::string caption = tool != nullptr ? tool->name : "";
+            if (tool != nullptr && tool->cost > 0) {
+                caption += "  " + civic::dollars(tool->cost);
+            } else if (tool_index_ == special_tool_index() && special_choice_ >= 0) {
+                caption = session_.special_status_line(special_choice_);
+            }
+            const TextMetrics m = measure_text(cr, bold_font(), caption, -1);
+            const double cw = m.width + dp(16);
+            const double ch = m.height + dp(8);
+            double cx = quick_x_ + tool_index_ * slot + slot / 2.0 - cw / 2.0;
+            cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
+            const double cy = quick_y_ - lift - ch - dp(6);
+            slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
+            slate_text(cr, bold_font(), caption, cx + dp(8), cy + dp(4), kSlateGold);
+        }
+    }
+    // Button hints along the bottom edge.
+    {
+        const double y = win_h_ - hint_h_;
+        slate_fill(cr, 0, y, win_w_, hint_h_, kSlateDeep, 0.88);
+        const ToolDef *tool = tool_by_index(tool_index_);
+        const bool inspecting = tool_index_ == kToolCount - 1;
+        std::vector<std::pair<std::string, std::string>> hints;
+        if (menu_.open()) {
+            hints = {{glyph_for(PadConfirm), "Choose"}, {glyph_for(PadCancel), "Close"}};
+        } else {
+            hints = {{glyph_for(PadConfirm), inspecting ? "Inspect" : (tool != nullptr ? "Build" : "Use")},
+                     {glyph_for(PadCancel), "Back"},
+                     {inspecting ? std::string() : glyph_for(PadQuery), "Inspect"},
+                     {glyph_for(PadPause), speed_ <= 0 ? "Resume" : "Pause"},
+                     {glyph_for(PadOverlay), "Data map"},
+                     {glyph_for(PadMenu), "Menu"}};
+        }
+        double hx = dp(12);
+        const double cap_h = measure_text(cr, tag_font(), "Ag", -1).height + dp(4);
+        for (const auto &hint : hints) {
+            if (hint.first.empty()) {
+                continue;
+            }
+            const TextMetrics key = measure_text(cr, tag_font(), hint.first, -1);
+            const TextMetrics words = measure_text(cr, ui_font(), hint.second, -1);
+            const double kw = std::max(cap_h, static_cast<double>(key.width + dp(10)));
+            if (hx + kw + dp(6) + words.width > win_w_ - dp(12)) {
+                break;
+            }
+            const double ky = y + (hint_h_ - cap_h) / 2.0;
+            slate_round(cr, hx, ky, kw, cap_h, cap_h / 2.0, kSlateInk);
+            slate_text(cr, tag_font(), hint.first, hx + (kw - key.width) / 2.0, ky + dp(2), kSlateDeep);
+            slate_text(cr, ui_font(), hint.second, hx + kw + dp(6), y + (hint_h_ - words.height) / 2.0, kSlateDim);
+            hx += kw + dp(6) + words.width + dp(18);
+        }
+    }
+}
+
+void Shell::refresh_continue_card()
+{
+    if (recent_.empty()) {
+        continue_path_.clear();
+        continue_ok_ = false;
+        continue_name_.clear();
+        continue_detail_.clear();
+        continue_thumb_.clear();
+        return;
+    }
+    const std::string &path = recent_.front();
+    if (path == continue_path_) {
+        return;
+    }
+    continue_path_ = path;
+    std::string name = strip_mnemonic(welcome_continue_label().c_str());
+    const std::string lead = "Continue: ";
+    if (name.rfind(lead, 0) == 0) {
+        name = name.substr(lead.size());
+    }
+    continue_name_ = name;
+    const CityGlance glance = city_glance(path);
+    continue_ok_ = glance.ok;
+    continue_detail_.clear();
+    continue_thumb_.clear();
+    if (!glance.ok) {
+        return;
+    }
+    continue_detail_ = std::string(month_short(glance.month)) + " " + std::to_string(glance.year) + "  \u00b7  Pop " +
+                       plain_count(glance.population) + "  \u00b7  " + civic::dollars(glance.funds);
+    if (glance.swatch.size() == static_cast<std::size_t>(120 * 100)) {
+        continue_thumb_.resize(glance.swatch.size());
+        for (std::size_t i = 0; i < glance.swatch.size(); ++i) {
+            continue_thumb_[i] = 0xFF000000u | (glance.swatch[i] & 0x00FFFFFFu);
+        }
+    }
 }

@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "layout_mode.hpp"
 
 #include "pad_glyphs.hpp"
 
@@ -30,6 +31,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -503,6 +505,9 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         scale_percent_ = open_scale_percent_;
         open_pause_unfocused_ = pause_unfocused_;
         open_autosave_ = autosave_seconds_;
+        open_slate_ = slate_;
+        open_night_ = night_;
+        open_layout_pref_ = layout_pref_;
         focus_id_ = kSlider + 1;
     }
     set_paused_for_dialog();
@@ -2006,6 +2011,11 @@ void Shell::apply_action(Action action)
     case Action::Fullscreen:
         toggle_fullscreen();
         break;
+    case Action::NightMode:
+        night_ = !night_;
+        map_.set_night(night_);
+        save_window_settings();
+        break;
     case Action::About:
         open_dialog(Dialog::About);
         break;
@@ -2025,6 +2035,31 @@ void Shell::apply_action(Action action)
     case Action::None:
         break;
     }
+}
+
+void Shell::apply_skin()
+{
+    // The skin and the layout change the chrome around the map, so the
+    // window is laid out again. The map art itself does not change.
+    layout();
+}
+
+bool Shell::handheld_device() const
+{
+    static int cached = -1;
+    if (cached < 0) {
+        cached = 0;
+#if defined(__linux__)
+        if (std::getenv("LUNDUKE_CITY2_REVIEW") == nullptr && std::getenv("LUNDUKE_CITY2_UI_TEST") == nullptr) {
+            std::ifstream in("/sys/class/dmi/id/product_name");
+            std::string product;
+            if (in && std::getline(in, product)) {
+                cached = layout_mode::handheld_product(product) ? 1 : 0;
+            }
+        }
+#endif
+    }
+    return cached == 1;
 }
 
 void Shell::on_dialog_button(int id)
@@ -2053,6 +2088,21 @@ void Shell::on_dialog_button(int id)
             wheel_zooms_ = !wheel_zooms_;
             return;
         }
+        if (id == kSkinBox) {
+            slate_ = !slate_;
+            apply_skin();
+            return;
+        }
+        if (id == kNightBox) {
+            night_ = !night_;
+            map_.set_night(night_);
+            return;
+        }
+        if (id == kLayoutBox) {
+            layout_pref_ = (layout_mode::clamp_choice(layout_pref_) + 1) % 3;
+            apply_skin();
+            return;
+        }
         if (id == kFullscreenBox) {
             toggle_fullscreen();
             return;
@@ -2063,6 +2113,13 @@ void Shell::on_dialog_button(int id)
             pause_unfocused_ = open_pause_unfocused_;
             wheel_zooms_ = open_wheel_zooms_;
             autosave_seconds_ = open_autosave_;
+            if (slate_ != open_slate_ || layout_pref_ != open_layout_pref_) {
+                slate_ = open_slate_;
+                layout_pref_ = open_layout_pref_;
+                apply_skin();
+            }
+            night_ = open_night_;
+            map_.set_night(night_);
             schedule_autosave();
             user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
             sound_.set_volume(static_cast<float>(volume_) / 100.0f);
@@ -2640,6 +2697,53 @@ void Shell::on_dialog_button(int id)
 
 void Shell::on_hotspot(int id, double x, double y)
 {
+    if (dialog_ == Dialog::None && !menu_.open()) {
+        if (id >= kSpeedPill && id < kSpeedPill + 4) {
+            static const Action speeds[4] = {Action::SetPause, Action::Slow, Action::Medium, Action::Fast};
+            special_open_ = false;
+            apply_action(speeds[id - kSpeedPill]);
+            return;
+        }
+        if (id >= kQuickTool && id < kQuickTool + kToolCount) {
+            const int index = id - kQuickTool;
+            if (index == tool_index_ && tool_by_index(index)->engine_id == kSpecialEngineId) {
+                special_open_ = !special_open_;
+                if (special_open_ && (special_cursor_ < 0 || special_cursor_ >= special_building_count())) {
+                    special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
+                }
+                return;
+            }
+            special_open_ = false;
+            select_tool(index);
+            return;
+        }
+        if (id == kHudZoomIn || id == kHudZoomOut) {
+            special_open_ = false;
+            zoom_by(id == kHudZoomIn ? 1 : -1);
+            return;
+        }
+        if (id == kHudCenter) {
+            special_open_ = false;
+            if (gamepad_nav_) {
+                center_on_cursor();
+            } else {
+                center_on_fraction(0.5, 0.5);
+            }
+            return;
+        }
+    }
+    if (id == kHudMenu && dialog_ == Dialog::None) {
+        special_open_ = false;
+        if (menu_.open()) {
+            menu_.close();
+        } else {
+            menu_.open_menu = 0;
+            menu_.cursor = 0;
+            menu_.alt_shown = true;
+            menu_.recent_open = false;
+        }
+        return;
+    }
     if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
         if (id >= kSpecialItem && id < kSpecialItem + special_building_count()) {
             choose_special(id - kSpecialItem);
@@ -4555,6 +4659,13 @@ void Shell::refresh_place_cue()
         cue.width = std::max(1, forecast.width);
         cue.height = std::max(1, forecast.height);
         cue.tag = forecast.tag;
+        if ((slate_ || handheld_) && tool != nullptr && engine != kSpecialEngineId && forecast.cost > 0 &&
+            (forecast.mark == PlaceMark::Ready || forecast.mark == PlaceMark::Caution) &&
+            cue.tag.find('$') == std::string::npos) {
+            // Slate shows the price at the cursor even when the forecast has
+            // only a word (or nothing) to say.
+            cue.tag = (cue.tag.empty() ? std::string(tool->name) : cue.tag) + " \u00b7 " + civic::dollars(forecast.cost);
+        }
         if (engine == kSpecialEngineId && special >= 0) {
             cue.sprite = special;
             const std::string blocked = session_.special_menu_detail(special);

@@ -2724,6 +2724,64 @@ int CitySession::map_value(int x, int y) const
     return engine_->sim.map[x][y];
 }
 
+CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
+{
+    InspectFacts out;
+    const TileInspect card = inspect_tile(x, y);
+    if (!card.valid) {
+        return out;
+    }
+    out.valid = true;
+    out.kind_name = card.name;
+    out.offer_power = card.offer_power;
+    out.left = card.left;
+    out.top = card.top;
+    out.width = card.width;
+    out.height = card.height;
+    using inspect_report::Kind;
+    inspect_report::Facts &facts = out.facts;
+    if (card.name == "Residential") {
+        facts.kind = Kind::Residential;
+        facts.demand = res_demand();
+    } else if (card.name == "Commercial") {
+        facts.kind = Kind::Commercial;
+        facts.demand = com_demand();
+    } else if (card.name == "Industrial") {
+        facts.kind = Kind::Industrial;
+        facts.demand = ind_demand();
+    } else if (card.zone) {
+        facts.kind = Kind::Building;
+    } else if (card.name == "Road" || card.name == "Rail" || card.name == "Power line") {
+        facts.kind = Kind::Network;
+    } else {
+        facts.kind = Kind::Land;
+    }
+    if (card.power == "Power: on") {
+        facts.power = 1;
+    } else if (card.power == "Power: off") {
+        facts.power = 0;
+    } else {
+        facts.power = -1;
+    }
+    facts.access = card.access == "Road access" || card.access == "Rail access";
+    facts.density = layer_value(MapLayer::Population, x, y);
+    facts.land_value = layer_value(MapLayer::LandValue, x, y);
+    facts.crime = layer_value(MapLayer::Crime, x, y);
+    facts.pollution = layer_value(MapLayer::Pollution, x, y);
+    facts.traffic = layer_value(MapLayer::Traffic, x, y);
+    facts.growth = layer_value(MapLayer::Growth, x, y);
+    return out;
+}
+
+std::int64_t CitySession::population() const
+{
+    if (!ready_ || engine_ == nullptr) {
+        return 0;
+    }
+    const Quad people = live_population_count(engine_->sim);
+    return people < 0 ? 0 : static_cast<std::int64_t>(people);
+}
+
 int CitySession::layer_value(MapLayer layer, int x, int y) const
 {
     if (!ready_ || !Micropolis::testBounds(x, y)) {

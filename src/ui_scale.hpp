@@ -287,6 +287,12 @@ struct StoredSettings {
     int milestone_notes = -1;
     // -1 absent (one minute, the historical interval). 0 is off.
     int autosave = -1;
+    // -1 absent (Slate), 0 Slate, 1 Light (the earlier cream chrome).
+    int skin = -1;
+    // -1 absent (off), 0 off, 1 on.
+    int night = -1;
+    // -1 absent (Auto), 0 Auto, 1 Desktop, 2 Handheld.
+    int layout = -1;
     // bind_key_* and bind_pad_* lines, kept so a rewrite does not drop them.
     std::string binds;
 };
@@ -319,6 +325,9 @@ inline std::string settings_text(const StoredSettings &settings)
     put("look", settings.look);
     put("milestone_notes", settings.milestone_notes);
     put("autosave", settings.autosave);
+    put("skin", settings.skin);
+    put("night", settings.night);
+    put("layout", settings.layout);
     if (!settings.binds.empty()) {
         out << settings.binds;
         if (settings.binds.back() != '\n') {
@@ -470,6 +479,15 @@ inline StoredSettings settings_parse(const std::string &text)
         } else if (key == "autosave") {
             bool saw = false;
             as_int(settings.autosave, saw);
+        } else if (key == "skin") {
+            bool saw = false;
+            as_int(settings.skin, saw);
+        } else if (key == "night") {
+            bool saw = false;
+            as_int(settings.night, saw);
+        } else if (key == "layout") {
+            bool saw = false;
+            as_int(settings.layout, saw);
         } else if (key.compare(0, 5, "bind_") == 0) {
             settings.binds += line;
             settings.binds.push_back('\n');

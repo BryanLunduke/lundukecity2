@@ -82,6 +82,16 @@ public:
     // switches the toolbar to 3 so the minimap and demand meters fit.
     static int width_for(int cell, int columns = 2);
     static int height_for(int cell, int columns = 2);
+    // Slate toolbar: section headers of `header` pixels above each group.
+    static int grouped_height_for(int cell, int columns, int header);
+    // slate draws the dark skin. header > 0 adds the section headers.
+    void set_style(bool slate, int header);
+    bool slate() const { return slate_; }
+    int header() const { return header_; }
+    // Height of the grid as it is drawn now.
+    int height() const;
+    // Top-left of a tool's cell in palette coordinates. False without a button.
+    bool cell_origin(int index, double &x, double &y) const;
     void set_cell(int cell) { cell_ = cell; }
     int cell() const { return cell_; }
     void set_columns(int columns);
@@ -104,9 +114,12 @@ public:
 
 private:
     static constexpr int kPad = 4;
+    void draw_slate(cairo_t *cr) const;
 
     int columns_ = 2;
     int cell_ = 44;
+    int header_ = 0;
+    bool slate_ = false;
     int selected_ = 0;
     int hover_ = -1;
     int pressed_ = -1;

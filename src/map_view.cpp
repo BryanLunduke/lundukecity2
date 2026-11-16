@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "map_view.hpp"
+#include "night_light.hpp"
 
 #include "assets.hpp"
 #include "map_fit.hpp"
@@ -32,6 +33,10 @@ MapView::~MapView()
     if (map_pixels_ != nullptr) {
         cairo_surface_destroy(map_pixels_);
         map_pixels_ = nullptr;
+    }
+    if (light_pixels_ != nullptr) {
+        cairo_surface_destroy(light_pixels_);
+        light_pixels_ = nullptr;
     }
 }
 
@@ -475,6 +480,12 @@ void MapView::sync()
     last_sync_blits_ = dirty;
     if (dirty > 0) {
         cairo_surface_mark_dirty(map_pixels_);
+        light_dirty_ = true;
+        if (dirty > 256) {
+            // A loaded or newly generated city: light it on this frame
+            // instead of waiting out the rebuild throttle.
+            light_built_ = {};
+        }
     }
 }
 
@@ -722,7 +733,8 @@ void paint_corners(cairo_t *cr, double x, double y, double w, double h, double l
     cairo_stroke(cr);
 }
 
-void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::string &text, int tile, int slot)
+void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::string &text, int tile, int slot,
+               bool slate)
 {
     if (text.empty()) {
         return;
@@ -744,6 +756,26 @@ void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::s
     const double cy = y + h * 0.5;
     if (cx >= tx && cx <= tx + tw && cy >= ty && cy <= ty + th) {
         tx = cx + std::max(8.0, w * 0.55);
+    }
+    if (slate) {
+        // Slate chip: dark plate, gold edge, cream text. Same place and size.
+        cairo_save(cr);
+        cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+        cairo_set_source_rgba(cr, 0, 0, 0, 0.45);
+        cairo_rectangle(cr, tx + 1.5, ty + 2.0, tw, th);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, 0x1E / 255.0, 0x26 / 255.0, 0x31 / 255.0);
+        cairo_rectangle(cr, tx, ty, tw, th);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0);
+        cairo_set_line_width(cr, 1.0);
+        cairo_rectangle(cr, tx + 0.5, ty + 0.5, tw - 1.0, th - 1.0);
+        cairo_stroke(cr);
+        cairo_set_source_rgb(cr, 0xF6 / 255.0, 0xF0 / 255.0, 0xE4 / 255.0);
+        cairo_move_to(cr, tx + pad - extents.x_bearing, ty + pad - extents.y_bearing);
+        cairo_show_text(cr, text.c_str());
+        cairo_restore(cr);
+        return;
     }
     vga_rgb(cr, 0, 0, 0);
     cairo_rectangle(cr, tx + 1.0, ty + 1.0, tw, th);
@@ -850,7 +882,7 @@ void MapView::draw_footprint(cairo_t *cr) const
                 cairo_stroke(cr);
             }
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.55), cue_.mark);
-            paint_tag(cr, x, y, w, h, cue_.tag, tile_size_, 0);
+            paint_tag(cr, x, y, w, h, cue_.tag, tile_size_, 0, slate_tags_);
         }
         if (cue_.receipt && cue_.rwidth > 0 && cue_.rheight > 0) {
             const double x = cue_.rleft * tile;
@@ -859,7 +891,7 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double h = cue_.rheight * tile;
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.6), cue_.receipt_ok ? 1 : 3);
             const int receipt_slot = cue_.active && !cue_.tag.empty() ? 1 : 0;
-            paint_tag(cr, x, y, w, h, cue_.receipt_text, tile_size_, receipt_slot);
+            paint_tag(cr, x, y, w, h, cue_.receipt_text, tile_size_, receipt_slot, slate_tags_);
         }
         cairo_restore(cr);
         if (cue_.active) {
@@ -956,8 +988,62 @@ void MapView::draw(cairo_t *cr)
             cairo_restore(cr);
         }
     }
+    if (night_ && !night_hold_) {
+        draw_night(cr, source);
+    }
     cairo_restore(cr);
     draw_dust(cr);
     draw_footprint(cr);
+    cairo_restore(cr);
+}
+
+void MapView::set_night(bool on)
+{
+    if (on == night_) {
+        return;
+    }
+    night_ = on;
+    light_dirty_ = true;
+    light_built_ = {};
+}
+
+void MapView::draw_night(cairo_t *cr, int source)
+{
+    const int world_w = CitySession::kWorldW;
+    const int world_h = CitySession::kWorldH;
+    const int lw = world_w * night_light::kPx;
+    const int lh = world_h * night_light::kPx;
+    if (light_pixels_ == nullptr) {
+        light_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, lw, lh);
+        light_dirty_ = true;
+        light_built_ = {};
+    }
+    const auto now = std::chrono::steady_clock::now();
+    // A running city changes a few tiles every slice. Rebuilding the whole
+    // layer twice a second is plenty for lights and keeps the frame cheap.
+    if (light_dirty_ && static_cast<int>(cached_raw_.size()) == world_w * world_h &&
+        (light_built_.time_since_epoch().count() == 0 || now - light_built_ >= std::chrono::milliseconds(500))) {
+        cairo_surface_flush(light_pixels_);
+        night_light::build(cached_raw_, world_w, world_h, cairo_image_surface_get_data(light_pixels_),
+                           cairo_image_surface_get_stride(light_pixels_));
+        cairo_surface_mark_dirty(light_pixels_);
+        light_dirty_ = false;
+        light_built_ = now;
+    }
+    cairo_save(cr);
+    cairo_rectangle(cr, 0, 0, world_w * source, world_h * source);
+    cairo_clip(cr);
+    // Dusk blue over the day art, then the lights added on top.
+    cairo_set_operator(cr, CAIRO_OPERATOR_MULTIPLY);
+    cairo_set_source_rgb(cr, 0.30, 0.36, 0.58);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
+    const double up = static_cast<double>(source) / night_light::kPx;
+    cairo_scale(cr, up, up);
+    cairo_set_source_surface(cr, light_pixels_, 0, 0);
+    // Crisp light pixels match the tile art; a smooth filter smears the
+    // windows into blobs.
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
     cairo_restore(cr);
 }

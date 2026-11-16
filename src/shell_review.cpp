@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "layout_mode.hpp"
 
 #include "city_tail.hpp"
 #include "view_math.hpp"
@@ -568,7 +569,7 @@ void Shell::run_review_checks()
             fail("leaving fullscreen did not lay out at the windowed size");
             return;
         }
-        if (view_y_ != menu_h_ || view_y_ + view_h_ > win_h_ || view_x_ + view_w_ > win_w_) {
+        if (view_y_ != menu_h_ + band_h_ || view_y_ + view_h_ > win_h_ || view_x_ + view_w_ > win_w_) {
             fail("leaving fullscreen left the view outside the window");
             return;
         }
@@ -586,6 +587,77 @@ void Shell::run_review_checks()
     if (allow_saved_settings()) {
         fail("review run would persist window settings");
         return;
+    }
+    // Slate is the default desktop look; Light keeps the classic layout; the
+    // handheld layout gives the map the whole screen with a quick bar.
+    {
+        auto find_hot = [](const std::vector<Hotspot> &hots, int id, double) -> const Hotspot * {
+            for (auto it = hots.rbegin(); it != hots.rend(); ++it) {
+                if (it->id == id) {
+                    return &*it;
+                }
+            }
+            return nullptr;
+        };
+        const int tool_before = tool_index_;
+        if (!slate_ || band_h_ <= 0 || palette_.header() <= 0 || handheld_) {
+            fail("the Slate desktop layout is not the default");
+            return;
+        }
+        slate_ = false;
+        apply_skin();
+        render();
+        if (band_h_ != 0 || view_y_ != menu_h_ || palette_.header() != 0 || status_h_ <= 0 || demand_h_ <= 0) {
+            fail("the Light skin did not keep the classic layout");
+            return;
+        }
+        slate_ = true;
+        layout_pref_ = static_cast<int>(layout_mode::Handheld);
+        apply_skin();
+        render();
+        if (!handheld_ || view_x_ != 0 || view_y_ != 0 || view_w_ != win_w_ || view_h_ != win_h_ || side_w_ != 0 ||
+            status_h_ != 0) {
+            fail("the handheld layout does not give the map the whole screen");
+            return;
+        }
+        int quick = 0;
+        bool hud = true;
+        for (const int id : {kHudMenu, kHudZoomIn, kHudZoomOut, kHudCenter}) {
+            if (find_hot(hot_, id, 0) == nullptr) {
+                hud = false;
+            }
+        }
+        for (const Hotspot &hot : hot_) {
+            if (hot.id >= kQuickTool && hot.id < kQuickTool + kToolCount) {
+                ++quick;
+                if (hot.x < 0 || hot.x + hot.w > win_w_ || hot.y + hot.h > win_h_ - hint_h_ + 1) {
+                    fail("a quick bar button is outside the screen");
+                    return;
+                }
+            }
+        }
+        if (quick != kToolCount || !hud) {
+            fail("the handheld quick bar or touch buttons are missing");
+            return;
+        }
+        const Hotspot *roads = find_hot(hot_, kQuickTool + 1, 0);
+        if (roads == nullptr || hit(roads->x + roads->w / 2.0, roads->y + roads->h / 2.0) != kQuickTool + 1) {
+            fail("the quick bar Roads button is covered");
+            return;
+        }
+        on_hotspot(kQuickTool + 1, roads->x + roads->w / 2.0, roads->y + roads->h / 2.0);
+        if (tool_index_ != 1) {
+            fail("tapping Roads on the quick bar did not pick Roads");
+            return;
+        }
+        layout_pref_ = static_cast<int>(layout_mode::Auto);
+        apply_skin();
+        render();
+        if (handheld_ || band_h_ <= 0) {
+            fail("Auto picked the handheld layout on a desktop");
+            return;
+        }
+        select_tool(tool_before);
     }
     const ui_scale::Placement laptop = ui_scale::fit_default_window(1280, 800, 0, 0, 1366, 768);
     if (laptop.h + window_fit::kFrameTop + window_fit::kFrameBottom > 768 || laptop.w + 2 * window_fit::kFrameSide > 1366) {
@@ -2667,7 +2739,7 @@ void Shell::run_review_checks()
         }
         map_.set_hover_tile(wx, wy);
         refresh_place_cue();
-        if (!map_.cue().active || map_.cue().mark != 2 || map_.cue().tag != "Water: bridge cost") {
+        if (!map_.cue().active || map_.cue().mark != 2 || map_.cue().tag.rfind("Water: bridge cost", 0) != 0) {
             fail("a road touching water did not preview the bridge cost, tag " + map_.cue().tag);
             return;
         }

@@ -84,6 +84,10 @@ enum HotspotId : int {
     kPageDot0 = 154,
     kPageDot1 = 155,
     kPageDot2 = 156,
+    // Settings rows added with the Slate skin.
+    kSkinBox = 157,
+    kNightBox = 158,
+    kLayoutBox = 159,
 
     // The history chart. Left and right read a value. It is not a button.
     kGraphPlot = 180,
@@ -100,11 +104,19 @@ enum HotspotId : int {
 
     // Special-building rows are kSpecialItem + table index.
     kSpecialItem = 9000,
+
+    // Info band and handheld HUD. Not dialog controls.
+    kHudMenu = 9500,
+    kHudZoomIn = 9501,
+    kHudZoomOut = 9502,
+    kHudCenter = 9503,
+    kSpeedPill = 9510, // + 0..3 (pause, slow, normal, fast)
+    kQuickTool = 9600, // + tool index 0..16 (16 = Inspect)
 };
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kPageDot2;
+    return id >= kCancel && id <= kLayoutBox;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

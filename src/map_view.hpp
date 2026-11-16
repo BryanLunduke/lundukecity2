@@ -90,6 +90,14 @@ public:
     int blink_remaining_ms() const;
 
     void draw(cairo_t *cr);
+    // Night mode: darken the map and add the light layer (lit windows,
+    // street lamps, fires). The tile art is not touched. hold hides it for
+    // a frame, for example under a data map.
+    void set_night(bool on);
+    void set_night_hold(bool hold) { night_hold_ = hold; }
+    bool night() const { return night_; }
+    // Slate look for the price and reason tag at the cursor.
+    void set_slate_tags(bool on) { slate_tags_ = on; }
 
     // Coordinates are map-local pixels (after subtracting the scroll origin).
     bool press(double x, double y);
@@ -152,4 +160,11 @@ private:
     std::vector<int> cached_raw_;
     std::vector<int> cached_shown_;
     cairo_surface_t *map_pixels_ = nullptr;
+    void draw_night(cairo_t *cr, int source);
+    bool night_ = false;
+    bool night_hold_ = false;
+    bool slate_tags_ = false;
+    bool light_dirty_ = true;
+    std::chrono::steady_clock::time_point light_built_{};
+    cairo_surface_t *light_pixels_ = nullptr;
 };

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "civic.hpp"
+#include "inspect_report.hpp"
 
 #include <cstdint>
 #include <cstdarg>
@@ -278,6 +279,22 @@ public:
         int height = 1;
     };
     TileInspect inspect_tile(int x, int y) const;
+    // Read-only facts for the Inspect card: the tile's kind, power, road
+    // access and the simulator map values under it, plus the demand for
+    // its zone type. kind_name is the card title.
+    struct InspectFacts {
+        bool valid = false;
+        std::string kind_name;
+        inspect_report::Facts facts;
+        bool offer_power = false;
+        int left = 0;
+        int top = 0;
+        int width = 1;
+        int height = 1;
+    };
+    InspectFacts inspect_facts(int x, int y);
+    // Live head count, the same figure the Evaluation window shows.
+    std::int64_t population() const;
     const civic::Ledger &ledger() const { return ledger_; }
     // announce is false while catching a city up, so an old city does not
     // celebrate milestones it had already reached.

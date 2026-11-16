@@ -32,13 +32,21 @@ public:
 
     const char *title() const;
     const char *legend() const;
+    // Gradient layers (pollution, crime, land value, traffic, coverage,
+    // population, growth) get the smooth heat picture on the map. On/off
+    // layers (power, zones, water, transportation) stay crisp tiles.
+    bool smooth() const;
+    void set_smooth_enabled(bool on) { smooth_enabled_ = on; }
 
 private:
     void rebuild();
+    void rebuild_smooth();
 
     CitySession::MapLayer layer_ = CitySession::MapLayer::Power;
     CitySession *session_ = nullptr;
     cairo_surface_t *image_ = nullptr;
+    cairo_surface_t *smooth_ = nullptr;
+    bool smooth_enabled_ = true;
     unsigned map_serial_ = 0;
 };
 
