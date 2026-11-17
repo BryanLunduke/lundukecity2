@@ -164,7 +164,7 @@ int main()
         return fail("a missing icon leaves a blank button");
     }
     if (tool_icon_fallback_label(3)[0] == '\0' || tool_icon_fallback_label(kToolIconCount)[0] != '?' ||
-        std::string(tool_icon_fallback_label(8)) != "DC" || std::string(tool_icon_fallback_label(15)) != "MN") {
+        std::string(tool_icon_fallback_label(7)) != "DC" || std::string(tool_icon_fallback_label(16)) != "MN") {
         return fail("missing-icon labels are empty");
     }
     auto load_png = [&](const std::string &rel) -> cairo_surface_t * {

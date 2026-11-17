@@ -6,6 +6,8 @@
 
 #include "osk_layout.hpp"
 #include "special_buildings.hpp"
+#include "tool_groups.hpp"
+#include "tools.hpp"
 
 #include <cstdlib>
 #include <SDL3/SDL.h>
@@ -1321,7 +1323,21 @@ void Shell::drive_ui_test()
         return;
     }
     case 27: {
-        const int slot = special_tool_index();
+        // Every landmark has its own toolbar button (no dropdown). A click
+        // picks the building itself.
+        for (int row = 0; row < special_menu_count(); ++row) {
+            int button = -1;
+            for (int i = 0; i < kPaletteToolCount; ++i) {
+                if (tool_fixed_special(tool_by_index(i)) == row) {
+                    button = i;
+                }
+            }
+            if (button < 0) {
+                fail("a special building has no toolbar button");
+                return;
+            }
+        }
+        const int slot = tool_groups::groups()[5].first;
         const int cell = palette_.cell();
         double cx = 0;
         double cy = 0;
@@ -1329,64 +1345,37 @@ void Shell::drive_ui_test()
         const double x = side_x_ + cx + cell / 2.0;
         const double y = pal_y_ + cy + cell / 2.0;
         click_at(x, y);
-        if (tool_index_ != slot || !special_open_) {
-            fail("the special buildings button did not open the list");
+        if (tool_index_ != slot || placing_special() < 0 ||
+            std::string(special_building(placing_special()).name) != "Zoo") {
+            fail("the Zoo button did not pick the Zoo");
             return;
         }
         ui_step_ = 28;
         return;
     }
     case 28: {
-        for (int i = 0; i < special_menu_count(); ++i) {
-            if (find_hot(hot_, kSpecialItem + i, 0) == nullptr) {
-                fail("a special building row was not drawn");
-                return;
-            }
-        }
-        const int before = special_cursor_;
-        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return special_cursor_ == before; });
-        if (special_cursor_ == before) {
-            fail("the D-pad did not move the special building list");
-            return;
-        }
-        const int chosen = special_cursor_;
-        tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return special_open_; });
-        if (special_open_ || special_choice_ != chosen) {
-            fail("A did not choose the highlighted special building");
-            return;
-        }
-        if (special_status_text(special_choice_).find('$') == std::string::npos) {
+        if (tool_hint_now(tool_index_).find('$') == std::string::npos) {
             fail("the status line does not name the special building cost");
             return;
         }
-        special_open_ = true;
-        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return special_open_; });
-        if (special_open_) {
-            fail("B did not close the special building list");
-            return;
-        }
-        select_tool(special_tool_index() - 1);
+        // The shoulder buttons walk through the landmarks like any tool.
+        const int zoo = tool_groups::groups()[5].first;
+        select_tool(zoo - 1);
         cycle_tool(1);
-        if (tool_index_ != special_tool_index() || !special_open_) {
-            fail("the shoulder button did not open special buildings");
+        if (tool_index_ != zoo || placing_special() < 0) {
+            fail("the shoulder button did not reach the Zoo");
             return;
         }
         cycle_tool(1);
-        if (tool_index_ == special_tool_index() || special_open_) {
-            fail("the shoulder button left the special list open");
+        if (tool_index_ != zoo + 1 || placing_special() < 0 ||
+            std::string(special_building(placing_special()).name) != "Amusement Park") {
+            fail("the shoulder button did not step to the Amusement Park");
             return;
         }
-        select_tool(special_tool_index());
-        special_open_ = true;
-        special_cursor_ = 0;
-        key_down(SDLK_DOWN);
-        if (special_cursor_ != 1) {
-            fail("the down key did not move the special building list");
-            return;
-        }
-        key_down(SDLK_RETURN);
-        if (special_open_ || special_choice_ != 1) {
-            fail("return did not choose the special building");
+        // The Mayor's House waits for 2,000 people: greyed, and the hint says so.
+        const int mayor = tool_groups::groups()[5].first + 6;
+        if (session_.population() < 2000 && ((locked_tool_mask() >> mayor) & 1u) == 0) {
+            fail("the locked Mayor's House button is not greyed");
             return;
         }
         // One D-pad tap while A is held lays one road tile and spends $10.

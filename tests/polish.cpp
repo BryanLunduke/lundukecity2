@@ -62,15 +62,20 @@ int main()
             last = group.first + group.count - 1;
             covered += group.count;
         }
-        check(covered == 18, "tool groups cover the 18 toolbar buttons");
-        check(tool_groups::group_of(8) == 1 && std::string(tool_groups::groups()[1].title) == "ZONES",
-              "the Data Center sits with the zones");
-        check(tool_groups::group_of(15) == 3 && std::string(tool_groups::groups()[3].title) == "POWER & PORTS",
-              "the Micro nuclear plant sits with power and ports");
-        for (int columns = 2; columns <= 3; ++columns) {
+        check(covered == 26, "tool groups cover the 26 toolbar buttons");
+        static const char *titles[] = {"BUILD",     "ZONES",             "PARKS", "SERVICES",
+                                       "UTILITIES", "SPECIAL BUILDINGS", "PORTS"};
+        check(tool_groups::kGroupCount == 7, "seven toolbar sections");
+        for (int g = 0; g < tool_groups::kGroupCount && g < 7; ++g) {
+            check(std::string(tool_groups::groups()[g].title) == titles[g], "toolbar sections in the editor's order");
+        }
+        check(tool_groups::group_of(7) == 1, "the Data Center sits with the zones");
+        check(tool_groups::group_of(16) == 4, "the Micro nuclear plant sits with the utilities");
+        check(tool_groups::group_of(20) == 5, "the stadium sits with the special buildings");
+        for (int columns = 2; columns <= 4; ++columns) {
             const int cell = 40;
             const int header = 18;
-            for (int i = 0; i < 18; ++i) {
+            for (int i = 0; i < 26; ++i) {
                 int x = 0;
                 int y = 0;
                 check(tool_groups::slot(i, columns, cell, header, x, y), "every tool has a slot");
@@ -80,13 +85,13 @@ int main()
             check(tool_groups::index_at(5, 5, columns, cell, header) == -1, "a header is not a button");
             check(tool_groups::index_at(columns * cell + 1, header + 5, columns, cell, header) == -1,
                   "right of the grid is not a button");
-            check(tool_groups::grid_height(columns, cell, header) >= 18 / columns * cell + 5 * header,
+            check(tool_groups::grid_height(columns, cell, header) >= 26 / columns * cell + 7 * header,
                   "grid height includes every header");
         }
         int x = 0;
         int y = 0;
-        tool_groups::slot(4, 3, 40, 18, x, y);
-        check(x == 40 && y == 18 + 40, "Park sits on the second row of BUILD with three columns");
+        tool_groups::slot(3, 3, 40, 18, x, y);
+        check(x == 0 && y == 18 + 40, "Power lines sit on the second row of BUILD with three columns");
         check(tool_groups::index_at(80 + 20, 18 + 40 + 20, 3, 40, 18) == -1, "the empty end of a short row is not a button");
     }
 

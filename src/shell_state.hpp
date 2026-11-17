@@ -120,12 +120,13 @@ private:
     void draw_info_band(cairo_t *cr);
     void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
     void draw_handheld_hud(cairo_t *cr);
+    void draw_minimap_overlay(cairo_t *cr);
+    double minimap_clearance() const;
     void draw_hover_card(cairo_t *cr);
     void refresh_continue_card();
     void apply_skin();
     bool handheld_device() const;
     void draw_menu_dropdown(cairo_t *cr);
-    void draw_special_menu(cairo_t *cr);
     void draw_dialog(cairo_t *cr);
     void draw_welcome_background(cairo_t *cr);
     void draw_year_cover(cairo_t *cr, double margin, double band_h);
@@ -212,12 +213,14 @@ private:
     void cycle_tool(int delta);
     void select_tool(int index);
     void press_palette(double x, double y);
-    int special_tool_index() const;
-    // Table row the map tool places: the fixed building of a Data Center /
-    // Micro nuclear button, otherwise the dropdown choice (-1 for none).
+    // Table row the map tool places: the fixed building of a special
+    // button (Data Center, Micro nuclear, a landmark), -1 for an engine tool.
     int placing_special() const;
-    void choose_special(int index);
-    void move_special_cursor(int delta);
+    // A tool's hint ("Zoo: $100. ..."), plus why a landmark is locked
+    // (population gate or cap) when the city cannot buy it yet.
+    std::string tool_hint_now(int index) const;
+    // Bit i is set when palette button i is a landmark the city cannot buy.
+    unsigned locked_tool_mask() const;
     void demo_place_gifts(bool query_one);
     void sync_title();
     void note_message();
@@ -476,10 +479,7 @@ private:
     bool open_pause_unfocused_ = false;
     ui_scale::StoredSettings loaded_{};
     int paused_from_ = 2;
-    int tool_index_ = 18; // kDefaultToolIndex (Query)
-    bool special_open_ = false;
-    int special_cursor_ = 0;
-    int special_choice_ = -1;
+    int tool_index_ = 26; // kDefaultToolIndex (Query)
     unsigned city_generation_ = 1;
     unsigned save_generation_ = 0;
 

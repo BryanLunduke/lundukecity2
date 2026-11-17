@@ -9,8 +9,9 @@
 #include <algorithm>
 #include <functional>
 
-// Toolbar grid of the 16 build tools (Query has no button). Icons are
-// original drawings, not imported artwork.
+// Toolbar grid of the build tools (Query has no button), in the
+// tool_groups.hpp sections. Icons are original drawings, not imported
+// artwork.
 
 // Nearest-neighbor scale for a square sprite. A slot smaller than the sprite
 // (UI scale below 1) shrinks to fit. A larger slot uses the biggest whole
@@ -29,13 +30,14 @@ inline double icon_pixel_scale(int source, int slot)
 }
 
 // Toolbar buttons with a sprite: every palette entry but Query.
-inline constexpr int kToolIconCount = 18;
+inline constexpr int kToolIconCount = 26;
 
 // Short name drawn when the sprite file is missing, so the button is not blank.
 inline const char *tool_icon_fallback_label(int index)
 {
     static const char *labels[kToolIconCount + 1] = {
-        "BD", "RD", "RL", "PW", "PK", "R", "C", "I", "DC", "PO", "FD", "ST", "SP", "CO", "NU", "MN", "AP", "*", "?",
+        "BD", "RD", "RL", "PW", "R",  "C",  "I",  "DC", "PK", "BP", "FN", "FD", "PO", "PR",
+        "CO", "NU", "MN", "ZO", "AM", "CA", "ST", "MA", "LB", "MH", "AP", "SP", "?",
     };
     if (index < 0 || index > kToolIconCount) {
         return "?";
@@ -49,11 +51,15 @@ inline void paint_tool_fallback(cairo_t *cr, int index, double x, double y, doub
         return;
     }
     static const double colors[kToolIconCount + 1][3] = {
-        {0.85, 0.62, 0.12}, {0.25, 0.25, 0.28}, {0.45, 0.28, 0.14}, {0.55, 0.55, 0.15},
-        {0.18, 0.55, 0.22}, {0.20, 0.62, 0.28}, {0.16, 0.32, 0.72}, {0.72, 0.40, 0.12},
-        {0.78, 0.66, 0.16}, {0.15, 0.28, 0.70}, {0.75, 0.16, 0.14}, {0.20, 0.55, 0.28},
-        {0.12, 0.40, 0.62}, {0.22, 0.22, 0.24}, {0.15, 0.55, 0.58}, {0.20, 0.48, 0.52},
-        {0.35, 0.45, 0.62}, {0.85, 0.65, 0.12}, {0.25, 0.25, 0.28},
+        {0.85, 0.62, 0.12}, {0.25, 0.25, 0.28}, {0.45, 0.28, 0.14}, {0.55, 0.55, 0.15}, // build
+        {0.20, 0.62, 0.28}, {0.16, 0.32, 0.72}, {0.72, 0.40, 0.12}, {0.78, 0.66, 0.16}, // zones
+        {0.18, 0.55, 0.22}, {0.16, 0.48, 0.20}, {0.30, 0.55, 0.70},                     // parks
+        {0.75, 0.16, 0.14}, {0.15, 0.28, 0.70}, {0.40, 0.40, 0.42},                     // services
+        {0.22, 0.22, 0.24}, {0.15, 0.55, 0.58}, {0.20, 0.48, 0.52},                     // utilities
+        {0.55, 0.45, 0.20}, {0.70, 0.30, 0.45}, {0.60, 0.15, 0.20}, {0.20, 0.55, 0.28},
+        {0.25, 0.45, 0.70}, {0.50, 0.32, 0.20}, {0.62, 0.55, 0.40},                     // special
+        {0.35, 0.45, 0.62}, {0.12, 0.40, 0.62},                                         // ports
+        {0.25, 0.25, 0.28},
     };
     const int clamped = std::max(0, std::min(index, kToolIconCount));
     cairo_set_source_rgb(cr, colors[clamped][0], colors[clamped][1], colors[clamped][2]);
@@ -81,8 +87,8 @@ public:
     void set_selected(int index);
     int hover() const { return hover_; }
 
-    // Width and height of the grid. columns is 2 until a short window
-    // switches the toolbar to 3 so the minimap and demand meters fit.
+    // Width and height of the grid, 2 to 4 columns. The desktop layout
+    // picks the fewest columns (from 3) that fit the window height.
     static int width_for(int cell, int columns = 2);
     static int height_for(int cell, int columns = 2);
     // Slate toolbar: section headers of `header` pixels above each group.
@@ -108,6 +114,10 @@ public:
     void motion(double x, double y);
     void leave();
     void set_focus(int index) { focus_ = index; }
+    // Bit i greys out button i: a landmark the city cannot buy yet (the
+    // population gate or the cap). It stays clickable; placing it shows why.
+    void set_dimmed(unsigned mask) { dimmed_ = mask; }
+    bool dimmed(int index) const { return index >= 0 && index < 32 && (dimmed_ >> index & 1u) != 0; }
     int focus() const { return focus_; }
     void advance(int elapsed_ms);
     int hover_ms() const { return hover_ms_; }
@@ -127,6 +137,7 @@ private:
     int hover_ = -1;
     int pressed_ = -1;
     int focus_ = -1;
+    unsigned dimmed_ = 0;
     int edge_ms_ = 0;
     int hover_ms_ = 0;
 };

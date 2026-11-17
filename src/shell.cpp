@@ -20,6 +20,7 @@
 #include "text_paint.hpp"
 #include "theme.hpp"
 #include "tile_atlas.hpp"
+#include "tool_groups.hpp"
 #include "tool_keys.hpp"
 #include "tools.hpp"
 #include "version.hpp"
@@ -994,22 +995,12 @@ void Shell::bind_session()
         const ToolDef *tool = tool_by_index(tool_index_);
         const int fixed = tool_fixed_special(tool);
         if (fixed >= 0) {
-            // Data Center and Micro nuclear: the button is the building.
-            special_open_ = false;
+            // A special button (Data Center, Micro nuclear, a landmark) is
+            // the building it places.
             session_.place_special(fixed, x, y);
             return;
         }
         if (tool->engine_id == kSpecialEngineId) {
-            if (special_open_ || special_choice_ < 0) {
-                if (special_choice_ < 0) {
-                    special_open_ = true;
-                    special_cursor_ = 0;
-                } else {
-                    special_open_ = false;
-                }
-                return;
-            }
-            session_.place_special(special_choice_, x, y);
             return;
         }
         session_.use_tool(tool->engine_id, x, y);
@@ -1083,7 +1074,6 @@ std::string Shell::visual_stamp() const
         << list_index_ << ' ' << list_scroll_ << ' ' << scenario_index_ << ' ' << focus_id_ << ' ' << hover_id_ << ' '
         << menu_.open_menu << ' ' << menu_.cursor << ' ' << menu_.recent_open << ' ' << menu_.recent_cursor << ' '
         << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
-        << special_open_ << ' ' << special_cursor_ << ' ' << special_choice_ << ' '
         << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << slate_ << night_
         << layout_pref_ << handheld_ << ' ' << session_.map_serial()
         << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
@@ -1651,11 +1641,8 @@ void Shell::loop()
                     set_look_preference(look_from_setting(which));
                     map_.invalidate_all();
                 }
-                select_tool(special_tool_index());
-                special_choice_ = 0;
-                special_cursor_ = 0;
-                special_open_ = true;
-                // Deck hint bar: A selects a building, B closes the list.
+                // The first Special Buildings button (the Zoo), ghost on the map.
+                select_tool(tool_groups::groups()[5].first);
                 gamepad_nav_ = true;
                 cursor_x_ = static_cast<float>(view_x_ + view_w_ / 2);
                 cursor_y_ = static_cast<float>(view_y_ + view_h_ / 2);
@@ -2154,8 +2141,6 @@ void Shell::handle_event(const SDL_Event &event)
             } else {
                 graph_pointer_x_ = -1;
             }
-        } else if (hover_id_ >= kSpecialItem && hover_id_ < kSpecialItem + special_menu_count()) {
-            special_cursor_ = hover_id_ - kSpecialItem;
         } else if (hover_id_ == kPaletteId && !menu_.open()) {
             palette_.motion(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         }
@@ -2504,10 +2489,10 @@ void Shell::handle_event(const SDL_Event &event)
             }
             break;
         }
-        if (!menu_.open() && !special_open_ && take_bound_key(key, mods)) {
+        if (!menu_.open() && take_bound_key(key, mods)) {
             break;
         }
-        if (mods == 0 && !menu_.open() && !special_open_ && active_field() == nullptr) {
+        if (mods == 0 && !menu_.open() && active_field() == nullptr) {
             const int keyed = tool_index_for_key(letter);
             if (keyed >= 0) {
                 select_tool(keyed);
@@ -2530,29 +2515,11 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
         }
-        if (accel == AccelKey::Escape && dialog_ == Dialog::None && !menu_.open() && !special_open_ && overlay_on_) {
+        if (accel == AccelKey::Escape && dialog_ == Dialog::None && !menu_.open() && overlay_on_) {
             return_from_overlay();
             break;
         }
-        if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
-            if (accel == AccelKey::Escape) {
-                special_open_ = false;
-                break;
-            }
-            if (accel == AccelKey::Return || accel == AccelKey::Space) {
-                choose_special(special_cursor_);
-                break;
-            }
-            if (accel == AccelKey::Up || accel == AccelKey::Left) {
-                move_special_cursor(-1);
-                break;
-            }
-            if (accel == AccelKey::Down || accel == AccelKey::Right) {
-                move_special_cursor(1);
-                break;
-            }
-        }
-        if (notice_sticky_ && accel == AccelKey::Escape && !menu_.open() && !special_open_) {
+        if (notice_sticky_ && accel == AccelKey::Escape && !menu_.open()) {
             dismiss_background_notice();
             break;
         }
@@ -2568,12 +2535,12 @@ void Shell::handle_event(const SDL_Event &event)
             step_cursor_on_map(step_x, step_y);
             break;
         }
-        if (accel == AccelKey::Return && key_cursor_ && !special_open_) {
+        if (accel == AccelKey::Return && key_cursor_) {
             gamepad_use_cursor(true);
             release_pad_drag();
             break;
         }
-        if (accel == AccelKey::Escape && key_cursor_ && !overlay_on_ && !special_open_) {
+        if (accel == AccelKey::Escape && key_cursor_ && !overlay_on_) {
             key_cursor_ = false;
             break;
         }
@@ -2643,7 +2610,6 @@ void Shell::handle_event(const SDL_Event &event)
                 activate_focus();
                 break;
             }
-            special_open_ = false;
             if (dialog_ != Dialog::None) {
                 activate_dialog_start();
             } else if (!menu_.open()) {
@@ -2674,17 +2640,15 @@ void Shell::handle_event(const SDL_Event &event)
                 }
                 break;
             }
-            if (notice_sticky_ && dialog_ == Dialog::None && !menu_.open() && !special_open_) {
+            if (notice_sticky_ && dialog_ == Dialog::None && !menu_.open()) {
                 dismiss_background_notice();
                 break;
             }
-            if (overlay_on_ && dialog_ == Dialog::None && !menu_.open() && !special_open_) {
+            if (overlay_on_ && dialog_ == Dialog::None && !menu_.open()) {
                 return_from_overlay();
                 break;
             }
-            if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
-                special_open_ = false;
-            } else if (menu_.open()) {
+            if (menu_.open()) {
                 menu_.handle_key(AccelKey::Escape, 0, 0);
             } else if (dialog_ != Dialog::None) {
                 cancel_dialog();
@@ -2694,9 +2658,7 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (pact == PadConfirm) {
-            if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
-                choose_special(special_cursor_);
-            } else if (menu_.open()) {
+            if (menu_.open()) {
                 menu_.handle_key(AccelKey::Return, 0, 0);
                 if (menu_.activated == Action::RecentIndex && menu_.activated_recent >= 0 &&
                     menu_.activated_recent < static_cast<int>(recent_.size())) {
@@ -2736,11 +2698,11 @@ void Shell::handle_event(const SDL_Event &event)
             }
             break;
         }
-        if (pact == PadOverlay && dialog_ == Dialog::None && !menu_.open() && !special_open_) {
+        if (pact == PadOverlay && dialog_ == Dialog::None && !menu_.open()) {
             overlay_on_ = !overlay_on_;
             break;
         }
-        if (pact == PadCenter && dialog_ == Dialog::None && !menu_.open() && !special_open_) {
+        if (pact == PadCenter && dialog_ == Dialog::None && !menu_.open()) {
             center_on_cursor();
             break;
         }

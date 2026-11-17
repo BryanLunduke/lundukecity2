@@ -61,11 +61,12 @@ int main()
     if (menu_table::actionable_count() != 53) {
         return fail(1, "the menu does not have 53 actionable rows");
     }
-    if (kDefaultToolIndex != 18 || kToolCount != 19) {
+    if (kDefaultToolIndex != 26 || kToolCount != 27) {
         return fail(2, "a new city does not start on Query");
     }
-    if (tool_hotkey_clashes() || tool_index_for_key('b') != 0 || tool_index_for_key('Q') != 18 ||
-        tool_index_for_key('o') != 9 || tool_index_for_key('z') != 8 || tool_index_for_key('m') != 15 ||
+    if (tool_hotkey_clashes() || tool_index_for_key('b') != 0 || tool_index_for_key('Q') != 26 ||
+        tool_index_for_key('o') != 12 || tool_index_for_key('z') != 7 || tool_index_for_key('m') != 16 ||
+        tool_index_for_key('x') != 17 || tool_index_for_key('j') != 13 || tool_hotkey(23) != 0 ||
         menu_table::accel_action(AccelKey::Letter, 0) != Action::None ||
         menu_table::accel_action(AccelKey::O, static_cast<int>(AccelMod::Ctrl)) != Action::Load) {
         return fail(3, "a tool letter clashes with a menu shortcut");

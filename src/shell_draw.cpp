@@ -264,89 +264,46 @@ void Shell::layout()
         pal_y_ = menu_h_ + band_h_ + dp(6);
         const int status_top = win_h_ - status_h_;
         const int gap = dp(8);
-        const int mini_ok = dp(64);
         const int demand_ok = dp(64);
         const int header = slate_ ? dp(18) : 0;
         auto pal_height = [&](int columns) {
             return header > 0 ? ToolPalette::grouped_height_for(cell_, columns, header)
                               : ToolPalette::height_for(cell_, columns);
         };
-        // Two columns until the minimap or the demand meters would be squeezed.
-        // Three columns shorten the toolbar. The minimap is dropped only when
-        // even that cannot keep the meters readable. 960x600 stays usable.
-        // Slate keeps the demand meters in the info band, so the tray only
-        // needs room for the minimap.
-        auto measure = [&](int columns, bool want_mini, int &mini_h, int &demand_y, int &demand_h) {
-            const int side = ToolPalette::width_for(cell_, columns);
-            const int pal_h = pal_height(columns);
-            const int mini_y = pal_y_ + pal_h + gap;
-            if (!want_mini) {
-                mini_h = 0;
-                demand_y = mini_y;
-                if (slate_) {
-                    demand_h = 0;
-                    return mini_y <= status_top;
-                }
-                demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
-                return demand_h >= demand_ok;
-            }
-            mini_h = std::max(dp(64), side * 5 / 6);
-            demand_y = mini_y + mini_h + gap;
-            if (slate_) {
-                if (mini_y + mini_h + gap > status_top) {
-                    mini_h = std::max(0, status_top - gap - mini_y);
-                }
-                demand_y = mini_y + mini_h + gap;
-                demand_h = 0;
-                return mini_h >= mini_ok;
-            }
-            const int demand_floor = dp(72);
-            if (demand_y + demand_floor > status_top) {
-                const int overflow = demand_y + demand_floor - status_top;
-                mini_h = std::max(dp(36), mini_h - overflow);
-                demand_y = mini_y + mini_h + gap;
-            }
-            demand_h = std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
-            return mini_h >= mini_ok && demand_h >= demand_ok;
-        };
+        // The minimap sits over the top-right corner of the map (as in the
+        // handheld layout), so the tray is only the toolbar, plus the demand
+        // meters under it in the classic skin (Slate keeps them in the info
+        // band). Three columns when they fit, four in a short window, and a
+        // smaller cell only when even four columns would run into the status
+        // line (ui_scale has normally shrunk the whole UI before that).
+        const int room = status_top - pal_y_ - (slate_ ? 0 : gap + demand_ok);
         int columns = 3;
-        int mini_h = 0;
-        int demand_y = 0;
-        int demand_h = 0;
-        // Three columns once the window is tall enough. Two columns made the
-        // toolbar tall and the minimap a postage stamp as the window grew.
-        if (!measure(3, true, mini_h, demand_y, demand_h)) {
-            columns = 2;
-            if (!measure(2, true, mini_h, demand_y, demand_h)) {
-                columns = 3;
-                if (!measure(3, false, mini_h, demand_y, demand_h)) {
-                    columns = 2;
-                    measure(2, false, mini_h, demand_y, demand_h);
-                }
-            }
+        if (pal_height(columns) > room) {
+            columns = 4;
         }
-        // The minimap keeps its own 6:5 height and the demand meters sit right
-        // under it. The tool card that used to fill the space between them is
-        // gone; the tool name and cost are on the status line and the hover tip.
+        const int step = std::max(1, dp(2));
+        while (pal_height(columns) > room && cell_ - step >= dp(28)) {
+            cell_ -= step;
+        }
         palette_.set_columns(columns);
         palette_.set_cell(cell_);
         palette_.set_style(slate_, header);
         side_w_ = ToolPalette::width_for(cell_, columns);
-        mini_y_ = pal_y_ + pal_height(columns) + gap;
-        if (mini_h <= 0) {
-            mini_y_ = pal_y_ + pal_height(columns);
-            demand_y = mini_y_ + gap;
-            demand_h = slate_ ? 0 : std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y));
-        }
-        mini_x_ = side_x_;
-        mini_w_ = side_w_;
-        mini_h_ = mini_h;
-        demand_y_ = demand_y;
-        demand_h_ = demand_h;
+        demand_y_ = pal_y_ + pal_height(columns) + gap;
+        demand_h_ = slate_ ? 0 : std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y_));
         view_x_ = side_x_ + side_w_ + dp(8);
         view_y_ = menu_h_ + band_h_;
         view_w_ = std::max(dp(32), win_w_ - view_x_ - dp(8));
         view_h_ = std::max(dp(32), win_h_ - view_y_ - status_h_);
+        // Same size rule as the handheld minimap. Inset from the right edge
+        // past the map's vertical scroll bar.
+        mini_w_ = std::min(dp(200), std::max(dp(120), view_w_ / 6));
+        mini_h_ = mini_w_ * 5 / 6;
+        if (mini_h_ + dp(20) > view_h_ || mini_w_ + dp(28) > view_w_) {
+            mini_h_ = 0;
+        }
+        mini_x_ = view_x_ + view_w_ - mini_w_ - dp(14);
+        mini_y_ = view_y_ + dp(10);
     }
     map_.set_slate_tags(slate_ || handheld_);
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
@@ -3466,102 +3423,6 @@ void Shell::draw_dialog(cairo_t *cr)
     }
 }
 
-void Shell::draw_special_menu(cairo_t *cr)
-{
-    if (!special_open_ || dialog_ != Dialog::None || menu_.open()) {
-        return;
-    }
-    const int count = special_menu_count();
-    if (count < 1) {
-        return;
-    }
-    // Clicks outside the list close it. Rows are pushed after this catcher.
-    push_hot(0, menu_h_, win_w_, std::max(0, win_h_ - menu_h_), 0);
-    const int slot = special_tool_index();
-    double cell_x = 0;
-    double cell_y = 0;
-    palette_.cell_origin(slot, cell_x, cell_y);
-    const double anchor_x = side_x_ + cell_x + cell_ + 6;
-    const double anchor_y = pal_y_ + cell_y;
-    const bool dark = slate_ || handheld_;
-    int name_h = 1;
-    int cost_h = 1;
-    for (int i = 0; i < count; ++i) {
-        const SpecialBuilding &building = special_building(i);
-        name_h = std::max(name_h, measure_text(cr, bold_font(), building.name, -1).height);
-        const std::string sample = session_.special_menu_detail(i);
-        cost_h = std::max(cost_h, measure_text(cr, ui_font(), sample, -1).height);
-    }
-    const int between = dp(6);
-    const int text_block = name_h + between + cost_h;
-    const double row_h = std::max(std::max(static_cast<double>(dp(44)), static_cast<double>(cell_ - 4)),
-                                  static_cast<double>(text_block + dp(12)));
-    const double icon = std::min(static_cast<double>(dp(40)), row_h - dp(8));
-    double widest = static_cast<double>(dp(240));
-    for (int i = 0; i < count; ++i) {
-        const std::string sample = session_.special_menu_detail(i);
-        widest = std::max(widest, icon + dp(36) + measure_text(cr, ui_font(), sample, -1).width);
-        widest = std::max(widest, icon + dp(36) + measure_text(cr, bold_font(), special_building(i).name, -1).width);
-    }
-    const double drop_w = std::min(static_cast<double>(win_w_ - 8), widest);
-    double drop_x = anchor_x;
-    if (drop_x + drop_w > win_w_ - 4) {
-        drop_x = std::max(4.0, win_w_ - drop_w - 4);
-    }
-    double drop_y = anchor_y;
-    const double drop_h = 8 + count * row_h;
-    if (handheld_) {
-        // Open upward from the Landmarks slot on the quick bar.
-        drop_x = std::max(4.0, std::min(quick_x_ + slot * quick_slot_ + quick_slot_ - drop_w, win_w_ - drop_w - 4.0));
-        drop_y = std::max(4.0, quick_y_ - drop_h - dp(8));
-    } else if (drop_y + drop_h > win_h_ - status_h_ - 4) {
-        drop_y = std::max(static_cast<double>(menu_h_ + 4), win_h_ - status_h_ - 4 - drop_h);
-    }
-    if (dark) {
-        fill(cr, drop_x + 3, drop_y + 4, drop_w, drop_h, 0.0, 0.0, 0.0);
-        fill(cr, drop_x, drop_y, drop_w, drop_h, 0x23 / 255.0, 0x2C / 255.0, 0x38 / 255.0);
-        stroke_rect(cr, drop_x, drop_y, drop_w, drop_h, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0);
-    } else {
-        fill(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
-        stroke_rect(cr, drop_x, drop_y, drop_w, drop_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-    }
-    for (int i = 0; i < count; ++i) {
-        const SpecialBuilding &building = special_building(i);
-        const double y = drop_y + 4 + i * row_h;
-        const bool lit = i == special_cursor_;
-        if (lit && dark) {
-            fill(cr, drop_x + 3, y, drop_w - 6, row_h - 2, 0x3A / 255.0, 0x4B / 255.0, 0x63 / 255.0);
-            fill(cr, drop_x + 3, y, dp(3), row_h - 2, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0);
-        } else if (lit) {
-            fill(cr, drop_x + 3, y, drop_w - 6, row_h - 2, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
-        }
-        cairo_surface_t *sprite = tool_icon_named(building.icon);
-        if (sprite != nullptr) {
-            const int iw = cairo_image_surface_get_width(sprite);
-            const int ih = cairo_image_surface_get_height(sprite);
-            const double scale = icon_pixel_scale(std::max(iw, ih), static_cast<int>(icon));
-            cairo_save(cr);
-            cairo_translate(cr, std::floor(drop_x + 8), std::floor(y + (row_h - icon) / 2.0));
-            cairo_scale(cr, scale, scale);
-            cairo_set_source_surface(cr, sprite, 0, 0);
-            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-            cairo_paint(cr);
-            cairo_restore(cr);
-        }
-        const std::string name = building.name;
-        const std::string cost = session_.special_menu_detail(i);
-        const double text_x = drop_x + 8 + icon + dp(8);
-        const double text_r = dark ? 0xEE / 255.0 : (lit ? 0.05 : theme::kTextR);
-        const double text_g = dark ? 0xE8 / 255.0 : (lit ? 0.05 : theme::kTextG);
-        const double text_b = dark ? 0xDA / 255.0 : (lit ? 0.05 : theme::kTextB);
-        const double text_y = y + std::max(4.0, (row_h - text_block) / 2.0);
-        paint_text(cr, bold_font(), name, text_x, text_y, text_r, text_g, text_b,
-                   static_cast<int>(drop_w - icon - dp(24)));
-        paint_text(cr, ui_font(), cost, text_x, text_y + name_h + between, text_r, text_g, text_b, -1);
-        push_hot(drop_x + 3, y, drop_w - 6, row_h - 2, kSpecialItem + i);
-    }
-}
-
 void Shell::draw(cairo_t *cr)
 {
     sync_pointer_cursor();
@@ -3598,20 +3459,10 @@ void Shell::draw(cairo_t *cr)
         {
             TargetCr live(cr);
             cairo_translate(live.cr, side_x_, pal_y_);
+            palette_.set_dimmed(locked_tool_mask());
             palette_.draw(live.cr);
         }
         push_hot(side_x_, pal_y_, side_w_, palette_.height(), kPaletteId);
-        if (mini_h_ > 0) {
-            minimap_.set_pin_top(false);
-            const AspectBox land = minimap_.content_box(mini_w_, mini_h_);
-            {
-                TargetCr live(cr);
-                cairo_translate(live.cr, mini_x_, mini_y_);
-                minimap_.sync();
-                minimap_.draw(live.cr, mini_w_, mini_h_);
-            }
-            push_hot(mini_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
-        }
         if (demand_h_ > 0) {
             TargetCr live(cr);
             cairo_translate(live.cr, side_x_, demand_y_);
@@ -3733,6 +3584,8 @@ void Shell::draw(cairo_t *cr)
     push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
     if (handheld_) {
         draw_handheld_hud(cr);
+    } else {
+        draw_minimap_overlay(cr);
     }
     draw_hover_card(cr);
     if (overlay_on_ && overlay_return_eval_ && dialog_ == Dialog::None) {
@@ -3789,24 +3642,19 @@ void Shell::draw(cairo_t *cr)
     std::string tool_text;
     {
         const bool show_keys = !deck_ && !gamepad_nav_;
-        const int special = special_tool_index();
         int shown_tool = tool_index_;
         const int hover = palette_.hover();
-        const bool hovering =
-            hover >= 0 && palette_.hover_ms() >= 350 && (hover == special || tool_by_index(hover) != nullptr);
+        const bool hovering = hover >= 0 && palette_.hover_ms() >= 350 && tool_by_index(hover) != nullptr;
         if (hovering) {
             shown_tool = hover;
         } else if (palette_.focus() >= 0) {
             shown_tool = palette_.focus();
         }
-        if (shown_tool == special) {
-            tool_text = (hovering || special_choice_ < 0) ? std::string(tool_by_index(special)->hint)
-                                                          : session_.special_status_line(special_choice_);
-        } else if (shown_tool == kToolCount - 1) {
+        if (shown_tool == kToolCount - 1) {
             // Query is the no-tool inspect mode: nothing to name or price.
             tool_text.clear();
-        } else if (const ToolDef *tool = tool_by_index(shown_tool)) {
-            tool_text = tool->hint;
+        } else {
+            tool_text = tool_hint_now(shown_tool);
         }
         if (show_keys && !tool_text.empty() && shown_tool >= 0 && shown_tool < KeyActCount - KeyTool0 && dialog_ == Dialog::None) {
             const std::string key_name = chord_label(binds_.key[KeyTool0 + shown_tool]);
@@ -3915,7 +3763,7 @@ void Shell::draw(cairo_t *cr)
             gy = view_y_ + pad + hud_top_ + inspect_card_h_ + pad;
             room = std::max(0.0, static_cast<double>(view_w_) - pad * 2.0);
         }
-        if (handheld_) {
+        if (mini_h_ > 0) {
             room = std::min(room, static_cast<double>(view_w_ - mini_w_ - hud_right_ - pad * 4));
         }
         const int wrap = std::max(1, static_cast<int>(room) - pad * 2);
@@ -3971,7 +3819,7 @@ void Shell::draw(cairo_t *cr)
         const double lw = metrics.width + pad * 2;
         const double lh = metrics.height + pad * 2 + dp(14);
         const double lx = view_x_ + view_w_ - lw - pad - (handheld_ ? hud_right_ : 0);
-        const double ly = view_y_ + pad + (handheld_ ? mini_y_ + mini_h_ : 0);
+        const double ly = view_y_ + pad + minimap_clearance();
         double legend_r = 0;
         double legend_g = 0;
         double legend_b = 0;
@@ -4080,7 +3928,6 @@ void Shell::draw(cairo_t *cr)
         draw_menubar(cr);
     }
     draw_menu_dropdown(cr);
-    draw_special_menu(cr);
 }
 
 std::string Shell::dialog_title_hint() const
@@ -4273,7 +4120,8 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
     if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging()) {
         bottom -= dp(78) + gap;
     }
-    const double top_limit = view_y_ + dp(8) + hud_top_;
+    // Desktop alerts stop under the minimap overlay in the top-right corner.
+    const double top_limit = view_y_ + dp(8) + (handheld_ ? hud_top_ : minimap_clearance());
     double look_r = 0;
     double look_g = 0;
     double look_b = 0;
@@ -4379,9 +4227,6 @@ std::string Shell::context_hint() const
             return {};
         }
         return dialog_title_hint();
-    }
-    if (special_open_) {
-        return pad ? hint_join({hint_button(a, "selects"), hint_button(b, "closes")}) : "Enter selects. Esc closes";
     }
     const ToolDef *tool = tool_by_index(tool_index_);
     const int engine = tool != nullptr ? tool->engine_id : TOOL_QUERY;
@@ -5419,7 +5264,7 @@ void Shell::draw_hover_card(cairo_t *cr)
     inspect_card_w_ = card_w;
     inspect_card_h_ = card_h;
     const double card_x = view_x_ + view_w_ - card_w - dp(12) - hud_right_;
-    const double card_y = view_y_ + dp(8) + (handheld_ ? mini_y_ + mini_h_ : 0);
+    const double card_y = view_y_ + dp(8) + minimap_clearance();
     if (!slate_ && !handheld_) {
         fill(cr, card_x, card_y, card_w, card_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
         stroke_rect(cr, card_x, card_y, card_w, card_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
@@ -5462,22 +5307,43 @@ void Shell::draw_hover_card(cairo_t *cr)
     }
 }
 
+void Shell::draw_minimap_overlay(cairo_t *cr)
+{
+    // Minimap over the top-right corner of the map, in both layouts. Click
+    // or tap jumps there; the frame is the view rectangle.
+    if (mini_h_ <= 0) {
+        return;
+    }
+    if (slate_ || handheld_) {
+        slate_round(cr, mini_x_ - dp(4), mini_y_ - dp(4), mini_w_ + dp(8), mini_h_ + dp(8), dp(8), kSlateBand, 0.92);
+    } else {
+        fill(cr, mini_x_ - dp(3), mini_y_ - dp(3), mini_w_ + dp(6), mini_h_ + dp(6), theme::kMenuBgR, theme::kMenuBgG,
+             theme::kMenuBgB);
+        stroke_rect(cr, mini_x_ - dp(3), mini_y_ - dp(3), mini_w_ + dp(6), mini_h_ + dp(6), theme::kMenuFrameR,
+                    theme::kMenuFrameG, theme::kMenuFrameB);
+    }
+    minimap_.set_pin_top(false);
+    const AspectBox land = minimap_.content_box(mini_w_, mini_h_);
+    {
+        TargetCr live(cr);
+        cairo_translate(live.cr, mini_x_, mini_y_);
+        minimap_.sync();
+        minimap_.draw(live.cr, mini_w_, mini_h_);
+    }
+    push_hot(mini_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
+}
+
+double Shell::minimap_clearance() const
+{
+    // Height under the top of the map that the minimap overlay takes, so a
+    // card or legend at the top right can sit below it.
+    return mini_h_ > 0 ? std::max(0.0, static_cast<double>(mini_y_ + mini_h_ - view_y_)) : 0.0;
+}
+
 void Shell::draw_handheld_hud(cairo_t *cr)
 {
     const bool open_ui = dialog_ != Dialog::None;
-    // Minimap, top right.
-    if (mini_h_ > 0) {
-        slate_round(cr, mini_x_ - dp(4), mini_y_ - dp(4), mini_w_ + dp(8), mini_h_ + dp(8), dp(8), kSlateBand, 0.92);
-        minimap_.set_pin_top(false);
-        const AspectBox land = minimap_.content_box(mini_w_, mini_h_);
-        {
-            TargetCr live(cr);
-            cairo_translate(live.cr, mini_x_, mini_y_);
-            minimap_.sync();
-            minimap_.draw(live.cr, mini_w_, mini_h_);
-        }
-        push_hot(mini_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
-    }
+    draw_minimap_overlay(cr);
     // Menu chip and the compact info pill, top left.
     const double top = dp(10);
     const double chip_h = dp(40);
@@ -5609,7 +5475,24 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         if (shown_tool < 0 || shown_tool >= count) {
             shown_tool = -1;
         }
-        const double icon = std::max(16.0, slot - dp(12));
+        // 27 slots no longer leave room for a 12px margin round a 40px
+        // icon on a 1280px screen. The icon art has its own transparent
+        // margin, so it keeps 1:1 whenever the slot is 42px or wider rather
+        // than dropping to half size.
+        double icon = std::max(16.0, slot - dp(12));
+        if (icon < 40.0 && slot >= 42.0) {
+            icon = 40.0;
+        }
+        const unsigned locked = locked_tool_mask();
+        // Thin rules between the toolbar sections (Build | Zones | Parks ...).
+        for (int g = 1; g < tool_groups::kGroupCount; ++g) {
+            const double rx = std::round(quick_x_ + tool_groups::groups()[g].first * slot) - 0.5;
+            cairo_set_source_rgba(cr, kSlateDim.r, kSlateDim.g, kSlateDim.b, 0.55);
+            cairo_set_line_width(cr, 1.0);
+            cairo_move_to(cr, rx, quick_y_ + dp(8));
+            cairo_line_to(cr, rx, quick_y_ + quick_h_ - dp(4));
+            cairo_stroke(cr);
+        }
         for (int i = 0; i < count; ++i) {
             const bool chosen = i == tool_index_;
             const double sx = quick_x_ + i * slot;
@@ -5669,6 +5552,10 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             } else {
                 paint_tool_fallback(cr, i, ix, iy, icon);
             }
+            if (i < 32 && (locked >> i & 1u) != 0) {
+                // A landmark the city cannot buy yet: greyed, still selectable.
+                slate_round(cr, sx + 2, sy + 1, slot - 4, slot - 4, dp(6), chosen ? kSlatePanel : kSlateBand, 0.62);
+            }
             if (palette_.focus() == i) {
                 round_dialog_rect(cr, sx + 3, sy + 2, slot - 6, slot - 6, dp(6));
                 cairo_set_source_rgb(cr, kSlateInk.r, kSlateInk.g, kSlateInk.b);
@@ -5695,13 +5582,19 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             slate_text(cr, tag_font(), next, bar_x + bar_w + dp(8) + dp(6), ky + dp(3), kSlateInk);
         }
         // Tool name and price above the raised slot.
-        if (tool_index_ >= 0 && tool_index_ < count && !open_ui && !special_open_) {
+        if (tool_index_ >= 0 && tool_index_ < count && !open_ui) {
             const ToolDef *tool = tool_by_index(tool_index_);
             std::string caption = tool != nullptr ? tool->name : "";
             if (tool != nullptr && tool->cost > 0) {
                 caption += "  " + civic::dollars(tool->cost);
-            } else if (tool_index_ == special_tool_index() && special_choice_ >= 0) {
-                caption = session_.special_status_line(special_choice_);
+            }
+            const int fixed = tool_fixed_special(tool);
+            if (fixed >= 0) {
+                // A locked landmark says why instead of its price.
+                const std::string detail = session_.special_menu_detail(fixed);
+                if (!detail.empty() && detail[0] != '$') {
+                    caption = std::string(tool->name) + ": " + detail;
+                }
             }
             const TextMetrics m = measure_text(cr, bold_font(), caption, -1);
             const double cw = m.width + dp(16);

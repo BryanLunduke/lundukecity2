@@ -43,7 +43,8 @@ int main()
     if (assign_key(edited, KeyPause, "b", conflict) || conflict != KeyTool0) {
         return fail("Pause was allowed to take the bulldozer key");
     }
-    if (!assign_key(edited, KeyTool0, "x", conflict) || !assign_key(edited, KeyPause, "b", conflict)) {
+    // Every letter is a factory tool key now, so the bulldozer moves to F5.
+    if (!assign_key(edited, KeyTool0, "f5", conflict) || !assign_key(edited, KeyPause, "b", conflict)) {
         return fail("a freed key could not be assigned");
     }
     if (key_act_for_token(edited, "b") != KeyPause || key_act_for_token(edited, "space") != -1) {
@@ -54,7 +55,7 @@ int main()
     }
     const std::string saved = binds_override_text(edited);
     const ControlBinds loaded = binds_from_text("speed=1\n" + saved + "bind_key_nope=z\n");
-    if (loaded.key[KeyPause] != "b" || loaded.key[KeyTool0] != "x" || loaded.key[KeySave] != "ctrl+s") {
+    if (loaded.key[KeyPause] != "b" || loaded.key[KeyTool0] != "f5" || loaded.key[KeySave] != "ctrl+s") {
         return fail("bindings did not round-trip, or a factory key was dropped");
     }
     const ControlBinds untouched = binds_from_text("ui_scale=1\nlook=0\n");

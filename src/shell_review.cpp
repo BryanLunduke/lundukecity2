@@ -604,6 +604,21 @@ void Shell::run_review_checks()
             fail("the Slate desktop layout is not the default");
             return;
         }
+        {
+            // The desktop minimap sits over the map's top-right corner, as in
+            // the handheld layout, and the toolbar ends above the status line.
+            const Hotspot *mini = find_hot(hot_, kMinimapId, 0);
+            if (mini == nullptr || mini->x < view_x_ + view_w_ / 2.0 || mini->x + mini->w > view_x_ + view_w_ ||
+                mini->y < view_y_ || mini->y > view_y_ + dp(24) ||
+                hit(mini->x + mini->w / 2.0, mini->y + mini->h / 2.0) != kMinimapId) {
+                fail("the desktop minimap is not over the top-right corner of the map");
+                return;
+            }
+            if (mini_x_ < view_x_ || pal_y_ + palette_.height() > win_h_ - status_h_) {
+                fail("the desktop toolbar runs into the status line, or the minimap left the map");
+                return;
+            }
+        }
         slate_ = false;
         apply_skin();
         render();
@@ -2311,7 +2326,6 @@ void Shell::run_review_checks()
     {
         close_dialog();
         menu_.close();
-        special_open_ = false;
         pad_dragging_ = false;
         if (!attach_test_pad()) {
             fail("the map D-pad check had no controller");

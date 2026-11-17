@@ -32,7 +32,7 @@ enum KeyAct : int {
     KeyEvaluation,
     KeyFullscreen,
     KeyTool0,
-    KeyActCount = KeyTool0 + 19
+    KeyActCount = KeyTool0 + 27
 };
 
 enum PadAct : int {
@@ -109,10 +109,14 @@ inline const char *key_act_id(int act)
         break;
     }
     if (act >= KeyTool0 && act < KeyActCount) {
-        static const char *ids[] = {"bulldoze", "roads",   "rail",    "power",   "park",         "residential",
-                                    "commercial", "industrial", "datacenter", "police", "fire", "stadium",
-                                    "seaport",  "coal",    "nuclear", "micronuclear", "airport", "special",
-                                    "query"};
+        // Saved by this id, so a reordered toolbar keeps every binding.
+        // "special" (the old Landmarks dropdown) is gone; an old line for
+        // it is ignored and the landmarks get their own factory keys.
+        static const char *ids[] = {"bulldoze",   "roads",     "rail",      "power",     "residential", "commercial",
+                                    "industrial", "datacenter", "park",     "bigpark",   "fountain",    "fire",
+                                    "police",     "prison",    "coal",      "nuclear",   "micronuclear", "zoo",
+                                    "amusement",  "casino",    "stadium",   "marina",    "library",     "mayor",
+                                    "airport",    "seaport",   "query"};
         return ids[act - KeyTool0];
     }
     return "";
@@ -203,10 +207,12 @@ inline const char *key_act_label(int act)
         break;
     }
     if (act >= KeyTool0 && act < KeyActCount) {
-        static const char *names[] = {"Bulldozer", "Roads",     "Rail",      "Power lines",   "Park",
-                                      "Residential", "Commercial", "Industrial", "Data Center", "Police",
-                                      "Fire dept", "Stadium",   "Seaport",   "Coal power",    "Nuclear",
-                                      "Micro nuclear", "Airport", "Special", "Inspect"};
+        static const char *names[] = {"Bulldozer",  "Roads",         "Rail",          "Power lines", "Residential",
+                                      "Commercial", "Industrial",    "Data Center",   "Park",        "Big Park",
+                                      "Fountain",   "Fire dept",     "Police",        "Prison",      "Coal power",
+                                      "Nuclear",    "Micro nuclear", "Zoo",           "Amusement Park", "Casino",
+                                      "Stadium",    "Marina",        "Library",       "Mayor's House", "Airport",
+                                      "Seaport",    "Inspect"};
         return names[act - KeyTool0];
     }
     return "";
@@ -317,8 +323,12 @@ inline std::string factory_key(int act)
         break;
     }
     if (act >= KeyTool0 && act < KeyActCount) {
-        static const char letters[] = {'b', 'r', 't', 'w', 'g', 'h', 'c', 'i', 'z', 'o',
-                                       'f', 'd', 'p', 'e', 'u', 'm', 'a', 'v', 'q'};
+        static const char letters[] = {'b', 'r', 't', 'w', 'h', 'c', 'i', 'z', 'g', 'k', 'n', 'f', 'o', 'j',
+                                       'e', 'u', 'm', 'x', 'y', 's', 'd', 'v', 'l', 0,   'a', 'p', 'q'};
+        static_assert(sizeof(letters) == KeyActCount - KeyTool0, "one factory letter per tool");
+        if (letters[act - KeyTool0] == 0) {
+            return {};
+        }
         return std::string(1, letters[act - KeyTool0]);
     }
     return {};
@@ -756,7 +766,7 @@ inline ControlBinds binds_from_text(const std::string &text)
     return binds;
 }
 
-inline constexpr int kBindRowCount = 42;
+inline constexpr int kBindRowCount = 50;
 
 inline int bind_row_count()
 {
@@ -793,21 +803,29 @@ inline BindRow bind_row(int index)
         {"Roads", KeyTool0 + 1, -1},
         {"Rail", KeyTool0 + 2, -1},
         {"Power lines", KeyTool0 + 3, -1},
-        {"Park", KeyTool0 + 4, -1},
-        {"Residential", KeyTool0 + 5, -1},
-        {"Commercial", KeyTool0 + 6, -1},
-        {"Industrial", KeyTool0 + 7, -1},
-        {"Data Center", KeyTool0 + 8, -1},
-        {"Police", KeyTool0 + 9, -1},
-        {"Fire dept", KeyTool0 + 10, -1},
-        {"Stadium", KeyTool0 + 11, -1},
-        {"Seaport", KeyTool0 + 12, -1},
-        {"Coal power", KeyTool0 + 13, -1},
-        {"Nuclear", KeyTool0 + 14, -1},
-        {"Micro nuclear", KeyTool0 + 15, -1},
-        {"Airport", KeyTool0 + 16, -1},
-        {"Special", KeyTool0 + 17, -1},
-        {"Inspect", KeyTool0 + 18, PadQuery},
+        {"Residential", KeyTool0 + 4, -1},
+        {"Commercial", KeyTool0 + 5, -1},
+        {"Industrial", KeyTool0 + 6, -1},
+        {"Data Center", KeyTool0 + 7, -1},
+        {"Park", KeyTool0 + 8, -1},
+        {"Big Park", KeyTool0 + 9, -1},
+        {"Fountain", KeyTool0 + 10, -1},
+        {"Fire dept", KeyTool0 + 11, -1},
+        {"Police", KeyTool0 + 12, -1},
+        {"Prison", KeyTool0 + 13, -1},
+        {"Coal power", KeyTool0 + 14, -1},
+        {"Nuclear", KeyTool0 + 15, -1},
+        {"Micro nuclear", KeyTool0 + 16, -1},
+        {"Zoo", KeyTool0 + 17, -1},
+        {"Amusement Park", KeyTool0 + 18, -1},
+        {"Casino", KeyTool0 + 19, -1},
+        {"Stadium", KeyTool0 + 20, -1},
+        {"Marina", KeyTool0 + 21, -1},
+        {"Library", KeyTool0 + 22, -1},
+        {"Mayor's House", KeyTool0 + 23, -1},
+        {"Airport", KeyTool0 + 24, -1},
+        {"Seaport", KeyTool0 + 25, -1},
+        {"Inspect", KeyTool0 + 26, PadQuery},
     };
     static_assert(sizeof(rows) / sizeof(rows[0]) == kBindRowCount, "bind row count");
     if (index < 0 || index >= kBindRowCount) {

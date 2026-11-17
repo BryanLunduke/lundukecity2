@@ -9,7 +9,7 @@
 class Micropolis;
 
 // Special buildings are one row in this table. Placement, query, income,
-// land value, the dropdown, and the map art all walk the table. A new
+// land value, the toolbar buttons, and the map art all walk the table. A new
 // building needs a center-tile id the simulator will not grow, a toolbar
 // icon, and a map sprite. 1020-1022 are the classic free ids. Later
 // landmarks reuse unused trash ids 53-55. Prison, Marina, and Fountain use
@@ -21,7 +21,7 @@ class Micropolis;
 struct SpecialBuilding {
     int center_tile = 0;
     const char *name = "";
-    // 40px toolbar / dropdown icon, under tool-icons/. Stem only: the
+    // 40px toolbar icon, under tool-icons/. Stem only: the
     // Spooky and SVGA files add -spooky and -svga, and Big Park's stem
     // stays bigpark with no hyphen.
     const char *icon = "";
@@ -74,9 +74,10 @@ struct SpecialBuilding {
     // of the powered/unpowered zone count. Every other special conducts
     // like a zone and needs power to count as powered.
     bool open_air = false;
-    // Listed in the Landmarks dropdown. The Data Center and Micro Nuclear
-    // Plant have their own toolbar buttons instead, and the built Data
-    // Center row is only reached by the lot growing into it.
+    // A landmark: one of the first rows, each with its own toolbar button in
+    // Parks, Services or Special buildings (tools.cpp). False for the Data
+    // Center lot and the Micro Nuclear Plant (Zones and Utilities buttons)
+    // and the built Data Center, which only the lot grows into.
     bool in_menu = true;
 };
 
@@ -85,8 +86,7 @@ inline constexpr int kSpecialBodyTile = 1023;
 inline constexpr int kSpecialEngineId = -1;
 
 int special_building_count();
-// Rows shown in the Landmarks dropdown. They are the first rows of the
-// table, so a dropdown index is also a table index.
+// The landmark rows (in_menu). They are the first rows of the table.
 int special_menu_count();
 // MapView keeps one cached sheet per table row and look. The table must
 // fit; raise this (and only this) to add rows past it.
@@ -127,7 +127,8 @@ int special_population(const Micropolis *sim);
 // menu and the status line show (unlock or cap).
 std::string special_block_reason(const Micropolis *sim, int index);
 
-// Second line of the specials menu: the lock sentence, or "$100".
+// The lock sentence, or the price ("$100"). The toolbar greys a locked
+// landmark and its hint carries the sentence.
 std::string special_menu_detail(const Micropolis *sim, int index);
 
 // Click is the anchor tile. On failure, error is a short status-bar sentence
