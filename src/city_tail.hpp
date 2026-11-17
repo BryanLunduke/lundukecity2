@@ -24,6 +24,30 @@ inline constexpr std::size_t kClassicCityBytes = 27120;
 // keeps a truncated image or a huge file from being read into memory.
 inline constexpr std::size_t kMaxCityBytes = 4u * 1024u * 1024u;
 
+// C1: the save-format marker, the last 12 bytes of a City 2 save from
+// format 2 on ("LCV1", u16 version, u16 flags, u16 corner tile, u16 0).
+// Mirrors Micropolis::readCityFormat for code that reads files directly.
+inline constexpr std::size_t kCityFormatBytes = 12;
+inline constexpr unsigned kCityFormatGuardTile = 1019;
+inline bool city_format_marker(const unsigned char *data, std::size_t size, unsigned &version, unsigned &flags,
+                               unsigned &corner)
+{
+    version = 1;
+    flags = 0;
+    corner = 0;
+    if (data == nullptr || size < kClassicCityBytes + kCityFormatBytes) {
+        return false;
+    }
+    const unsigned char *c = data + size - kCityFormatBytes;
+    if (c[0] != 'L' || c[1] != 'C' || c[2] != 'V' || c[3] != '1') {
+        return false;
+    }
+    version = static_cast<unsigned>(c[4]) | (static_cast<unsigned>(c[5]) << 8);
+    flags = static_cast<unsigned>(c[6]) | (static_cast<unsigned>(c[7]) << 8);
+    corner = static_cast<unsigned>(c[8]) | (static_cast<unsigned>(c[9]) << 8);
+    return true;
+}
+
 inline CityFileKind classify_city_bytes(const unsigned char *data, std::size_t size)
 {
     if (data == nullptr || size < kClassicCityBytes) {
@@ -85,6 +109,18 @@ inline CityFileKind classify_city_bytes(const unsigned char *data, std::size_t s
         return CityFileKind::Incomplete;
     }
     off += wide;
+    // Optional marina dock notes (LCM1): 8-byte header, then 6 bytes each.
+    if (avail() >= 8 && at()[0] == 'L' && at()[1] == 'C' && at()[2] == 'M' && at()[3] == '1') {
+        const std::size_t count = static_cast<std::size_t>(at()[6]) | (static_cast<std::size_t>(at()[7]) << 8);
+        if (avail() < 8 + count * 6) {
+            return CityFileKind::Incomplete;
+        }
+        off += 8 + count * 6;
+    }
+    // Optional save-format marker (LCV1), always last.
+    if (avail() == kCityFormatBytes && at()[0] == 'L' && at()[1] == 'C' && at()[2] == 'V' && at()[3] == '1') {
+        off += kCityFormatBytes;
+    }
     if (off != size) {
         return CityFileKind::Incomplete;
     }

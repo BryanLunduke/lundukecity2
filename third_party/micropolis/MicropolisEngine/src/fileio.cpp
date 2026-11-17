@@ -733,6 +733,66 @@ static bool read_marina_dock(Micropolis *sim, const unsigned char *bytes, std::s
     return true;
 }
 
+// Save-format marker (C1), always the last 12 bytes of a City 2 save:
+// "LCV1", u16 format version, u16 flags, u16 original corner tile, u16 0.
+// Format 1 is every save before the marker; format 2 adds the Data Center
+// and micro nuclear tiles (873-875), which builds before them misread as
+// tiny explosions. A build that finds a newer format refuses the file.
+//
+// Builds before the marker cannot read it, so a save that holds those
+// tiles also swaps the corner tile map[0][0] for kCityFormatGuardTile, a
+// value every older City 2 build rejects as "unknown tile". They refuse the
+// file instead of silently breaking the city; this build puts the corner
+// back from the marker. Flag bit 0 says the swap was made.
+static const char kCityFormatMagic[4] = {'L', 'C', 'V', '1'};
+static const unsigned int kCityFormatBytes = 12;
+static const unsigned int kCityFormatGuardFlag = 1u;
+
+static bool city_needs_format_guard(const Micropolis *sim)
+{
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const unsigned int tile = sim->map[x][y] & LOMASK;
+            if (tile == SPECIAL_DATACENTER_LOT || tile == SPECIAL_MICRONUKE || tile == SPECIAL_DATACENTER) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool write_city_format(FILE *f, bool guard, unsigned short corner)
+{
+    unsigned char chunk[kCityFormatBytes];
+    for (int i = 0; i < 4; ++i) {
+        chunk[i] = (unsigned char)kCityFormatMagic[i];
+    }
+    write_le_u16(chunk + 4, (unsigned int)Micropolis::kCityFormatVersion);
+    write_le_u16(chunk + 6, guard ? kCityFormatGuardFlag : 0u);
+    write_le_u16(chunk + 8, guard ? corner : 0u);
+    write_le_u16(chunk + 10, 0);
+    return fwrite(chunk, 1, kCityFormatBytes, f) == kCityFormatBytes;
+}
+
+bool Micropolis::readCityFormat(const unsigned char *bytes, std::size_t size, unsigned int &version,
+                                unsigned int &flags, unsigned int &corner)
+{
+    version = 1;
+    flags = 0;
+    corner = 0;
+    if (bytes == NULL || size < 27120 + kCityFormatBytes) {
+        return false;
+    }
+    const unsigned char *chunk = bytes + size - kCityFormatBytes;
+    if (std::memcmp(chunk, kCityFormatMagic, 4) != 0) {
+        return false;
+    }
+    version = read_le_u16(chunk + 4);
+    flags = read_le_u16(chunk + 6);
+    corner = read_le_u16(chunk + 8);
+    return true;
+}
+
 static void note_save_error(Micropolis *sim, int err, const char *fallback)
 {
     sim->saveErrno = err;
@@ -838,6 +898,25 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
     if (!parsed) {
         return false;
     }
+    // C1: a newer save format is refused, not half-read. A guarded corner
+    // tile goes back to the tile the city really has.
+    std::size_t format_bytes = 0;
+    {
+        unsigned int version = 1;
+        unsigned int flags = 0;
+        unsigned int corner = 0;
+        if (readCityFormat(data.data(), data.size(), version, flags, corner)) {
+            format_bytes = kCityFormatBytes;
+            if (version > (unsigned int)kCityFormatVersion) {
+                loadErrorDetail = "This city was saved by a newer version of Lunduke City 2 (save format " +
+                                  std::to_string(version) + "). Update the game to open it.";
+                return false;
+            }
+            if ((flags & kCityFormatGuardFlag) != 0 && (unsigned short)tiles[0] == kCityFormatGuardTile) {
+                tiles[0] = (short)corner;
+            }
+        }
+    }
     // City files have no magic number, so check that the contents are
     // plausible before anything touches the live city.
     bool hasWideFunds = false;
@@ -898,8 +977,8 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
         }
     }
     const std::size_t dock_at = trailer + wide_bytes;
-    if (data.size() > dock_at) {
-        read_marina_dock(this, data.data() + dock_at, data.size() - dock_at);
+    if (data.size() > dock_at + format_bytes) {
+        read_marina_dock(this, data.data() + dock_at, data.size() - dock_at - format_bytes);
     }
 
     return true;
@@ -1461,7 +1540,13 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
     // C-1 (round 11): a short fwrite leaves the reason in errno; keep it so
     // a full disk is reported as ENOSPC, not EIO.
     errno = 0;
-    bool result =
+    // C1: see kCityFormatMagic. The swap is for the file only.
+    const bool format_guard = city_needs_format_guard(this);
+    const unsigned short corner = map[0][0];
+    if (format_guard) {
+        map[0][0] = kCityFormatGuardTile;
+    }
+    const bool map_written =
         save_short(resHist, HISTORY_LENGTH / 2, f) &&
         save_short(comHist, HISTORY_LENGTH / 2, f) &&
         save_short(indHist, HISTORY_LENGTH / 2, f) &&
@@ -1469,11 +1554,15 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
         save_short(pollutionHist, HISTORY_LENGTH / 2, f) &&
         save_short(moneyHist, HISTORY_LENGTH / 2, f) &&
         save_short(miscHist, MISC_HISTORY_LENGTH / 2, f) &&
-        save_short(((short *)&map[0][0]), WORLD_W * WORLD_H, f) &&
+        save_short(((short *)&map[0][0]), WORLD_W * WORLD_H, f);
+    map[0][0] = corner;
+    bool result =
+        map_written &&
         write_city_name(f, cityName) &&
         write_cash_flow_history(f, this) &&
         write_wide_city(f, this, funds_for_file) &&
-        write_marina_dock(f, this);
+        write_marina_dock(f, this) &&
+        write_city_format(f, format_guard, corner);
 
     int ioerr = 0;
     if (!result) {

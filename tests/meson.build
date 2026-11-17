@@ -507,6 +507,18 @@ new_specials_test = executable(
 
 test('new_specials', new_specials_test, timeout: 120)
 
+# C1: the save-format marker and the guard that older builds refuse.
+save_format_test = executable(
+  'save_format',
+  'save_format.cpp',
+  '../src/city_glance.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  cpp_args: ['-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"'],
+)
+
+test('save_format', save_format_test, timeout: 120)
+
 # Landmarks that use electricity take power, flash, and count for the score.
 landmark_power_test = executable(
   'landmark_power',
