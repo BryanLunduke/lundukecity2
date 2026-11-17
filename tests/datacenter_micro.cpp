@@ -258,6 +258,43 @@ int main()
             return fail(23, "a Data Center and a micro plant made pollution");
         }
 
+        // A1: a damaged Data Center (a body tile lost to fire or rubble)
+        // stops counting as commercial and industrial, like a landmark, and
+        // its night glass stays dark (A3). Rebuilding the body restores it.
+        {
+            const unsigned short body = sim.map[49][49];
+            sim.map[49][49] = RUBBLE | BULLBIT;
+            settle(sim);
+            settle(sim);
+            if ((sim.map[50][50] & LOMASK) != SPECIAL_DATACENTER) {
+                return fail(46, "a damaged Data Center lost its centre");
+            }
+            if (sim.comZonePop != 0 || sim.indZonePop != 0 || sim.comPop != 0 || sim.indPop != 0) {
+                std::fprintf(stderr, "com %d ind %d\n", sim.comZonePop, sim.indZonePop);
+                return fail(47, "a damaged Data Center still counts as commercial and industrial");
+            }
+            std::vector<int> raw(static_cast<std::size_t>(WORLD_W * WORLD_H));
+            for (int y = 0; y < WORLD_H; ++y) {
+                for (int x = 0; x < WORLD_W; ++x) {
+                    raw[static_cast<std::size_t>(y * WORLD_W + x)] = sim.map[x][y];
+                }
+            }
+            std::vector<night_light::MaskRows> sheet(static_cast<std::size_t>(9 * night_light::kTile), 0x0f0f);
+            night_light::CellGlass glass;
+            night_light::stamp_glass(raw, WORLD_W, WORLD_H, SPECIAL_DATACENTER, kSpecialBodyTile, 3, 1, sheet, glass);
+            for (night_light::MaskRows row : glass) {
+                if (row != 0) {
+                    return fail(48, "a damaged Data Center (counted as closed) lit up at night");
+                }
+            }
+            sim.map[49][49] = body;
+            settle(sim);
+            settle(sim);
+            if (sim.comZonePop != 1 || sim.indZonePop != 1) {
+                return fail(49, "a repaired Data Center did not count again");
+            }
+        }
+
         // Save and load: the built Data Center and the micro plant survive.
         char dir_template[] = "/tmp/lunduke-dcmicro-XXXXXX";
         char *dir = mkdtemp(dir_template);

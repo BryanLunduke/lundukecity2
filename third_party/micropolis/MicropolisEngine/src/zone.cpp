@@ -135,7 +135,24 @@ void Micropolis::doZone(const Position &pos)
         tile = SPECIAL_DATACENTER;
     }
     if (tile == SPECIAL_DATACENTER) {
-        if (zonePowerFlag) {
+        // Like a landmark, a damaged Data Center (any of its eight body
+        // tiles gone) stops working until it is bulldozed and rebuilt. It
+        // still conducts and keeps its power state, but counts as no zone.
+        bool intact = true;
+        for (int dy = -1; dy <= 1 && intact; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dy == 0) {
+                    continue;
+                }
+                const int bx = pos.posX + dx;
+                const int by = pos.posY + dy;
+                if (!testBounds(bx, by) || (map[bx][by] & LOMASK) != SPECIAL_BODY) {
+                    intact = false;
+                    break;
+                }
+            }
+        }
+        if (zonePowerFlag && intact) {
             comZonePop++;
             indZonePop++;
             comPop += DATACENTER_ZONE_DENSITY;
