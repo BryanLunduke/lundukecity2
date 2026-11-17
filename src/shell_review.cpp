@@ -145,7 +145,7 @@ void Shell::run_review_checks()
             dialog_ = Dialog::None;
             return;
         }
-        list_index_ = 39;
+        list_index_ = kBindRowCount - 1; // Inspect, the last row
         const int saved_query = binds_.pad[PadQuery];
         clear_bind_row(true);
         if (binds_.pad[PadQuery] != -1 || !dialog_note_ok_) {

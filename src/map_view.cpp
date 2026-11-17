@@ -271,18 +271,22 @@ cairo_surface_t *load_png(const std::string &path)
     return surface;
 }
 
-cairo_surface_t *special_sprite(int index, bool &vga_snap)
+// How the 8px overview snaps a special sheet: like the atlas the sheet
+// belongs to (SVGA sheets keep their tan dirt ramp, Spooky snaps to VGA).
+enum class SpecialSnap { None, Vga, Svga };
+
+cairo_surface_t *special_sprite(int index, SpecialSnap &snap)
 {
-    vga_snap = false;
+    snap = SpecialSnap::None;
     struct Slot {
         cairo_surface_t *image = nullptr;
         bool tried = false;
     };
     struct Cache {
-        // One slot per special. 16 leaves room past the nine buildings.
-        Slot slots[16];
-        Slot svga[16];
-        Slot spooky[16];
+        // One slot per table row (special_buildings.cpp asserts it fits).
+        Slot slots[kSpecialSpriteSlots];
+        Slot svga[kSpecialSpriteSlots];
+        Slot spooky[kSpecialSpriteSlots];
         ~Cache()
         {
             for (Slot &slot : slots) {
@@ -303,7 +307,7 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
         }
     };
     static Cache cache;
-    if (index < 0 || index >= 16 || index >= special_building_count()) {
+    if (index < 0 || index >= kSpecialSpriteSlots || index >= special_building_count()) {
         return nullptr;
     }
     const char *name = special_building(index).map_sprite;
@@ -320,14 +324,14 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
     if (look == 2) {
         cairo_surface_t *night = take(cache.spooky[index], ui_data_file(std::string("special-tiles/") + name + "-spooky.png"));
         if (night != nullptr) {
-            vga_snap = true;
+            snap = SpecialSnap::Vga;
             return night;
         }
     }
     if (look >= 1) {
         cairo_surface_t *day = take(cache.svga[index], ui_data_file(std::string("special-tiles/") + name + "-svga.png"));
         if (day != nullptr) {
-            vga_snap = true;
+            snap = SpecialSnap::Svga;
             return day;
         }
     }
@@ -338,6 +342,92 @@ cairo_surface_t *special_sprite(int index, bool &vga_snap)
     slot.tried = true;
     slot.image = load_png(ui_data_file(std::string("special-tiles/") + special_building(index).map_sprite + ".png"));
     return slot.image;
+}
+
+// The Data Center's night glass: data/special-tiles/datacenter-glass.png
+// (opaque where the facade glass is, the same in every look) as 3x3 cells
+// of window-mask rows. Empty when the file is missing.
+const std::vector<std::uint16_t> &datacenter_glass_sheet()
+{
+    static std::vector<std::uint16_t> sheet;
+    static bool tried = false;
+    if (tried) {
+        return sheet;
+    }
+    tried = true;
+    const int index = special_datacenter_index();
+    if (index < 0) {
+        return sheet;
+    }
+    const SpecialBuilding &building = special_building(index);
+    const int span = building.width;
+    cairo_surface_t *mask = load_png(ui_data_file("special-tiles/datacenter-glass.png"));
+    if (mask == nullptr) {
+        return sheet;
+    }
+    cairo_surface_flush(mask);
+    const int kt = night_light::kTile;
+    if (cairo_image_surface_get_width(mask) == span * kt && cairo_image_surface_get_height(mask) == span * kt &&
+        cairo_image_surface_get_format(mask) == CAIRO_FORMAT_ARGB32) {
+        sheet.assign(static_cast<std::size_t>(span * span * kt), 0);
+        const unsigned char *data = cairo_image_surface_get_data(mask);
+        const int stride = cairo_image_surface_get_stride(mask);
+        for (int y = 0; y < span * kt; ++y) {
+            const auto *row = reinterpret_cast<const std::uint32_t *>(data + y * stride);
+            for (int x = 0; x < span * kt; ++x) {
+                if ((row[x] >> 24) < 128) {
+                    continue;
+                }
+                const int cell = (y / kt) * span + x / kt;
+                std::uint16_t &bits = sheet[static_cast<std::size_t>(cell * kt + y % kt)];
+                bits = static_cast<std::uint16_t>(bits | (1u << (x % kt)));
+            }
+        }
+    }
+    cairo_surface_destroy(mask);
+    return sheet;
+}
+
+// The micro nuclear plant's night light: data/special-tiles/
+// micro-nuclear-light.png (16x16; colour is the light, alpha its strength,
+// the same in every look). No lamp when the file is missing.
+const night_light::TileLamp &micro_nuclear_lamp()
+{
+    static night_light::TileLamp lamp;
+    static bool tried = false;
+    if (tried) {
+        return lamp;
+    }
+    tried = true;
+    cairo_surface_t *sheet = load_png(ui_data_file("special-tiles/micro-nuclear-light.png"));
+    if (sheet == nullptr) {
+        return lamp;
+    }
+    cairo_surface_flush(sheet);
+    const int kt = night_light::kTile;
+    if (cairo_image_surface_get_width(sheet) == kt && cairo_image_surface_get_height(sheet) == kt &&
+        cairo_image_surface_get_format(sheet) == CAIRO_FORMAT_ARGB32) {
+        lamp.pixels.assign(static_cast<std::size_t>(kt * kt), 0);
+        const unsigned char *data = cairo_image_surface_get_data(sheet);
+        const int stride = cairo_image_surface_get_stride(sheet);
+        for (int y = 0; y < kt; ++y) {
+            const auto *row = reinterpret_cast<const std::uint32_t *>(data + y * stride);
+            for (int x = 0; x < kt; ++x) {
+                const std::uint32_t p = row[x];
+                const std::uint32_t a = p >> 24;
+                if (a == 0) {
+                    continue;
+                }
+                // Cairo stores premultiplied colour; the lamp wants it straight.
+                auto un = [a](std::uint32_t c) { return std::min<std::uint32_t>(255, (c * 255 + a / 2) / a); };
+                lamp.pixels[static_cast<std::size_t>(y * kt + x)] =
+                    (a << 24) | (un((p >> 16) & 0xFF) << 16) | (un((p >> 8) & 0xFF) << 8) | un(p & 0xFF);
+            }
+        }
+        lamp.tile = SPECIAL_MICRONUKE;
+    }
+    cairo_surface_destroy(sheet);
+    return lamp;
 }
 
 int session_word(int x, int y, const void *ctx)
@@ -385,8 +475,8 @@ void MapView::blit_special(int x, int y, int index, int cell)
             }
         }
     };
-    bool vga_snap = false;
-    cairo_surface_t *sprite = special_sprite(index, vga_snap);
+    SpecialSnap snap = SpecialSnap::None;
+    cairo_surface_t *sprite = special_sprite(index, snap);
     const int cols = index >= 0 && index < special_building_count() && special_building(index).width > 0
                          ? special_building(index).width
                          : 3;
@@ -433,8 +523,13 @@ void MapView::blit_special(int x, int y, int index, int cell)
                 const unsigned green = mix(p00, p10, p01, p11, 8);
                 const unsigned blue = mix(p00, p10, p01, p11, 0);
                 const unsigned alpha = mix(p00, p10, p01, p11, 24);
-                out[c] = vga_snap ? snap_vga_rgb(red, green, blue)
-                                  : ((alpha << 24) | (red << 16) | (green << 8) | blue);
+                if (snap == SpecialSnap::Svga) {
+                    out[c] = snap_svga_rgb(red, green, blue);
+                } else if (snap == SpecialSnap::Vga) {
+                    out[c] = snap_vga_rgb(red, green, blue);
+                } else {
+                    out[c] = (alpha << 24) | (red << 16) | (green << 8) | blue;
+                }
             }
         }
         return;
@@ -831,8 +926,8 @@ void paint_special_ghost(cairo_t *cr, int index, double x, double y, double w, d
     if (index < 0 || w < 2.0 || h < 2.0) {
         return;
     }
-    bool vga_snap = false;
-    cairo_surface_t *sprite = special_sprite(index, vga_snap);
+    SpecialSnap snap = SpecialSnap::None;
+    cairo_surface_t *sprite = special_sprite(index, snap);
     if (sprite == nullptr) {
         return;
     }
@@ -1180,14 +1275,23 @@ void MapView::draw_night(cairo_t *cr, int source)
     if (light_dirty_ && static_cast<int>(cached_raw_.size()) == world_w * world_h &&
         (light_built_.time_since_epoch().count() == 0 || now - light_built_ >= std::chrono::milliseconds(500))) {
         const bool at_once = light_built_.time_since_epoch().count() == 0;
+        // Every glass pixel of a powered Data Center lights.
+        const int datacenter = special_datacenter_index();
+        if (datacenter >= 0) {
+            const SpecialBuilding &building = special_building(datacenter);
+            night_light::stamp_glass(cached_raw_, world_w, world_h, building.center_tile, kSpecialBodyTile,
+                                     building.width, building.anchor_x, datacenter_glass_sheet(), glass_cells_);
+        }
         cairo_surface_flush(light_pixels_);
         night_light::build(cached_raw_, world_w, world_h, cairo_image_surface_get_data(light_pixels_),
-                           cairo_image_surface_get_stride(light_pixels_), &window_masks_);
+                           cairo_image_surface_get_stride(light_pixels_), &window_masks_, &glass_cells_,
+                           &micro_nuclear_lamp());
         cairo_surface_mark_dirty(light_pixels_);
         cairo_surface_flush(window_pixels_);
         night_light::build_windows(cached_raw_, world_w, world_h, window_masks_,
                                    cairo_image_surface_get_data(window_pixels_),
-                                   cairo_image_surface_get_stride(window_pixels_), &window_keys_);
+                                   cairo_image_surface_get_stride(window_pixels_), &window_keys_, &glass_cells_,
+                                   &micro_nuclear_lamp());
         cairo_surface_mark_dirty(window_pixels_);
         // A new or loaded city lights in one go; a running city's small
         // changes are flattened a quarter of the map per frame, starting

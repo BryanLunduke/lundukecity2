@@ -62,11 +62,15 @@ int main()
             last = group.first + group.count - 1;
             covered += group.count;
         }
-        check(covered == 16, "tool groups cover the 16 toolbar buttons");
+        check(covered == 18, "tool groups cover the 18 toolbar buttons");
+        check(tool_groups::group_of(8) == 1 && std::string(tool_groups::groups()[1].title) == "ZONES",
+              "the Data Center sits with the zones");
+        check(tool_groups::group_of(15) == 3 && std::string(tool_groups::groups()[3].title) == "POWER & PORTS",
+              "the Micro nuclear plant sits with power and ports");
         for (int columns = 2; columns <= 3; ++columns) {
             const int cell = 40;
             const int header = 18;
-            for (int i = 0; i < 16; ++i) {
+            for (int i = 0; i < 18; ++i) {
                 int x = 0;
                 int y = 0;
                 check(tool_groups::slot(i, columns, cell, header, x, y), "every tool has a slot");
@@ -76,7 +80,7 @@ int main()
             check(tool_groups::index_at(5, 5, columns, cell, header) == -1, "a header is not a button");
             check(tool_groups::index_at(columns * cell + 1, header + 5, columns, cell, header) == -1,
                   "right of the grid is not a button");
-            check(tool_groups::grid_height(columns, cell, header) >= 16 / columns * cell + 5 * header,
+            check(tool_groups::grid_height(columns, cell, header) >= 18 / columns * cell + 5 * header,
                   "grid height includes every header");
         }
         int x = 0;

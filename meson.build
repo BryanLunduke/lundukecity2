@@ -85,6 +85,8 @@ install_data(
     'data/tool-icons/prison.png',
     'data/tool-icons/marina.png',
     'data/tool-icons/fountain.png',
+    'data/tool-icons/datacenter.png',
+    'data/tool-icons/micronuclear.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'tool-icons',
 )
@@ -117,6 +119,14 @@ install_data(
     'data/special-tiles/fountain.png',
     'data/special-tiles/fountain-svga.png',
     'data/special-tiles/fountain-spooky.png',
+    'data/special-tiles/datacenter.png',
+    'data/special-tiles/datacenter-svga.png',
+    'data/special-tiles/datacenter-vacant.png',
+    'data/special-tiles/datacenter-vacant-svga.png',
+    'data/special-tiles/datacenter-glass.png',
+    'data/special-tiles/micro-nuclear.png',
+    'data/special-tiles/micro-nuclear-svga.png',
+    'data/special-tiles/micro-nuclear-light.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'special-tiles',
 )

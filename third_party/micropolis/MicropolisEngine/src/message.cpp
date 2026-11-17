@@ -90,7 +90,9 @@ void Micropolis::sendMessages()
     checkGrowth();
 
     totalZonePop = resZonePop + comZonePop + indZonePop;
-    PowerPop = nuclearPowerPop + coalPowerPop;
+    // Any plant counts here, micro plants included: a city powered only by
+    // micro plants does not need the "build a power plant" nag.
+    PowerPop = nuclearPowerPop + coalPowerPop + microNuclearPop;
 
     switch (cityTime & 63) {
 

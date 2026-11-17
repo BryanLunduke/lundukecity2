@@ -238,7 +238,7 @@ void Shell::layout()
         palette_.set_columns(2);
         palette_.set_cell(cell_);
         hint_h_ = dp(28);
-        quick_h_ = std::min(dp(66), std::max(dp(44), (win_w_ - dp(40)) / 17));
+        quick_h_ = std::min(dp(66), std::max(dp(44), (win_w_ - dp(40)) / kToolCount));
         quick_y_ = win_h_ - hint_h_ - quick_h_ - dp(6);
         hud_top_ = dp(54);
         hud_bottom_ = win_h_ - quick_y_ + dp(6);
@@ -3186,6 +3186,10 @@ void Shell::draw_dialog(cairo_t *cr)
         for (const std::string &reason : report.reasons) {
             reasons_h += line_height(ui_font(), "\u2022  " + reason, inner) + dp(4);
         }
+        double notes_h = 0;
+        for (const std::string &note : facts.notes) {
+            notes_h += line_height(ui_font(), "\u2022  " + note, inner) + dp(4);
+        }
         const double bh = static_cast<double>(control_px(36, 44));
         const double top_pad = dark ? static_cast<double>(margin + dp(18)) : static_cast<double>(dp(52));
         double height = top_pad + title_h + dp(10) + chip_h + dp(12);
@@ -3194,6 +3198,9 @@ void Shell::draw_dialog(cairo_t *cr)
         }
         if (zone) {
             height += row_h;
+        }
+        if (!facts.notes.empty()) {
+            height += notes_h + dp(8);
         }
         if (!reasons_head.empty()) {
             height += line_height(tag_font(), reasons_head, inner) + dp(6) + reasons_h + dp(4);
@@ -3299,11 +3306,25 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             const double used = chip(x + margin, power_text, facts.facts.power);
             if (zone || facts.facts.kind == inspect_report::Kind::Building) {
-                chip(x + margin + used + dp(8), facts.facts.access ? "Road access" : "No road", facts.facts.access ? 1 : 0);
+                if (facts.facts.access) {
+                    chip(x + margin + used + dp(8), "Road access", 1);
+                } else if (!facts.facts.needs_road) {
+                    // Power plants work without a road.
+                    chip(x + margin + used + dp(8), "No road needed", -1);
+                } else {
+                    chip(x + margin + used + dp(8), "No road", 0);
+                }
             }
             text_spans_.push_back(TextSpan{x + margin, cy, inner, chip_h});
         }
         cy += chip_h + dp(12);
+        // Data Center / Micro Nuclear Plant facts.
+        if (!facts.notes.empty()) {
+            for (const std::string &note : facts.notes) {
+                cy += place_line(ui_font(), "\u2022  " + note, x + margin, cy, inner, ink_r, ink_g, ink_b) + dp(4);
+            }
+            cy += dp(8);
+        }
         // Bars start after the widest label and stop before the widest
         // value, with the same gap on both sides, at every UI scale.
         double widest_label = 0.0;
@@ -3450,7 +3471,7 @@ void Shell::draw_special_menu(cairo_t *cr)
     if (!special_open_ || dialog_ != Dialog::None || menu_.open()) {
         return;
     }
-    const int count = special_building_count();
+    const int count = special_menu_count();
     if (count < 1) {
         return;
     }
@@ -3787,7 +3808,7 @@ void Shell::draw(cairo_t *cr)
         } else if (const ToolDef *tool = tool_by_index(shown_tool)) {
             tool_text = tool->hint;
         }
-        if (show_keys && !tool_text.empty() && shown_tool >= 0 && shown_tool < 17 && dialog_ == Dialog::None) {
+        if (show_keys && !tool_text.empty() && shown_tool >= 0 && shown_tool < KeyActCount - KeyTool0 && dialog_ == Dialog::None) {
             const std::string key_name = chord_label(binds_.key[KeyTool0 + shown_tool]);
             if (!key_name.empty() && key_name != "None") {
                 tool_text += "  [" + key_name + "]";
@@ -4371,8 +4392,8 @@ std::string Shell::context_hint() const
         if (!tool_hint) {
             return pad ? hint_join({hint_button(b, "closes the map"), "D-pad scrolls"}) : "Esc closes the map";
         }
-        return pad ? hint_join({tool_press_phrase(engine, a.c_str()), hint_button(b, "closes the map"), "D-pad scrolls"})
-                   : std::string(tool_click_phrase(engine)) + ". Esc closes the map";
+        return pad ? hint_join({tool_press_text(tool, a.c_str()), hint_button(b, "closes the map"), "D-pad scrolls"})
+                   : tool_click_text(tool) + ". Esc closes the map";
     }
     if (pad) {
         const int under = hit(cursor_x_, cursor_y_);
@@ -4401,7 +4422,7 @@ std::string Shell::context_hint() const
         }
         const std::string query = glyph_for(PadQuery);
         const std::string pause = glyph_for(PadPause);
-        return hint_join({tool_press_phrase(engine, a.c_str()), hint_button(query, "inspects"),
+        return hint_join({tool_press_text(tool, a.c_str()), hint_button(query, "inspects"),
                           hint_button(pause, speed_ <= 0 ? "resumes" : "pauses"), hint_pair(left, right, "tool"),
                           hint_button(menu, "menu")});
     }
@@ -4409,7 +4430,7 @@ std::string Shell::context_hint() const
         return {};
     }
     if (finger) {
-        std::string phrase = tool_click_phrase(engine);
+        std::string phrase = tool_click_text(tool);
         const auto at = phrase.find("click to ");
         if (at != std::string::npos) {
             phrase.replace(at, 9, "tap to ");
@@ -4417,7 +4438,7 @@ std::string Shell::context_hint() const
         return phrase;
     }
     const std::string pause_key = chord_label(binds_.key[KeyPause]);
-    std::string line = std::string(tool_click_phrase(engine)) + ". Arrows pan";
+    std::string line = tool_click_text(tool) + ". Arrows pan";
     if (!pause_key.empty() && pause_key != "None") {
         line += ". " + pause_key + (speed_ <= 0 ? " resumes" : " pauses");
     }
@@ -5633,22 +5654,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
                 push_hot(sx, quick_y_ - lift, slot, quick_h_ + lift + dp(4), kQuickTool + i);
                 continue;
             }
-            cairo_surface_t *image = tool_icon_named(i == 0    ? "bulldozer"
-                                                     : i == 1  ? "road"
-                                                     : i == 2  ? "rail"
-                                                     : i == 3  ? "wire"
-                                                     : i == 4  ? "park"
-                                                     : i == 5  ? "residential"
-                                                     : i == 6  ? "commercial"
-                                                     : i == 7  ? "industrial"
-                                                     : i == 8  ? "police"
-                                                     : i == 9  ? "fire"
-                                                     : i == 10 ? "stadium"
-                                                     : i == 11 ? "seaport"
-                                                     : i == 12 ? "coal"
-                                                     : i == 13 ? "nuclear"
-                                                     : i == 14 ? "airport"
-                                                               : "special");
+            cairo_surface_t *image = tool_icon_named(tool_icon_stem(i));
             if (image != nullptr) {
                 const int iw = cairo_image_surface_get_width(image);
                 const int ih = cairo_image_surface_get_height(image);

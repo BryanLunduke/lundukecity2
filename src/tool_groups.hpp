@@ -16,16 +16,17 @@ struct Group {
     int count;
 };
 
-// Bulldozer..Park, the three zones, the services, power and the ports,
-// then the special buildings.
+// Bulldozer..Park, the zones (R, C, I and the Data Center), the services,
+// power and the ports (with the Micro Nuclear Plant after Nuclear), then
+// the special buildings.
 inline const Group *groups()
 {
     static const Group table[] = {
         {"BUILD", 0, 5},
-        {"ZONES", 5, 3},
-        {"SERVICES", 8, 3},
-        {"POWER & PORTS", 11, 4},
-        {"LANDMARKS", 15, 1},
+        {"ZONES", 5, 4},
+        {"SERVICES", 9, 3},
+        {"POWER & PORTS", 12, 5},
+        {"LANDMARKS", 17, 1},
     };
     return table;
 }

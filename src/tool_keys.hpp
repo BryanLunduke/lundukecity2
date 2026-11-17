@@ -12,9 +12,13 @@
 // stay with the menu (Ctrl+O load, Ctrl+S save, Ctrl+P pause, Ctrl+N new,
 // Ctrl+Q quit). The letters below are free when no modifier is held.
 
+inline constexpr int kToolHotkeyCount = 19;
+
 inline char tool_hotkey(int index)
 {
-    static const char keys[] = {'b', 'r', 't', 'w', 'g', 'h', 'c', 'i', 'o', 'f', 'd', 'p', 'e', 'u', 'a', 'v', 'q'};
+    // Data Center is Z, Micro nuclear is M.
+    static const char keys[] = {'b', 'r', 't', 'w', 'g', 'h', 'c', 'i', 'z', 'o', 'f',
+                                'd', 'p', 'e', 'u', 'm', 'a', 'v', 'q'};
     if (index < 0 || index >= static_cast<int>(sizeof(keys))) {
         return 0;
     }
@@ -26,7 +30,7 @@ inline int tool_index_for_key(char letter)
     if (letter >= 'A' && letter <= 'Z') {
         letter = static_cast<char>(letter - 'A' + 'a');
     }
-    for (int i = 0; i < 17; ++i) {
+    for (int i = 0; i < kToolHotkeyCount; ++i) {
         if (tool_hotkey(i) == letter) {
             return i;
         }
@@ -54,7 +58,7 @@ inline std::string tool_hint_with_key(int index, const char *hint)
 // menu table only binds those letters with Ctrl (or Ctrl+Shift).
 inline bool tool_hotkey_clashes()
 {
-    for (int i = 0; i < 17; ++i) {
+    for (int i = 0; i < kToolHotkeyCount; ++i) {
         const char key = tool_hotkey(i);
         if (key == 0) {
             continue;

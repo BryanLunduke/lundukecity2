@@ -232,6 +232,68 @@ void window_masks(const std::uint32_t *sheet, int tiles, std::vector<MaskRows> &
     }
 }
 
+void stamp_glass(const std::vector<int> &raw, int w, int h, int center_tile, int body_tile, int span, int anchor,
+                 const std::vector<MaskRows> &sheet, CellGlass &out, bool clear)
+{
+    const std::size_t cells = static_cast<std::size_t>(std::max(0, w * h));
+    if (clear || out.size() != cells * kTile) {
+        out.assign(cells * kTile, 0);
+    }
+    if (w <= 0 || h <= 0 || span <= 0 || static_cast<int>(raw.size()) < w * h ||
+        sheet.size() < static_cast<std::size_t>(span * span * kTile)) {
+        return;
+    }
+    for (int cy = 0; cy < h; ++cy) {
+        for (int cx = 0; cx < w; ++cx) {
+            const int word = raw[static_cast<std::size_t>(cy * w + cx)];
+            if (word < 0 || (word & ZONEBIT) == 0 || (word & LOMASK) != center_tile) {
+                continue;
+            }
+            const int left = cx - anchor;
+            const int top = cy - anchor;
+            if (left < 0 || top < 0 || left + span > w || top + span > h) {
+                continue;
+            }
+            bool intact = true;
+            for (int dy = 0; dy < span && intact; ++dy) {
+                for (int dx = 0; dx < span; ++dx) {
+                    if (dx == anchor && dy == anchor) {
+                        continue;
+                    }
+                    const int body = raw[static_cast<std::size_t>((top + dy) * w + left + dx)];
+                    if (body < 0 || (body & LOMASK) != body_tile) {
+                        intact = false;
+                        break;
+                    }
+                }
+            }
+            if (!intact) {
+                continue;
+            }
+            for (int dy = 0; dy < span; ++dy) {
+                for (int dx = 0; dx < span; ++dx) {
+                    const MaskRows *from = &sheet[static_cast<std::size_t>((dy * span + dx) * kTile)];
+                    MaskRows *to = &out[static_cast<std::size_t>(((top + dy) * w + left + dx) * kTile)];
+                    for (int py = 0; py < kTile; ++py) {
+                        to[py] = static_cast<MaskRows>(to[py] | from[py]);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void glass_rgb(int ax, int ay, float &r, float &g, float &b)
+{
+    // Cool white with a faint cyan, brighter and darker in two-pixel bands
+    // so a lit facade reads as floors of server halls, not a flat sheet,
+    // and never as a speckle.
+    const float k = 0.80f + 0.16f * static_cast<float>(hash(ax / 6, ay / 2, 211) & 0xFF) / 255.0f;
+    r = 0.74f * k;
+    g = 0.90f * k;
+    b = 1.00f * k;
+}
+
 bool window_lit(int owner, int x, int y, int px, int py)
 {
     // Each building has its own share of lit floors (25-80%). A lit floor
@@ -277,7 +339,14 @@ template <typename Fn> void each_lit_window(const std::vector<MaskRows> &masks, 
 
 } // namespace
 
-void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int stride, const std::vector<MaskRows> *masks)
+bool lamp_lit(const TileLamp *lamp, int word)
+{
+    return lamp != nullptr && word >= 0 && lamp->tile >= 0 && (word & LOMASK) == lamp->tile && (word & ZONEBIT) != 0 &&
+           (word & PWRBIT) != 0 && lamp->pixels.size() == static_cast<std::size_t>(kTile * kTile);
+}
+
+void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int stride, const std::vector<MaskRows> *masks,
+           const CellGlass *glass, const TileLamp *lamp)
 {
     if (w <= 0 || h <= 0 || out == nullptr || static_cast<int>(raw.size()) < w * h) {
         return;
@@ -361,7 +430,8 @@ void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int st
     const Rgb white = kWhite;
     const Rgb sodium{1.00f, 0.70f, 0.36f};
     const Rgb flame{1.00f, 0.45f, 0.12f};
-    if (masks != nullptr) {
+    const bool with_glass = glass != nullptr && glass->size() == static_cast<std::size_t>(w * h * kTile);
+    if (masks != nullptr || with_glass) {
         bloom.assign(static_cast<std::size_t>(lw * lh), 0.0f);
     }
     for (int y = 0; y < h; ++y) {
@@ -372,6 +442,38 @@ void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int st
                 continue;
             }
             const int tile = word & LOMASK;
+            if (lamp_lit(lamp, word)) {
+                // Each lit pixel of the lamp feeds a small pool of its own
+                // colour; a full-strength pixel (nucleus, electron) a clear
+                // one, a faint one (orbit ring) only a breath.
+                for (int py = 0; py < kTile; ++py) {
+                    for (int px = 0; px < kTile; ++px) {
+                        const std::uint32_t v = lamp->pixels[static_cast<std::size_t>(py * kTile + px)];
+                        const float a = static_cast<float>(v >> 24) / 255.0f;
+                        if (a <= 0.0f) {
+                            continue;
+                        }
+                        const Rgb c{static_cast<float>((v >> 16) & 0xFF) / 255.0f,
+                                    static_cast<float>((v >> 8) & 0xFF) / 255.0f,
+                                    static_cast<float>(v & 0xFF) / 255.0f};
+                        glow(x * kPx + px * kPx / kTile, y * kPx + py * kPx / kTile, kPx * 0.9, c,
+                             a >= 0.99f ? 0.20f : 0.004f * a);
+                    }
+                }
+            }
+            if (with_glass && powered[at] != 0) {
+                // Lit glass glows like a wall of windows: every pane feeds
+                // the halo, a little less each than a lone window.
+                const MaskRows *rows = &(*glass)[at * kTile];
+                for (int py = 0; py < kTile; ++py) {
+                    for (int px = 0; px < kTile; ++px) {
+                        if ((rows[py] & (1u << px)) != 0) {
+                            bloom[static_cast<std::size_t>((y * kPx + py * kPx / kTile) * lw + x * kPx +
+                                                           px * kPx / kTile)] += 0.6f;
+                        }
+                    }
+                }
+            }
             const Glow kind = glow_for_tile(tile);
             if (kind == Glow::None) {
                 continue;
@@ -412,7 +514,7 @@ void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int st
             });
         }
     }
-    if (masks != nullptr) {
+    if (!bloom.empty()) {
         // A 7-tap [1 6 15 20 15 6 1] blur each way (three [1 2 1] passes):
         // a halo about two glow cells (eight art pixels) wide, much fainter
         // than a lamp. Empty rows are skipped; most of a map has no panes.
@@ -487,8 +589,9 @@ void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int st
 }
 
 int build_windows(const std::vector<int> &raw, int w, int h, const std::vector<MaskRows> &masks, unsigned char *out,
-                  int stride, std::vector<int> *keys)
+                  int stride, std::vector<int> *keys, const CellGlass *glass, const TileLamp *lamp)
 {
+    const bool with_glass = glass != nullptr && glass->size() == static_cast<std::size_t>(w * h * kTile);
     if (w <= 0 || h <= 0 || out == nullptr || static_cast<int>(raw.size()) < w * h) {
         return 0;
     }
@@ -506,8 +609,18 @@ int build_windows(const std::vector<int> &raw, int w, int h, const std::vector<M
             const int tile = word < 0 ? 0 : (word & LOMASK);
             const bool lit = word >= 0 && (powered[at] != 0 || (word & PWRBIT) != 0) && wants_windows(tile);
             const int who = owner[at] >= 0 ? owner[at] : static_cast<int>(at);
+            const MaskRows *glass_rows = with_glass ? &(*glass)[at * kTile] : nullptr;
+            bool glass_on = false;
+            if (glass_rows != nullptr && word >= 0 && powered[at] != 0) {
+                for (int py = 0; py < kTile && !glass_on; ++py) {
+                    glass_on = glass_rows[py] != 0;
+                }
+            }
             // What this tile's windows depend on: the tile, power and owner.
-            const int key = lit ? tile + 1024 * (1 + who) : 0;
+            // Lit glass is keyed apart (negative) so a lot that turns into a
+            // Data Center, or loses power, repaints.
+            const bool lamp_on = lamp_lit(lamp, word);
+            const int key = (glass_on || lamp_on) ? -(tile + 1024 * (1 + who)) - 1 : (lit ? tile + 1024 * (1 + who) : 0);
             if (keys != nullptr) {
                 int &was = (*keys)[at];
                 if (was == key) {
@@ -519,6 +632,44 @@ int build_windows(const std::vector<int> &raw, int w, int h, const std::vector<M
             for (int py = 0; py < kTile; ++py) {
                 auto *row = reinterpret_cast<std::uint32_t *>(out + (y * kTile + py) * stride) + x * kTile;
                 std::memset(row, 0, sizeof(std::uint32_t) * kTile);
+            }
+            if (lamp_on) {
+                for (int py = 0; py < kTile; ++py) {
+                    auto *row = reinterpret_cast<std::uint32_t *>(out + (y * kTile + py) * stride) + x * kTile;
+                    for (int px = 0; px < kTile; ++px) {
+                        const std::uint32_t v = lamp->pixels[static_cast<std::size_t>(py * kTile + px)];
+                        const std::uint32_t a = v >> 24;
+                        if (a == 0) {
+                            continue;
+                        }
+                        // Premultiplied, like every layer here.
+                        const std::uint32_t r = ((v >> 16) & 0xFF) * a / 255;
+                        const std::uint32_t g = ((v >> 8) & 0xFF) * a / 255;
+                        const std::uint32_t b = (v & 0xFF) * a / 255;
+                        row[px] = (a << 24) | (r << 16) | (g << 8) | b;
+                    }
+                }
+                continue;
+            }
+            if (glass_on) {
+                for (int py = 0; py < kTile; ++py) {
+                    auto *row = reinterpret_cast<std::uint32_t *>(out + (y * kTile + py) * stride) + x * kTile;
+                    for (int px = 0; px < kTile; ++px) {
+                        if ((glass_rows[py] & (1u << px)) == 0) {
+                            continue;
+                        }
+                        float fr = 0.0f;
+                        float fg = 0.0f;
+                        float fb = 0.0f;
+                        glass_rgb(x * kTile + px, y * kTile + py, fr, fg, fb);
+                        const int r = static_cast<int>(std::min(1.0f, fr) * 255.0f + 0.5f);
+                        const int g = static_cast<int>(std::min(1.0f, fg) * 255.0f + 0.5f);
+                        const int b = static_cast<int>(std::min(1.0f, fb) * 255.0f + 0.5f);
+                        const int a = std::max(r, std::max(g, b));
+                        row[px] = (static_cast<std::uint32_t>(a) << 24) | (static_cast<std::uint32_t>(r) << 16) |
+                                  (static_cast<std::uint32_t>(g) << 8) | static_cast<std::uint32_t>(b);
+                    }
+                }
             }
             if (!lit) {
                 continue;

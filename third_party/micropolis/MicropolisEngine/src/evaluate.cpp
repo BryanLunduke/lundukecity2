@@ -218,6 +218,7 @@ void Micropolis::getAssessedValue()
     z += airportPop * 10000;
     z += coalPowerPop * 3000;
     z += nuclearPowerPop * 6000;
+    z += microNuclearPop * 6000 / 9; // a micro plant is 1/9 of a nuclear plant
 
     cityAssessedValue = z * 1000;
 }

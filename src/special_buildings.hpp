@@ -13,9 +13,10 @@ class Micropolis;
 // building needs a center-tile id the simulator will not grow, a toolbar
 // icon, and a map sprite. 1020-1022 are the classic free ids. Later
 // landmarks reuse unused trash ids 53-55. Prison, Marina, and Fountain use
-// 870-872, the gap after the tiny-explosion tiles. 1019 stays the
-// unknown-tile check. The park animation at FOUNTAIN (840) is not a
-// placeable building.
+// 870-872, the gap after the tiny-explosion tiles. The Data Center (lot
+// 873, built 875) and the Micro Nuclear Plant (874) continue that gap.
+// 1019 stays the unknown-tile check. The park animation at FOUNTAIN (840)
+// is not a placeable building.
 
 struct SpecialBuilding {
     int center_tile = 0;
@@ -73,6 +74,10 @@ struct SpecialBuilding {
     // of the powered/unpowered zone count. Every other special conducts
     // like a zone and needs power to count as powered.
     bool open_air = false;
+    // Listed in the Landmarks dropdown. The Data Center and Micro Nuclear
+    // Plant have their own toolbar buttons instead, and the built Data
+    // Center row is only reached by the lot growing into it.
+    bool in_menu = true;
 };
 
 // Shared non-center tile. The center tile id says which building it is.
@@ -80,6 +85,24 @@ inline constexpr int kSpecialBodyTile = 1023;
 inline constexpr int kSpecialEngineId = -1;
 
 int special_building_count();
+// Rows shown in the Landmarks dropdown. They are the first rows of the
+// table, so a dropdown index is also a table index.
+int special_menu_count();
+// MapView keeps one cached sheet per table row and look. The table must
+// fit; raise this (and only this) to add rows past it.
+inline constexpr int kSpecialSpriteSlots = 16;
+// Table rows for the buttons that place one fixed special.
+// A power plant's zone centre: coal (POWERPLANT), nuclear (NUCLEAR) or
+// micro nuclear (SPECIAL_MICRONUKE). Plants need no road.
+bool tile_is_power_plant(int center_tile);
+int special_datacenter_lot_index();
+int special_datacenter_index();
+int special_micro_nuclear_index();
+// Tiles one Micro Nuclear Plant can power: NUCLEAR_POWER_STRENGTH (2000,
+// power.cpp) / 9, rounded down. Nine of them power exactly 2000.
+inline constexpr int kMicroNuclearPowerTiles = 2000 / 9;
+// True for the Data Center lot or the built Data Center.
+bool special_is_datacenter(int index);
 const SpecialBuilding &special_building(int index);
 // -1 when the tile is not a center id from the table.
 int special_index_for_tile(int tile);

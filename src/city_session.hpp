@@ -273,6 +273,8 @@ public:
         std::string condition;
         bool offer_power = false;
         bool zone = false;
+        // Coal, nuclear or micro nuclear plant: no road needed.
+        bool power_plant = false;
         int left = 0;
         int top = 0;
         int width = 1;
@@ -294,8 +296,13 @@ public:
         int top = 0;
         int width = 1;
         int height = 1;
+        // Short facts about the building itself, drawn under the chips
+        // (Data Center: zone counts and no pollution; Micro Nuclear Plant:
+        // its power and no meltdown). Empty for everything else.
+        std::vector<std::string> notes;
     };
     InspectFacts inspect_facts(int x, int y);
+    std::vector<std::string> special_inspect_notes(int x, int y) const;
     // Live head count, the same figure the Evaluation window shows.
     std::int64_t population() const;
     const civic::Ledger &ledger() const { return ledger_; }

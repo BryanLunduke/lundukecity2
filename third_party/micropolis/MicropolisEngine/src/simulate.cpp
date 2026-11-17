@@ -720,6 +720,7 @@ void Micropolis::clearCensus()
     stadiumPop = 0;
     coalPowerPop = 0;
     nuclearPowerPop = 0;
+    microNuclearPop = 0;
     seaportPop = 0;
     airportPop = 0;
     powerStackPointer = 0; /* Reset before Mapscan */
@@ -748,6 +749,7 @@ void Micropolis::captureCensusSnapshot()
     snapAirportPop = airportPop;
     snapCoalPop = coalPowerPop;
     snapNuclearPop = nuclearPowerPop;
+    snapMicroNuclearPop = microNuclearPop;
     censusSnapshotValid = true;
     liveCensusComplete = true;
 }

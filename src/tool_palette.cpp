@@ -29,7 +29,7 @@ void box(cairo_t *cr, double x, double y, double w, double h, double r, double g
 // size, and a smaller slot (UI scale under 1) is the only case that shrinks.
 struct ToolIcons {
     bool tried = false;
-    cairo_surface_t *image[16] = {};
+    cairo_surface_t *image[kToolIconCount] = {};
 
     ~ToolIcons()
     {
@@ -41,6 +41,23 @@ struct ToolIcons {
     }
 };
 
+} // namespace
+
+const char *tool_icon_stem(int index)
+{
+    static const char *names[kToolIconCount] = {
+        "bulldozer",  "road",       "rail",   "wire", "park",    "residential", "commercial",
+        "industrial", "datacenter", "police", "fire", "stadium", "seaport",     "coal",
+        "nuclear",    "micronuclear", "airport", "special",
+    };
+    if (index < 0 || index >= kToolIconCount) {
+        return "special";
+    }
+    return names[index];
+}
+
+namespace {
+
 ToolIcons &tool_icons()
 {
     static ToolIcons icons;
@@ -48,12 +65,8 @@ ToolIcons &tool_icons()
         return icons;
     }
     icons.tried = true;
-    static const char *names[16] = {
-        "bulldozer", "road",     "rail",     "wire",    "park",       "residential", "commercial", "industrial",
-        "police",    "fire",     "stadium",  "seaport", "coal",       "nuclear",     "airport",    "special",
-    };
-    for (int i = 0; i < 16; ++i) {
-        const std::string path = ui_data_file(std::string("tool-icons/") + names[i] + ".png");
+    for (int i = 0; i < kToolIconCount; ++i) {
+        const std::string path = ui_data_file(std::string("tool-icons/") + tool_icon_stem(i) + ".png");
         if (path.empty()) {
             continue;
         }
@@ -369,7 +382,7 @@ void ToolPalette::draw(cairo_t *cr) const
         }
 
         const double shift = sunk ? unit : 0.0;
-        cairo_surface_t *icon = (i >= 0 && i < 16) ? tool_icons().image[i] : nullptr;
+        cairo_surface_t *icon = (i >= 0 && i < kToolIconCount) ? tool_icons().image[i] : nullptr;
         // Authored at 20x20, pre-doubled to 40x40; integer scaling only.
         paint_icon(cr, icon, i, x + 3 * unit + shift, y + 2 * unit + shift, bs - 6 * unit);
         if (sunk || hot) {
@@ -468,7 +481,7 @@ void ToolPalette::draw_slate(cairo_t *cr) const
         rgb(chosen ? 0xF2C14E : (hover || focused ? 0x8C98AA : 0x3C4859));
         cairo_stroke(cr);
         const double shift = down ? 1.0 : 0.0;
-        cairo_surface_t *icon = (i >= 0 && i < 16) ? tool_icons().image[i] : nullptr;
+        cairo_surface_t *icon = (i >= 0 && i < kToolIconCount) ? tool_icons().image[i] : nullptr;
         cairo_save(cr);
         cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
         // The 40px icon art has its own transparent margin. Give it the whole

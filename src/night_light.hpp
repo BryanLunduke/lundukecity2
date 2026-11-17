@@ -56,19 +56,55 @@ void window_mask(const std::uint32_t *tile_pixels, MaskRows rows[kTile]);
 // get an empty mask.
 void window_masks(const std::uint32_t *sheet, int tiles, std::vector<MaskRows> &out);
 
+// Glass that lights as a whole, per map cell rather than per atlas tile:
+// the Data Center's facade is special-building art over the shared body
+// tile, so its panes cannot come from the atlas masks. `cells` holds
+// kTile rows per map cell (w*h*kTile); a set bit is a glass pixel that
+// lights, all of it, whenever its building has power.
+using CellGlass = std::vector<MaskRows>;
+
+// Stamps a building's glass sheet onto every intact copy of it in `raw`.
+// `sheet` is span*span cells of kTile rows (row-major cells); the centre
+// tile is `center_tile` at (anchor, anchor) and the other cells must be
+// `body_tile`, so wreckage and a half-bulldozed lot stay dark. `out` is
+// resized to w*h*kTile and cleared first when `clear` is set.
+void stamp_glass(const std::vector<int> &raw, int w, int h, int center_tile, int body_tile, int span, int anchor,
+                 const std::vector<MaskRows> &sheet, CellGlass &out, bool clear = true);
+
+// A 1x1 building lit pixel by pixel from its own light sheet: the micro
+// nuclear plant's atom. `pixels` is kTile*kTile straight ARGB (0xAARRGGBB,
+// row-major); alpha is the light's strength and 0 is dark. It lights on
+// an intact building (its centre tile with ZONEBIT) that has power.
+struct TileLamp {
+    int tile = -1;
+    std::vector<std::uint32_t> pixels;
+};
+
 // Fills the glow layer `out` (premultiplied ARGB32, width w*kPx, height
 // h*kPx, `stride` bytes per row) from the raw map words in `raw`
-// (row-major, w*h). With `masks`, lit windows add a faint bloom.
+// (row-major, w*h). With `masks`, lit windows add a faint bloom; lit
+// `glass` does too. A lit `lamp` adds a small soft pool of its own colour
+// around each of its pixels.
 void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int stride,
-           const std::vector<MaskRows> *masks = nullptr);
+           const std::vector<MaskRows> *masks = nullptr, const CellGlass *glass = nullptr,
+           const TileLamp *lamp = nullptr);
 
 // Fills the window layer `out` (premultiplied ARGB32, width w*kTile,
 // height h*kTile). Only mask pixels of powered buildings light, and each
 // building lights its own share of windows, floor by floor. `keys` (may
 // be null) remembers what each tile was drawn from, so a later call only
 // repaints tiles that changed. Returns the number of tiles repainted.
+// With `glass`, every glass pixel of a powered building lights too, in a
+// cool server-room white. With `lamp`, a lit lamp tile paints its sheet.
 int build_windows(const std::vector<int> &raw, int w, int h, const std::vector<MaskRows> &masks, unsigned char *out,
-                  int stride, std::vector<int> *keys = nullptr);
+                  int stride, std::vector<int> *keys = nullptr, const CellGlass *glass = nullptr,
+                  const TileLamp *lamp = nullptr);
+
+// True when `lamp` lights the map word `word` (its tile, ZONEBIT, PWRBIT).
+bool lamp_lit(const TileLamp *lamp, int word);
+
+// Colour of one lit glass pixel (art pixel ax, ay of the map) as 0..1 RGB.
+void glass_rgb(int ax, int ay, float &r, float &g, float &b);
 
 // Flattens the two layers into `out` at window-layer size (w*kTile by
 // h*kTile): the glow scaled up 4x with a bilinear filter (the same

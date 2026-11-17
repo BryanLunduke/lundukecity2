@@ -337,7 +337,9 @@ int Micropolis::getPollutionValue(int loc)
 {
     // These ids sit in the old radiation gap. They are civic centres now.
     if (loc == SPECIAL_MAYOR || loc == SPECIAL_CASINO || loc == SPECIAL_AMUSEMENT ||
-        loc == SPECIAL_PRISON || loc == SPECIAL_MARINA || loc == SPECIAL_FOUNTAIN) {
+        loc == SPECIAL_PRISON || loc == SPECIAL_MARINA || loc == SPECIAL_FOUNTAIN ||
+        loc == SPECIAL_DATACENTER_LOT || loc == SPECIAL_DATACENTER || loc == SPECIAL_MICRONUKE) {
+        // Data Centers and micro nuclear plants do not pollute.
         return 0;
     }
 

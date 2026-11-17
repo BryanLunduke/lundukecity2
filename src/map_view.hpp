@@ -187,6 +187,9 @@ private:
     void tint_tile(int x, int y);
     std::vector<std::uint16_t> window_masks_;
     std::vector<int> window_keys_;
+    // Data Center facade glass, kTile rows per map cell, restamped with
+    // every night rebuild from datacenter-glass.png.
+    std::vector<std::uint16_t> glass_cells_;
     int window_masks_generation_ = -1;
     bool window_masks_loaded_ = false;
 };

@@ -1337,7 +1337,7 @@ void Shell::drive_ui_test()
         return;
     }
     case 28: {
-        for (int i = 0; i < special_building_count(); ++i) {
+        for (int i = 0; i < special_menu_count(); ++i) {
             if (find_hot(hot_, kSpecialItem + i, 0) == nullptr) {
                 fail("a special building row was not drawn");
                 return;

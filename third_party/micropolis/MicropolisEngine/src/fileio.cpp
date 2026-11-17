@@ -944,15 +944,17 @@ std::string Micropolis::checkCityContents(const short *misc, const short *tiles,
         const unsigned short v = (unsigned short)tiles[i];
         const unsigned int t = v & LOMASK;
         const bool special_center = t == SPECIAL_ZOO || t == SPECIAL_PARK || t == SPECIAL_LIBRARY ||
-                                    t == SPECIAL_PRISON || t == SPECIAL_MARINA || t == SPECIAL_FOUNTAIN;
+                                    t == SPECIAL_PRISON || t == SPECIAL_MARINA || t == SPECIAL_FOUNTAIN ||
+                                    t == SPECIAL_DATACENTER_LOT || t == SPECIAL_DATACENTER ||
+                                    t == SPECIAL_MICRONUKE;
         const bool special = special_center || t == SPECIAL_BODY;
         if (t > CHURCH7LAST && !special) {
             unknown++;
         }
         if (v & ZONEBIT) {
-            // A fountain is one tile, so it does not count toward the
-            // "every building is at least 3x3" centre budget.
-            if (t != SPECIAL_FOUNTAIN) {
+            // A fountain or micro nuclear plant is one tile, so it does not
+            // count toward the "every building is at least 3x3" centre budget.
+            if (t != SPECIAL_FOUNTAIN && t != SPECIAL_MICRONUKE) {
                 centres++;
             }
             if (t > CHURCH7LAST && !special_center) {
@@ -964,7 +966,7 @@ std::string Micropolis::checkCityContents(const short *misc, const short *tiles,
         return "The map has " + std::to_string(unknown) + " unknown tile value" + (unknown == 1 ? "" : "s") + ".";
     }
     // Counted centres belong to buildings of at least 3x3, so a real map has
-    // at most 1/9 of them. Fountains are one tile and are not included.
+    // at most 1/9 of them. Fountains and micro plants are one tile and are not included.
     if (centres > tileCount / 9 || badCentres > 0) {
         return "The map has " + std::to_string(centres) + " building centres, more than can fit.";
     }
@@ -997,7 +999,7 @@ int Micropolis::sanitizeLoadedZones()
                        tile == PORT || tile == SPECIAL_PRISON) {
                 // Prison uses the stadium anchor: one tile up/left, two down/right.
                 above = 2;
-            } else if (tile == SPECIAL_FOUNTAIN) {
+            } else if (tile == SPECIAL_FOUNTAIN || tile == SPECIAL_MICRONUKE) {
                 below = 0;
                 above = 0;
             }
@@ -1093,6 +1095,7 @@ bool Micropolis::loadFile(const char *filename)
     scenario = SC_NONE;
     initSimLoad = 1;
     doInitialEval = false;
+    powerGridFresh = false; // the grid is still the previous city's
     doSimInit();
 
     roadPercent = savedRoadPercent;
@@ -1627,6 +1630,7 @@ bool Micropolis::loadScenario(Scenario s)
     invalidateMaps();
     initSimLoad = 1;
     doInitialEval = false;
+    powerGridFresh = false; // the grid is still the previous city's
     doSimInit();
     didLoadScenario();
     return true;

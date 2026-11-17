@@ -36,6 +36,27 @@ void tile_rgb(int raw, double &r, double &g, double &b)
         b = 0.28;
         return;
     }
+    // Data Center and Micro Nuclear Plant centres sit on the old explosion
+    // ids, so the atlas average would be a blast. Lot gold, glass blue, and
+    // concrete grey instead.
+    if (kind == SPECIAL_DATACENTER_LOT) {
+        r = 0.80;
+        g = 0.70;
+        b = 0.25;
+        return;
+    }
+    if (kind == SPECIAL_DATACENTER) {
+        r = 0.25;
+        g = 0.35;
+        b = 0.62;
+        return;
+    }
+    if (kind == SPECIAL_MICRONUKE) {
+        r = 0.60;
+        g = 0.60;
+        b = 0.62;
+        return;
+    }
     const TileAtlas &atlas = tile_atlas();
     if (atlas.loaded()) {
         atlas.average_color(raw & LOMASK, r, g, b);

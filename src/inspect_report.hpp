@@ -23,6 +23,9 @@ struct Facts {
     int power = -1;
     // True when a road (or rail) touches the zone edge.
     bool access = true;
+    // False for power plants (coal, nuclear, micro nuclear): they work
+    // without a road, so a missing one is not a problem to report.
+    bool needs_road = true;
     // 0..255 from the simulator maps.
     int density = 0;
     int land_value = 0;
@@ -94,7 +97,7 @@ inline Report make(const Facts &facts)
     if (facts.power == 0) {
         report.reasons.push_back("No power: connect a power line");
     }
-    if (!facts.access && (zone || facts.kind == Kind::Building)) {
+    if (!facts.access && facts.needs_road && (zone || facts.kind == Kind::Building)) {
         report.reasons.push_back("No road touches it");
     }
     if (!zone) {
