@@ -43,7 +43,7 @@ int main()
 {
     if (special_building_count() != 12 || special_menu_count() != 9) {
         return fail(1, "the table should list the original three, the three landmarks, prison, marina, fountain "
-                       "(the dropdown), then the Data Center lot, Micro Nuclear Plant and built Data Center");
+                       "(the landmarks, each with a toolbar button), then the Data Center lot, Micro Nuclear Plant and built Data Center");
     }
     if (std::string(special_building(0).name) != "Zoo" || special_building(0).cost != 100 ||
         special_building(0).annual_income != 0 || std::string(special_building(1).name) != "Big Park" ||
@@ -54,9 +54,9 @@ int main()
     if (!footprint.placeable || footprint.width != 3 || footprint.height != 3) {
         return fail(3, "the special tool is not a 3x3 placement");
     }
-    if (kToolCount != 19 || !tool_opens_special_menu(tool_by_index(17)) ||
-        tool_by_index(18)->engine_id != TOOL_QUERY) {
-        return fail(4, "query is no longer the last tool after special buildings");
+    if (kToolCount != 27 || tool_by_index(26)->engine_id != TOOL_QUERY ||
+        tool_fixed_special(tool_by_index(17)) != 0 || tool_by_index(25)->engine_id != TOOL_SEAPORT) {
+        return fail(4, "query is no longer the last tool after the ports, or the Zoo button moved");
     }
 
     Micropolis sim;

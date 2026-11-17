@@ -98,7 +98,7 @@ constexpr SpecialBuilding kBuildings[] = {
      "Raises nearby land value. The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
     {SPECIAL_FOUNTAIN, "Fountain", "fountain", "fountain", 20, 0, 1, 1, 4, 16, "Raises nearby land value", 0, 0, 0, -1,
      0, 0, 0, false, false, false, true},
-    // Toolbar-only rows below; the dropdown lists the rows above. The Data
+    // Rows below are not landmarks; the landmarks are the rows above. The Data
     // Center is a zone, not a landmark: no land-value bump, no income.
     // The engine turns the lot into the built row once it has power and
     // counts a powered Data Center as one commercial plus one industrial
@@ -135,7 +135,7 @@ constexpr bool menu_rows_lead()
     }
     return true;
 }
-static_assert(menu_rows_lead(), "dropdown rows come first, so a dropdown index is a table index");
+static_assert(menu_rows_lead(), "the landmark rows come first");
 
 int row_for_tile(int tile)
 {

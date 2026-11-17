@@ -102,16 +102,13 @@ enum HotspotId : int {
     kChoice = 8300,
     kGraphSeries = 8500,
 
-    // Special-building rows are kSpecialItem + table index.
-    kSpecialItem = 9000,
-
     // Info band and handheld HUD. Not dialog controls.
     kHudMenu = 9500,
     kHudZoomIn = 9501,
     kHudZoomOut = 9502,
     kHudCenter = 9503,
     kSpeedPill = 9510, // + 0..3 (pause, slow, normal, fast)
-    kQuickTool = 9600, // + tool index 0..16 (16 = Inspect)
+    kQuickTool = 9600, // + tool index 0..26 (26 = Inspect)
 };
 
 inline bool is_dialog_button(int id)

@@ -12,13 +12,17 @@
 // stay with the menu (Ctrl+O load, Ctrl+S save, Ctrl+P pause, Ctrl+N new,
 // Ctrl+Q quit). The letters below are free when no modifier is held.
 
-inline constexpr int kToolHotkeyCount = 19;
+inline constexpr int kToolHotkeyCount = 27;
 
 inline char tool_hotkey(int index)
 {
-    // Data Center is Z, Micro nuclear is M.
-    static const char keys[] = {'b', 'r', 't', 'w', 'g', 'h', 'c', 'i', 'z', 'o', 'f',
-                                'd', 'p', 'e', 'u', 'm', 'a', 'v', 'q'};
+    // Palette order (tools.cpp). The letters the old toolbar had stay on
+    // the same tools (Data Center Z, Micro nuclear M). The landmarks take
+    // the free letters: Big Park K, Fountain N, Prison J, Zoo X, Amusement
+    // Park Y, Casino S, Marina V, Library L. The Mayor's House has no
+    // factory letter (none is left); Controls can bind one.
+    static const char keys[] = {'b', 'r', 't', 'w', 'h', 'c', 'i', 'z', 'g', 'k', 'n', 'f', 'o', 'j',
+                                'e', 'u', 'm', 'x', 'y', 's', 'd', 'v', 'l', 0,   'a', 'p', 'q'};
     if (index < 0 || index >= static_cast<int>(sizeof(keys))) {
         return 0;
     }
@@ -27,6 +31,9 @@ inline char tool_hotkey(int index)
 
 inline int tool_index_for_key(char letter)
 {
+    if (letter == 0) {
+        return -1;
+    }
     if (letter >= 'A' && letter <= 'Z') {
         letter = static_cast<char>(letter - 'A' + 'a');
     }

@@ -405,7 +405,6 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
 {
     reset_touch_state();
     menu_.close();
-    special_open_ = false;
     dialog_ = dialog;
     dialog_error_.clear();
     panel_settle_ = 0;
@@ -617,20 +616,39 @@ void Shell::select_save_name()
     }
 }
 
-int Shell::special_tool_index() const
-{
-    for (int i = 0; i < kToolCount; ++i) {
-        if (tool_opens_special_menu(tool_by_index(i))) {
-            return i;
-        }
-    }
-    return kToolCount - 1;
-}
-
 int Shell::placing_special() const
 {
-    const int fixed = tool_fixed_special(tool_by_index(tool_index_));
-    return fixed >= 0 ? fixed : special_choice_;
+    return tool_fixed_special(tool_by_index(tool_index_));
+}
+
+std::string Shell::tool_hint_now(int index) const
+{
+    const ToolDef *tool = tool_by_index(index);
+    std::string text = tool->hint;
+    const int fixed = tool_fixed_special(tool);
+    if (fixed >= 0) {
+        const std::string detail = session_.special_menu_detail(fixed);
+        if (!detail.empty() && detail[0] != '$') {
+            text += ". " + detail;
+        }
+    }
+    return text;
+}
+
+unsigned Shell::locked_tool_mask() const
+{
+    unsigned mask = 0;
+    for (int i = 0; i < kPaletteToolCount && i < 32; ++i) {
+        const int fixed = tool_fixed_special(tool_by_index(i));
+        if (fixed < 0) {
+            continue;
+        }
+        const std::string detail = session_.special_menu_detail(fixed);
+        if (!detail.empty() && detail[0] != '$') {
+            mask |= 1u << i;
+        }
+    }
+    return mask;
 }
 
 void Shell::select_tool(int index)
@@ -641,77 +659,19 @@ void Shell::select_tool(int index)
     if (index >= kToolCount) {
         index = 0;
     }
-    const int special = special_tool_index();
-    const bool entering = index == special && tool_index_ != index;
-    const bool leaving = tool_index_ == special && index != special;
     tool_index_ = index;
     palette_.set_selected(index);
     map_.set_tool(tool_by_index(index)->engine_id);
-    if (entering) {
-        menu_.close();
-        special_open_ = true;
-        if (special_cursor_ < 0 || special_cursor_ >= special_menu_count()) {
-            special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
-        }
-    }
-    if (leaving) {
-        special_open_ = false;
-    }
 }
 
 void Shell::cycle_tool(int delta)
 {
-    if (special_open_) {
-        special_open_ = false;
-    }
     select_tool(tool_index_ + delta);
 }
 
 void Shell::press_palette(double x, double y)
 {
-    const int index = palette_.index_at(x, y);
-    if (index >= 0 && index == tool_index_ && tool_opens_special_menu(tool_by_index(index))) {
-        special_open_ = !special_open_;
-        if (special_open_) {
-            menu_.close();
-            if (special_cursor_ < 0 || special_cursor_ >= special_menu_count()) {
-                special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
-            }
-        }
-        return;
-    }
     palette_.press(x, y);
-}
-
-void Shell::move_special_cursor(int delta)
-{
-    const int count = special_menu_count();
-    if (count < 1) {
-        return;
-    }
-    int next = special_cursor_ + delta;
-    if (next < 0) {
-        next = count - 1;
-    }
-    if (next >= count) {
-        next = 0;
-    }
-    special_cursor_ = next;
-}
-
-void Shell::choose_special(int index)
-{
-    if (index < 0 || index >= special_menu_count()) {
-        return;
-    }
-    special_choice_ = index;
-    special_cursor_ = index;
-    const int slot = special_tool_index();
-    if (tool_index_ != slot) {
-        select_tool(slot);
-    }
-    special_open_ = false;
-    map_.set_tool(kSpecialEngineId);
 }
 
 void Shell::clamp_scroll()
@@ -845,14 +805,6 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
     if (dir == AccelKey::None || pad_dragging_) {
         return;
     }
-    if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
-        if (dir == AccelKey::Up || dir == AccelKey::Left) {
-            move_special_cursor(-1);
-        } else {
-            move_special_cursor(1);
-        }
-        return;
-    }
     if (menu_.open()) {
         menu_.wrap_rows = false;
         menu_.handle_key(dir, 0, 0);
@@ -930,7 +882,7 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
 
 bool Shell::map_dpad_repeating() const
 {
-    return nav_repeat_.held && dialog_ == Dialog::None && !menu_.open() && !special_open_ && !pad_dragging_;
+    return nav_repeat_.held && dialog_ == Dialog::None && !menu_.open() && !pad_dragging_;
 }
 
 void Shell::step_cursor_on_map(int dx, int dy)
@@ -2706,30 +2658,18 @@ void Shell::on_hotspot(int id, double x, double y)
     if (dialog_ == Dialog::None && !menu_.open()) {
         if (id >= kSpeedPill && id < kSpeedPill + 4) {
             static const Action speeds[4] = {Action::SetPause, Action::Slow, Action::Medium, Action::Fast};
-            special_open_ = false;
             apply_action(speeds[id - kSpeedPill]);
             return;
         }
         if (id >= kQuickTool && id < kQuickTool + kToolCount) {
-            const int index = id - kQuickTool;
-            if (index == tool_index_ && tool_opens_special_menu(tool_by_index(index))) {
-                special_open_ = !special_open_;
-                if (special_open_ && (special_cursor_ < 0 || special_cursor_ >= special_menu_count())) {
-                    special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
-                }
-                return;
-            }
-            special_open_ = false;
-            select_tool(index);
+            select_tool(id - kQuickTool);
             return;
         }
         if (id == kHudZoomIn || id == kHudZoomOut) {
-            special_open_ = false;
             zoom_by(id == kHudZoomIn ? 1 : -1);
             return;
         }
         if (id == kHudCenter) {
-            special_open_ = false;
             if (gamepad_nav_) {
                 center_on_cursor();
             } else {
@@ -2739,7 +2679,6 @@ void Shell::on_hotspot(int id, double x, double y)
         }
     }
     if (id == kHudMenu && dialog_ == Dialog::None) {
-        special_open_ = false;
         if (menu_.open()) {
             menu_.close();
         } else {
@@ -2747,18 +2686,7 @@ void Shell::on_hotspot(int id, double x, double y)
         }
         return;
     }
-    if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
-        if (id >= kSpecialItem && id < kSpecialItem + special_menu_count()) {
-            choose_special(id - kSpecialItem);
-            return;
-        }
-        if (id == kHotNone) {
-            special_open_ = false;
-            return;
-        }
-    }
     if (id >= kMenuTitle && id < kMenuTitle + 5 && dialog_ == Dialog::None) {
-        special_open_ = false;
         const int column = id - kMenuTitle;
         if (menu_.open_menu == column) {
             menu_.close();

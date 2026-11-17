@@ -46,12 +46,13 @@ struct ToolIcons {
 const char *tool_icon_stem(int index)
 {
     static const char *names[kToolIconCount] = {
-        "bulldozer",  "road",       "rail",   "wire", "park",    "residential", "commercial",
-        "industrial", "datacenter", "police", "fire", "stadium", "seaport",     "coal",
-        "nuclear",    "micronuclear", "airport", "special",
+        "bulldozer", "road",    "rail",         "wire",    "residential", "commercial", "industrial",
+        "datacenter", "park",   "bigpark",      "fountain", "fire",       "police",     "prison",
+        "coal",      "nuclear", "micronuclear", "zoo",     "amusement",   "casino",     "stadium",
+        "marina",    "library", "mayor",        "airport", "seaport",
     };
     if (index < 0 || index >= kToolIconCount) {
-        return "special";
+        return "";
     }
     return names[index];
 }
@@ -123,8 +124,8 @@ void ToolPalette::set_columns(int columns)
     if (columns < 2) {
         columns = 2;
     }
-    if (columns > 3) {
-        columns = 3;
+    if (columns > 4) {
+        columns = 4;
     }
     columns_ = columns;
 }
@@ -385,6 +386,12 @@ void ToolPalette::draw(cairo_t *cr) const
         cairo_surface_t *icon = (i >= 0 && i < kToolIconCount) ? tool_icons().image[i] : nullptr;
         // Authored at 20x20, pre-doubled to 40x40; integer scaling only.
         paint_icon(cr, icon, i, x + 3 * unit + shift, y + 2 * unit + shift, bs - 6 * unit);
+        if (dimmed(i)) {
+            // Locked (population or cap): the stone shows through the icon.
+            cairo_set_source_rgba(cr, 0xDE / 255.0, 0xD4 / 255.0, 0xC2 / 255.0, 0.6);
+            cairo_rectangle(cr, x + 3 * unit, y + 2 * unit, bs - 6 * unit, bs - 6 * unit);
+            cairo_fill(cr);
+        }
         if (sunk || hot) {
             slab(6 * unit, bs - (sunk ? 3 : 4) * unit, bs - 12 * unit, 2 * unit,
                  sunk ? 0xB88C2E : 0xB59473);
@@ -434,6 +441,13 @@ void ToolPalette::draw_slate(cairo_t *cr) const
             cairo_text_extents_t extents;
             cairo_text_extents(cr, title, &extents);
             const double room = w - kPad * 2 - 4;
+            // A narrow toolbar shows the first word only ("SPECIAL").
+            std::string shown = title;
+            const std::size_t space = shown.find(' ');
+            if (extents.x_advance > room && space != std::string::npos) {
+                shown.resize(space);
+                cairo_text_extents(cr, shown.c_str(), &extents);
+            }
             double tx = kPad + 2;
             const double baseline = top + header_ * 0.5 + font * 0.36;
             cairo_save(cr);
@@ -441,7 +455,7 @@ void ToolPalette::draw_slate(cairo_t *cr) const
             cairo_clip(cr);
             rgb(0xC9A646);
             cairo_move_to(cr, tx - extents.x_bearing, baseline);
-            cairo_show_text(cr, title);
+            cairo_show_text(cr, shown.c_str());
             cairo_restore(cr);
             const double rule_x = tx + extents.x_advance + 5;
             if (rule_x < kPad + room) {
@@ -489,6 +503,12 @@ void ToolPalette::draw_slate(cairo_t *cr) const
         const double pad = bs >= 42.0 ? 1.0 : std::max(2.0, std::round(bs * 0.1));
         paint_icon(cr, icon, i, std::round(x + pad + shift), std::round(y + pad + shift), bs - pad * 2);
         cairo_restore(cr);
+        if (dimmed(i)) {
+            // Locked (population or cap): the face shows through the icon.
+            rounded(x + 1, y + 1, bs - 2, bs - 2, std::max(2.0, radius - 1));
+            rgb(chosen ? 0x3E4A5E : 0x29323F, 0.62);
+            cairo_fill(cr);
+        }
         if (focused) {
             cairo_set_line_width(cr, 2.0);
             rgb(0xF6F0E4);

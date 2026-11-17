@@ -6,16 +6,19 @@
 
 #include <string>
 
-// Palette order matches the classic left-hand tool column (top to bottom,
-// left to right). engine_id values are the Micropolis EditingTool ordinals.
+// Palette order is the toolbar order: Build, Zones, Parks, Services,
+// Utilities, Special buildings, Ports (tool_groups.hpp), then Query. The
+// handheld quick bar, L1/R1 cycling and the Controls page follow it too.
+// Key bindings are saved by name (bindings.hpp), not by this index.
+// engine_id values are the Micropolis EditingTool ordinals.
 struct ToolDef {
     int engine_id;
     const char *name;
     int cost;
     const char *hint;
     // A kSpecialEngineId button that always places this special centre tile
-    // (Data Center, Micro Nuclear Plant). 0 for every other button, and for
-    // the Landmarks button, which opens the dropdown.
+    // (the Data Center, the Micro Nuclear Plant and every landmark). 0 for
+    // the engine tools.
     int special_tile = 0;
 };
 
@@ -26,11 +29,8 @@ extern const int kDefaultToolIndex;
 extern const int kPaletteToolCount;
 
 const ToolDef *tool_by_index(int index);
-// Special-building table row a fixed button places, or -1 (any other tool,
-// including the Landmarks dropdown button).
+// Special-building table row a fixed button places, or -1 (an engine tool).
 int tool_fixed_special(const ToolDef *tool);
-// The Landmarks button: a special tool with no fixed building.
-bool tool_opens_special_menu(const ToolDef *tool);
 // Click / press instruction for a palette entry. Fixed special buttons use
 // their own name ("Data Center: click to zone"); the rest are the
 // engine_id phrases below.

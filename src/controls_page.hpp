@@ -146,10 +146,11 @@ struct ControlsKeyText {
 
     ControlsKeyText()
     {
-        static const char letters[] = {'B', 'R', 'T', 'W', 'G', 'H', 'C', 'I', 'Z', 'O',
-                                       'F', 'D', 'P', 'E', 'U', 'M', 'A', 'V', 'Q'};
         for (int i = 0; i < kToolHotkeyCount; ++i) {
-            tool[i] = std::string(1, letters[i]);
+            const char key = tool_hotkey(i);
+            if (key != 0) {
+                tool[i] = std::string(1, static_cast<char>(key - 'a' + 'A'));
+            }
         }
     }
 };
@@ -188,10 +189,13 @@ struct ControlsSection {
 
 inline const char *controls_tool_name(int index)
 {
-    static const char *names[] = {"Bulldozer",  "Roads",         "Rail",    "Power lines",      "Park",
-                                  "Residential", "Commercial",   "Industrial", "Data Center",   "Police",
-                                  "Fire dept",  "Stadium",       "Seaport", "Coal power",       "Nuclear",
-                                  "Micro nuclear", "Airport",    "Special buildings", "Inspect (a tile's card)"};
+    static const char *names[] = {"Bulldozer",     "Roads",          "Rail",       "Power lines",   "Residential",
+                                  "Commercial",    "Industrial",     "Data Center", "Park",         "Big Park",
+                                  "Fountain",      "Fire dept",      "Police",      "Prison",       "Coal power",
+                                  "Nuclear",       "Micro nuclear",  "Zoo",         "Amusement Park", "Casino",
+                                  "Stadium",       "Marina",         "Library",     "Mayor's House", "Airport",
+                                  "Seaport",       "Inspect (a tile's card)"};
+    static_assert(sizeof(names) / sizeof(names[0]) == kToolHotkeyCount, "one name per tool");
     if (index < 0 || index >= kToolHotkeyCount) {
         return "";
     }
@@ -302,7 +306,12 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                         }, 0});
     ControlsSection tools{"Tool keys", {}, 2};
     for (int i = 0; i < kToolHotkeyCount; ++i) {
-        tools.rows.push_back({controls_tool_key(i, keys), controls_tool_name(i)});
+        const std::string key = controls_tool_key(i, keys);
+        // A tool with no key (the Mayor's House by default) has no row.
+        if (key.empty() || key == "None") {
+            continue;
+        }
+        tools.rows.push_back({key, controls_tool_name(i)});
     }
     sections.push_back(tools);
     return sections;

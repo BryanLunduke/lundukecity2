@@ -4,8 +4,9 @@
 
 #pragma once
 
-// Section headers for the Slate toolbar. The groups follow the existing
-// palette order, so a tool keeps its index, its key and its pad position.
+// Section headers for the Slate toolbar. kTools is in toolbar order, so
+// each group is a run of palette indices and a tool keeps one index for
+// its button, its quick-bar slot and its pad position.
 // Pure layout arithmetic: no cairo, no SDL, so a test can check it.
 
 namespace tool_groups {
@@ -16,22 +17,18 @@ struct Group {
     int count;
 };
 
-// Bulldozer..Park, the zones (R, C, I and the Data Center), the services,
-// power and the ports (with the Micro Nuclear Plant after Nuclear), then
-// the special buildings.
+// Build, Zones (R, C, I and the Data Center), Parks, Services, Utilities,
+// Special buildings (the landmarks and the stadium) and Ports.
 inline const Group *groups()
 {
     static const Group table[] = {
-        {"BUILD", 0, 5},
-        {"ZONES", 5, 4},
-        {"SERVICES", 9, 3},
-        {"POWER & PORTS", 12, 5},
-        {"LANDMARKS", 17, 1},
+        {"BUILD", 0, 4},     {"ZONES", 4, 4},      {"PARKS", 8, 3},  {"SERVICES", 11, 3},
+        {"UTILITIES", 14, 3}, {"SPECIAL BUILDINGS", 17, 7}, {"PORTS", 24, 2},
     };
     return table;
 }
 
-constexpr int kGroupCount = 5;
+constexpr int kGroupCount = 7;
 
 inline int group_of(int index)
 {
