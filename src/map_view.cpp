@@ -388,6 +388,48 @@ const std::vector<std::uint16_t> &datacenter_glass_sheet()
     return sheet;
 }
 
+// The micro nuclear plant's night light: data/special-tiles/
+// micro-nuclear-light.png (16x16; colour is the light, alpha its strength,
+// the same in every look). No lamp when the file is missing.
+const night_light::TileLamp &micro_nuclear_lamp()
+{
+    static night_light::TileLamp lamp;
+    static bool tried = false;
+    if (tried) {
+        return lamp;
+    }
+    tried = true;
+    cairo_surface_t *sheet = load_png(ui_data_file("special-tiles/micro-nuclear-light.png"));
+    if (sheet == nullptr) {
+        return lamp;
+    }
+    cairo_surface_flush(sheet);
+    const int kt = night_light::kTile;
+    if (cairo_image_surface_get_width(sheet) == kt && cairo_image_surface_get_height(sheet) == kt &&
+        cairo_image_surface_get_format(sheet) == CAIRO_FORMAT_ARGB32) {
+        lamp.pixels.assign(static_cast<std::size_t>(kt * kt), 0);
+        const unsigned char *data = cairo_image_surface_get_data(sheet);
+        const int stride = cairo_image_surface_get_stride(sheet);
+        for (int y = 0; y < kt; ++y) {
+            const auto *row = reinterpret_cast<const std::uint32_t *>(data + y * stride);
+            for (int x = 0; x < kt; ++x) {
+                const std::uint32_t p = row[x];
+                const std::uint32_t a = p >> 24;
+                if (a == 0) {
+                    continue;
+                }
+                // Cairo stores premultiplied colour; the lamp wants it straight.
+                auto un = [a](std::uint32_t c) { return std::min<std::uint32_t>(255, (c * 255 + a / 2) / a); };
+                lamp.pixels[static_cast<std::size_t>(y * kt + x)] =
+                    (a << 24) | (un((p >> 16) & 0xFF) << 16) | (un((p >> 8) & 0xFF) << 8) | un(p & 0xFF);
+            }
+        }
+        lamp.tile = SPECIAL_MICRONUKE;
+    }
+    cairo_surface_destroy(sheet);
+    return lamp;
+}
+
 int session_word(int x, int y, const void *ctx)
 {
     const CitySession *session = static_cast<const CitySession *>(ctx);
@@ -1242,12 +1284,14 @@ void MapView::draw_night(cairo_t *cr, int source)
         }
         cairo_surface_flush(light_pixels_);
         night_light::build(cached_raw_, world_w, world_h, cairo_image_surface_get_data(light_pixels_),
-                           cairo_image_surface_get_stride(light_pixels_), &window_masks_, &glass_cells_);
+                           cairo_image_surface_get_stride(light_pixels_), &window_masks_, &glass_cells_,
+                           &micro_nuclear_lamp());
         cairo_surface_mark_dirty(light_pixels_);
         cairo_surface_flush(window_pixels_);
         night_light::build_windows(cached_raw_, world_w, world_h, window_masks_,
                                    cairo_image_surface_get_data(window_pixels_),
-                                   cairo_image_surface_get_stride(window_pixels_), &window_keys_, &glass_cells_);
+                                   cairo_image_surface_get_stride(window_pixels_), &window_keys_, &glass_cells_,
+                                   &micro_nuclear_lamp());
         cairo_surface_mark_dirty(window_pixels_);
         // A new or loaded city lights in one go; a running city's small
         // changes are flattened a quarter of the map per frame, starting

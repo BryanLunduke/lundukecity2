@@ -718,6 +718,11 @@ int special_menu_count()
     return count_menu_rows();
 }
 
+bool tile_is_power_plant(int center_tile)
+{
+    return center_tile == POWERPLANT || center_tile == NUCLEAR || center_tile == SPECIAL_MICRONUKE;
+}
+
 int special_datacenter_lot_index()
 {
     return row_for_tile(SPECIAL_DATACENTER_LOT);

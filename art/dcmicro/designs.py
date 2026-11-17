@@ -219,6 +219,10 @@ def west_wall(v, s):
     return 'wall_lit'
 
 
+# The atom emblem's box on the micro plant (design A): atom(c, 5, 2, ...) is 9x9.
+MN_ATOM = (5, 2, 13, 10)
+
+
 def mn_r3a():
     """A: 10x10 roof with light parapet, 2 px walls, 9 px atom (the r2 C atom, one px less roof)."""
     c = px.Canvas(16, 16); c.frame()

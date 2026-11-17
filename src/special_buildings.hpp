@@ -92,6 +92,9 @@ int special_menu_count();
 // fit; raise this (and only this) to add rows past it.
 inline constexpr int kSpecialSpriteSlots = 16;
 // Table rows for the buttons that place one fixed special.
+// A power plant's zone centre: coal (POWERPLANT), nuclear (NUCLEAR) or
+// micro nuclear (SPECIAL_MICRONUKE). Plants need no road.
+bool tile_is_power_plant(int center_tile);
 int special_datacenter_lot_index();
 int special_datacenter_index();
 int special_micro_nuclear_index();

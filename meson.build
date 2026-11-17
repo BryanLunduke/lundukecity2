@@ -126,6 +126,7 @@ install_data(
     'data/special-tiles/datacenter-glass.png',
     'data/special-tiles/micro-nuclear.png',
     'data/special-tiles/micro-nuclear-svga.png',
+    'data/special-tiles/micro-nuclear-light.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'special-tiles',
 )

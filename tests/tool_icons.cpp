@@ -202,6 +202,7 @@ int main()
         {"fountain", 16}, {"fountain-svga", 16}, {"fountain-spooky", 16},
         {"datacenter", 48}, {"datacenter-svga", 48}, {"datacenter-vacant", 48}, {"datacenter-vacant-svga", 48},
         {"datacenter-glass", 48}, {"micro-nuclear", 16}, {"micro-nuclear-svga", 16},
+        {"micro-nuclear-light", 16},
     };
     for (const SheetExpect &sheet : kNewSheets) {
         cairo_surface_t *surface = load_png(std::string("special-tiles/") + sheet.name + ".png");

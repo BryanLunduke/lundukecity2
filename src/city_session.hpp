@@ -273,6 +273,8 @@ public:
         std::string condition;
         bool offer_power = false;
         bool zone = false;
+        // Coal, nuclear or micro nuclear plant: no road needed.
+        bool power_plant = false;
         int left = 0;
         int top = 0;
         int width = 1;

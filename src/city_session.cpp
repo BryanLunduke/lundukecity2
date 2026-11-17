@@ -2593,6 +2593,7 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     if (inside || ((raw & ZONEBIT) != 0 && tile != DIRT)) {
         const int sample = inside ? map_value(center_x, center_y) : raw;
         const bool powered = (sample & PWRBIT) != 0;
+        card.power_plant = tile_is_power_plant(sample & LOMASK);
         if (special_tile_skips_power(sample & LOMASK)) {
             card.power = "Power: not needed";
         } else {
@@ -2785,6 +2786,7 @@ CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
         facts.power = -1;
     }
     facts.access = card.access == "Road access" || card.access == "Rail access";
+    facts.needs_road = !card.power_plant;
     out.notes = special_inspect_notes(x, y);
     facts.density = layer_value(MapLayer::Population, x, y);
     facts.land_value = layer_value(MapLayer::LandValue, x, y);

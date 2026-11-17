@@ -760,6 +760,38 @@ test(
 
 # November playtest notes: fountain Inspect, menu highlight, Inspect bars
 # and the Year in Review wording. Built on Windows too.
+# Power plants need no road; their Inspect card does not ask for one.
+plant_inspect = executable(
+  'plant_inspect',
+  'plant_inspect.cpp',
+  '../src/assets.cpp',
+  '../src/city_glance.cpp',
+  '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
+  '../src/messages.cpp',
+  '../src/overlay_map.cpp',
+  '../src/sound_player.cpp',
+  '../src/special_buildings.cpp',
+  '../src/sprite_art.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep, cairo_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'plant_inspect',
+  plant_inspect,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+  timeout: 120,
+)
+
 playtest_notes = executable(
   'playtest_notes',
   'playtest_notes.cpp',

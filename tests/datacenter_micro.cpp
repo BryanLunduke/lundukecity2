@@ -412,6 +412,65 @@ int main()
         }
     }
 
+    // Night: the micro plant's atom lights (nucleus warm, electrons cool)
+    // only on an intact, powered micro plant.
+    {
+        const int w = 3;
+        const int h = 1;
+        night_light::TileLamp lamp;
+        lamp.tile = SPECIAL_MICRONUKE;
+        lamp.pixels.assign(static_cast<std::size_t>(night_light::kTile * night_light::kTile), 0);
+        const int nucleus = 6 * night_light::kTile + 9;
+        const int ring = 2 * night_light::kTile + 6;
+        lamp.pixels[static_cast<std::size_t>(nucleus)] = 0xFFFFA85Cu;
+        lamp.pixels[static_cast<std::size_t>(ring)] = 0x7880C4F0u;
+        const int on = SPECIAL_MICRONUKE | ZONEBIT | PWRBIT | CONDBIT;
+        std::vector<int> raw = {on, SPECIAL_MICRONUKE | ZONEBIT | CONDBIT, RUBBLE};
+        if (!night_light::lamp_lit(&lamp, raw[0]) || night_light::lamp_lit(&lamp, raw[1]) ||
+            night_light::lamp_lit(&lamp, raw[2]) || night_light::lamp_lit(&lamp, SPECIAL_MICRONUKE | PWRBIT) ||
+            night_light::lamp_lit(nullptr, raw[0])) {
+            return fail(46, "the micro plant lamp lights on the wrong tiles");
+        }
+        const int kt = night_light::kTile;
+        const int stride = w * kt * 4;
+        std::vector<unsigned char> windows(static_cast<std::size_t>(stride * h * kt), 0);
+        const std::vector<night_light::MaskRows> no_masks;
+        night_light::build_windows(raw, w, h, no_masks, windows.data(), stride, nullptr, nullptr, &lamp);
+        auto pixel = [&](int x, int y) {
+            return *reinterpret_cast<const std::uint32_t *>(&windows[static_cast<std::size_t>(y * stride + x * 4)]);
+        };
+        const std::uint32_t lit_nucleus = pixel(9, 6);
+        const std::uint32_t lit_ring = pixel(6, 2);
+        if ((lit_nucleus >> 24) != 0xFF || ((lit_nucleus >> 16) & 0xFF) <= (lit_nucleus & 0xFF)) {
+            return fail(47, "the nucleus should light warm at full strength");
+        }
+        if ((lit_ring >> 24) != 0x78 || (lit_ring & 0xFF) <= ((lit_ring >> 16) & 0xFF)) {
+            return fail(48, "the orbit ring should light faint and cool");
+        }
+        if (pixel(0, 0) != 0 || pixel(kt + 9, 6) != 0 || pixel(2 * kt + 9, 6) != 0) {
+            return fail(49, "an unpowered or wrecked micro plant lit up");
+        }
+        // The glow layer gets a pool around the powered plant only.
+        const int lw = w * night_light::kPx;
+        const int lstride = lw * 4;
+        std::vector<unsigned char> glow(static_cast<std::size_t>(lstride * h * night_light::kPx), 0);
+        night_light::build(raw, w, h, glow.data(), lstride, nullptr, nullptr, &lamp);
+        auto glow_at = [&](int x, int y) {
+            return *reinterpret_cast<const std::uint32_t *>(&glow[static_cast<std::size_t>(y * lstride + x * 4)]);
+        };
+        if ((glow_at(2, 1) >> 24) == 0) {
+            return fail(50, "a powered micro plant casts no glow");
+        }
+        std::vector<int> dark = {raw[1], raw[1], raw[2]};
+        std::vector<unsigned char> none(glow.size(), 0);
+        night_light::build(dark, w, h, none.data(), lstride, nullptr, nullptr, &lamp);
+        for (unsigned char byte : none) {
+            if (byte != 0) {
+                return fail(51, "an unpowered micro plant casts a glow");
+            }
+        }
+    }
+
     std::puts("datacenter_micro ok");
     return 0;
 }

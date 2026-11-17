@@ -3306,7 +3306,14 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             const double used = chip(x + margin, power_text, facts.facts.power);
             if (zone || facts.facts.kind == inspect_report::Kind::Building) {
-                chip(x + margin + used + dp(8), facts.facts.access ? "Road access" : "No road", facts.facts.access ? 1 : 0);
+                if (facts.facts.access) {
+                    chip(x + margin + used + dp(8), "Road access", 1);
+                } else if (!facts.facts.needs_road) {
+                    // Power plants work without a road.
+                    chip(x + margin + used + dp(8), "No road needed", -1);
+                } else {
+                    chip(x + margin + used + dp(8), "No road", 0);
+                }
             }
             text_spans_.push_back(TextSpan{x + margin, cy, inner, chip_h});
         }

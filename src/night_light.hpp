@@ -71,12 +71,23 @@ using CellGlass = std::vector<MaskRows>;
 void stamp_glass(const std::vector<int> &raw, int w, int h, int center_tile, int body_tile, int span, int anchor,
                  const std::vector<MaskRows> &sheet, CellGlass &out, bool clear = true);
 
+// A 1x1 building lit pixel by pixel from its own light sheet: the micro
+// nuclear plant's atom. `pixels` is kTile*kTile straight ARGB (0xAARRGGBB,
+// row-major); alpha is the light's strength and 0 is dark. It lights on
+// an intact building (its centre tile with ZONEBIT) that has power.
+struct TileLamp {
+    int tile = -1;
+    std::vector<std::uint32_t> pixels;
+};
+
 // Fills the glow layer `out` (premultiplied ARGB32, width w*kPx, height
 // h*kPx, `stride` bytes per row) from the raw map words in `raw`
 // (row-major, w*h). With `masks`, lit windows add a faint bloom; lit
-// `glass` does too.
+// `glass` does too. A lit `lamp` adds a small soft pool of its own colour
+// around each of its pixels.
 void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int stride,
-           const std::vector<MaskRows> *masks = nullptr, const CellGlass *glass = nullptr);
+           const std::vector<MaskRows> *masks = nullptr, const CellGlass *glass = nullptr,
+           const TileLamp *lamp = nullptr);
 
 // Fills the window layer `out` (premultiplied ARGB32, width w*kTile,
 // height h*kTile). Only mask pixels of powered buildings light, and each
@@ -84,9 +95,13 @@ void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int st
 // be null) remembers what each tile was drawn from, so a later call only
 // repaints tiles that changed. Returns the number of tiles repainted.
 // With `glass`, every glass pixel of a powered building lights too, in a
-// cool server-room white.
+// cool server-room white. With `lamp`, a lit lamp tile paints its sheet.
 int build_windows(const std::vector<int> &raw, int w, int h, const std::vector<MaskRows> &masks, unsigned char *out,
-                  int stride, std::vector<int> *keys = nullptr, const CellGlass *glass = nullptr);
+                  int stride, std::vector<int> *keys = nullptr, const CellGlass *glass = nullptr,
+                  const TileLamp *lamp = nullptr);
+
+// True when `lamp` lights the map word `word` (its tile, ZONEBIT, PWRBIT).
+bool lamp_lit(const TileLamp *lamp, int word);
 
 // Colour of one lit glass pixel (art pixel ax, ay of the map) as 0..1 RGB.
 void glass_rgb(int ax, int ay, float &r, float &g, float &b);
