@@ -191,13 +191,14 @@ int main()
             text.highlights.find("reached 50,000") != std::string::npos ||
             text.highlights.find("Grew into a town") != std::string::npos ||
             text.highlights.find("Grew into a city") != std::string::npos ||
-            text.highlights.find("An explosion has been detected (4 times)") == std::string::npos) {
+            text.highlights.find("explosion") != std::string::npos) {
             std::fprintf(stderr, "%s\n", text.highlights.c_str());
-            return fail(43, "highlights should be plain, dateless and not repeat the milestone");
+            return fail(43, "highlights should be plain, dateless, good news only and not repeat the milestone");
         }
-        if (text.challenges.find("Top complaint: Crime (31% of citizens)") != 0) {
+        if (text.challenges.find("Top complaint: Crime (31% of citizens)") != 0 ||
+            text.challenges.find("An explosion has been detected (4 times)") == std::string::npos) {
             std::fprintf(stderr, "%s\n", text.challenges.c_str());
-            return fail(44, "challenges should name the top complaint plainly");
+            return fail(44, "challenges should name the top complaint plainly, then the disasters");
         }
         civic::YearDigest first = civic::make_year_digest(500, 500, true, false, 10, civic::Ledger{}, nullptr, nullptr,
                                                           -1, -1, 0, false, 1901, {});
@@ -206,6 +207,38 @@ int main()
             fresh.challenges != "No big complaints this year.") {
             std::fprintf(stderr, "%s | %s | %s\n", fresh.people.c_str(), fresh.funds.c_str(), fresh.challenges.c_str());
             return fail(45, "a first year should omit the change and read plainly");
+        }
+        // A collapse with no one left to poll (the review's monster year):
+        // the blackout, the monster and the demand nag are challenges, and
+        // Challenges never says "No big complaints".
+        {
+            civic::Ledger prior;
+            prior.have_prior = true;
+            prior.prior_population = 640;
+            civic::award(prior, civic::Balanced, 1901, 6, nullptr);
+            std::vector<civic::DigestNotice> bad;
+            for (const char *line : {"Blackouts reported. Check power.", "A monster has been sighted.",
+                                     "More commercial zones needed."}) {
+                civic::DigestNotice n;
+                n.text = line;
+                n.year = 1901;
+                n.month = 4;
+                bad.push_back(n);
+            }
+            civic::YearDigest crash = civic::make_year_digest(15000, 15100, true, false, 0, prior, nullptr, nullptr, -1, -1,
+                                                              0, false, 1902, bad);
+            const civic::ReviewText fell = civic::make_review_text(crash, 0, 0, 0, true, "Village", 0, 0);
+            if (fell.highlights.find("Blackouts") != std::string::npos ||
+                fell.highlights.find("monster") != std::string::npos ||
+                fell.highlights.find("zones needed") != std::string::npos ||
+                fell.challenges.find("No big complaints") != std::string::npos ||
+                fell.challenges.find("Blackouts reported") == std::string::npos ||
+                fell.challenges.find("A monster has been sighted") == std::string::npos ||
+                fell.challenges.find("More commercial zones needed") == std::string::npos ||
+                fell.challenges.find("Population down 640") == std::string::npos) {
+                std::fprintf(stderr, "H: %s\nC: %s\n", fell.highlights.c_str(), fell.challenges.c_str());
+                return fail(46, "bad news must sit under Challenges, never Highlights");
+            }
         }
     }
     std::printf("playtest notes ok\n");
