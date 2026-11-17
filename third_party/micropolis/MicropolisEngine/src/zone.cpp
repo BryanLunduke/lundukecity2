@@ -87,6 +87,18 @@ void Micropolis::doZone(const Position &pos)
         return;
     }
 
+    // Micro nuclear plant: a 1x1 plant with 1/9 of NUCLEAR's output (see
+    // doPowerScan) and 1/9 of its assessed value (getAssessedValue). It has
+    // no meltdown roll, so it can never melt down. A big plant adds one
+    // powered zone to the score's power share; a ninth of that rounds to
+    // nothing, so a micro plant is left out of the powered/unpowered counts.
+    if (openAir == SPECIAL_MICRONUKE) {
+        setZonePower(pos);
+        microNuclearPop++;
+        pushPowerStack(pos);
+        return;
+    }
+
     // Set Power Bit in Map from powerGridMap
     bool zonePowerFlag = setZonePower(pos);
 
@@ -105,6 +117,33 @@ void Micropolis::doZone(const Position &pos)
         tile == SPECIAL_PRISON || tile == SPECIAL_MARINA || tile == SPECIAL_FOUNTAIN) {
         return;
     }
+
+    // Data Center. The vacant lot becomes the built center the first time
+    // it has power. A powered Data Center counts as one commercial and one
+    // industrial zone at a fixed light density. It makes no pollution (its
+    // tiles are on the zero list in getPollutionValue) and no traffic.
+    if (tile == SPECIAL_DATACENTER_LOT) {
+        if (!zonePowerFlag || !powerGridFresh) {
+            if (!powerGridFresh) {
+                // The grid is from before this city was loaded.
+                map[pos.posX][pos.posY] &= ~PWRBIT;
+            }
+            return;
+        }
+        map[pos.posX][pos.posY] =
+            (map[pos.posX][pos.posY] & ~LOMASK) | SPECIAL_DATACENTER;
+        tile = SPECIAL_DATACENTER;
+    }
+    if (tile == SPECIAL_DATACENTER) {
+        if (zonePowerFlag) {
+            comZonePop++;
+            indZonePop++;
+            comPop += DATACENTER_ZONE_DENSITY;
+            indPop += DATACENTER_ZONE_DENSITY;
+        }
+        return;
+    }
+
 
     // Do special zones.
     if ((tile > PORTBASE) &&
@@ -458,7 +497,7 @@ bool Micropolis::setZonePower(const Position &pos)
     MapValue mapValue = map[pos.posX][pos.posY];
     MapTile tile = mapValue & LOMASK;
 
-    if (tile == NUCLEAR || tile == POWERPLANT) {
+    if (tile == NUCLEAR || tile == POWERPLANT || tile == SPECIAL_MICRONUKE) {
         map[pos.posX][pos.posY] = mapValue | PWRBIT;
         return true;
     }

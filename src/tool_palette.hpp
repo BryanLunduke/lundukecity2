@@ -28,13 +28,16 @@ inline double icon_pixel_scale(int source, int slot)
     return static_cast<double>(std::max(1, slot / source));
 }
 
+// Toolbar buttons with a sprite: every palette entry but Query.
+inline constexpr int kToolIconCount = 18;
+
 // Short name drawn when the sprite file is missing, so the button is not blank.
 inline const char *tool_icon_fallback_label(int index)
 {
-    static const char *labels[17] = {
-        "BD", "RD", "RL", "PW", "PK", "R", "C", "I", "PO", "FD", "ST", "SP", "CO", "NU", "AP", "*", "?",
+    static const char *labels[kToolIconCount + 1] = {
+        "BD", "RD", "RL", "PW", "PK", "R", "C", "I", "DC", "PO", "FD", "ST", "SP", "CO", "NU", "MN", "AP", "*", "?",
     };
-    if (index < 0 || index >= 17) {
+    if (index < 0 || index > kToolIconCount) {
         return "?";
     }
     return labels[index];
@@ -45,14 +48,14 @@ inline void paint_tool_fallback(cairo_t *cr, int index, double x, double y, doub
     if (cr == nullptr || size < 4.0) {
         return;
     }
-    static const double colors[17][3] = {
+    static const double colors[kToolIconCount + 1][3] = {
         {0.85, 0.62, 0.12}, {0.25, 0.25, 0.28}, {0.45, 0.28, 0.14}, {0.55, 0.55, 0.15},
         {0.18, 0.55, 0.22}, {0.20, 0.62, 0.28}, {0.16, 0.32, 0.72}, {0.72, 0.40, 0.12},
-        {0.15, 0.28, 0.70}, {0.75, 0.16, 0.14}, {0.20, 0.55, 0.28}, {0.12, 0.40, 0.62},
-        {0.22, 0.22, 0.24}, {0.15, 0.55, 0.58}, {0.35, 0.45, 0.62}, {0.85, 0.65, 0.12},
-        {0.25, 0.25, 0.28},
+        {0.78, 0.66, 0.16}, {0.15, 0.28, 0.70}, {0.75, 0.16, 0.14}, {0.20, 0.55, 0.28},
+        {0.12, 0.40, 0.62}, {0.22, 0.22, 0.24}, {0.15, 0.55, 0.58}, {0.20, 0.48, 0.52},
+        {0.35, 0.45, 0.62}, {0.85, 0.65, 0.12}, {0.25, 0.25, 0.28},
     };
-    const int clamped = std::max(0, std::min(index, 16));
+    const int clamped = std::max(0, std::min(index, kToolIconCount));
     cairo_set_source_rgb(cr, colors[clamped][0], colors[clamped][1], colors[clamped][2]);
     cairo_rectangle(cr, x, y, size, size);
     cairo_fill(cr);
@@ -128,5 +131,7 @@ private:
     int hover_ms_ = 0;
 };
 
+// File stem under tool-icons/ for a palette index (Query has none).
+const char *tool_icon_stem(int index);
 // Toolbar and menu sprites, loaded by file stem under tool-icons/.
 cairo_surface_t *tool_icon_named(const char *stem);

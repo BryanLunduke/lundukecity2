@@ -32,7 +32,7 @@ enum KeyAct : int {
     KeyEvaluation,
     KeyFullscreen,
     KeyTool0,
-    KeyActCount = KeyTool0 + 17
+    KeyActCount = KeyTool0 + 19
 };
 
 enum PadAct : int {
@@ -109,9 +109,10 @@ inline const char *key_act_id(int act)
         break;
     }
     if (act >= KeyTool0 && act < KeyActCount) {
-        static const char *ids[] = {"bulldoze", "roads", "rail", "power", "park", "residential", "commercial",
-                                    "industrial", "police", "fire", "stadium", "seaport", "coal", "nuclear",
-                                    "airport", "special", "query"};
+        static const char *ids[] = {"bulldoze", "roads",   "rail",    "power",   "park",         "residential",
+                                    "commercial", "industrial", "datacenter", "police", "fire", "stadium",
+                                    "seaport",  "coal",    "nuclear", "micronuclear", "airport", "special",
+                                    "query"};
         return ids[act - KeyTool0];
     }
     return "";
@@ -202,9 +203,10 @@ inline const char *key_act_label(int act)
         break;
     }
     if (act >= KeyTool0 && act < KeyActCount) {
-        static const char *names[] = {"Bulldozer", "Roads", "Rail", "Power lines", "Park", "Residential",
-                                      "Commercial", "Industrial", "Police", "Fire dept", "Stadium", "Seaport",
-                                      "Coal power", "Nuclear", "Airport", "Special", "Inspect"};
+        static const char *names[] = {"Bulldozer", "Roads",     "Rail",      "Power lines",   "Park",
+                                      "Residential", "Commercial", "Industrial", "Data Center", "Police",
+                                      "Fire dept", "Stadium",   "Seaport",   "Coal power",    "Nuclear",
+                                      "Micro nuclear", "Airport", "Special", "Inspect"};
         return names[act - KeyTool0];
     }
     return "";
@@ -315,7 +317,8 @@ inline std::string factory_key(int act)
         break;
     }
     if (act >= KeyTool0 && act < KeyActCount) {
-        static const char letters[] = {'b', 'r', 't', 'w', 'g', 'h', 'c', 'i', 'o', 'f', 'd', 'p', 'e', 'u', 'a', 'v', 'q'};
+        static const char letters[] = {'b', 'r', 't', 'w', 'g', 'h', 'c', 'i', 'z', 'o',
+                                       'f', 'd', 'p', 'e', 'u', 'm', 'a', 'v', 'q'};
         return std::string(1, letters[act - KeyTool0]);
     }
     return {};
@@ -753,9 +756,11 @@ inline ControlBinds binds_from_text(const std::string &text)
     return binds;
 }
 
+inline constexpr int kBindRowCount = 42;
+
 inline int bind_row_count()
 {
-    return 40;
+    return kBindRowCount;
 }
 
 inline BindRow bind_row(int index)
@@ -792,18 +797,20 @@ inline BindRow bind_row(int index)
         {"Residential", KeyTool0 + 5, -1},
         {"Commercial", KeyTool0 + 6, -1},
         {"Industrial", KeyTool0 + 7, -1},
-        {"Police", KeyTool0 + 8, -1},
-        {"Fire dept", KeyTool0 + 9, -1},
-        {"Stadium", KeyTool0 + 10, -1},
-        {"Seaport", KeyTool0 + 11, -1},
-        {"Coal power", KeyTool0 + 12, -1},
-        {"Nuclear", KeyTool0 + 13, -1},
-        {"Airport", KeyTool0 + 14, -1},
-        {"Special", KeyTool0 + 15, -1},
-        {"Inspect", KeyTool0 + 16, PadQuery},
+        {"Data Center", KeyTool0 + 8, -1},
+        {"Police", KeyTool0 + 9, -1},
+        {"Fire dept", KeyTool0 + 10, -1},
+        {"Stadium", KeyTool0 + 11, -1},
+        {"Seaport", KeyTool0 + 12, -1},
+        {"Coal power", KeyTool0 + 13, -1},
+        {"Nuclear", KeyTool0 + 14, -1},
+        {"Micro nuclear", KeyTool0 + 15, -1},
+        {"Airport", KeyTool0 + 16, -1},
+        {"Special", KeyTool0 + 17, -1},
+        {"Inspect", KeyTool0 + 18, PadQuery},
     };
-    static_assert(sizeof(rows) / sizeof(rows[0]) == 40, "bind row count");
-    if (index < 0 || index >= 40) {
+    static_assert(sizeof(rows) / sizeof(rows[0]) == kBindRowCount, "bind row count");
+    if (index < 0 || index >= kBindRowCount) {
         return BindRow{"", -1, -1};
     }
     return rows[index];

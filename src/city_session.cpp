@@ -2705,6 +2705,40 @@ int CitySession::map_value(int x, int y) const
     return engine_->sim.map[x][y];
 }
 
+std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
+{
+    std::vector<std::string> notes;
+    if (!ready_) {
+        return notes;
+    }
+    int index = -1;
+    int cell = 0;
+    auto word = [](int wx, int wy, const void *ctx) {
+        return Micropolis::testBounds(wx, wy) ? static_cast<const CitySession *>(ctx)->map_value(wx, wy) : -1;
+    };
+    if (!special_sheet_at(x, y, word, this, index, cell)) {
+        return notes;
+    }
+    const SpecialBuilding &building = special_building(index);
+    const int cx = x - cell % std::max(1, building.width) + building.anchor_x;
+    const int cy = y - cell / std::max(1, building.width) + building.anchor_y;
+    const bool powered = (map_value(cx, cy) & PWRBIT) != 0;
+    if (index == special_datacenter_lot_index()) {
+        notes.push_back("Vacant lot: the Data Center opens once it has power");
+        notes.push_back("Then counts as 1 industrial + 1 commercial zone");
+        notes.push_back("No pollution");
+    } else if (index == special_datacenter_index()) {
+        notes.push_back(powered ? "Counts as 1 industrial + 1 commercial zone"
+                                : "Counts as 1 industrial + 1 commercial zone with power");
+        notes.push_back("No pollution");
+    } else if (index == special_micro_nuclear_index()) {
+        notes.push_back("Supplies 1/9 of a nuclear plant's power (about " +
+                        std::to_string(kMicroNuclearPowerTiles) + " tiles)");
+        notes.push_back("Cannot melt down. No pollution");
+    }
+    return notes;
+}
+
 CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
 {
     InspectFacts out;
@@ -2751,6 +2785,7 @@ CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
         facts.power = -1;
     }
     facts.access = card.access == "Road access" || card.access == "Rail access";
+    out.notes = special_inspect_notes(x, y);
     facts.density = layer_value(MapLayer::Population, x, y);
     facts.land_value = layer_value(MapLayer::LandValue, x, y);
     facts.crime = layer_value(MapLayer::Crime, x, y);

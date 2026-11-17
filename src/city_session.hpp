@@ -294,8 +294,13 @@ public:
         int top = 0;
         int width = 1;
         int height = 1;
+        // Short facts about the building itself, drawn under the chips
+        // (Data Center: zone counts and no pollution; Micro Nuclear Plant:
+        // its power and no meltdown). Empty for everything else.
+        std::vector<std::string> notes;
     };
     InspectFacts inspect_facts(int x, int y);
+    std::vector<std::string> special_inspect_notes(int x, int y) const;
     // Live head count, the same figure the Evaluation window shows.
     std::int64_t population() const;
     const civic::Ledger &ledger() const { return ledger_; }

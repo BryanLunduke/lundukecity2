@@ -992,6 +992,13 @@ void Shell::bind_session()
     map_.on_tool_down = [this](int x, int y) {
         goal_dismissed_ = true;
         const ToolDef *tool = tool_by_index(tool_index_);
+        const int fixed = tool_fixed_special(tool);
+        if (fixed >= 0) {
+            // Data Center and Micro nuclear: the button is the building.
+            special_open_ = false;
+            session_.place_special(fixed, x, y);
+            return;
+        }
         if (tool->engine_id == kSpecialEngineId) {
             if (special_open_ || special_choice_ < 0) {
                 if (special_choice_ < 0) {
@@ -2147,7 +2154,7 @@ void Shell::handle_event(const SDL_Event &event)
             } else {
                 graph_pointer_x_ = -1;
             }
-        } else if (hover_id_ >= kSpecialItem && hover_id_ < kSpecialItem + special_building_count()) {
+        } else if (hover_id_ >= kSpecialItem && hover_id_ < kSpecialItem + special_menu_count()) {
             special_cursor_ = hover_id_ - kSpecialItem;
         } else if (hover_id_ == kPaletteId && !menu_.open()) {
             palette_.motion(pointer_x_ - side_x_, pointer_y_ - pal_y_);

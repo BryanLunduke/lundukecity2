@@ -13,6 +13,10 @@ struct ToolDef {
     const char *name;
     int cost;
     const char *hint;
+    // A kSpecialEngineId button that always places this special centre tile
+    // (Data Center, Micro Nuclear Plant). 0 for every other button, and for
+    // the Landmarks button, which opens the dropdown.
+    int special_tile = 0;
 };
 
 extern const ToolDef kTools[];
@@ -22,6 +26,16 @@ extern const int kDefaultToolIndex;
 extern const int kPaletteToolCount;
 
 const ToolDef *tool_by_index(int index);
+// Special-building table row a fixed button places, or -1 (any other tool,
+// including the Landmarks dropdown button).
+int tool_fixed_special(const ToolDef *tool);
+// The Landmarks button: a special tool with no fixed building.
+bool tool_opens_special_menu(const ToolDef *tool);
+// Click / press instruction for a palette entry. Fixed special buttons use
+// their own name ("Data Center: click to zone"); the rest are the
+// engine_id phrases below.
+std::string tool_click_text(const ToolDef *tool);
+std::string tool_press_text(const ToolDef *tool, const char *button);
 // Short instruction for the selected tool, such as "Bulldozer: click to clear".
 const char *tool_click_phrase(int engine_id);
 // False for Query, the inspect mode with no tool picked: the status line

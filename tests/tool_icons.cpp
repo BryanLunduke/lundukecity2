@@ -28,7 +28,8 @@ int fail(const std::string &message)
 
 const char *kNames[] = {
     "bulldozer", "road",    "rail",    "wire",     "park",      "residential", "commercial", "industrial",
-    "police",    "fire",    "stadium", "seaport",  "coal",      "nuclear",     "airport",    "special",
+    "datacenter", "police", "fire",    "stadium",  "seaport",   "coal",        "nuclear",    "micronuclear",
+    "airport",   "special",
     "zoo", "bigpark", "library", "mayor", "casino", "amusement", "prison", "marina", "fountain",
 };
 
@@ -162,7 +163,8 @@ int main()
     if (!have || varied < 8) {
         return fail("a missing icon leaves a blank button");
     }
-    if (tool_icon_fallback_label(3)[0] == '\0' || tool_icon_fallback_label(16)[0] != '?') {
+    if (tool_icon_fallback_label(3)[0] == '\0' || tool_icon_fallback_label(kToolIconCount)[0] != '?' ||
+        std::string(tool_icon_fallback_label(8)) != "DC" || std::string(tool_icon_fallback_label(15)) != "MN") {
         return fail("missing-icon labels are empty");
     }
     auto load_png = [&](const std::string &rel) -> cairo_surface_t * {
@@ -198,6 +200,8 @@ int main()
         {"prison", 64}, {"prison-svga", 64}, {"prison-spooky", 64},
         {"marina", 48}, {"marina-svga", 48}, {"marina-spooky", 48},
         {"fountain", 16}, {"fountain-svga", 16}, {"fountain-spooky", 16},
+        {"datacenter", 48}, {"datacenter-svga", 48}, {"datacenter-vacant", 48}, {"datacenter-vacant-svga", 48},
+        {"datacenter-glass", 48}, {"micro-nuclear", 16}, {"micro-nuclear-svga", 16},
     };
     for (const SheetExpect &sheet : kNewSheets) {
         cairo_surface_t *surface = load_png(std::string("special-tiles/") + sheet.name + ".png");

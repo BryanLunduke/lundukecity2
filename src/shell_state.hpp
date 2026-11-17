@@ -213,6 +213,9 @@ private:
     void select_tool(int index);
     void press_palette(double x, double y);
     int special_tool_index() const;
+    // Table row the map tool places: the fixed building of a Data Center /
+    // Micro nuclear button, otherwise the dropdown choice (-1 for none).
+    int placing_special() const;
     void choose_special(int index);
     void move_special_cursor(int delta);
     void demo_place_gifts(bool query_one);
@@ -473,7 +476,7 @@ private:
     bool open_pause_unfocused_ = false;
     ui_scale::StoredSettings loaded_{};
     int paused_from_ = 2;
-    int tool_index_ = 16;
+    int tool_index_ = 18; // kDefaultToolIndex (Query)
     bool special_open_ = false;
     int special_cursor_ = 0;
     int special_choice_ = -1;

@@ -173,6 +173,10 @@ void Micropolis::init()
     // short nuclearPowerPop;
     nuclearPowerPop = 0;
 
+    microNuclearPop = 0;
+
+    powerGridFresh = false;
+
     // short seaportPop;
     seaportPop = 0;
 
@@ -657,6 +661,7 @@ void Micropolis::init()
     snapAirportPop = 0;
     snapCoalPop = 0;
     snapNuclearPop = 0;
+    snapMicroNuclearPop = 0;
 
     // short speedCycle;
     speedCycle = 0;

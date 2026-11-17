@@ -119,10 +119,13 @@ void Micropolis::doPowerScan()
 
     // Clear power map.
     powerGridMap.clear();
+    powerGridFresh = true;
 
     // Power that the combined coal and nuclear power plants can deliver.
+    // A micro nuclear plant supplies 1/9 of a nuclear plant. Sum in ninths
+    // so nine micros equal one plant exactly.
     Quad maxPower = coalPowerPop * COAL_POWER_STRENGTH +
-                    nuclearPowerPop * NUCLEAR_POWER_STRENGTH;
+                    (nuclearPowerPop * 9 + microNuclearPop) * NUCLEAR_POWER_STRENGTH / 9;
 
     Quad numPower = 0; // Amount of power used.
 

@@ -149,6 +149,11 @@ std::int64_t population_on_map(const unsigned char *map)
                 if (tile != INDCLR) {
                     ind += ((tile - IZB) / 9) % 4 + 1;
                 }
+            } else if (tile == SPECIAL_DATACENTER && (raw & PWRBIT) != 0) {
+                // A powered Data Center is one commercial and one industrial
+                // zone, the same weight doZone gives it.
+                com += DATACENTER_ZONE_DENSITY;
+                ind += DATACENTER_ZONE_DENSITY;
             }
         }
     }
@@ -203,13 +208,16 @@ CityGlance city_glance(const std::string &path)
         const int raw = be_short(data.data() + kMap + i * 2);
         const int tile = raw & LOMASK;
         const bool special_center = tile == SPECIAL_ZOO || tile == SPECIAL_PARK || tile == SPECIAL_LIBRARY ||
-                                    tile == SPECIAL_PRISON || tile == SPECIAL_MARINA || tile == SPECIAL_FOUNTAIN;
+                                    tile == SPECIAL_PRISON || tile == SPECIAL_MARINA || tile == SPECIAL_FOUNTAIN ||
+                                    tile == SPECIAL_DATACENTER_LOT || tile == SPECIAL_DATACENTER ||
+                                    tile == SPECIAL_MICRONUKE;
         const bool special = special_center || tile == SPECIAL_BODY;
         if (tile > CHURCH7LAST && !special) {
             ++unknown;
         }
         if ((raw & ZONEBIT) != 0) {
-            if (tile != SPECIAL_FOUNTAIN) {
+            // One-tile buildings are outside the 3x3 centre budget.
+            if (tile != SPECIAL_FOUNTAIN && tile != SPECIAL_MICRONUKE) {
                 ++centres;
             }
             if (tile > CHURCH7LAST && !special_center) {

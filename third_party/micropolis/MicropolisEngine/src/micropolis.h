@@ -775,10 +775,25 @@ enum MapTileCharacters {
     SPECIAL_MARINA     = 871,
     SPECIAL_FOUNTAIN   = 872,
 
+    // Data Center and Micro Nuclear Plant, also in the free 873..882 gap.
+    // A placed Data Center starts as the vacant lot and doZone turns it
+    // into the built center once it has power. The micro plant is a 1x1
+    // power plant (1/9 of NUCLEAR) that never melts down.
+    SPECIAL_DATACENTER_LOT = 873,
+    SPECIAL_MICRONUKE      = 874,
+    SPECIAL_DATACENTER     = 875,
+
     TILE_COUNT     = 1024,
 
     TILE_INVALID   = -1, ///< Invalid tile (not used in the world map).
 };
+
+/**
+ * Census weight of a powered Data Center (SPECIAL_DATACENTER), added to
+ * both comPop and indPop. Ordinary zones run 1..5 (commercial) and 1..4
+ * (industrial) by density; 2 is a light zone of each kind.
+ */
+static const int DATACENTER_ZONE_DENSITY = 2;
 
 // The shipped tiles.png is 256 by 960, so it draws indices 0 through 959.
 // TILE_COUNT is larger: later ids are simulator values the sheet does not
@@ -1226,6 +1241,20 @@ public:
      * Nuclear power plant population.
      */
     short nuclearPowerPop;
+
+    /**
+     * Micro nuclear plant population (SPECIAL_MICRONUKE). Each one is
+     * worth 1/9 of a nuclear plant for power and assessed value.
+     */
+    short microNuclearPop;
+
+    /**
+     * True once doPowerScan() has filled powerGridMap for the map that is
+     * loaded now. A Data Center lot opens only on a fresh grid, so the scan
+     * right after loading a city (which still sees the previous city's
+     * grid) cannot open a lot that has no power.
+     */
+    bool powerGridFresh;
 
     /**
      * Seaport population.
@@ -2607,6 +2636,7 @@ public:
     short snapAirportPop;
     short snapCoalPop;
     short snapNuclearPop;
+    short snapMicroNuclearPop;
 
     /** Opinion and problems from cityEvaluationPreview, without keeping its writes. */
     bool evalPreviewValid;

@@ -620,11 +620,17 @@ void Shell::select_save_name()
 int Shell::special_tool_index() const
 {
     for (int i = 0; i < kToolCount; ++i) {
-        if (tool_by_index(i)->engine_id == kSpecialEngineId) {
+        if (tool_opens_special_menu(tool_by_index(i))) {
             return i;
         }
     }
     return kToolCount - 1;
+}
+
+int Shell::placing_special() const
+{
+    const int fixed = tool_fixed_special(tool_by_index(tool_index_));
+    return fixed >= 0 ? fixed : special_choice_;
 }
 
 void Shell::select_tool(int index)
@@ -644,7 +650,7 @@ void Shell::select_tool(int index)
     if (entering) {
         menu_.close();
         special_open_ = true;
-        if (special_cursor_ < 0 || special_cursor_ >= special_building_count()) {
+        if (special_cursor_ < 0 || special_cursor_ >= special_menu_count()) {
             special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
         }
     }
@@ -664,11 +670,11 @@ void Shell::cycle_tool(int delta)
 void Shell::press_palette(double x, double y)
 {
     const int index = palette_.index_at(x, y);
-    if (index >= 0 && index == tool_index_ && tool_by_index(index)->engine_id == kSpecialEngineId) {
+    if (index >= 0 && index == tool_index_ && tool_opens_special_menu(tool_by_index(index))) {
         special_open_ = !special_open_;
         if (special_open_) {
             menu_.close();
-            if (special_cursor_ < 0 || special_cursor_ >= special_building_count()) {
+            if (special_cursor_ < 0 || special_cursor_ >= special_menu_count()) {
                 special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
             }
         }
@@ -679,7 +685,7 @@ void Shell::press_palette(double x, double y)
 
 void Shell::move_special_cursor(int delta)
 {
-    const int count = special_building_count();
+    const int count = special_menu_count();
     if (count < 1) {
         return;
     }
@@ -695,7 +701,7 @@ void Shell::move_special_cursor(int delta)
 
 void Shell::choose_special(int index)
 {
-    if (index < 0 || index >= special_building_count()) {
+    if (index < 0 || index >= special_menu_count()) {
         return;
     }
     special_choice_ = index;
@@ -2706,9 +2712,9 @@ void Shell::on_hotspot(int id, double x, double y)
         }
         if (id >= kQuickTool && id < kQuickTool + kToolCount) {
             const int index = id - kQuickTool;
-            if (index == tool_index_ && tool_by_index(index)->engine_id == kSpecialEngineId) {
+            if (index == tool_index_ && tool_opens_special_menu(tool_by_index(index))) {
                 special_open_ = !special_open_;
-                if (special_open_ && (special_cursor_ < 0 || special_cursor_ >= special_building_count())) {
+                if (special_open_ && (special_cursor_ < 0 || special_cursor_ >= special_menu_count())) {
                     special_cursor_ = special_choice_ >= 0 ? special_choice_ : 0;
                 }
                 return;
@@ -2742,7 +2748,7 @@ void Shell::on_hotspot(int id, double x, double y)
         return;
     }
     if (special_open_ && dialog_ == Dialog::None && !menu_.open()) {
-        if (id >= kSpecialItem && id < kSpecialItem + special_building_count()) {
+        if (id >= kSpecialItem && id < kSpecialItem + special_menu_count()) {
             choose_special(id - kSpecialItem);
             return;
         }
@@ -4463,7 +4469,7 @@ ControlsKeyText Shell::controls_keys() const
     put(keys.graphs, KeyGraphs);
     put(keys.evaluation, KeyEvaluation);
     put(keys.fullscreen, KeyFullscreen);
-    for (int i = 0; i < 17; ++i) {
+    for (int i = 0; i < KeyActCount - KeyTool0; ++i) {
         put(keys.tool[i], KeyTool0 + i);
     }
     return keys;
@@ -4642,7 +4648,7 @@ void Shell::refresh_place_cue()
     const int query_id = tool_by_index(kToolCount - 1)->engine_id;
     const bool placeable = engine != query_id && (engine >= 0 || engine == kSpecialEngineId);
     if (placeable && hovering && dialog_ == Dialog::None && !menu_.open()) {
-        const int special = engine == kSpecialEngineId ? special_choice_ : -1;
+        const int special = engine == kSpecialEngineId ? placing_special() : -1;
         const PlaceForecast forecast =
             forecast_tile(engine, hx, hy, special, session_.funds(), session_.auto_bulldoze(),
                           [this](int x, int y) { return session_.map_value(x, y); });

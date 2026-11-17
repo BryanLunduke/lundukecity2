@@ -60,6 +60,11 @@ static_assert(SPECIAL_MARINA == 871, "marina center tile");
 static_assert(SPECIAL_FOUNTAIN == 872, "placeable fountain tile");
 static_assert(SPECIAL_FOUNTAIN != FOUNTAIN, "park fountain animation stays on tile 840");
 static_assert(kSpecialBodyTile == SPECIAL_BODY, "body tile constant");
+static_assert(SPECIAL_DATACENTER_LOT == 873, "vacant data center lot tile");
+static_assert(SPECIAL_MICRONUKE == 874, "micro nuclear plant tile");
+static_assert(SPECIAL_DATACENTER == 875, "built data center tile");
+static_assert(SPECIAL_DATACENTER_LOT > LASTTINYEXP + 2 && SPECIAL_DATACENTER < TINYEXPLAST,
+              "data center and micro plant ids sit in the free gap the bulldozer does not treat as rubble");
 
 namespace {
 
@@ -74,7 +79,7 @@ namespace {
 // click is the tile itself, like a park. Big Park and Fountain are the
 // open-air landmarks: no power. Everything else uses electricity, conducts
 // like a zone, and needs a powered grid.
-const SpecialBuilding kBuildings[] = {
+constexpr SpecialBuilding kBuildings[] = {
     {1020, "Zoo", "zoo", "zoo", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
     {1021, "Big Park", "bigpark", "big-park", 100, 0, 3, 3, 6, 48, "Raises nearby land value", 0, 0, 0, -1, 0, 1, 1,
      false, false, false, true},
@@ -93,7 +98,54 @@ const SpecialBuilding kBuildings[] = {
      "Raises nearby land value. The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
     {SPECIAL_FOUNTAIN, "Fountain", "fountain", "fountain", 20, 0, 1, 1, 4, 16, "Raises nearby land value", 0, 0, 0, -1,
      0, 0, 0, false, false, false, true},
+    // Toolbar-only rows below; the dropdown lists the rows above. The Data
+    // Center is a zone, not a landmark: no land-value bump, no income.
+    // The engine turns the lot into the built row once it has power and
+    // counts a powered Data Center as one commercial plus one industrial
+    // zone (DATACENTER_ZONE_DENSITY each). Neither building pollutes. The
+    // micro plant is 1/9 of a nuclear plant and cannot melt down.
+    {SPECIAL_DATACENTER_LOT, "Data Center", "datacenter", "datacenter-vacant", 400, 0, 3, 3, 0, 0,
+     "Vacant lot. Opens once it has power, then counts as 1 industrial + 1 commercial zone. No pollution", 0, 0, 0,
+     -1, 0, 1, 1, false, false, false, false, false},
+    {SPECIAL_MICRONUKE, "Micro Nuclear Plant", "micronuclear", "micro-nuclear", 1000, 0, 1, 1, 0, 0,
+     "Supplies 1/9 the power of a nuclear plant. Cannot melt down", 0, 0, 0, -1, 0, 0, 0, false, false, false, false,
+     false},
+    {SPECIAL_DATACENTER, "Data Center", "datacenter", "datacenter", 400, 0, 3, 3, 0, 0,
+     "Counts as 1 industrial + 1 commercial zone while powered. No pollution", 0, 0, 0, -1, 0, 1, 1, false, false,
+     false, false, false},
 };
+
+constexpr int kBuildingRows = static_cast<int>(sizeof(kBuildings) / sizeof(kBuildings[0]));
+static_assert(kBuildingRows <= kSpecialSpriteSlots, "MapView caches one sheet per row; raise kSpecialSpriteSlots");
+
+constexpr int count_menu_rows()
+{
+    int rows = 0;
+    while (rows < kBuildingRows && kBuildings[rows].in_menu) {
+        ++rows;
+    }
+    return rows;
+}
+constexpr bool menu_rows_lead()
+{
+    for (int i = count_menu_rows(); i < kBuildingRows; ++i) {
+        if (kBuildings[i].in_menu) {
+            return false;
+        }
+    }
+    return true;
+}
+static_assert(menu_rows_lead(), "dropdown rows come first, so a dropdown index is a table index");
+
+int row_for_tile(int tile)
+{
+    for (int i = 0; i < kBuildingRows; ++i) {
+        if (kBuildings[i].center_tile == tile) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 bool in_bounds(int x, int y)
 {
@@ -658,7 +710,32 @@ bool bulldoze_dock_wreck(Micropolis *sim, int tile_x, int tile_y)
 
 int special_building_count()
 {
-    return static_cast<int>(sizeof(kBuildings) / sizeof(kBuildings[0]));
+    return kBuildingRows;
+}
+
+int special_menu_count()
+{
+    return count_menu_rows();
+}
+
+int special_datacenter_lot_index()
+{
+    return row_for_tile(SPECIAL_DATACENTER_LOT);
+}
+
+int special_datacenter_index()
+{
+    return row_for_tile(SPECIAL_DATACENTER);
+}
+
+int special_micro_nuclear_index()
+{
+    return row_for_tile(SPECIAL_MICRONUKE);
+}
+
+bool special_is_datacenter(int index)
+{
+    return index >= 0 && (index == special_datacenter_lot_index() || index == special_datacenter_index());
 }
 
 const SpecialBuilding &special_building(int index)
@@ -1039,6 +1116,12 @@ bool place_special_building(Micropolis *sim, int index, int tile_x, int tile_y, 
                 bits = static_cast<unsigned short>(bits | CONDBIT);
             }
             sim->map[x][y] = static_cast<unsigned short>(tile | bits);
+            if (building.center_tile == SPECIAL_DATACENTER_LOT) {
+                // The power grid is from the last scan, before this lot was
+                // here. A lot opens for good the first time it has power, so
+                // it waits for a scan that sees its own wiring.
+                sim->powerGridMap.worldSet(x, y, 0);
+            }
         }
     }
     if (building.needs_south_water) {

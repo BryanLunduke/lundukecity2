@@ -142,12 +142,13 @@ struct ControlsKeyText {
     std::string graphs = "Ctrl+G";
     std::string evaluation = "Ctrl+E";
     std::string fullscreen = "F11";
-    std::string tool[17];
+    std::string tool[kToolHotkeyCount];
 
     ControlsKeyText()
     {
-        static const char letters[] = {'B', 'R', 'T', 'W', 'G', 'H', 'C', 'I', 'O', 'F', 'D', 'P', 'E', 'U', 'A', 'V', 'Q'};
-        for (int i = 0; i < 17; ++i) {
+        static const char letters[] = {'B', 'R', 'T', 'W', 'G', 'H', 'C', 'I', 'Z', 'O',
+                                       'F', 'D', 'P', 'E', 'U', 'M', 'A', 'V', 'Q'};
+        for (int i = 0; i < kToolHotkeyCount; ++i) {
             tool[i] = std::string(1, letters[i]);
         }
     }
@@ -187,10 +188,11 @@ struct ControlsSection {
 
 inline const char *controls_tool_name(int index)
 {
-    static const char *names[] = {"Bulldozer", "Roads", "Rail", "Power lines", "Park", "Residential",
-                                  "Commercial", "Industrial", "Police", "Fire dept", "Stadium", "Seaport",
-                                  "Coal power", "Nuclear", "Airport", "Special buildings", "Inspect (a tile's card)"};
-    if (index < 0 || index >= 17) {
+    static const char *names[] = {"Bulldozer",  "Roads",         "Rail",    "Power lines",      "Park",
+                                  "Residential", "Commercial",   "Industrial", "Data Center",   "Police",
+                                  "Fire dept",  "Stadium",       "Seaport", "Coal power",       "Nuclear",
+                                  "Micro nuclear", "Airport",    "Special buildings", "Inspect (a tile's card)"};
+    if (index < 0 || index >= kToolHotkeyCount) {
         return "";
     }
     return names[index];
@@ -199,7 +201,7 @@ inline const char *controls_tool_name(int index)
 // The key shown for a tool: the remapped key when there is one.
 inline std::string controls_tool_key(int index, const ControlsKeyText &keys)
 {
-    if (index >= 0 && index < 17 && !keys.tool[index].empty()) {
+    if (index >= 0 && index < kToolHotkeyCount && !keys.tool[index].empty()) {
         return keys.tool[index];
     }
     const char key = tool_hotkey(index);
@@ -299,7 +301,7 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                             {keys.quit, "Quit"},
                         }, 0});
     ControlsSection tools{"Tool keys", {}, 2};
-    for (int i = 0; i < 17; ++i) {
+    for (int i = 0; i < kToolHotkeyCount; ++i) {
         tools.rows.push_back({controls_tool_key(i, keys), controls_tool_name(i)});
     }
     sections.push_back(tools);

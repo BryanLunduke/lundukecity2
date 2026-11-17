@@ -264,6 +264,7 @@ GLYPH = {
     'R': ["###.", "#..#", "#..#", "###.", "#.#.", "#..#"],
     'C': [".###", "#...", "#...", "#...", "#...", ".###"],
     'I': ["####", ".##.", ".##.", ".##.", ".##.", "####"],
+    'D': ["###.", "#..#", "#..#", "#..#", "#..#", "###."],
 }
 
 
@@ -485,6 +486,60 @@ def industrial():
     c.rect(2, 11, 4, 12, 'glass', 2)
     c.hline(0, 16, 17, M, 3)
     badge(c, 0, 0, 'I', 'zi', ink=('ink', 0))
+    return c
+
+
+def datacenter():
+    """One wide glass-and-steel block with a solar roof. The sign is the
+    vacant lot's colours: a yellow plate with a blue D (industrial plus
+    commercial)."""
+    c = Canvas()
+    M = 'stone'
+    poly(c, [(2, 8), (13, 8), (17, 4), (6, 4)], M, 0)      # roof
+    for y, x0 in ((5, 6), (7, 4)):                           # solar rows on the roof
+        c.hline(x0, x0 + 9, y, 'glass', 2)
+    c.hline(2, 13, 8, M, 2)                                  # roof lip
+    c.rect(2, 9, 13, 16, 'glass', 1)                         # south face glass
+    for x in (2, 5, 8, 11):                                  # mullions
+        c.vline(x, 9, 16, M, 1)
+    c.vline(13, 9, 16, M, 2)
+    c.hline(2, 13, 12, M, 1)                                 # floor line
+    c.rect(2, 14, 13, 16, M, 2)                              # louvred plinth
+    c.hline(2, 13, 15, M, 3)
+    for x in (3, 6, 9, 12):
+        c.put(x, 10, 'glass', 0)                             # sky in the top panes
+    poly(c, [(14, 8), (17, 5), (17, 13), (14, 16)], 'glass', 3)  # east face in shade
+    for y in (11, 14):
+        c.hline(14, 17, y, M, 3)
+    c.vline(14, 8, 16, M, 3)
+    c.hline(0, 17, 17, M, 3)
+    badge(c, 0, 0, 'D', 'zi', ink=('zc', 1))
+    return c
+
+
+def micronuclear():
+    """A small squat plant building wearing the reactor atom from its map
+    tile: two crossed orbits in ink, a red nucleus, gold electrons. No
+    cooling tower; that is the big plant's."""
+    c = Canvas()
+    M = 'stone'
+    poly(c, [(3, 7), (13, 7), (16, 4), (6, 4)], M, 0)       # roof
+    c.hline(6, 15, 4, M, 1)
+    c.rect(3, 8, 13, 16, 'wall', 0)                          # front wall, pale so the atom reads
+    c.hline(3, 13, 16, 'wall', 2)
+    poly(c, [(14, 7), (16, 5), (16, 14), (14, 16)], M, 3)   # side wall
+    c.rows(4, 8, [
+        ".KK...KK.",
+        "K..K.K..K",
+        "G...K...K",
+        "K..K.K..K",
+        ".KK.R.KK.",
+        "K..K.K..K",
+        "K...K...G",
+        "K..K.K..K",
+        ".KK...KK.",
+    ], {'K': ('ink', 0), 'R': ('roof', 0), 'G': ('gold', 0)})
+    c.hline(1, 17, 17, M, 3)
     return c
 
 
@@ -856,19 +911,20 @@ SPRITES = {
     'commercial': (commercial, 'com'), 'industrial': (industrial, 'ind'), 'police': (police, 'service'),
     'fire': (fire, 'service'), 'stadium': (stadium, 'landmark'), 'seaport': (seaport, 'landmark'),
     'coal': (coal, 'utility'), 'nuclear': (nuclear, 'utility'), 'airport': (airport, 'landmark'),
-    'special': (special, 'landmark'),
+    'special': (special, 'landmark'), 'datacenter': (datacenter, 'ind'), 'micronuclear': (micronuclear, 'utility'),
     'amusement': (amusement, 'landmark'), 'bigpark': (bigpark, 'landmark'), 'casino': (casino, 'landmark'),
     'fountain': (fountain, 'landmark'), 'library': (library, 'landmark'), 'marina': (marina, 'landmark'),
     'mayor': (mayor, 'landmark'), 'prison': (prison, 'landmark'), 'zoo': (zoo, 'landmark'),
 }
-TOOLBAR = ['bulldozer', 'road', 'rail', 'wire', 'park', 'residential', 'commercial', 'industrial',
-           'police', 'fire', 'stadium', 'seaport', 'coal', 'nuclear', 'airport', 'special']
+TOOLBAR = ['bulldozer', 'road', 'rail', 'wire', 'park', 'residential', 'commercial', 'industrial', 'datacenter',
+           'police', 'fire', 'stadium', 'seaport', 'coal', 'nuclear', 'micronuclear', 'airport', 'special']
 LANDMARKS = ['zoo', 'fountain', 'library', 'mayor', 'casino', 'amusement', 'prison', 'marina', 'bigpark']
 ACCENTS = {
     'bulldozer': {'yellow'}, 'road': {'line', 'cone'}, 'rail': {'cone'}, 'wire': {'gold'},
     'park': {'grass'}, 'residential': {'zr'}, 'commercial': {'zc'}, 'industrial': {'zi'},
     'police': {'navy', 'roof'}, 'fire': {'roof'}, 'stadium': {'wood'}, 'seaport': {'navy'},
     'coal': {'gold', 'brick'}, 'nuclear': {'gold'}, 'airport': {'navy'}, 'special': {'gold'},
+    'datacenter': set(), 'micronuclear': {'gold', 'roof'},
     'amusement': {'roof'}, 'bigpark': {'grass'}, 'casino': {'roof'},
     'fountain': {'glass'}, 'library': {'roof'}, 'marina': {'roof'}, 'mayor': {'roof'},
     'prison': {'yellow'}, 'zoo': {'yellow'},

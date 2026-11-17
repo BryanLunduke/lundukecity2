@@ -520,6 +520,23 @@ landmark_power_test = executable(
 
 test('landmark_power', landmark_power_test, timeout: 120)
 
+# Data Center (I+C when powered, no pollution) and micro nuclear (1/9 power,
+# no meltdown): prices, capacity, save/load, glance, night glass.
+datacenter_micro_test = executable(
+  'datacenter_micro',
+  'datacenter_micro.cpp',
+  '../src/city_glance.cpp',
+  '../src/night_light.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  cpp_args: ['-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"'],
+)
+
+test('datacenter_micro', datacenter_micro_test, timeout: 300)
+
 # Thumbnails painted from the scenario files themselves.
 scenario_preview_test = executable(
   'scenario_preview',
@@ -723,6 +740,19 @@ test(
   args: [
     atlas_test,
     meson.project_source_root() / 'data' / 'tool-icons' / 'make_icons.py',
+    '--check',
+  ],
+  env: ['PYTHONDONTWRITEBYTECODE=1'],
+)
+
+# Same check for the Data Center / Micro Nuclear map sheets and the Data
+# Center night-glass mask.
+test(
+  'dcmicro_sprites_generator',
+  python,
+  args: [
+    atlas_test,
+    meson.project_source_root() / 'art' / 'dcmicro' / 'make_dcmicro.py',
     '--check',
   ],
   env: ['PYTHONDONTWRITEBYTECODE=1'],

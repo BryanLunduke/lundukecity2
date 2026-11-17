@@ -68,7 +68,9 @@ bool build_city(Micropolis &sim, const std::string &loose, std::vector<Placed> &
         }
     }
     int left = 12;
-    for (int i = 0; i < special_building_count(); ++i) {
+    // The Landmarks dropdown rows. The Data Center and Micro Nuclear Plant
+    // (toolbar buttons) have their own power test in datacenter_micro.cpp.
+    for (int i = 0; i < special_menu_count(); ++i) {
         const SpecialBuilding &b = special_building(i);
         const bool marina = b.needs_south_water;
         int top = marina ? kWireRow + 1 : kWireRow - b.height;
@@ -158,7 +160,7 @@ int main()
         }
     }
     if (static_cast<int>(sizeof(uses_power) / sizeof(uses_power[0]) + sizeof(open_air) / sizeof(open_air[0])) !=
-        special_building_count()) {
+        special_menu_count()) {
         return fail(3, "a special building is in neither power group");
     }
 

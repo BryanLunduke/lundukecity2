@@ -19,19 +19,23 @@ const ToolDef kTools[] = {
     {TOOL_RESIDENTIAL, "Residential", 100, "Residential: $100"},
     {TOOL_COMMERCIAL, "Commercial", 100, "Commercial: $100"},
     {TOOL_INDUSTRIAL, "Industrial", 100, "Industrial: $100"},
+    {kSpecialEngineId, "Data Center", 400, "Data Center: $400. Industrial + commercial, no pollution",
+     SPECIAL_DATACENTER_LOT},
     {TOOL_POLICESTATION, "Police", 500, "Police: $500"},
     {TOOL_FIRESTATION, "Fire dept", 500, "Fire dept: $500"},
     {TOOL_STADIUM, "Stadium", 5000, "Stadium: $5,000"},
     {TOOL_SEAPORT, "Seaport", 3000, "Seaport: $3,000"},
     {TOOL_COALPOWER, "Coal power", 3000, "Coal power: $3,000"},
     {TOOL_NUCLEARPOWER, "Nuclear power", 5000, "Nuclear power: $5,000"},
+    {kSpecialEngineId, "Micro nuclear", 1000, "Micro nuclear: $1,000. 1/9 of a nuclear plant, no meltdown",
+     SPECIAL_MICRONUKE},
     {TOOL_AIRPORT, "Airport", 10000, "Airport: $10,000"},
     {kSpecialEngineId, "Special buildings", 0, "Special buildings"},
     {TOOL_QUERY, "Inspect", 0, "Inspect"},
 };
 
 const int kToolCount = static_cast<int>(sizeof(kTools) / sizeof(kTools[0]));
-const int kDefaultToolIndex = 16; // Query. A first click reports the tile and does not build.
+const int kDefaultToolIndex = 18; // Query. A first click reports the tile and does not build.
 // Query has no toolbar button. It is the inspect mode with no build tool
 // picked: the hover card shows what is under the pointer, Q and the pad
 // shoulder buttons still reach it, and nothing is built.
@@ -43,6 +47,51 @@ const ToolDef *tool_by_index(int index)
         return &kTools[0];
     }
     return &kTools[index];
+}
+
+int tool_fixed_special(const ToolDef *tool)
+{
+    if (tool == nullptr || tool->engine_id != kSpecialEngineId || tool->special_tile == 0) {
+        return -1;
+    }
+    return special_index_for_tile(tool->special_tile);
+}
+
+bool tool_opens_special_menu(const ToolDef *tool)
+{
+    return tool != nullptr && tool->engine_id == kSpecialEngineId && tool->special_tile == 0;
+}
+
+namespace {
+
+const char *fixed_special_verb(const ToolDef *tool, bool press)
+{
+    const bool zone = tool->special_tile == SPECIAL_DATACENTER_LOT;
+    if (press) {
+        return zone ? "zones" : "builds";
+    }
+    return zone ? "click to zone" : "click to build";
+}
+
+} // namespace
+
+std::string tool_click_text(const ToolDef *tool)
+{
+    if (tool_fixed_special(tool) >= 0) {
+        return std::string(tool->name) + ": " + fixed_special_verb(tool, false);
+    }
+    return tool_click_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY);
+}
+
+std::string tool_press_text(const ToolDef *tool, const char *button)
+{
+    if (tool_fixed_special(tool) >= 0) {
+        if (button == nullptr || button[0] == '\0') {
+            return tool_click_text(tool);
+        }
+        return std::string(tool->name) + ": " + button + " " + fixed_special_verb(tool, true);
+    }
+    return tool_press_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY, button);
 }
 
 const char *tool_click_phrase(int engine_id)
@@ -220,9 +269,13 @@ struct ToolIdCheck {
     {
         assert(TOOL_BULLDOZER == kTools[0].engine_id);
         assert(TOOL_WIRE == kTools[3].engine_id);
-        assert(kSpecialEngineId == kTools[15].engine_id);
-        assert(TOOL_QUERY == kTools[16].engine_id);
-        assert(kToolCount == 17);
+        assert(TOOL_INDUSTRIAL == kTools[7].engine_id);
+        assert(SPECIAL_DATACENTER_LOT == kTools[8].special_tile);
+        assert(TOOL_NUCLEARPOWER == kTools[14].engine_id);
+        assert(SPECIAL_MICRONUKE == kTools[15].special_tile);
+        assert(kSpecialEngineId == kTools[17].engine_id && kTools[17].special_tile == 0);
+        assert(TOOL_QUERY == kTools[18].engine_id);
+        assert(kToolCount == 19);
     }
 };
 
