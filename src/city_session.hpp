@@ -275,6 +275,15 @@ public:
         bool zone = false;
         // Coal, nuclear or micro nuclear plant: no road needed.
         bool power_plant = false;
+        // A building that works only with a road or rail beside it (zones,
+        // service buildings, the Prison). False for plants, the Data
+        // Center and the landmarks whose table row needs no road, and for
+        // anything that is not a building (water, dirt, a road).
+        bool needs_road = false;
+        // Table row of the special building here, -1 for none, and whether
+        // part of it has been destroyed (it stops working until rebuilt).
+        int special = -1;
+        bool damaged = false;
         int left = 0;
         int top = 0;
         int width = 1;
@@ -469,6 +478,15 @@ public:
     };
     const std::vector<CityNotice> &notices() const { return notices_; }
     void clear_notices();
+    // The price of the building a bulldozer at (x, y) would clear, and its
+    // name, or 0 for anything that is not a whole building (A5: the shell
+    // asks before clearing one worth kBulldozeConfirmCost or more).
+    int bulldoze_worth(int tile_x, int tile_y, std::string *name = nullptr) const;
+    static constexpr int kBulldozeConfirmCost = 400;
+    // A one-line message for the toast (not the NEWS log).
+    void tell(std::string text) { post_message(std::move(text)); }
+    // Puts back a NEWS log saved with a recovery file (newest first).
+    void restore_notices(std::vector<CityNotice> notices);
     // Terrain only, on a throwaway simulator. Does not touch this city.
     bool preview_terrain(int seed, int island, int rivers, int lakes, int trees, std::vector<unsigned short> &tiles) const;
     std::vector<SpriteDot> sprites() const;

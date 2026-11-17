@@ -148,6 +148,7 @@ struct TargetCr {
 
 void fill(cairo_t *cr, double x, double y, double w, double h, double r, double g, double b)
 {
+    slate_page::surface(r, g, b);
     cairo_set_source_rgb(cr, r, g, b);
     cairo_rectangle(cr, x, y, w, h);
     cairo_fill(cr);
@@ -155,6 +156,7 @@ void fill(cairo_t *cr, double x, double y, double w, double h, double r, double 
 
 void stroke_rect(cairo_t *cr, double x, double y, double w, double h, double r, double g, double b)
 {
+    slate_page::edge(r, g, b);
     cairo_set_source_rgb(cr, r, g, b);
     cairo_set_line_width(cr, 1);
     cairo_rectangle(cr, x + 0.5, y + 0.5, w - 1, h - 1);
@@ -238,7 +240,9 @@ void Shell::layout()
         palette_.set_columns(2);
         palette_.set_cell(cell_);
         hint_h_ = dp(28);
-        quick_h_ = std::min(dp(66), std::max(dp(44), (win_w_ - dp(40)) / kToolCount));
+        // Full-size slots for the chosen tool's section (quick_bar_layout);
+        // 27 even slots were about 42px on a Steam Deck.
+        quick_h_ = std::min(dp(56), std::max(dp(44), (win_w_ - dp(96)) / 12));
         quick_y_ = win_h_ - hint_h_ - quick_h_ - dp(6);
         hud_top_ = dp(54);
         hud_bottom_ = win_h_ - quick_y_ + dp(6);
@@ -344,7 +348,21 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         const double gold_b = 0.18;
         round_dialog_rect(cr, x, y, w, h, std::min(6.0, h / 2.0));
         cairo_pattern_t *shade = cairo_pattern_create_linear(x, y, x, y + h);
-        if (!enabled) {
+        const bool slate_page = slate_page::active();
+        if (slate_page && !(primary && enabled && !selected)) {
+            // Slate dialog: dark faces; the primary action stays blue.
+            const double lift = hot ? 0.05 : 0.0;
+            if (!enabled) {
+                cairo_pattern_add_color_stop_rgb(shade, 0, 0x23 / 255.0, 0x2A / 255.0, 0x33 / 255.0);
+                cairo_pattern_add_color_stop_rgb(shade, 1, 0x1F / 255.0, 0x25 / 255.0, 0x2E / 255.0);
+            } else if (selected) {
+                cairo_pattern_add_color_stop_rgb(shade, 0, 0x3E / 255.0 + lift, 0x4A / 255.0 + lift, 0x5E / 255.0 + lift);
+                cairo_pattern_add_color_stop_rgb(shade, 1, 0x34 / 255.0, 0x3F / 255.0, 0x50 / 255.0);
+            } else {
+                cairo_pattern_add_color_stop_rgb(shade, 0, 0x35 / 255.0 + lift, 0x41 / 255.0 + lift, 0x54 / 255.0 + lift);
+                cairo_pattern_add_color_stop_rgb(shade, 1, 0x29 / 255.0, 0x32 / 255.0, 0x3F / 255.0);
+            }
+        } else if (!enabled) {
             cairo_pattern_add_color_stop_rgb(shade, 0, 0.78, 0.76, 0.70);
             cairo_pattern_add_color_stop_rgb(shade, 1, 0.68, 0.66, 0.60);
         } else if (selected) {
@@ -480,6 +498,46 @@ void Shell::paint_vga_veil(cairo_t *cr)
 
 void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, const char *title)
 {
+    if (slate_) {
+        // Slate dialogs: the Inspect card's materials (a dark slate page, a
+        // gold keyline and a gold title). slate_page turns the dialog's own
+        // dark ink light and its light fields dark until draw_dialog ends.
+        slate_page::active() = false;
+        cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
+        cairo_rectangle(cr, 0, 0, win_w_, win_h_);
+        cairo_fill(cr);
+        push_hot(0, 0, win_w_, win_h_, 0);
+        cairo_set_source_rgba(cr, 0, 0, 0, 0.45);
+        round_dialog_rect(cr, x + 3, y + 5, w, h, dp(10));
+        cairo_fill(cr);
+        round_dialog_rect(cr, x, y, w, h, dp(10));
+        cairo_set_source_rgb(cr, 0x1E / 255.0, 0x26 / 255.0, 0x31 / 255.0);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgb(cr, 0xC9 / 255.0, 0xA6 / 255.0, 0x46 / 255.0);
+        cairo_set_line_width(cr, 1.5);
+        cairo_stroke(cr);
+        const double rim = std::max(4.0, static_cast<double>(dp(6)));
+        const double kTitleBand = dp(40);
+        const TextMetrics title_metrics = measure_text(cr, title_font(), title, static_cast<int>(w - 24));
+        const double title_y = y + std::max(rim, (kTitleBand - title_metrics.height) / 2.0);
+        const bool title_hint = gamepad_nav_ || deck_ || touch_used_;
+        const std::string hint = title_hint ? dialog_title_hint() : std::string();
+        const TextMetrics hint_metrics = hint.empty() ? TextMetrics{} : measure_text(cr, ui_font(), hint, -1);
+        const int title_wrap =
+            static_cast<int>(std::max(40.0, w - rim * 2 - 16 - (hint.empty() ? 0 : hint_metrics.width + 16)));
+        paint_text(cr, title_font(), title, x + rim + 8, title_y, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0, title_wrap);
+        if (!hint.empty() && hint_metrics.width + 16 < w - title_metrics.width - 48) {
+            paint_text(cr, ui_font(), hint, x + w - rim - hint_metrics.width - 8, title_y, 0xA9 / 255.0, 0xB3 / 255.0,
+                       0xC2 / 255.0, -1);
+        }
+        cairo_set_source_rgb(cr, 0x3A / 255.0, 0x46 / 255.0, 0x58 / 255.0);
+        cairo_set_line_width(cr, 1);
+        cairo_move_to(cr, x + rim + 8, y + kTitleBand + 0.5);
+        cairo_line_to(cr, x + w - rim - 8, y + kTitleBand + 0.5);
+        cairo_stroke(cr);
+        slate_page::active() = true;
+        return;
+    }
     // Same materials as the Year in Review card: a navy rim, a gold edge,
     // and a cream page. The city tiles and the welcome art are untouched.
     const double navy_r = 0.02;
@@ -969,6 +1027,12 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::None) {
         return;
     }
+    // frame_panel turns the Slate page colours on; nothing after the dialog
+    // (toasts, the cursor) may inherit them.
+    struct SlatePageOff {
+        SlatePageOff() { slate_page::active() = false; }
+        ~SlatePageOff() { slate_page::active() = false; }
+    } slate_page_off;
     // The welcome plate is the whole window. It is painted before the
     // two-frame settle so the city art itself does not jump.
     const bool hold_title = welcome_gate_ &&
@@ -1290,6 +1354,21 @@ void Shell::draw_dialog(cairo_t *cr)
         button(cr, bx, by, bw, bh, "Select a _scenario", kWelcomeScenario, false);
         by += bh + gap;
         button(cr, bx, by, bw, bh, "_Quit", kWelcomeQuit, false);
+        return;
+    }
+    if (dialog_ == Dialog::BulldozeConfirm) {
+        const std::string question = "Bulldoze the " + bulldoze_name_ + "? It cost " + civic::dollars(bulldoze_cost_) +
+                                     " to build. Bulldozing costs $1 and gives nothing back.";
+        const double width = message_width(win_w_, margin, dp(420), dp(520));
+        const double column = std::max(1.0, width - 2.0 * margin);
+        const double body_h = text_block_height(question, column);
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Bulldoze?");
+        place_line(body_font(), question, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
+                   theme::kTextG, theme::kTextB);
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
+                   {{"_Keep it", kCancel}, {"_Bulldoze", kOk}}, 0, focus_id_);
         return;
     }
     if (dialog_ == Dialog::QuitConfirm) {
@@ -2480,7 +2559,12 @@ void Shell::draw_dialog(cairo_t *cr)
                         if (paint) {
                             cairo_save(cr);
                             round_dialog_rect(cr, sx + 0.5, ry + 0.5, key_w - 1, chip_h - 1, dp(4));
-                            cairo_set_source_rgb(cr, 0.93, 0.87, 0.72);
+                            if (slate_page::active()) {
+                                // Slate key chip: a raised dark key with a gold keyline.
+                                cairo_set_source_rgb(cr, 0x2E / 255.0, 0x38 / 255.0, 0x47 / 255.0);
+                            } else {
+                                cairo_set_source_rgb(cr, 0.93, 0.87, 0.72);
+                            }
                             cairo_fill_preserve(cr);
                             cairo_set_source_rgb(cr, 0.72, 0.55, 0.18);
                             cairo_set_line_width(cr, 1.0);
@@ -2498,12 +2582,27 @@ void Shell::draw_dialog(cairo_t *cr)
                 return bottom - y;
             };
             const double col_w = (inner - col_gap * (grid - 1)) / grid;
+            // Three columns: the tool keys run in two lists, so their column
+            // takes a larger share (U10) and the long names wrap less.
+            double widths[3] = {col_w, col_w, col_w};
+            if (three) {
+                const double free_w = inner - col_gap * 2;
+                widths[0] = free_w * 0.29;
+                widths[1] = free_w * 0.29;
+                widths[2] = free_w - widths[0] - widths[1];
+            }
             double y = y0;
+            double col_x = x0;
             for (int c = 0; c < grid; ++c) {
                 double cy = y0;
+                const double this_w = widths[c];
                 for (const ControlsSection *section : column[c]) {
-                    cy += section_block(*section, x0 + c * (col_w + col_gap), cy, col_w, 1) + section_gap;
+                    // The long tool-key list gets two runs in its own column
+                    // so it fits without scrolling on a laptop window.
+                    const int runs = section->side == 2 && section->rows.size() > 12 ? 2 : 1;
+                    cy += section_block(*section, col_x, cy, this_w, runs) + section_gap;
                 }
+                col_x += this_w + col_gap;
                 y = std::max(y, cy);
             }
             for (const ControlsSection *section : band) {
@@ -2544,6 +2643,29 @@ void Shell::draw_dialog(cairo_t *cr)
         const double origin = body_top - controls_scroll_;
         lay_page(sections, panel.x + margin, origin, true);
         cairo_restore(cr);
+        if (controls_scroll_ < controls_scroll_max_) {
+            // More rows below the cut: fade the last lines into the page and
+            // say so, since the thin scrollbar alone is easy to miss.
+            const double fade_h = std::min(view_h * 0.5, static_cast<double>(dp(36)));
+            const double fade_y = body_top + view_h - fade_h;
+            const bool dark = slate_page::active();
+            const double pr = dark ? 0x1E / 255.0 : 0.976;
+            const double pg = dark ? 0x26 / 255.0 : 0.922;
+            const double pb = dark ? 0x31 / 255.0 : 0.808;
+            cairo_pattern_t *fade = cairo_pattern_create_linear(0, fade_y, 0, fade_y + fade_h);
+            cairo_pattern_add_color_stop_rgba(fade, 0, pr, pg, pb, 0.0);
+            cairo_pattern_add_color_stop_rgba(fade, 1, pr, pg, pb, 0.95);
+            cairo_save(cr);
+            cairo_rectangle(cr, panel.x + margin, fade_y, panel.w - 2 * margin, fade_h);
+            cairo_set_source(cr, fade);
+            cairo_fill(cr);
+            cairo_restore(cr);
+            cairo_pattern_destroy(fade);
+            const std::string more = deck_ ? "\u25BC More below" : "\u25BC More below (scroll)";
+            const int more_w = measure_text(cr, bold_font(), more, -1).width;
+            paint_text(cr, bold_font(), more, panel.x + (panel.w - more_w) / 2.0,
+                       body_top + view_h - line_height(bold_font(), more, more_w + 4) - dp(2), 0.45, 0.04, 0.02, more_w + 4);
+        }
         if (controls_scroll_max_ > 0) {
             const double track_w = std::max(4.0, static_cast<double>(dp(6)));
             const double track_x = panel.x + panel.w - margin + (margin - track_w) * 0.5;
@@ -3600,19 +3722,24 @@ void Shell::draw(cairo_t *cr)
         const double card_h = dp(78);
         const double card_x = view_x_ + view_w_ - hud_right_ - card_w - dp(12);
         const double card_y = view_y_ + view_h_ - hud_bottom_ - card_h - dp(16);
-        fill(cr, card_x + 2, card_y + 2, card_w, card_h, 0, 0, 0);
-        fill(cr, card_x, card_y, card_w, card_h, 255.0 / 255.0, 255.0 / 255.0, 85.0 / 255.0);
-        stroke_rect(cr, card_x, card_y, card_w, card_h, 0, 0, 0);
-        paint_text(cr, bold_font(), civic::milestone_title(card_id_), card_x + 8, card_y + 6, 0, 0, 0,
-                   static_cast<int>(card_w - 28));
-        paint_text(cr, ui_font(), civic::milestone_card(card_id_), card_x + 8, card_y + dp(28), 0, 0, 0,
-                   static_cast<int>(card_w - 16));
+        if (slate_ || handheld_) {
+            draw_slate_milestone(cr, card_x, card_y, card_w, card_h);
+        } else {
+            fill(cr, card_x + 2, card_y + 2, card_w, card_h, 0, 0, 0);
+            fill(cr, card_x, card_y, card_w, card_h, 255.0 / 255.0, 255.0 / 255.0, 85.0 / 255.0);
+            stroke_rect(cr, card_x, card_y, card_w, card_h, 0, 0, 0);
+            paint_text(cr, bold_font(), civic::milestone_title(card_id_), card_x + 8, card_y + 6, 0, 0, 0,
+                       static_cast<int>(card_w - 28));
+            paint_text(cr, ui_font(), civic::milestone_card(card_id_), card_x + 8, card_y + dp(28), 0, 0, 0,
+                       static_cast<int>(card_w - 16));
+        }
         push_hot(card_x + card_w - dp(22), card_y + 4, dp(18), dp(18), kCardDismiss);
     }
-    const double max_x = std::max(0, map_.pixel_width() - view_w_);
+    const double max_x = scroll_max_x();
     const double max_y = std::max(0, map_.pixel_height() - view_h_);
     if (max_x > 0 && !handheld_) {
-        const double bw = std::max(20.0, view_w_ * (view_w_ / static_cast<double>(map_.pixel_width())));
+        const double span_x = static_cast<double>(view_w_) + max_x;
+        const double bw = std::max(20.0, view_w_ * (view_w_ / span_x));
         const double bx = view_x_ + (view_w_ - bw) * (scroll_x_ / max_x);
         fill(cr, bx, view_y_ + view_h_ - 8, bw, 6, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
     }
@@ -4117,6 +4244,11 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
     const double pad_y = dp(8);
     const double gap = dp(8);
     double bottom = view_y_ + view_h_ - edge - hud_bottom_;
+    if (handheld_ && !menu_.open()) {
+        // Clear of the chosen tool's name and price, drawn above the raised
+        // quick-bar slot.
+        bottom -= dp(44);
+    }
     if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging()) {
         bottom -= dp(78) + gap;
     }
@@ -4644,16 +4776,27 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     const double paper_w = panel_w - 2.0 * frame;
     const double paper_h = panel_h - 2.0 * frame;
 
-    fill(cr, panel_x, panel_y, panel_w, panel_h, navy_r, navy_g, navy_b);
-    stroke_rect(cr, panel_x + 1.5, panel_y + 1.5, panel_w - 3, panel_h - 3, gold_r, gold_g, gold_b);
-    fill(cr, paper_x, paper_y, paper_w, paper_h, paper_r, paper_g, paper_b);
-    cairo_save(cr);
-    cairo_rectangle(cr, paper_x, paper_y, paper_w, paper_h);
-    cairo_clip(cr);
-    cairo_set_source_surface(cr, paper_grain(), paper_x, paper_y);
-    cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
-    cairo_paint(cr);
-    cairo_restore(cr);
+    if (slate_) {
+        // U4: under Slate the review is a dark slate page with the same gold
+        // keylines and filigree. slate_page turns the cream boxes dark and
+        // the dark ink light; draw_dialog switches it off again.
+        slate_page::active() = false;
+        fill(cr, panel_x, panel_y, panel_w, panel_h, 0x16 / 255.0, 0x1C / 255.0, 0x24 / 255.0);
+        stroke_rect(cr, panel_x + 1.5, panel_y + 1.5, panel_w - 3, panel_h - 3, gold_r, gold_g, gold_b);
+        fill(cr, paper_x, paper_y, paper_w, paper_h, 0x1E / 255.0, 0x26 / 255.0, 0x31 / 255.0);
+        slate_page::active() = true;
+    } else {
+        fill(cr, panel_x, panel_y, panel_w, panel_h, navy_r, navy_g, navy_b);
+        stroke_rect(cr, panel_x + 1.5, panel_y + 1.5, panel_w - 3, panel_h - 3, gold_r, gold_g, gold_b);
+        fill(cr, paper_x, paper_y, paper_w, paper_h, paper_r, paper_g, paper_b);
+        cairo_save(cr);
+        cairo_rectangle(cr, paper_x, paper_y, paper_w, paper_h);
+        cairo_clip(cr);
+        cairo_set_source_surface(cr, paper_grain(), paper_x, paper_y);
+        cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+        cairo_paint(cr);
+        cairo_restore(cr);
+    }
     stroke_rect(cr, paper_x + 0.5, paper_y + 0.5, paper_w - 1, paper_h - 1, gold_r, gold_g, gold_b);
     stroke_rect(cr, paper_x + 3.5, paper_y + 3.5, paper_w - 7, paper_h - 7, gold_hi_r, gold_hi_g, gold_hi_b);
     filigree(cr, paper_x + dp(8), paper_y + dp(8), 0, gold_r, gold_g, gold_b);
@@ -4718,6 +4861,10 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         if (primary) {
             cairo_pattern_add_color_stop_rgb(shade, 0, pressed ? 0.08 : 0.20, pressed ? 0.32 : 0.42, pressed ? 0.62 : 0.72);
             cairo_pattern_add_color_stop_rgb(shade, 1, 0.07, 0.24, 0.52);
+        } else if (slate_) {
+            const double lift = hot ? 0.04 : 0.0;
+            cairo_pattern_add_color_stop_rgb(shade, 0, 0x35 / 255.0 + lift, 0x41 / 255.0 + lift, 0x54 / 255.0 + lift);
+            cairo_pattern_add_color_stop_rgb(shade, 1, 0x29 / 255.0, 0x32 / 255.0, 0x3F / 255.0);
         } else {
             const double lift = hot ? 0.06 : 0.0;
             cairo_pattern_add_color_stop_rgb(shade, 0, 0.78 + lift, 0.77 + lift, 0.75 + lift);
@@ -5244,6 +5391,24 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() ? kSlateDim : kSlateInk);
 }
 
+void Shell::draw_slate_milestone(cairo_t *cr, double card_x, double card_y, double card_w, double card_h)
+{
+    // The milestone card in the Slate skin: the hover card's plate with a
+    // gold edge and title, in place of the classic yellow card.
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
+    round_dialog_rect(cr, card_x + 2, card_y + 3, card_w, card_h, dp(8));
+    cairo_fill(cr);
+    slate_round(cr, card_x, card_y, card_w, card_h, dp(8), kSlateBand, 0.96);
+    round_dialog_rect(cr, card_x, card_y, card_w, card_h, dp(8));
+    cairo_set_source_rgb(cr, kSlateGoldDim.r, kSlateGoldDim.g, kSlateGoldDim.b);
+    cairo_set_line_width(cr, 1.0);
+    cairo_stroke(cr);
+    paint_text(cr, bold_font(), civic::milestone_title(card_id_), card_x + 10, card_y + 6, kSlateGold.r, kSlateGold.g,
+               kSlateGold.b, static_cast<int>(card_w - 30));
+    paint_text(cr, ui_font(), civic::milestone_card(card_id_), card_x + 10, card_y + dp(28), kSlateInk.r, kSlateInk.g,
+               kSlateInk.b, static_cast<int>(card_w - 18));
+}
+
 void Shell::draw_hover_card(cairo_t *cr)
 {
     if (dialog_ != Dialog::None || menu_.open() || tool_index_ != kToolCount - 1) {
@@ -5259,7 +5424,7 @@ void Shell::draw_hover_card(cairo_t *cr)
         return;
     }
     const double card_w = std::min(static_cast<double>(dp(220)), std::max(80.0, view_w_ * 0.34));
-    const double card_h = card.offer_power ? dp(132) : dp(96);
+    const double card_h = (card.offer_power ? dp(132) : dp(96)) - (card.access.empty() ? dp(18) : 0);
     inspect_card_shown_ = true;
     inspect_card_w_ = card_w;
     inspect_card_h_ = card_h;
@@ -5272,10 +5437,14 @@ void Shell::draw_hover_card(cairo_t *cr)
                    static_cast<int>(card_w - 16));
         paint_text(cr, ui_font(), card.power, card_x + 8, card_y + dp(26), theme::kTextR, theme::kTextG, theme::kTextB,
                    static_cast<int>(card_w - 16));
-        paint_text(cr, ui_font(), card.access, card_x + 8, card_y + dp(44), theme::kTextR, theme::kTextG, theme::kTextB,
+        double line_y = card_y + dp(44);
+        if (!card.access.empty()) {
+            paint_text(cr, ui_font(), card.access, card_x + 8, line_y, theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(card_w - 16));
+            line_y += dp(18);
+        }
+        paint_text(cr, ui_font(), card.condition, card_x + 8, line_y, theme::kTextR, theme::kTextG, theme::kTextB,
                    static_cast<int>(card_w - 16));
-        paint_text(cr, ui_font(), card.condition, card_x + 8, card_y + dp(62), theme::kTextR, theme::kTextG,
-                   theme::kTextB, static_cast<int>(card_w - 16));
     } else {
         cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
         round_dialog_rect(cr, card_x + 2, card_y + 3, card_w, card_h, dp(8));
@@ -5298,9 +5467,16 @@ void Shell::draw_hover_card(cairo_t *cr)
             paint_text(cr, ui_font(), text, card_x + 24, ly, kSlateInk.r, kSlateInk.g, kSlateInk.b, wrap - 14);
         };
         dot_line(card.power, card_y + dp(26), on ? 1 : (off ? 0 : -1));
-        const bool access = card.access == "Road access" || card.access == "Rail access";
-        dot_line(card.access, card_y + dp(44), access ? 1 : (card.access == "No direct road" ? 0 : -1));
-        paint_text(cr, ui_font(), card.condition, card_x + 10, card_y + dp(62), kSlateDim.r, kSlateDim.g, kSlateDim.b, wrap);
+        double line_y = card_y + dp(44);
+        if (!card.access.empty()) {
+            // Green with a road, red when the building needs one, grey
+            // ("No road needed") for plants, the Data Center and landmarks.
+            const bool access = card.access == "Road access" || card.access == "Rail access";
+            dot_line(card.access, line_y, access ? 1 : (card.access == "No direct road" ? 0 : -1));
+            line_y += dp(18);
+        }
+        const SlateInk &cond_ink = card.damaged ? kSlateBad : kSlateDim;
+        paint_text(cr, ui_font(), card.condition, card_x + 10, line_y, cond_ink.r, cond_ink.g, cond_ink.b, wrap);
     }
     if (card.offer_power) {
         button(cr, card_x + 8, card_y + card_h - dp(34), card_w - 16, dp(26), "Show _power", kInspectPower, false);
@@ -5323,6 +5499,7 @@ void Shell::draw_minimap_overlay(cairo_t *cr)
                     theme::kMenuFrameG, theme::kMenuFrameB);
     }
     minimap_.set_pin_top(false);
+    minimap_.set_night(map_.night_shown());
     const AspectBox land = minimap_.content_box(mini_w_, mini_h_);
     {
         TargetCr live(cr);
@@ -5344,11 +5521,14 @@ void Shell::draw_handheld_hud(cairo_t *cr)
 {
     const bool open_ui = dialog_ != Dialog::None;
     draw_minimap_overlay(cr);
-    // Menu chip and the compact info pill, top left.
+    // Menu chip and the compact info pill, top left. The menu bar replaces
+    // them while it is open; the pill is taller than the bar, so drawing it
+    // left a sliver (a red demand bar) peeking out underneath.
     const double top = dp(10);
     const double chip_h = dp(40);
     double x = dp(10);
-    {
+    const bool menu_up = menu_.open();
+    if (!menu_up) {
         const std::string menu_label = "Menu";
         const TextMetrics m = measure_text(cr, bold_font(), menu_label, -1);
         const double w = m.width + dp(44);
@@ -5361,7 +5541,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         push_hot(x, top, w, chip_h, kHudMenu);
         x += w + dp(8);
     }
-    {
+    if (!menu_up) {
         const int speed = welcome_gate_ ? 0 : speed_;
         const std::string funds = civic::dollars(session_.funds());
         const std::string date = session_.date_text();
@@ -5461,32 +5641,40 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         }
     }
     // Quick bar: every build tool plus Inspect, the chosen one raised
-    // with its price.
-    {
+    // with its price. The section the chosen (or focused) tool is in is drawn
+    // with full-size slots, so the tools a player is choosing between are
+    // easy to hit on a 7" screen; the other sections share the rest of the
+    // width. Hidden while a menu is open, which would cover it anyway.
+    if (!menu_.open()) {
         const int count = kToolCount;
-        const double slot = std::min(static_cast<double>(quick_h_), (win_w_ - dp(140)) / static_cast<double>(count));
-        const double bar_w = slot * count + dp(16);
-        const double bar_x = (win_w_ - bar_w) / 2.0;
-        quick_x_ = bar_x + dp(8);
-        quick_slot_ = slot;
-        const double lift = dp(8);
-        slate_round(cr, bar_x, quick_y_, bar_w, quick_h_ + dp(4), dp(12), kSlateBand, 0.94);
         int shown_tool = palette_.focus() >= 0 ? palette_.focus() : tool_index_;
         if (shown_tool < 0 || shown_tool >= count) {
             shown_tool = -1;
         }
-        // 27 slots no longer leave room for a 12px margin round a 40px
-        // icon on a 1280px screen. The icon art has its own transparent
-        // margin, so it keeps 1:1 whenever the slot is 42px or wider rather
-        // than dropping to half size.
-        double icon = std::max(16.0, slot - dp(12));
-        if (icon < 40.0 && slot >= 42.0) {
-            icon = 40.0;
+        double xs[kToolCount] = {};
+        double ws[kToolCount] = {};
+        const double big = static_cast<double>(quick_h_);
+        // The L1/R1 glyph chips sit outside the bar on both ends.
+        const double room = win_w_ - dp(96);
+        const tool_groups::QuickBarLayout bar = tool_groups::quick_bar_layout(count, shown_tool, big, room);
+        const double bar_w = bar.total + dp(16);
+        const double bar_x = (win_w_ - bar_w) / 2.0;
+        quick_x_ = bar_x + dp(8);
+        quick_slot_ = bar.small;
+        {
+            double run = quick_x_;
+            for (int i = 0; i < count; ++i) {
+                xs[i] = run;
+                ws[i] = bar.width[i];
+                run += ws[i];
+            }
         }
+        const double lift = dp(8);
+        slate_round(cr, bar_x, quick_y_, bar_w, quick_h_ + dp(4), dp(12), kSlateBand, 0.94);
         const unsigned locked = locked_tool_mask();
         // Thin rules between the toolbar sections (Build | Zones | Parks ...).
         for (int g = 1; g < tool_groups::kGroupCount; ++g) {
-            const double rx = std::round(quick_x_ + tool_groups::groups()[g].first * slot) - 0.5;
+            const double rx = std::round(xs[tool_groups::groups()[g].first]) - 0.5;
             cairo_set_source_rgba(cr, kSlateDim.r, kSlateDim.g, kSlateDim.b, 0.55);
             cairo_set_line_width(cr, 1.0);
             cairo_move_to(cr, rx, quick_y_ + dp(8));
@@ -5494,9 +5682,11 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             cairo_stroke(cr);
         }
         for (int i = 0; i < count; ++i) {
+            const double slot = ws[i];
             const bool chosen = i == tool_index_;
-            const double sx = quick_x_ + i * slot;
-            const double sy = quick_y_ + dp(4) - (chosen ? lift : 0);
+            const double sx = xs[i];
+            // Smaller slots sit on the bar's middle line.
+            const double sy = quick_y_ + dp(4) + (big - slot) / 2.0 - (chosen ? lift : 0);
             if (chosen) {
                 slate_round(cr, sx + 1, sy, slot - 2, slot - 2, dp(8), kSlatePanel);
                 round_dialog_rect(cr, sx + 1, sy, slot - 2, slot - 2, dp(8));
@@ -5506,6 +5696,9 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             } else if (hover_id_ == kQuickTool + i) {
                 slate_round(cr, sx + 1, sy, slot - 2, slot - 2, dp(8), kSlateEdge);
             }
+            // The icon art has its own transparent margin: 1:1 from a 42px
+            // slot, fitted (not halved) in a smaller one.
+            const double icon = slot >= 42.0 ? 40.0 : std::max(16.0, slot - 4.0);
             const double ix = std::floor(sx + (slot - icon) / 2.0);
             const double iy = std::floor(sy + (slot - 2 - icon) / 2.0);
             if (i == kToolCount - 1) {
@@ -5541,12 +5734,13 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             if (image != nullptr) {
                 const int iw = cairo_image_surface_get_width(image);
                 const int ih = cairo_image_surface_get_height(image);
-                const double scale = icon_pixel_scale(std::max(iw, ih), static_cast<int>(icon));
+                bool smooth = false;
+                const double scale = icon_fit_scale(std::max(iw, ih), static_cast<int>(icon), smooth);
                 cairo_save(cr);
                 cairo_translate(cr, std::floor(ix + (icon - iw * scale) / 2.0), std::floor(iy + (icon - ih * scale) / 2.0));
                 cairo_scale(cr, scale, scale);
                 cairo_set_source_surface(cr, image, 0, 0);
-                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+                cairo_pattern_set_filter(cairo_get_source(cr), smooth ? CAIRO_FILTER_GOOD : CAIRO_FILTER_NEAREST);
                 cairo_paint(cr);
                 cairo_restore(cr);
             } else {
@@ -5599,7 +5793,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             const TextMetrics m = measure_text(cr, bold_font(), caption, -1);
             const double cw = m.width + dp(16);
             const double ch = m.height + dp(8);
-            double cx = quick_x_ + tool_index_ * slot + slot / 2.0 - cw / 2.0;
+            double cx = xs[tool_index_] + ws[tool_index_] / 2.0 - cw / 2.0;
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);

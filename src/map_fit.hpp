@@ -159,6 +159,28 @@ inline int map_letterbox(int view, int map_pixels)
     return (view - map_pixels) / 2;
 }
 
+// Letterbox for a map that also has an overlay `reserve` pixels wide over
+// the right side of the view (the minimap). A narrow map stays centred when
+// that clears the overlay and otherwise moves left until its right edge does,
+// so no column sits under the overlay at the overview zoom.
+inline int map_letterbox_clear(int view, int map_pixels, int reserve)
+{
+    const int centred = map_letterbox(view, map_pixels);
+    if (centred <= 0 || reserve <= 0) {
+        return centred;
+    }
+    return std::max(0, std::min(centred, view - reserve - map_pixels));
+}
+
+// Largest scroll on an axis. A map at least as wide as the view may scroll
+// `reserve` pixels past its trailing edge (right or bottom), so the tiles under an
+// overlay can still be brought out from under it and clicked.
+inline double map_scroll_limit(int view, int map_pixels, int letterbox, int reserve)
+{
+    const int over = letterbox + map_pixels + std::max(0, reserve) - view;
+    return over > 0 ? static_cast<double>(over) : 0.0;
+}
+
 // Fraction of the map under a window point. `point` and `view_origin` are
 // window pixels. `letterbox` is the grey band on that side, and `scroll` is
 // in map pixels. Leaving the band in the sum treats the margin as city, so a

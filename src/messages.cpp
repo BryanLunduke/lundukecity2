@@ -90,11 +90,11 @@ const char *kCategories[] = {
     "Industrial",
     "Seaport",
     "Airport",
-    "Coal power",
-    "Fire department",
-    "Police department",
+    "Coal Plant",
+    "Fire Station",
+    "Police Station",
     "Stadium",
-    "Nuclear power",
+    "Nuclear Plant",
     "Bridge",
     "Radar",
     "Fountain",
@@ -215,4 +215,19 @@ std::string zone_status_text(int tile_category, int population, int land_value,
 
     return std::string(kind) + " — Population: " + pop + ", Land value: " + land + ", Crime: " + crm +
            ", Pollution: " + pol + ", Growth: " + gro;
+}
+
+bool notice_is_tool_feedback(const std::string &text)
+{
+    static const char *kTool[] = {
+        "Not enough funds to build that.", "Bulldoze that area first.",  "Cannot build here.",
+        "That would be off the map.",      "No place to anchor a bridge.", "Bridge: $50",
+        "Rail bridge: $100",               "Underwater wire: $25",       "No place to land a power line.",
+    };
+    for (const char *line : kTool) {
+        if (text == line) {
+            return true;
+        }
+    }
+    return false;
 }

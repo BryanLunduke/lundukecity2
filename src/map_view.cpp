@@ -975,6 +975,14 @@ void MapView::draw_footprint(cairo_t *cr) const
         cairo_save(cr);
         cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
         const double tile = static_cast<double>(std::max(tile_size_, 1));
+        // A click's receipt over the footprint the pointer still covers:
+        // only the newest tag (the receipt) is drawn. Two tags there used to
+        // stack into each other ("Ca|Can't build on water").
+        const bool receipt_shown = cue_.receipt && cue_.rwidth > 0 && cue_.rheight > 0 && !cue_.receipt_text.empty();
+        const bool overlap = receipt_shown && cue_.active && cue_.left < cue_.rleft + cue_.rwidth + 2 &&
+                             cue_.rleft < cue_.left + cue_.width + 2 && cue_.top < cue_.rtop + cue_.rheight + 2 &&
+                             cue_.rtop < cue_.top + cue_.height + 2;
+        const std::string live_tag = overlap ? std::string() : cue_.tag;
         if (cue_.zone && cue_.zwidth > 0 && cue_.zheight > 0) {
             const double x = cue_.zleft * tile;
             const double y = cue_.ztop * tile;
@@ -1001,7 +1009,7 @@ void MapView::draw_footprint(cairo_t *cr) const
                 cairo_stroke(cr);
             }
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.55), cue_.mark);
-            paint_tag(cr, x, y, w, h, cue_.tag, tile_size_, 0, slate_tags_);
+            paint_tag(cr, x, y, w, h, live_tag, tile_size_, 0, slate_tags_);
         }
         if (cue_.receipt && cue_.rwidth > 0 && cue_.rheight > 0) {
             const double x = cue_.rleft * tile;
@@ -1009,7 +1017,7 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double w = cue_.rwidth * tile;
             const double h = cue_.rheight * tile;
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.6), cue_.receipt_ok ? 1 : 3);
-            const int receipt_slot = cue_.active && !cue_.tag.empty() ? 1 : 0;
+            const int receipt_slot = cue_.active && !live_tag.empty() ? 1 : 0;
             paint_tag(cr, x, y, w, h, cue_.receipt_text, tile_size_, receipt_slot, slate_tags_);
         }
         cairo_restore(cr);

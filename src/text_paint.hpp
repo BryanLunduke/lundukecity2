@@ -132,10 +132,91 @@ inline std::string avoid_short_last_line(cairo_t *cr, const char *font, const st
     });
 }
 
+// Slate dialogs. The dialogs were drawn for a cream page with dark ink. Under
+// the Slate skin the page is dark, so while a dialog is being painted
+// (Shell::frame_panel turns this on, draw_dialog turns it off) dark ink
+// turns light, saturated ink is lifted toward white so it keeps its hue, and
+// light surfaces (fields, rows, chips) turn into the Slate panel shades.
+namespace slate_page {
+
+inline bool &active()
+{
+    static bool on = false;
+    return on;
+}
+
+inline void ink(double &r, double &g, double &b)
+{
+    if (!active()) {
+        return;
+    }
+    const double hi = std::max(r, std::max(g, b));
+    const double lo = std::min(r, std::min(g, b));
+    const double luma = 0.30 * r + 0.59 * g + 0.11 * b;
+    if (hi - lo > 0.30) {
+        // A coloured word (a warning, money, a heading): same hue, lighter.
+        if (luma < 0.55) {
+            r += (1.0 - r) * 0.45;
+            g += (1.0 - g) * 0.45;
+            b += (1.0 - b) * 0.45;
+        }
+        return;
+    }
+    if (luma < 0.30) {
+        r = 0xF6 / 255.0;
+        g = 0xF0 / 255.0;
+        b = 0xE4 / 255.0;
+    } else if (luma < 0.62) {
+        r = 0xA9 / 255.0;
+        g = 0xB3 / 255.0;
+        b = 0xC2 / 255.0;
+    }
+}
+
+inline void surface(double &r, double &g, double &b)
+{
+    if (!active()) {
+        return;
+    }
+    const double hi = std::max(r, std::max(g, b));
+    const double lo = std::min(r, std::min(g, b));
+    const double luma = 0.30 * r + 0.59 * g + 0.11 * b;
+    if (hi - lo > 0.35) {
+        return;
+    }
+    if (luma > 0.80) {
+        r = 0x29 / 255.0;
+        g = 0x32 / 255.0;
+        b = 0x3F / 255.0;
+    } else if (luma > 0.55) {
+        r = 0x35 / 255.0;
+        g = 0x41 / 255.0;
+        b = 0x54 / 255.0;
+    }
+}
+
+inline void edge(double &r, double &g, double &b)
+{
+    if (!active()) {
+        return;
+    }
+    const double hi = std::max(r, std::max(g, b));
+    const double lo = std::min(r, std::min(g, b));
+    if (hi - lo > 0.35) {
+        return;
+    }
+    r = 0x3C / 255.0;
+    g = 0x48 / 255.0;
+    b = 0x59 / 255.0;
+}
+
+} // namespace slate_page
+
 inline void paint_text(cairo_t *cr, const char *font, const std::string &text, double x, double y, double r,
                        double g, double b, int wrap_width)
 {
     PangoLayout *layout = cached_layout(cr, font, text, wrap_width);
+    slate_page::ink(r, g, b);
     cairo_set_source_rgb(cr, r, g, b);
     cairo_move_to(cr, x, y);
     pango_cairo_show_layout(cr, layout);

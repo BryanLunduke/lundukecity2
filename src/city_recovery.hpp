@@ -51,6 +51,20 @@ struct Entry {
     std::string origin;      // file the city came from, may be empty
     std::string date_text;   // in-game date, e.g. "Mar 1923"
     long long written = 0;   // wall-clock seconds of the autosave
+    // The view and the NEWS log at the autosave, so Recover puts the player
+    // back where they were. tile_size 0 means "not recorded" (older info).
+    int tile_size = 0;
+    double center_x = 0.5;
+    double center_y = 0.5;
+    struct News {
+        std::string text;
+        int tile_x = 0;
+        int tile_y = 0;
+        int month = 0;
+        int year = 1900;
+        bool has_place = false;
+    };
+    std::vector<News> news; // newest first
 };
 
 // A path is usable only when every existing component is a real directory
@@ -201,14 +215,67 @@ inline std::string clean_line(const std::string &text)
     return out;
 }
 
+// The view and NEWS lines of an info file. Each news line is
+// "news=month|year|x|y|place|text"; the text is last so it may hold '|'.
+inline std::string view_and_news_lines(int tile_size, double center_x, double center_y,
+                                       const std::vector<Entry::News> &news)
+{
+    std::string body;
+    if (tile_size > 0) {
+        char view[96];
+        std::snprintf(view, sizeof(view), "tile=%d\ncenter=%.4f,%.4f\n", tile_size, center_x, center_y);
+        body += view;
+    }
+    std::size_t count = 0;
+    for (const Entry::News &n : news) {
+        if (++count > 50) {
+            break;
+        }
+        std::string text = clean_line(n.text);
+        if (text.size() > 200) {
+            text.resize(200);
+        }
+        body += "news=" + std::to_string(n.month) + "|" + std::to_string(n.year) + "|" + std::to_string(n.tile_x) + "|" +
+                std::to_string(n.tile_y) + "|" + (n.has_place ? "1" : "0") + "|" + text + "\n";
+    }
+    return body;
+}
+
+inline bool parse_news_line(const std::string &value, Entry::News &out)
+{
+    int fields[5] = {0, 0, 0, 0, 0};
+    std::size_t at = 0;
+    for (int i = 0; i < 5; ++i) {
+        const std::size_t bar = value.find('|', at);
+        if (bar == std::string::npos || bar == at || bar - at > 11) {
+            return false;
+        }
+        const std::string part = value.substr(at, bar - at);
+        if (part.find_first_not_of("-0123456789") != std::string::npos) {
+            return false;
+        }
+        fields[i] = std::atoi(part.c_str());
+        at = bar + 1;
+    }
+    out.month = fields[0] >= 0 && fields[0] <= 11 ? fields[0] : 0;
+    out.year = fields[1];
+    out.tile_x = fields[2];
+    out.tile_y = fields[3];
+    out.has_place = fields[4] != 0;
+    out.text = value.substr(at);
+    return !out.text.empty();
+}
+
 inline bool write_info(const std::string &recovery, const std::string &city_name, const std::string &origin,
-                       const std::string &date_text)
+                       const std::string &date_text, int tile_size = 0, double center_x = 0.5, double center_y = 0.5,
+                       const std::vector<Entry::News> &news = {})
 {
     const std::string path = info_path(recovery);
     const std::string tmp = path + ".tmp";
     const std::string body = "name=" + clean_line(city_name) + "\norigin=" + clean_line(origin) +
                              "\ndate=" + clean_line(date_text) + "\nwritten=" +
-                             std::to_string(static_cast<long long>(std::time(nullptr))) + "\n";
+                             std::to_string(static_cast<long long>(std::time(nullptr))) + "\n" +
+                             view_and_news_lines(tile_size, center_x, center_y, news);
 #ifdef _WIN32
     FILE *out = std::fopen(tmp.c_str(), "wb");
     if (out == nullptr) {
@@ -250,7 +317,7 @@ inline Entry read_entry(const std::string &recovery)
     }
     const unsigned long long info_size =
         (static_cast<unsigned long long>(info_attr.nFileSizeHigh) << 32) | info_attr.nFileSizeLow;
-    if (info_size > 16384) {
+    if (info_size > 32768) {
         return e;
     }
 #else
@@ -260,7 +327,7 @@ inline Entry read_entry(const std::string &recovery)
     }
     struct stat ist;
     const std::string info = info_path(recovery);
-    if (lstat(info.c_str(), &ist) != 0 || !S_ISREG(ist.st_mode) || ist.st_size > 16384) {
+    if (lstat(info.c_str(), &ist) != 0 || !S_ISREG(ist.st_mode) || ist.st_size > 32768) {
         return e;
     }
 #endif
@@ -281,6 +348,22 @@ inline Entry read_entry(const std::string &recovery)
             e.date_text = value;
         } else if (key == "written") {
             e.written = std::atoll(value.c_str());
+        } else if (key == "tile") {
+            const int tile = std::atoi(value.c_str());
+            e.tile_size = tile > 0 && tile <= 256 ? tile : 0;
+        } else if (key == "center") {
+            double cx = 0.5;
+            double cy = 0.5;
+            if (std::sscanf(value.c_str(), "%lf,%lf", &cx, &cy) == 2 && cx >= 0.0 && cx <= 1.0 && cy >= 0.0 &&
+                cy <= 1.0) {
+                e.center_x = cx;
+                e.center_y = cy;
+            }
+        } else if (key == "news" && e.news.size() < 50) {
+            Entry::News n;
+            if (parse_news_line(value, n)) {
+                e.news.push_back(n);
+            }
         }
     }
     return e;

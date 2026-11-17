@@ -40,7 +40,7 @@ bool kind_is(int tile, const char *want)
 
 int main()
 {
-    // Note 1: the fountain tiles sat inside the old "Nuclear power" range
+    // Note 1: the fountain tiles sat inside the old "Nuclear Plant" range
     // (NUCLEARBASE up to INDBASE2), along with the bridge and radar tiles.
     for (int t = FOUNTAIN; t < FOUNTAIN + 4; ++t) {
         if (!kind_is(t, "Park")) {
@@ -52,12 +52,12 @@ int main()
             return fail(11, "a park-tool tree is not a park");
         }
     }
-    if (!kind_is(NUCLEARBASE, "Nuclear power") || !kind_is(LASTZONE, "Nuclear power") ||
-        !kind_is(NUKESWIRL1, "Nuclear power") || !kind_is(HBRDG0, "Road") ||
+    if (!kind_is(NUCLEARBASE, "Nuclear Plant") || !kind_is(LASTZONE, "Nuclear Plant") ||
+        !kind_is(NUKESWIRL1, "Nuclear Plant") || !kind_is(HBRDG0, "Road") ||
         !kind_is(VBRDG3, "Road") || !kind_is(RADAR0, "Airport") || !kind_is(HOSPITALBASE, "Hospital") ||
         !kind_is(CHURCHBASE, "Church") || !kind_is(CHURCH1BASE, "Church") || !kind_is(WOODS, "Trees") ||
         !kind_is(DIRT, "Clear") || !kind_is(RIVER, "Water") || !kind_is(RUBBLE, "Rubble") ||
-        !kind_is(FIRE, "Fire") || !kind_is(COALSMOKE1, "Coal power") || !kind_is(FOOTBALLGAME1, "Stadium") ||
+        !kind_is(FIRE, "Fire") || !kind_is(COALSMOKE1, "Coal Plant") || !kind_is(FOOTBALLGAME1, "Stadium") ||
         !kind_is(INDBASE2, "Industrial") || !kind_is(TINYEXP, "Rubble")) {
         return fail(12, "a tile range reads as the wrong kind");
     }

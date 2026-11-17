@@ -67,7 +67,8 @@ enum class Dialog : int {
     Ledger,
     FileRename,
     FileDelete,
-    Bindings
+    Bindings,
+    BulldozeConfirm
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
@@ -121,6 +122,7 @@ private:
     void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
     void draw_handheld_hud(cairo_t *cr);
     void draw_minimap_overlay(cairo_t *cr);
+    void draw_slate_milestone(cairo_t *cr, double x, double y, double w, double h);
     double minimap_clearance() const;
     void draw_hover_card(cairo_t *cr);
     void refresh_continue_card();
@@ -221,6 +223,11 @@ private:
     std::string tool_hint_now(int index) const;
     // Bit i is set when palette button i is a landmark the city cannot buy.
     unsigned locked_tool_mask() const;
+    // Width the minimap overlay takes from the right of the map view, and the
+    // horizontal letterbox that keeps a narrow map clear of it.
+    int minimap_reserve_x() const;
+    int map_letterbox_x() const;
+    double scroll_max_x() const;
     void demo_place_gifts(bool query_one);
     void sync_title();
     void note_message();
@@ -444,6 +451,11 @@ private:
     // Small caps for the Slate labels, rebuilt when the UI scale changes.
     const char *tag_font() const;
     mutable std::string font_tag_;
+    // locked_tool_mask() walks the map for the landmark caps. It is drawn
+    // every frame, so the answer is kept until the sim ticks, the map
+    // changes or money moves (CitySession::change_fingerprint).
+    mutable std::string locked_mask_key_;
+    mutable unsigned locked_mask_ = 0;
     mutable float font_tag_scale_ = -1.0f;
 
     double scroll_x_ = 0;
@@ -484,6 +496,12 @@ private:
     unsigned save_generation_ = 0;
 
     Dialog dialog_ = Dialog::None;
+    // A5: the building a bulldozer click is waiting to clear.
+    int bulldoze_x_ = -1;
+    int bulldoze_y_ = -1;
+    int bulldoze_cost_ = 0;
+    std::string bulldoze_name_;
+    bool bulldoze_drag_noted_ = false;
     bool budget_is_tax_ = false;
     bool budget_cover_ = false;
     bool tax_pause_hold_ = false;
@@ -743,6 +761,12 @@ private:
     bool y_hold_fresh_ = false;
     int y_hold_ms_ = 0;
     bool y_hold_fired_ = false;
+    // L1/R1 held: after a short wait the tool jumps a whole toolbar section
+    // at a time (tool_groups::section_jump) instead of one slot.
+    int shoulder_hold_dir_ = 0;
+    bool shoulder_hold_fresh_ = false;
+    int shoulder_hold_ms_ = 0;
+    int shoulder_hold_steps_ = 0;
     bool nav_repeat_fresh_ = false;
     bool budget_was_dirty_ = false;
     float raw_lx_ = 0.0f;

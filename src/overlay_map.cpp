@@ -108,7 +108,7 @@ const char *overlay_legend(CitySession::MapLayer layer)
 {
     switch (layer) {
     case CitySession::MapLayer::Power:
-        return "Yellow zones have power. Red zones do not. Orange is a power line.";
+        return "Yellow buildings have power. Red ones do not. Orange is a power line.";
     case CitySession::MapLayer::Water:
         return "Blue is river, water, and flood. Land stays clear.";
     case CitySession::MapLayer::Pollution:

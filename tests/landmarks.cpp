@@ -273,6 +273,19 @@ int main()
         return fail(30, "the reviewed year is not the year that just ended");
     }
 
+    // C2: the block sentences come from the table, not literals.
+    if (special_unlock_sentence(2000) != "Available at 2,000 population (Town)" ||
+        special_unlock_sentence(10000) != "Available at 10,000 population (City)" ||
+        special_unlock_sentence(500) != "Available at 500 population") {
+        return fail(90, "unlock sentence: " + special_unlock_sentence(2000));
+    }
+    if (special_cap_sentence(mayor) != "Only one Mayor's House in a city." ||
+        special_cap_sentence(casino).find("limited to " + std::to_string(special_building(casino).cap_limit) + ".") ==
+            std::string::npos ||
+        special_cap_sentence(casino).find("Casinos") == std::string::npos ||
+        special_cap_sentence(index_named("Zoo")) != "") {
+        return fail(91, "cap sentence: " + special_cap_sentence(casino));
+    }
     std::printf("landmarks ok\n");
     return 0;
 }

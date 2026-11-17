@@ -328,7 +328,12 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
         int r = 0;
         int g = 0;
         int b = 0;
-        if (!channel_at(surface, sx, sy, r, g, b) || r < 160 || g < 160 || b < 160) {
+        // The pixel above Close must be bare page: cream paper, or the dark
+        // slate page (0x1E2631) when Slate dialogs are on (U4).
+        const bool got = channel_at(surface, sx, sy, r, g, b);
+        const bool bare = slate_ ? (std::abs(r - 0x1E) <= 12 && std::abs(g - 0x26) <= 12 && std::abs(b - 0x31) <= 12)
+                                 : (r >= 160 && g >= 160 && b >= 160);
+        if (!got || !bare) {
             ran_ok_ = false;
             smoke_error_ = "graphs legend overlaps Close (" + std::to_string(r) + "," + std::to_string(g) + "," +
                            std::to_string(b) + ")";
@@ -362,7 +367,10 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
             return;
         }
         // Map hover must not turn Cancel blue. Save itself stays the focused blue.
-        if (cb > cr + 20 || cr < 180) {
+        // Slate buttons have a dark face (U4); classic ones are light.
+        // A slate face is a little blue-grey (about 53,65,84); lit is the
+        // primary blue (about 51,107,184).
+        if (cb > cr + (slate_ ? 60 : 20) || (!slate_ && cr < 180)) {
             ran_ok_ = false;
             smoke_error_ = "Cancel lit up while the pointer was over the map (" + std::to_string(cr) + "," +
                            std::to_string(cg) + "," + std::to_string(cb) + ")";

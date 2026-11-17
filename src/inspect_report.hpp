@@ -26,6 +26,11 @@ struct Facts {
     // False for power plants (coal, nuclear, micro nuclear): they work
     // without a road, so a missing one is not a problem to report.
     bool needs_road = true;
+    // Part of a special building is gone. Landmarks and the Data Center
+    // stop working until it is bulldozed and rebuilt; damage_effect says
+    // what the city loses (empty when there is nothing to add).
+    bool damaged = false;
+    std::string damage_effect;
     // 0..255 from the simulator maps.
     int density = 0;
     int land_value = 0;
@@ -90,10 +95,29 @@ inline int land_band(int value)
     return 3;
 }
 
+// A 0..255 simulator map value as the percent the Inspect bars and the
+// hover card both show.
+inline int map_percent(int value)
+{
+    if (value < 0) {
+        value = 0;
+    }
+    if (value > 255) {
+        value = 255;
+    }
+    return (value * 100 + 127) / 255;
+}
+
 inline Report make(const Facts &facts)
 {
     Report report;
     const bool zone = is_zone(facts.kind);
+    if (facts.damaged) {
+        report.reasons.push_back("Damaged: bulldoze and rebuild it");
+        if (!facts.damage_effect.empty()) {
+            report.reasons.push_back(facts.damage_effect);
+        }
+    }
     if (facts.power == 0) {
         report.reasons.push_back("No power: connect a power line");
     }

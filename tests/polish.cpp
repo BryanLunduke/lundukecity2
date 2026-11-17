@@ -66,6 +66,29 @@ int main()
         static const char *titles[] = {"BUILD",     "ZONES",             "PARKS", "SERVICES",
                                        "UTILITIES", "SPECIAL BUILDINGS", "PORTS"};
         check(tool_groups::kGroupCount == 7, "seven toolbar sections");
+        {
+            // U9: L1/R1 held jump a section at a time; Inspect is its own stop.
+            const auto &gs = tool_groups::groups();
+            const int last = tool_groups::kGroupCount - 1;
+            const int count = gs[last].first + gs[last].count + 1;
+            check(tool_groups::section_jump(gs[0].first, 1, count) == gs[1].first, "R1 held jumps to the next section");
+            check(tool_groups::section_jump(gs[1].first + gs[1].count - 1, 1, count) == gs[2].first,
+                  "a jump from inside a section lands on the next one's first tool");
+            check(tool_groups::section_jump(gs[last].first, 1, count) == count - 1, "after the last section comes Inspect");
+            check(tool_groups::section_jump(count - 1, 1, count) == gs[0].first, "after Inspect it wraps to the start");
+            check(tool_groups::section_jump(gs[0].first, -1, count) == count - 1, "L1 held from the start goes to Inspect");
+            // U8: the active section's slots are big, the rest share the room.
+            const double room = 1180.0;
+            const tool_groups::QuickBarLayout bar = tool_groups::quick_bar_layout(count, gs[2].first, 56.0, room);
+            check(bar.total <= room + 0.01 && bar.big >= bar.small && bar.big > 0.0 && bar.small >= 36.0 - 1e-9,
+                  "the quick bar fits and keeps every slot at least 36px");
+            for (int i = 0; i < count; ++i) {
+                const bool inside = i >= gs[2].first && i < gs[2].first + gs[2].count;
+                check(bar.width[i] == (inside ? bar.big : bar.small), "only the active section's slots are big");
+            }
+            const tool_groups::QuickBarLayout even = tool_groups::quick_bar_layout(count, -1, 56.0, room);
+            check(even.big == even.small, "no active section: every slot the same");
+        }
         for (int g = 0; g < tool_groups::kGroupCount && g < 7; ++g) {
             check(std::string(tool_groups::groups()[g].title) == titles[g], "toolbar sections in the editor's order");
         }
@@ -90,9 +113,29 @@ int main()
         }
         int x = 0;
         int y = 0;
+        // Balanced rows: BUILD's four tools are 2+2 in three columns, centred
+        // (half a cell in), so Power lines is the second button of row two.
         tool_groups::slot(3, 3, 40, 18, x, y);
-        check(x == 0 && y == 18 + 40, "Power lines sit on the second row of BUILD with three columns");
-        check(tool_groups::index_at(80 + 20, 18 + 40 + 20, 3, 40, 18) == -1, "the empty end of a short row is not a button");
+        check(x == 20 + 40 && y == 18 + 40, "Power lines sit second on the second row of BUILD with three columns");
+        check(tool_groups::index_at(5, 18 + 40 + 20, 3, 40, 18) == -1, "the margin of a centred short row is not a button");
+        check(tool_groups::index_at(100 + 10, 18 + 40 + 20, 3, 40, 18) == -1, "the empty end of a short row is not a button");
+        // No section leaves a single orphan button on a row of its own.
+        for (int columns = 2; columns <= 4; ++columns) {
+            for (int g = 0; g < tool_groups::kGroupCount; ++g) {
+                const int rows = tool_groups::rows_in(g, columns);
+                int total = 0;
+                for (int r = 0; r < rows; ++r) {
+                    const int len = tool_groups::row_length(g, columns, r);
+                    total += len;
+                    check(len >= 1 && len <= columns, "a balanced row fits the columns");
+                    check(rows == 1 || tool_groups::groups()[g].count < 2 * rows || len >= 2,
+                          "no orphan button on a row of its own");
+                }
+                check(total == tool_groups::groups()[g].count, "balanced rows hold every tool");
+            }
+        }
+        check(tool_groups::row_length(5, 3, 0) == 3 && tool_groups::row_length(5, 3, 2) == 2,
+              "SPECIAL BUILDINGS is 3+2+2 in three columns");
     }
 
     // Inspect card verdicts.
@@ -388,6 +431,15 @@ int main()
         check(clamp_choice(7) == Auto && clamp_choice(-1) == Auto, "a bad stored value is Auto");
         check(handheld_product("Jupiter\n") && handheld_product("Galileo") && !handheld_product("ThinkPad X1"),
               "Steam Deck boards are handhelds");
+        check(handheld_product("83L3") && handheld_product("83E1") && handheld_product("Claw A1M") &&
+                  handheld_product("Claw 8 AI+ A2VM") && handheld_product("ROG Ally X RC72LA") &&
+                  handheld_product("ROG Xbox Ally RC73YA") && handheld_product("AYANEO 2S") &&
+                  handheld_product("ONEXPLAYER X1 i") && handheld_product("ZOTAC GAMING ZONE") &&
+                  handheld_product("G1618-04"),
+              "other handheld boards (C4) are handhelds");
+        check(!handheld_product("Galileo Pro") && !handheld_product("Clawhammer") && !handheld_product("") &&
+                  !handheld_product("Precision 5570"),
+              "desktop and laptop boards stay desktop");
     }
 
     // Settings round trip for the new keys.

@@ -191,8 +191,8 @@ inline const char *controls_tool_name(int index)
 {
     static const char *names[] = {"Bulldozer",     "Roads",          "Rail",       "Power lines",   "Residential",
                                   "Commercial",    "Industrial",     "Data Center", "Park",         "Big Park",
-                                  "Fountain",      "Fire dept",      "Police",      "Prison",       "Coal power",
-                                  "Nuclear",       "Micro nuclear",  "Zoo",         "Amusement Park", "Casino",
+                                  "Fountain",      "Fire Station",      "Police Station",      "Prison",       "Coal Plant",
+                                  "Nuclear Plant",       "Micro Nuclear Plant",  "Zoo",         "Amusement Park", "Casino",
                                   "Stadium",       "Marina",         "Library",     "Mayor's House", "Airport",
                                   "Seaport",       "Inspect (a tile's card)"};
     static_assert(sizeof(names) / sizeof(names[0]) == kToolHotkeyCount, "one name per tool");
@@ -227,7 +227,7 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                                 {pad.west, "Switch to Inspect. In a field, delete a letter"},
                                 {pad.north, "Pause or resume. Hold to cycle slow, medium, and fast"},
                                 {pad.menu, "Open the menu. In a window, press OK"},
-                                {std::string(pad.left) + " / " + pad.right, "Previous or next tool. A bigger slider step"},
+                                {std::string(pad.left) + " / " + pad.right, "Previous or next tool. Hold to jump a section. A bigger slider step"},
                                 {pad.l3, "Show or hide the map overlay"},
                                 {pad.r3, "Center the view on the cursor"},
                             }, 0});
@@ -307,8 +307,10 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
     ControlsSection tools{"Tool keys", {}, 2};
     for (int i = 0; i < kToolHotkeyCount; ++i) {
         const std::string key = controls_tool_key(i, keys);
-        // A tool with no key (the Mayor's House by default) has no row.
+        // A tool with no key (the Mayor's House by default) still gets a
+        // row, so players can see it exists and that Remap can bind it.
         if (key.empty() || key == "None") {
+            tools.rows.push_back({"\u2013", std::string(controls_tool_name(i)) + " (unbound)"});
             continue;
         }
         tools.rows.push_back({key, controls_tool_name(i)});

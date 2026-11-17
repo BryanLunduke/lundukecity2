@@ -251,6 +251,47 @@ int main()
         check(v.load_recovery(rec2, "") && v.save_path().empty() && v.needs_save_prompt(),
               "never-saved recovery opens with no path (Save asks where)");
 
+        // U11: the view and the NEWS log survive a recovery.
+        {
+            std::vector<city_recovery::Entry::News> news(2);
+            news[0].text = "Fire reported! | twice";
+            news[0].tile_x = 40;
+            news[0].tile_y = 30;
+            news[0].month = 3;
+            news[0].year = 1903;
+            news[0].has_place = true;
+            news[1].text = "The population has reached 2,000.";
+            news[1].month = 11;
+            news[1].year = 1902;
+            check(city_recovery::write_info(rec2, u.city_name(), u.save_path(), u.date_text(), 32, 0.25, 0.75, news),
+                  "write_info with view and news");
+            const auto e3 = city_recovery::read_entry(rec2);
+            check(e3.tile_size == 32 && e3.center_x > 0.249 && e3.center_x < 0.251 && e3.center_y > 0.749 &&
+                      e3.center_y < 0.751,
+                  "recovery info keeps the zoom and the view centre");
+            check(e3.news.size() == 2 && e3.news[0].text == "Fire reported! | twice" && e3.news[0].tile_x == 40 &&
+                      e3.news[0].has_place && e3.news[0].month == 3 && e3.news[0].year == 1903 &&
+                      e3.news[1].text == "The population has reached 2,000." && !e3.news[1].has_place,
+                  "recovery info keeps the NEWS log in order");
+            city_recovery::Entry::News bad;
+            check(!city_recovery::parse_news_line("x|1|2|3|1|text", bad) && !city_recovery::parse_news_line("1|2|3", bad),
+                  "a damaged news line is dropped");
+            std::vector<CitySession::CityNotice> back;
+            for (const auto &n : e3.news) {
+                CitySession::CityNotice c;
+                c.text = n.text;
+                c.tile_x = n.tile_x;
+                c.tile_y = n.tile_y;
+                c.month = n.month;
+                c.year = n.year;
+                c.has_place = n.has_place;
+                back.push_back(c);
+            }
+            v.restore_notices(back);
+            check(v.notices().size() == 2 && v.notices()[0].text == "Fire reported! | twice",
+                  "restore_notices puts the log back");
+        }
+
         city_recovery::remove(rec);
         city_recovery::remove(rec2);
         check(!exists(rec) && !exists(city_recovery::info_path(rec)), "remove deletes the file and its sidecar");

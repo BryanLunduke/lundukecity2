@@ -10,6 +10,7 @@
 #include "sound_player.hpp"
 #include "tools.hpp"
 #include "graph_legend.hpp"
+#include "messages.hpp"
 #include "version.hpp"
 #include "view_math.hpp"
 #include "zoom_keys.hpp"
@@ -497,6 +498,32 @@ int main()
     }
     if (!session.auto_goto()) {
         return fail(62, "a new city should start with auto-goto on");
+    }
+    // B6: a failed click is tool feedback, not NEWS.
+    if (!notice_is_tool_feedback("Cannot build here.") || !notice_is_tool_feedback("Bulldoze that area first.") ||
+        !notice_is_tool_feedback("Not enough funds to build that.") ||
+        notice_is_tool_feedback("Fire reported!") || notice_is_tool_feedback("Blackouts reported. Check power.")) {
+        return fail(63, "tool feedback is not told apart from news");
+    }
+    // U6: on the power layer only the wires are orange (4); every tile of a
+    // building reads its power state (2 or 3).
+    {
+        bool saw_body = false;
+        for (int y = 0; y < CitySession::kWorldH; ++y) {
+            for (int x = 0; x < CitySession::kWorldW; ++x) {
+                const int raw = session.map_value(x, y);
+                const int tile = raw & LOMASK;
+                const int value = session.layer_value(CitySession::MapLayer::Power, x, y);
+                const bool wire = (tile >= HROADPOWER && tile <= VROADPOWER) || (tile >= POWERBASE && tile <= LASTPOWER);
+                if (value == 4 && !wire) {
+                    return fail(64, "a building tile is drawn as a power line");
+                }
+                if ((raw & CONDBIT) != 0 && (raw & ZONEBIT) == 0 && !wire && tile >= RESBASE && tile < POWERBASE) {
+                    saw_body = saw_body || value == 2 || value == 3;
+                }
+            }
+        }
+        (void)saw_body;
     }
     return 0;
 }

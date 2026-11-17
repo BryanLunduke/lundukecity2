@@ -29,6 +29,21 @@ inline double icon_pixel_scale(int source, int slot)
     return static_cast<double>(std::max(1, slot / source));
 }
 
+// Scale for a toolbar icon in a slot. Same as icon_pixel_scale except in a
+// slot a little smaller than the sprite (a short window's 4-column toolbar):
+// halving a 40px icon into a 34px face left it lost in the cell, so from
+// 70% of the sprite up it is fitted to the slot and `smooth` asks for a
+// filtered (not nearest) scale.
+inline double icon_fit_scale(int source, int slot, bool &smooth)
+{
+    smooth = false;
+    if (source >= 1 && slot >= 1 && slot < source && slot * 10 >= source * 7) {
+        smooth = true;
+        return static_cast<double>(slot) / static_cast<double>(source);
+    }
+    return icon_pixel_scale(source, slot);
+}
+
 // Toolbar buttons with a sprite: every palette entry but Query.
 inline constexpr int kToolIconCount = 26;
 

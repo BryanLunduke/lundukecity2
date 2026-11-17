@@ -78,19 +78,19 @@ inline const char *name(int tile)
         return "Airport";
     }
     if (tile >= COALBASE && tile < FIRESTBASE) {
-        return "Coal power";
+        return "Coal Plant";
     }
     if (tile >= FIRESTBASE && tile < POLICESTBASE) {
-        return "Fire dept";
+        return "Fire Station";
     }
     if (tile >= POLICESTBASE && tile < STADIUMBASE) {
-        return "Police";
+        return "Police Station";
     }
     if (tile >= STADIUMBASE && tile < NUCLEARBASE) {
         return "Stadium";
     }
     if (tile >= NUCLEARBASE && tile <= LASTZONE) {
-        return "Nuclear power";
+        return "Nuclear Plant";
     }
     // 827 is the no-power bolt, drawn over a zone centre but never stored.
     if (tile >= HBRDG0 && tile <= HBRDG3) {
@@ -113,7 +113,7 @@ inline const char *name(int tile)
         return "Rubble";
     }
     if (tile >= COALSMOKE1 && tile < FOOTBALLGAME1) {
-        return "Coal power";
+        return "Coal Plant";
     }
     if (tile >= FOOTBALLGAME1 && tile < VBRDG0) {
         return "Stadium";
@@ -122,7 +122,7 @@ inline const char *name(int tile)
         return "Road";
     }
     if (tile >= NUKESWIRL1 && tile <= NUKESWIRL4) {
-        return "Nuclear power";
+        return "Nuclear Plant";
     }
     if (tile >= CHURCH1BASE && tile < CHURCH7BASE + 9) {
         return "Church";

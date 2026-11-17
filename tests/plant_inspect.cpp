@@ -2,9 +2,10 @@
 // Copyright (C) 2026 The Lunduke City authors
 // See COPYING and NOTICE.
 
-// Power plants (coal, nuclear, micro nuclear) work without a road, so their
-// Inspect card never says "No road touches it". Everything else that needs
-// road access still does.
+// Power plants (coal, nuclear, micro nuclear) and the Data Center work
+// without a road, so their Inspect card never says "No road touches it" and
+// the hover card reads "No road needed". Buildings that need road access
+// (a fire station) still do. Water and bare land carry no road line at all.
 
 #include "city_session.hpp"
 #include "inspect_report.hpp"
@@ -58,7 +59,8 @@ bool clear_square(CitySession &city, int side, int skip_x, int &left, int &top)
 struct Case {
     const char *what;
     int side;
-    bool plant;
+    // Works without a road: no "No road" reason, grey "No road needed".
+    bool exempt;
 };
 
 } // namespace
@@ -97,7 +99,7 @@ int main()
     city.set_disasters(false);
     city.set_auto_bulldoze(true);
     const Case cases[] = {
-        {"coal", 4, true}, {"nuclear", 4, true}, {"micro", 1, true}, {"fire", 3, false}, {"datacenter", 3, false},
+        {"coal", 4, true}, {"nuclear", 4, true}, {"micro", 1, true}, {"fire", 3, false}, {"datacenter", 3, true},
     };
     int skip_x = 3;
     for (const Case &c : cases) {
@@ -133,13 +135,63 @@ int main()
         if (!facts.valid || facts.facts.access) {
             return fail(6, std::string("the ") + c.what + " should have no road");
         }
-        if (facts.facts.needs_road == c.plant) {
+        if (facts.facts.needs_road == c.exempt) {
             return fail(7, std::string("the ") + c.what + " has the wrong road need");
         }
         const inspect_report::Report report = inspect_report::make(facts.facts);
-        if (says_no_road(report) == c.plant) {
+        if (says_no_road(report) == c.exempt) {
             std::fprintf(stderr, "%s: %s\n", c.what, report.status.c_str());
-            return fail(8, std::string("the ") + c.what + (c.plant ? " says No road" : " lost its No road warning"));
+            return fail(8, std::string("the ") + c.what + (c.exempt ? " says No road" : " lost its No road warning"));
+        }
+        if (c.exempt && report.status != "Working" && facts.facts.power == 1) {
+            return fail(9, std::string("the powered ") + c.what + " should read Working, not " + report.status);
+        }
+        // The hover card: grey "No road needed" for an exempt building,
+        // the red "No direct road" only where a road is needed.
+        const CitySession::TileInspect hover = city.inspect_tile(qx, qy);
+        const std::string want = c.exempt ? "No road needed" : "No direct road";
+        if (hover.access != want) {
+            return fail(10, std::string("the ") + c.what + " hover reads '" + hover.access + "', want '" + want + "'");
+        }
+        // A5: every tile of these $400+ buildings asks before a bulldozer
+        // clears it, and names the building and its price.
+        const int want_cost = what == "coal" ? 3000 : what == "nuclear" ? 5000 : what == "micro" ? 1000
+                              : what == "fire" ? 500 : 400;
+        for (int dy = 0; dy < c.side; ++dy) {
+            for (int dx = 0; dx < c.side; ++dx) {
+                std::string name;
+                const int worth = city.bulldoze_worth(left + dx, top + dy, &name);
+                if (worth != want_cost || name.empty()) {
+                    std::fprintf(stderr, "%s at +%d,+%d: %d '%s'\n", c.what, dx, dy, worth, name.c_str());
+                    return fail(12, std::string("the ") + c.what + " bulldoze price is wrong");
+                }
+            }
+        }
+        if (city.bulldoze_worth(left - 1, top - 1) != 0 && city.bulldoze_worth(left + c.side, top + c.side) != 0) {
+            return fail(13, std::string("land next to the ") + c.what + " counts as part of it");
+        }
+    }
+    // Non-buildings: no road line at all.
+    for (int y = 0; y < CitySession::kWorldH; ++y) {
+        for (int x = 0; x < CitySession::kWorldW; ++x) {
+            const int tile = city.map_value(x, y) & LOMASK;
+            const bool water = tile >= RIVER && tile <= WATER_HIGH;
+            if (!water && tile != DIRT) {
+                continue;
+            }
+            const CitySession::TileInspect hover = city.inspect_tile(x, y);
+            if (!hover.access.empty()) {
+                return fail(11, std::string(water ? "water" : "dirt") + " shows a road line: " + hover.access);
+            }
+        }
+    }
+    // A cheap zone is not asked about.
+    for (int y = 0; y < CitySession::kWorldH; ++y) {
+        for (int x = 0; x < CitySession::kWorldW; ++x) {
+            const int tile = city.map_value(x, y) & LOMASK;
+            if ((tile == DIRT || (tile >= RIVER && tile <= WATER_HIGH)) && city.bulldoze_worth(x, y) != 0) {
+                return fail(14, "bare land or water has a bulldoze price");
+            }
         }
     }
     std::puts("plant_inspect ok");
