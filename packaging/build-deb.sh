@@ -40,7 +40,7 @@ cp "$ROOT/debian/control" "$DEST/debian/control"
 SHLIBS="$(
   cd "$DEST"
   dpkg-shlibdeps --ignore-missing-info -O \
-    -e usr/bin/lunduke-city
+    -e usr/bin/lunduke-city-2
 )"
 SHLIBS_DEPS="${SHLIBS#shlibs:Depends=}"
 
