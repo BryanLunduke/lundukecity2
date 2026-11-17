@@ -61,6 +61,8 @@ struct Advice {
     const char *title = "";
     const char *body = "";
     const char *intention = "";
+    // One short line for the Year in Review.
+    const char *tip = "";
     const char *show = "";
     const char *alt = "";
     // CitySession::MapLayer ordinals. -1 when there is no map for it.
@@ -74,6 +76,8 @@ struct YearCard {
     std::string closing_label;
     std::string closing_value;
     std::string population;
+    // "Up 1,234 since last year". Empty when no earlier year is stored.
+    std::string population_change;
     std::string improvement;
     std::string problem;
     std::string intention;
@@ -139,6 +143,52 @@ inline const char *milestone_card(int id)
     }
 }
 
+// A milestone as one plain line in the Year in Review. The review already
+// names the year, so there is no date.
+inline const char *milestone_highlight(int id)
+{
+    switch (id) {
+    case Powered:
+        return "The first homes got power";
+    case Balanced:
+        return "Finished the year without losing money";
+    case Traffic:
+        return "Fewer traffic complaints than last year";
+    case Town:
+        return "Grew into a town (2,000 people)";
+    case City:
+        return "Grew into a city (10,000 people)";
+    case Capital:
+        return "Grew into a capital (50,000 people)";
+    case Metropolis:
+        return "Became a metropolis (100,000 people)";
+    case Megalopolis:
+        return "Became a megalopolis (500,000 people)";
+    default:
+        return "Reached a milestone";
+    }
+}
+
+// The population notice a size milestone already says, so the review does
+// not list "Grew into a town" and "The population has reached 2,000." both.
+inline const char *milestone_notice(int id)
+{
+    switch (id) {
+    case Town:
+        return "The population has reached 2,000.";
+    case City:
+        return "The population has reached 10,000.";
+    case Capital:
+        return "The population has reached 50,000.";
+    case Metropolis:
+        return "The population has reached 100,000.";
+    case Megalopolis:
+        return "The population has reached 500,000.";
+    default:
+        return "";
+    }
+}
+
 inline std::string milestone_date(const MilestoneHit &hit)
 {
     if (!hit.earned) {
@@ -157,6 +207,7 @@ inline Advice advice_for(int problem)
                       "outside police coverage, though the poll does not prove one cause. Look for occupied "
                       "blocks far from a station.";
         advice.intention = "Next year, compare the crime map with police coverage before changing the police budget.";
+        advice.tip = "Tip: put police stations near homes.";
         advice.show = "Crime map";
         advice.alt = "Police coverage";
         advice.layer = 3;
@@ -168,6 +219,7 @@ inline Advice advice_for(int problem)
                       "raise it, but this percentage is not a map of one smokestack. The pollution map shows where "
                       "the reading is high.";
         advice.intention = "Next year, look at the pollution map before siting more industry.";
+        advice.tip = "Tip: keep industry and power plants away from homes.";
         advice.show = "Pollution map";
         advice.layer = 2;
         break;
@@ -177,6 +229,7 @@ inline Advice advice_for(int problem)
                       "poll is city-wide, not a verdict on one block. The residential map and the demand meter show "
                       "where more homes would matter.";
         advice.intention = "Next year, watch residential demand before zoning more housing.";
+        advice.tip = "Tip: zone more homes.";
         advice.show = "Residential map";
         advice.layer = 11;
         break;
@@ -185,6 +238,7 @@ inline Advice advice_for(int problem)
         advice.body = "Tax complaints follow the rate people pay. A higher rate can slow a city. The poll does not "
                       "prove that this year's rate caused the score. The budget is where the rate is set.";
         advice.intention = "Next year, set the tax rate in the budget with the complaints in mind.";
+        advice.tip = "Tip: try a lower tax rate in the budget.";
         advice.show = "Budget";
         advice.layer = -1;
         break;
@@ -193,6 +247,7 @@ inline Advice advice_for(int problem)
         advice.body = "Traffic is the complaint people mention most. Busy roads show up on the traffic map. That "
                       "density is not a promise that one new road will clear it.";
         advice.intention = "Next year, look for long roads through developed blocks on the traffic map.";
+        advice.tip = "Tip: check the traffic map and add roads or rail.";
         advice.show = "Traffic map";
         advice.layer = 5;
         break;
@@ -202,6 +257,7 @@ inline Advice advice_for(int problem)
                       "city-wide reading, not a count on one block. Commercial and industrial zones are where work "
                       "appears.";
         advice.intention = "Next year, check commercial and industrial demand before zoning more jobs.";
+        advice.tip = "Tip: zone more shops and industry for jobs.";
         advice.show = "All zones";
         advice.layer = 10;
         break;
@@ -210,6 +266,7 @@ inline Advice advice_for(int problem)
         advice.body = "Fire complaints point at risk, not a fire that is burning now. Look for developed blocks "
                       "outside fire-station coverage. Coverage is not a guarantee that a block is safe.";
         advice.intention = "Next year, compare developed blocks with fire coverage.";
+        advice.tip = "Tip: put fire stations near busy blocks.";
         advice.show = "Fire coverage";
         advice.layer = 8;
         break;
@@ -217,6 +274,7 @@ inline Advice advice_for(int problem)
         advice.title = "Complaints";
         advice.body = "The poll ranks complaints. It does not prove what caused them.";
         advice.intention = "Next year, read the evaluation again after the city has changed.";
+        advice.tip = "Tip: check the evaluation again next year.";
         break;
     }
     return advice;
@@ -347,16 +405,16 @@ inline YearCard make_year_card(std::int64_t opening, std::int64_t closing, bool 
         }
         return with;
     };
-    if (!ledger.have_prior) {
-        card.population = "Population: " + plain(population) + ". No earlier January is stored.";
-    } else {
+    card.population = "Population " + plain(population);
+    if (ledger.have_prior) {
         const std::int64_t delta = population - ledger.prior_population;
-        std::string change = grouped_number(delta);
         if (delta > 0) {
-            change = "+" + change;
+            card.population_change = "Up " + plain(delta) + " since last year";
+        } else if (delta < 0) {
+            card.population_change = "Down " + plain(-delta) + " since last year";
+        } else {
+            card.population_change = "No change since last year";
         }
-        card.population = "Population: " + plain(ledger.prior_population) + " \u2192 " + plain(population) + " (" +
-                          change + ")";
     }
     int best = -1;
     int drop = 0;
@@ -383,12 +441,11 @@ inline YearCard make_year_card(std::int64_t opening, std::int64_t closing, bool 
         card.improvement = "No complaint fell since last January.";
     }
     if (top_name == nullptr || top_name[0] == '\0' || top_votes < 0) {
-        card.problem = "No complaint stands ahead of the others.";
-        card.intention = "Next year, read the evaluation once people have settled.";
+        card.problem = "No big complaints this year.";
+        card.intention = "";
     } else {
-        card.problem = std::string(top_name) + " is still the largest complaint, at " + std::to_string(top_votes) +
-                       "% of the poll.";
-        card.intention = advice_for(top_kind).intention;
+        card.problem = "Top complaint: " + std::string(top_name) + " (" + std::to_string(top_votes) + "% of citizens)";
+        card.intention = advice_for(top_kind).tip;
     }
     return card;
 }
@@ -519,16 +576,38 @@ inline YearDigest make_year_digest(std::int64_t opening, std::int64_t closing, b
         group.tile_y = tile_y;
         groups.push_back(group);
     };
+    std::vector<std::string> said;
+    // A city loaded at 65,000 people earns Town, City and Capital in the
+    // same year. Only the biggest size is news.
+    int biggest = -1;
+    for (int id = Town; id <= Megalopolis; ++id) {
+        const MilestoneHit &hit = ledger.hit[id];
+        if (hit.earned && digest_in_year(hit.year, hit.month, city_year)) {
+            biggest = id;
+        }
+    }
     for (int id = 0; id < kMilestones; ++id) {
         const MilestoneHit &hit = ledger.hit[id];
         if (!hit.earned || !digest_in_year(hit.year, hit.month, city_year)) {
             continue;
         }
-        add_line(std::string("Milestone: ") + milestone_title(id) + " (" + milestone_date(hit) + ").", true, false, 0,
-                 0);
+        if (milestone_notice(id)[0] != '\0') {
+            said.push_back(milestone_notice(id));
+        }
+        if (id >= Town && id <= Megalopolis && id != biggest) {
+            continue;
+        }
+        add_line(milestone_highlight(id), true, false, 0, 0);
     }
     for (const DigestNotice &notice : notices) {
         if (notice.text.empty() || digest_routine(notice.text) || !digest_in_year(notice.year, notice.month, city_year)) {
+            continue;
+        }
+        bool repeated = false;
+        for (const std::string &one : said) {
+            repeated = repeated || one == notice.text;
+        }
+        if (repeated) {
             continue;
         }
         add_line(notice.text, digest_notable(notice.text), notice.has_place, notice.tile_x, notice.tile_y);
@@ -536,7 +615,13 @@ inline YearDigest make_year_digest(std::int64_t opening, std::int64_t closing, b
     auto emit = [&](const Group &group) {
         DigestLine line;
         line.text = group.text;
-        if (group.count > 1) {
+        if (group.count > 1 && !line.text.empty() && line.text.back() == '.') {
+            // "An explosion has been detected (4 times)", not "detected. (4 times)".
+            line.text.pop_back();
+        }
+        if (group.count == 2) {
+            line.text += " (twice)";
+        } else if (group.count > 2) {
             line.text += " (" + std::to_string(group.count) + " times)";
         }
         line.has_place = group.has_place;
@@ -571,10 +656,76 @@ inline YearDigest make_year_digest(std::int64_t opening, std::int64_t closing, b
     }
     if (digest.events.empty()) {
         DigestLine quiet;
-        quiet.text = "No disaster or milestone was recorded this year.";
+        quiet.text = "No disasters or milestones this year.";
         digest.events.push_back(quiet);
     }
     return digest;
+}
+
+// The Year in Review boxes as plain text, one fact per line, so a player
+// can read each box at a glance.
+struct ReviewText {
+    std::string funds;
+    std::string people;
+    std::string standing;
+    std::string highlights;
+    std::string challenges;
+};
+
+inline ReviewText make_review_text(const YearDigest &digest, int homes, int shops, int industry, bool no_residents,
+                                   const std::string &city_size, int score, int approve_percent)
+{
+    ReviewText text;
+    const std::int64_t delta = digest.closing_funds - digest.opening_funds;
+    const char *est = digest.card.estimated ? " (estimate)" : "";
+    text.funds = "Start of year " + dollars(digest.opening_funds) + "\nEnd of year" + est + " " +
+                 dollars(digest.closing_funds) + "\n";
+    if (delta > 0) {
+        text.funds += "Gained " + dollars(delta) + " this year";
+    } else if (delta < 0) {
+        text.funds += "Lost " + dollars(-delta) + " this year";
+    } else {
+        text.funds += "Broke even this year";
+    }
+    text.people = digest.card.population;
+    if (!digest.card.population_change.empty()) {
+        text.people += "\n" + digest.card.population_change;
+    }
+    const int total = homes + shops + industry;
+    if (total > 0) {
+        const int h = homes * 100 / total;
+        const int s = shops * 100 / total;
+        const int i = 100 - h - s;
+        text.people += "\nHomes " + std::to_string(h) + "% \u00B7 Shops " + std::to_string(s) + "%\nIndustry " +
+                       std::to_string(i) + "%";
+    }
+    if (no_residents) {
+        text.standing = "No one lives here yet, so there is no score or poll.";
+    } else {
+        text.standing = "City size: " + city_size + "\nScore " + std::to_string(score) + " out of 1,000\n" +
+                        std::to_string(approve_percent) + "% approve of you";
+    }
+    int shown = 0;
+    for (const DigestLine &event : digest.events) {
+        if (event.text.find("No disasters") != std::string::npos) {
+            continue;
+        }
+        if (!text.highlights.empty()) {
+            text.highlights += "\n";
+        }
+        text.highlights += event.text;
+        if (++shown >= 4) {
+            break;
+        }
+    }
+    if (text.highlights.empty()) {
+        text.highlights = "A quiet year. No disasters or milestones.";
+    }
+    text.challenges = digest.card.problem;
+    if (!digest.card.intention.empty()) {
+        text.challenges += "\n" + digest.card.intention;
+    }
+    return text;
 }
 
 inline std::string encode_ledger(const Ledger &ledger)

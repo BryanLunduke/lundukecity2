@@ -2112,10 +2112,7 @@ void Shell::handle_event(const SDL_Event &event)
             // title the review kept seeing.
             if (!menu_thumb_drag_ && hover_id_ >= kMenuTitle && hover_id_ < kMenuTitle + menu_table::kColumnCount &&
                 hover_id_ != kMenuTitle + menu_.open_menu) {
-                menu_.open_menu = hover_id_ - kMenuTitle;
-                menu_.cursor = 0;
-                menu_.recent_open = false;
-                menu_.alt_shown = true;
+                menu_.open_by_pointer(hover_id_ - kMenuTitle);
             }
             if (menu_thumb_drag_) {
                 scroll_menu_to_pointer(pointer_y_);
