@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# A newer commit on the same ref cancels the windows run already in progress.
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cross:
     runs-on: ubuntu-24.04
@@ -19,11 +24,25 @@ jobs:
       - name: Host packages
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            g++-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64 \
-            meson ninja-build pkg-config python3 gnupg zstd zip \
-            wine wine64 xvfb xauth
+          # Noninteractive, and bounded. A stalled mirror or a debconf prompt
+          # otherwise leaves apt running. A killed install can leave dpkg
+          # half-configured, so the next attempt repairs that first.
+          export DEBIAN_FRONTEND=noninteractive
+          n=0
+          while [ "$n" -lt 3 ]; do
+            n=$((n + 1))
+            sudo dpkg --configure -a || true
+            if sudo -E timeout 180 apt-get update \
+              && sudo -E timeout 300 apt-get install -y --no-install-recommends \
+                g++-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64 \
+                meson ninja-build pkg-config python3 gnupg zstd zip \
+                wine wine64 xvfb xauth; then
+              exit 0
+            fi
+            echo "Host packages attempt ${n} did not finish; retrying" >&2
+            sleep 5
+          done
+          exit 1
       - name: Cache MSYS2 packages
         uses: actions/cache@v4
         with:
