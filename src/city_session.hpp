@@ -430,7 +430,7 @@ public:
     // The number the scenario is chasing, with the live reading.
     std::string scenario_meter() const;
     // Narrow forms for a tight status band (200% UI): "8y 11m left" and
-    // "Traffic 62 → <40 · 92,140 → 90,000".
+    // "Traffic 62 → <40 · 92,140 → ≥90,000".
     std::string scenario_clock_short() const;
     std::string scenario_meter_short() const;
 

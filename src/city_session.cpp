@@ -2186,7 +2186,7 @@ std::string CitySession::scenario_meter_short() const
     }
     if (id == SC_BERN) {
         return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → <" +
-               std::to_string(BERN_TRAFFIC_GOAL) + " · " + grouped_count(people > 0 ? people : 0) + " → " +
+               std::to_string(BERN_TRAFFIC_GOAL) + " · " + grouped_count(people > 0 ? people : 0) + " → ≥" +
                grouped_count(BERN_POPULATION_GOAL);
     }
     if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
