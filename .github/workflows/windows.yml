@@ -24,16 +24,34 @@ jobs:
       - name: Host packages
         run: |
           sudo dpkg --add-architecture i386
-          # Noninteractive, and bounded. A stalled mirror or a debconf prompt
-          # otherwise leaves apt running. A killed install can leave dpkg
-          # half-configured, so the next attempt repairs that first.
+          # ubuntu-24.04 runners try azure.archive.ubuntu.com first
+          # (priority 1 in /etc/apt/apt-mirrors.txt) and only then
+          # archive.ubuntu.com. A stalled Azure mirror never falls through,
+          # and apt ignores SIGTERM, so `timeout` without -k never returns.
+          # The last green run on master (00:22Z) used that Azure mirror and
+          # finished this step in 41s; later runners sat here past 15 minutes.
+          # Prefer the public archive, abort a quiet socket, and SIGKILL a
+          # stuck apt. A killed install can leave dpkg half-configured.
+          sudo systemctl stop --no-block apt-daily.timer apt-daily-upgrade.timer || true
+          sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service unattended-upgrades.service || true
+          sudo tee /etc/apt/apt.conf.d/99ci-acquire >/dev/null <<'EOF'
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          Acquire::Retries "3";
+          DPkg::Lock::Timeout "30";
+          EOF
+          sudo tee /etc/apt/apt-mirrors.txt >/dev/null <<'EOF'
+          https://archive.ubuntu.com/ubuntu/ priority:1
+          https://security.ubuntu.com/ubuntu/ priority:2
+          http://azure.archive.ubuntu.com/ubuntu/ priority:3
+          EOF
           export DEBIAN_FRONTEND=noninteractive
           n=0
           while [ "$n" -lt 3 ]; do
             n=$((n + 1))
-            sudo dpkg --configure -a || true
-            if sudo -E timeout 180 apt-get update \
-              && sudo -E timeout 300 apt-get install -y --no-install-recommends \
+            sudo -E timeout -k 20 60 dpkg --configure -a || true
+            if sudo -E timeout -k 20 120 apt-get update \
+              && sudo -E timeout -k 30 240 apt-get install -y --no-install-recommends \
                 g++-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64 \
                 meson ninja-build pkg-config python3 gnupg zstd zip \
                 wine wine64 xvfb xauth; then
