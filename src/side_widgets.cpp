@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <cstdint>
 
 namespace {
@@ -121,6 +122,7 @@ void MinimapView::set_session(CitySession *session)
 {
     session_ = session;
     cached_raw_.clear();
+    engraved_primed_ = false;
 }
 
 void MinimapView::set_viewport_provider(std::function<void(double &, double &, double &, double &)> provider)
@@ -137,8 +139,140 @@ AspectBox MinimapView::land_box(int width, int height) const
     return box;
 }
 
+void MinimapView::set_overlay(bool on, int layer)
+{
+    overlay_on_ = on;
+    overlay_layer_ = layer;
+}
+
+namespace {
+
+double steady_seconds()
+{
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+engraved::Plate plate_for(CitySession::MapLayer layer)
+{
+    using L = CitySession::MapLayer;
+    switch (layer) {
+    case L::Power:
+        return engraved::Plate::Power;
+    case L::Water:
+        return engraved::Plate::Water;
+    case L::Zones:
+        return engraved::Plate::Zones;
+    case L::Residential:
+        return engraved::Plate::Res;
+    case L::Commercial:
+        return engraved::Plate::Com;
+    case L::Industrial:
+        return engraved::Plate::Ind;
+    case L::Transportation:
+        return engraved::Plate::Transport;
+    case L::Growth:
+        return engraved::Plate::Growth;
+    default:
+        return engraved::Plate::Heat;
+    }
+}
+
+} // namespace
+
+void MinimapView::sync_engraved()
+{
+    const double now = steady_seconds();
+    const unsigned serial = session_ != nullptr ? session_->map_serial() : 0;
+    if (!engraved_primed_ || serial != engraved_serial_) {
+        engraved_serial_ = serial;
+        engraved_gate_.mark();
+    }
+    // The first picture, and a new city, draw at once. Later changes wait
+    // for the throttle so a busy city redraws about once a second.
+    if (!engraved_primed_ || engraved_gate_.due(now)) {
+        engraved_primed_ = true;
+        std::vector<int> raw(static_cast<std::size_t>(engraved::kW * engraved::kH));
+        for (int y = 0; y < engraved::kH; ++y) {
+            for (int x = 0; x < engraved::kW; ++x) {
+                raw[static_cast<std::size_t>(y * engraved::kW + x)] =
+                    session_ != nullptr ? session_->map_value(x, y) : 0;
+            }
+        }
+        engraved_map_.update_tiles(raw.data());
+    }
+    if (!overlay_on_ || session_ == nullptr) {
+        engraved_map_.clear_plate();
+        plate_layer_seen_ = -1;
+        return;
+    }
+    // Overlay data changes without a map change (crime, traffic), so the
+    // plate is read again every two seconds, and at once on a new layer.
+    if (overlay_layer_ != plate_layer_seen_ || now - plate_read_at_ >= 2.0) {
+        plate_layer_seen_ = overlay_layer_;
+        plate_read_at_ = now;
+        const auto layer = static_cast<CitySession::MapLayer>(overlay_layer_);
+        const engraved::Plate plate = plate_for(layer);
+        std::vector<float> values(static_cast<std::size_t>(engraved::kW * engraved::kH), 0.0f);
+        for (int y = 0; y < engraved::kH; ++y) {
+            for (int x = 0; x < engraved::kW; ++x) {
+                const int v = session_->layer_value(layer, x, y);
+                float f = static_cast<float>(v);
+                if (plate == engraved::Plate::Growth) {
+                    f = static_cast<float>(std::max(-1.0, std::min(1.0, v / 200.0)));
+                } else if (plate == engraved::Plate::Heat) {
+                    // Same scales as the big map's overlay.
+                    const double top = (layer == CitySession::MapLayer::Police || layer == CitySession::MapLayer::Fire)
+                                           ? 218.0
+                                           : 255.0;
+                    f = static_cast<float>(std::max(0.0, std::min(1.0, v / top)));
+                } else if (plate == engraved::Plate::Water || plate == engraved::Plate::Res ||
+                           plate == engraved::Plate::Com || plate == engraved::Plate::Ind) {
+                    f = v > 0 ? 1.0f : 0.0f;
+                }
+                values[static_cast<std::size_t>(y * engraved::kW + x)] = f;
+            }
+        }
+        engraved_map_.set_plate(plate, values);
+    }
+}
+
+void MinimapView::draw_engraved(cairo_t *cr, int width, int height)
+{
+    const AspectBox box = land_box(width, height);
+    if (box.width < 2.0 || box.height < 2.0) {
+        return;
+    }
+    const std::string title = session_ != nullptr ? session_->city_name() : std::string();
+    engraved_map_.set_geometry(static_cast<int>(std::floor(box.width + 0.01)),
+                               static_cast<int>(std::floor(box.height + 0.01)), unit_, title);
+    engraved_map_.set_night(night_);
+    sync_engraved();
+    engraved_map_.compose();
+    cairo_surface_t *sheet = engraved_map_.sheet();
+    if (sheet == nullptr) {
+        return;
+    }
+    const engraved::SheetGeom &g = engraved_map_.geom();
+    const double sx = std::round(box.x) - g.margin;
+    const double sy = std::round(box.y) - g.margin;
+    cairo_save(cr);
+    // A soft shadow so the sheet sits on the map like paper.
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.32);
+    cairo_rectangle(cr, sx + std::round(3 * unit_), sy + std::round(3 * unit_), g.sheet_w(), g.sheet_h());
+    cairo_fill(cr);
+    cairo_set_source_surface(cr, sheet, sx, sy);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    paint_viewport(cr, width, height);
+}
+
 void MinimapView::sync()
 {
+    if (engraved_) {
+        // The engraved sheet syncs while it draws, with its own throttle.
+        return;
+    }
     if (pixels_ == nullptr || cairo_image_surface_get_width(pixels_) != CitySession::kWorldW ||
         cairo_image_surface_get_height(pixels_) != CitySession::kWorldH) {
         if (pixels_ != nullptr) {
@@ -225,6 +359,30 @@ void MinimapView::paint_viewport(cairo_t *cr, int width, int height) const
     const double ry = box.y + vy * box.height;
     const double rw = std::max(4.0, vw * box.width);
     const double rh = std::max(4.0, vh * box.height);
+    if (engraved_) {
+        // Red ink, dashed, on a pale halo so it lifts off the paper. Over a
+        // red overlay plate the frame is dark ink instead.
+        const bool red_plate = engraved::plate_is_red(engraved_map_.plate());
+        const double u = unit_;
+        cairo_save(cr);
+        cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+        cairo_set_line_width(cr, 3.5 * u);
+        cairo_set_source_rgba(cr, 0.98, 0.95, 0.86, 0.85);
+        cairo_rectangle(cr, rx + 0.5 * u, ry + 0.5 * u, rw - u, rh - u);
+        cairo_stroke(cr);
+        const double dash[2] = {4.0 * u, 2.0 * u};
+        cairo_set_dash(cr, dash, 2, 0);
+        cairo_set_line_width(cr, 1.6 * u);
+        if (red_plate) {
+            cairo_set_source_rgb(cr, 0.16, 0.11, 0.07);
+        } else {
+            cairo_set_source_rgb(cr, 0.72, 0.08, 0.06);
+        }
+        cairo_rectangle(cr, rx + 0.5 * u, ry + 0.5 * u, rw - u, rh - u);
+        cairo_stroke(cr);
+        cairo_restore(cr);
+        return;
+    }
     cairo_set_line_width(cr, 2);
     cairo_set_source_rgb(cr, 0, 0, 0);
     cairo_rectangle(cr, rx, ry, rw, rh);
@@ -237,6 +395,10 @@ void MinimapView::paint_viewport(cairo_t *cr, int width, int height) const
 
 void MinimapView::draw(cairo_t *cr, int width, int height)
 {
+    if (engraved_) {
+        draw_engraved(cr, width, height);
+        return;
+    }
     const AspectBox box = land_box(width, height);
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
     fill(cr, 0, 0, width, height, 0xED / 255.0, 0xEC / 255.0, 0xEB / 255.0);

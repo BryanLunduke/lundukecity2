@@ -138,8 +138,8 @@ void Shell::close_dialog()
     map_.clear_hover();
     if (!gamepad_nav_ && !handheld_ && pointer_x_ >= view_x_ && pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ &&
         pointer_y_ < view_y_ + view_h_ &&
-        !(mini_h_ > 0 && pointer_x_ >= mini_x_ - dp(4) && pointer_x_ < mini_x_ + mini_w_ + dp(4) &&
-          pointer_y_ >= mini_y_ - dp(4) && pointer_y_ < mini_y_ + mini_h_ + dp(4))) {
+        !(mini_h_ > 0 && pointer_x_ >= mini_x_ - mini_pad() && pointer_x_ < mini_x_ + mini_w_ + mini_pad() &&
+          pointer_y_ >= mini_y_ - mini_pad() && pointer_y_ < mini_bottom() + mini_pad())) {
         map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), false);
     }
     set_paused_for_dialog();
@@ -518,6 +518,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         open_autosave_ = autosave_seconds_;
         open_slate_ = slate_;
         open_night_ = night_;
+        open_minimap_engraved_ = minimap_engraved_;
         open_layout_pref_ = layout_pref_;
         focus_id_ = kSlider + 1;
     }
@@ -694,12 +695,12 @@ void Shell::press_palette(double x, double y)
 
 int Shell::minimap_reserve_x() const
 {
-    // The minimap frame (dp(4) outside mini_w_) plus a small gap, measured
-    // from the right edge of the view.
+    // The minimap frame (mini_pad() outside mini_w_) plus a small gap,
+    // measured from the right edge of the view.
     if (mini_h_ <= 0 || mini_w_ <= 0) {
         return 0;
     }
-    return std::max(0, view_x_ + view_w_ - (mini_x_ - dp(4)) + dp(4));
+    return std::max(0, view_x_ + view_w_ - (mini_x_ - mini_pad()) + dp(4));
 }
 
 int Shell::map_letterbox_x() const
@@ -2156,6 +2157,10 @@ void Shell::on_dialog_button(int id)
             map_.set_night(night_);
             return;
         }
+        if (id == kMinimapBox) {
+            minimap_engraved_ = !minimap_engraved_;
+            return;
+        }
         if (id == kLayoutBox) {
             layout_pref_ = (layout_mode::clamp_choice(layout_pref_) + 1) % 3;
             apply_skin();
@@ -2178,6 +2183,7 @@ void Shell::on_dialog_button(int id)
             }
             night_ = open_night_;
             map_.set_night(night_);
+            minimap_engraved_ = open_minimap_engraved_;
             schedule_autosave();
             user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
             sound_.set_volume(static_cast<float>(volume_) / 100.0f);
