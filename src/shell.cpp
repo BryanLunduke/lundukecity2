@@ -347,6 +347,22 @@ int Shell::dp(int px) const
     return ui_scale::scaled_px(px, ui_scale_);
 }
 
+bool Shell::minimap_engraved_active() const
+{
+    // The Classic look keeps the tile-colour minimap.
+    return minimap_engraved_ && tile_atlas().look() != 0;
+}
+
+int Shell::mini_pad() const
+{
+    return minimap_engraved_active() ? minimap_.sheet_margin() : dp(4);
+}
+
+int Shell::mini_bottom() const
+{
+    return mini_y_ + mini_h_ + (minimap_engraved_active() ? minimap_.sheet_below() : 0);
+}
+
 const char *Shell::ui_font() const
 {
     return font_ui_.c_str();
@@ -454,6 +470,7 @@ void Shell::save_window_settings()
     stored.skin = slate_ ? 0 : 1;
     stored.night = night_ ? 1 : 0;
     stored.layout = layout_mode::clamp_choice(layout_pref_);
+    stored.minimap = minimap_engraved_ ? 1 : 0;
     keep_required_pad(binds_);
     stored.binds = binds_override_text(binds_);
     {
@@ -525,6 +542,9 @@ void Shell::apply_loaded_settings()
     }
     if (stored.layout >= 0) {
         layout_pref_ = layout_mode::clamp_choice(stored.layout);
+    }
+    if (stored.minimap >= 0) {
+        minimap_engraved_ = stored.minimap != 0;
     }
     map_.set_night(night_);
     if (!stored.binds.empty()) {

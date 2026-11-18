@@ -2356,11 +2356,11 @@ void Shell::draw_dialog(cairo_t *cr)
         const double stack_gap = static_cast<double>(dp(12));
         const SettingsStack volume_row = settings_stack(0, text_h, bar_h, stack_gap);
         const SettingsStack scale_row = settings_stack(volume_row.next_caption, text_h, bar_h, stack_gap);
-        // Seven switches in one column when the window is tall enough, else
+        // Eight switches in one column when the window is tall enough, else
         // two columns of four so the dialog still fits a 960x600 window.
-        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 7.0 + dp(8) + bh + margin;
+        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 8.0 + dp(8) + bh + margin;
         const bool paired = one_column > win_h_ - 2.0 * margin;
-        const double toggles = (bh + stack_gap) * (paired ? 4.0 : 7.0);
+        const double toggles = (bh + stack_gap) * (paired ? 4.0 : 8.0);
         const double rows = scale_row.next_caption + toggles;
         const double height = dp(48) + margin + rows + dp(8) + bh + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, paired ? dp(760) : dp(640), height, margin);
@@ -2465,6 +2465,10 @@ void Shell::draw_dialog(cairo_t *cr)
         if (layout_mode::clamp_choice(layout_pref_) == layout_mode::Auto) {
             layout_state += handheld_ ? " (handheld)" : " (desktop)";
         }
+        // Classic keeps the tile-colour minimap, so there the row says so.
+        const bool classic_look = tile_atlas().look() == 0;
+        const char *minimap_label = classic_look ? "Minimap (not in Classic)" : "Minimap";
+        const char *minimap_state = minimap_engraved_ ? "Engraved map" : "Classic";
         if (paired) {
             double py = first_row;
             pair_row("Interface", slate_ ? "Slate" : "Light", kSkinBox, py);
@@ -2472,12 +2476,16 @@ void Shell::draw_dialog(cairo_t *cr)
             pair_row("Night lighting", night_ ? "On" : "Off", kNightBox, py);
             py += bh + stack_gap;
             pair_row("Layout", layout_state.c_str(), kLayoutBox, py);
+            py += bh + stack_gap;
+            pair_row(minimap_label, minimap_state, kMinimapBox, py);
         } else {
             switch_row("Interface", slate_ ? "Slate" : "Light", kSkinBox, sy);
             sy += bh + stack_gap;
             switch_row("Night lighting", night_ ? "On" : "Off", kNightBox, sy);
             sy += bh + stack_gap;
             switch_row("Layout", layout_state.c_str(), kLayoutBox, sy);
+            sy += bh + stack_gap;
+            switch_row(minimap_label, minimap_state, kMinimapBox, sy);
         }
         buttons_at(x, dw, y + panel.h - margin - bh, {{"_Cancel", kCancel}, {"_OK", kOk}});
         return;
@@ -5490,7 +5498,13 @@ void Shell::draw_minimap_overlay(cairo_t *cr)
     if (mini_h_ <= 0) {
         return;
     }
-    if (slate_ || handheld_) {
+    const bool engraved = minimap_engraved_active();
+    minimap_.set_engraved(engraved);
+    minimap_.set_unit(ui_scale_);
+    minimap_.set_overlay(overlay_on_, static_cast<int>(overlay_.layer()));
+    if (engraved) {
+        // The paper sheet draws its own border, shadow and caption.
+    } else if (slate_ || handheld_) {
         slate_round(cr, mini_x_ - dp(4), mini_y_ - dp(4), mini_w_ + dp(8), mini_h_ + dp(8), dp(8), kSlateBand, 0.92);
     } else {
         fill(cr, mini_x_ - dp(3), mini_y_ - dp(3), mini_w_ + dp(6), mini_h_ + dp(6), theme::kMenuBgR, theme::kMenuBgG,
@@ -5507,14 +5521,23 @@ void Shell::draw_minimap_overlay(cairo_t *cr)
         minimap_.sync();
         minimap_.draw(live.cr, mini_w_, mini_h_);
     }
-    push_hot(mini_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
+    if (engraved) {
+        // The whole sheet takes the pointer, so a click on the caption or the
+        // border does not reach the map below. Only the land box jumps.
+        const double pad = mini_pad();
+        const double left = std::round(mini_x_ + land.x) - pad;
+        const double top = std::round(mini_y_ + land.y) - pad;
+        push_hot(left, top, std::floor(land.width + 0.01) + 2 * pad, mini_bottom() + pad - top, kMinimapId);
+    } else {
+        push_hot(mini_x_ + land.x, mini_y_ + land.y, land.width, land.height, kMinimapId);
+    }
 }
 
 double Shell::minimap_clearance() const
 {
     // Height under the top of the map that the minimap overlay takes, so a
     // card or legend at the top right can sit below it.
-    return mini_h_ > 0 ? std::max(0.0, static_cast<double>(mini_y_ + mini_h_ - view_y_)) : 0.0;
+    return mini_h_ > 0 ? std::max(0.0, static_cast<double>(mini_bottom() - view_y_)) : 0.0;
 }
 
 void Shell::draw_handheld_hud(cairo_t *cr)
@@ -5595,8 +5618,8 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         const double size = dp(50);
         const double bx = win_w_ - size - dp(10);
         const double span = size * 3 + dp(10) * 2;
-        double by = mini_y_ + mini_h_ + (quick_y_ - (mini_y_ + mini_h_) - span) / 2.0;
-        by = std::max(by, static_cast<double>(mini_y_ + mini_h_ + dp(12)));
+        double by = mini_bottom() + (quick_y_ - mini_bottom() - span) / 2.0;
+        by = std::max(by, static_cast<double>(mini_bottom() + dp(12)));
         const int ids[3] = {kHudZoomIn, kHudZoomOut, kHudCenter};
         for (int i = 0; i < 3; ++i) {
             const double cy = by + i * (size + dp(10));

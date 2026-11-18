@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# A newer commit on the same ref cancels the windows run already in progress.
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cross:
     runs-on: ubuntu-24.04
@@ -19,11 +24,43 @@ jobs:
       - name: Host packages
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            g++-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64 \
-            meson ninja-build pkg-config python3 gnupg zstd zip \
-            wine wine64 xvfb xauth
+          # AWS-backed ubuntu-24.04 runners list
+          # us-east-2.ec2.archive.ubuntu.com first. That mirror was still
+          # sending data, but at tens of KB/s (a 35 MB compiler package took
+          # about four minutes), so Host packages never finished. The last
+          # green master run used azure.archive.ubuntu.com and this step took
+          # 41s. Priority is a tab-separated field; a space is taken as part
+          # of the URI and the archive answers 400. Apt ignores SIGTERM, so
+          # the backstop timeout must be followed by SIGKILL.
+          sudo systemctl stop --no-block apt-daily.timer apt-daily-upgrade.timer || true
+          sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service unattended-upgrades.service || true
+          sudo tee /etc/apt/apt.conf.d/99ci-acquire >/dev/null <<'EOF'
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          Acquire::Retries "3";
+          DPkg::Lock::Timeout "30";
+          EOF
+          {
+            printf '%s\tpriority:1\n' 'https://archive.ubuntu.com/ubuntu/'
+            printf '%s\tpriority:2\n' 'http://azure.archive.ubuntu.com/ubuntu/'
+            printf '%s\tpriority:3\n' 'http://security.ubuntu.com/ubuntu/'
+          } | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          export DEBIAN_FRONTEND=noninteractive
+          n=0
+          while [ "$n" -lt 3 ]; do
+            n=$((n + 1))
+            sudo -E timeout -k 20 60 dpkg --configure -a || true
+            if sudo -E timeout -k 20 120 apt-get update \
+              && sudo -E timeout -k 30 240 apt-get install -y --no-install-recommends \
+                g++-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix binutils-mingw-w64-x86-64 \
+                meson ninja-build pkg-config python3 gnupg zstd zip \
+                wine wine64 xvfb xauth; then
+              exit 0
+            fi
+            echo "Host packages attempt ${n} did not finish; retrying" >&2
+            sleep 5
+          done
+          exit 1
       - name: Cache MSYS2 packages
         uses: actions/cache@v4
         with:

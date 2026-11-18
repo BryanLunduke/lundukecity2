@@ -834,3 +834,13 @@ test(
   ],
   timeout: 120,
 )
+
+engraved_minimap = executable(
+  'engraved_minimap',
+  'engraved_minimap.cpp',
+  '../src/engraved_map.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [cairo_dep, pangocairo_dep, micropolis_dep],
+)
+
+test('engraved_minimap', engraved_minimap)

@@ -314,6 +314,11 @@ private:
     void place_list_window(int index, int count);
     void run_review_checks();
     int dp(int px) const;
+    bool minimap_engraved_active() const;
+    // Paper or frame around the minimap, and its bottom edge including the
+    // engraved caption strip.
+    int mini_pad() const;
+    int mini_bottom() const;
     const char *ui_font() const;
     const char *body_font() const;
     const char *title_font() const;
@@ -421,6 +426,10 @@ private:
     // Night lighting over the map. Off unless the player turns it on.
     bool night_ = false;
     bool open_night_ = false;
+    // Engraved paper minimap (SVGA and Spooky looks). Classic always keeps
+    // the tile-colour minimap.
+    bool minimap_engraved_ = true;
+    bool open_minimap_engraved_ = true;
     // 0 Auto (handheld on a Steam Deck), 1 Desktop, 2 Handheld.
     int layout_pref_ = 0;
     int open_layout_pref_ = 0;
