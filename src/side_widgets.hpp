@@ -29,6 +29,9 @@ public:
     // Pin the city to the top of a tall slot so the space under it can
     // carry the tool name. Clicks use the same box.
     void set_pin_top(bool on) { pin_top_ = on; }
+    // Night: the land takes a softer version of the map's dusk tint, so the
+    // minimap matches the city but stays readable. The view frame is not dimmed.
+    void set_night(bool on) { night_ = on; }
     AspectBox content_box(int width, int height) const { return land_box(width, height); }
 
     std::function<void(double, double)> on_jump;
@@ -43,6 +46,7 @@ private:
     std::vector<int> cached_raw_;
     int look_generation_ = -1;
     bool pin_top_ = false;
+    bool night_ = false;
 };
 
 class DemandView {

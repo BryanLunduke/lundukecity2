@@ -662,6 +662,26 @@ inline YearDigest make_year_digest(std::int64_t opening, std::int64_t closing, b
     return digest;
 }
 
+// A digest line that is bad news or advice: a disaster, a blackout, a
+// shortage or a demand nag. These belong under Challenges; Highlights keeps
+// the milestones and the good news.
+inline bool digest_line_is_bad(const std::string &text)
+{
+    static const char *keys[] = {
+        "Fire reported", "monster",       "tornado",      "earthquake",  "crashed",       "wrecked",
+        "explosion",     "Flooding",      "meltdown",     "Riots",       "Firebombing",   "Scenario lost",
+        "Blackouts",     "Brownouts",     "out of funds", "needed",      "demand",        "too high",
+        "deteriorating", "need funding",  "Unemployment", "Traffic jams", "Heavy traffic", "very high",
+        "needs a",       "needs an",      "Build a power plant",
+    };
+    for (const char *key : keys) {
+        if (text.find(key) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The Year in Review boxes as plain text, one fact per line, so a player
 // can read each box at a glance.
 struct ReviewText {
@@ -705,25 +725,60 @@ inline ReviewText make_review_text(const YearDigest &digest, int homes, int shop
         text.standing = "City size: " + city_size + "\nScore " + std::to_string(score) + " out of 1,000\n" +
                         std::to_string(approve_percent) + "% approve of you";
     }
+    // Good news goes under Highlights; disasters, blackouts and demand
+    // advice under Challenges, after the poll's top complaint.
     int shown = 0;
+    std::vector<std::string> bad;
     for (const DigestLine &event : digest.events) {
         if (event.text.find("No disasters") != std::string::npos) {
+            continue;
+        }
+        if (digest_line_is_bad(event.text)) {
+            bad.push_back(event.text);
+            continue;
+        }
+        if (shown >= 4) {
             continue;
         }
         if (!text.highlights.empty()) {
             text.highlights += "\n";
         }
         text.highlights += event.text;
-        if (++shown >= 4) {
-            break;
-        }
+        ++shown;
     }
     if (text.highlights.empty()) {
-        text.highlights = "A quiet year. No disasters or milestones.";
+        text.highlights = bad.empty() ? "A quiet year. No disasters or milestones." : "Nothing went especially well.";
     }
-    text.challenges = digest.card.problem;
-    if (!digest.card.intention.empty()) {
-        text.challenges += "\n" + digest.card.intention;
+    const bool complaint = !digest.card.intention.empty() || digest.card.problem.rfind("Top complaint", 0) == 0;
+    int lines = 0;
+    if (complaint) {
+        text.challenges = digest.card.problem;
+        ++lines;
+        if (!digest.card.intention.empty()) {
+            text.challenges += "\n" + digest.card.intention;
+            ++lines;
+        }
+    }
+    for (const std::string &line : bad) {
+        if (lines >= 4) {
+            break;
+        }
+        if (!text.challenges.empty()) {
+            text.challenges += "\n";
+        }
+        text.challenges += line;
+        ++lines;
+    }
+    if (digest.card.population_change.rfind("Down ", 0) == 0 && lines < 4) {
+        // A shrinking city is a challenge even with no one left to poll.
+        if (!text.challenges.empty()) {
+            text.challenges += "\n";
+        }
+        text.challenges += "Population down " + digest.card.population_change.substr(5);
+        ++lines;
+    }
+    if (text.challenges.empty()) {
+        text.challenges = digest.card.problem.empty() ? "No big complaints this year." : digest.card.problem;
     }
     return text;
 }

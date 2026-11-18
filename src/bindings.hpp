@@ -209,8 +209,8 @@ inline const char *key_act_label(int act)
     if (act >= KeyTool0 && act < KeyActCount) {
         static const char *names[] = {"Bulldozer",  "Roads",         "Rail",          "Power lines", "Residential",
                                       "Commercial", "Industrial",    "Data Center",   "Park",        "Big Park",
-                                      "Fountain",   "Fire dept",     "Police",        "Prison",      "Coal power",
-                                      "Nuclear",    "Micro nuclear", "Zoo",           "Amusement Park", "Casino",
+                                      "Fountain",   "Fire Station",     "Police Station",        "Prison",      "Coal Plant",
+                                      "Nuclear Plant",    "Micro Nuclear Plant", "Zoo",           "Amusement Park", "Casino",
                                       "Stadium",    "Marina",        "Library",       "Mayor's House", "Airport",
                                       "Seaport",    "Inspect"};
         return names[act - KeyTool0];
@@ -810,12 +810,12 @@ inline BindRow bind_row(int index)
         {"Park", KeyTool0 + 8, -1},
         {"Big Park", KeyTool0 + 9, -1},
         {"Fountain", KeyTool0 + 10, -1},
-        {"Fire dept", KeyTool0 + 11, -1},
-        {"Police", KeyTool0 + 12, -1},
+        {"Fire Station", KeyTool0 + 11, -1},
+        {"Police Station", KeyTool0 + 12, -1},
         {"Prison", KeyTool0 + 13, -1},
-        {"Coal power", KeyTool0 + 14, -1},
-        {"Nuclear", KeyTool0 + 15, -1},
-        {"Micro nuclear", KeyTool0 + 16, -1},
+        {"Coal Plant", KeyTool0 + 14, -1},
+        {"Nuclear Plant", KeyTool0 + 15, -1},
+        {"Micro Nuclear Plant", KeyTool0 + 16, -1},
         {"Zoo", KeyTool0 + 17, -1},
         {"Amusement Park", KeyTool0 + 18, -1},
         {"Casino", KeyTool0 + 19, -1},

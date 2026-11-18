@@ -2486,9 +2486,15 @@ void Shell::run_review_checks()
             fail("the overview D-pad did not reach the corner");
             return;
         }
-        const double overview_max_x = std::max(0, map_.pixel_width() - view_w_);
+        // B2: the view may scroll past the right edge by the minimap's
+        // width, so the corner tile can be walked out from under it.
+        const double overview_max_x = scroll_max_x();
         if (overview_max_x < 0.5 && (scroll_x_ != overview_scroll_x || overview_scroll_x != 0.0)) {
             fail("the overview panned a map that already fit");
+            return;
+        }
+        if (scroll_x_ > overview_max_x + 0.5) {
+            fail("the overview scrolled past the minimap margin");
             return;
         }
         gamepad_nav_ = false;

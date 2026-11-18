@@ -1003,12 +1003,44 @@ void Shell::bind_session()
         if (tool->engine_id == kSpecialEngineId) {
             return;
         }
+        bulldoze_drag_noted_ = false;
+        if (tool->engine_id == TOOL_BULLDOZER) {
+            std::string name;
+            const int worth = session_.bulldoze_worth(x, y, &name);
+            if (worth >= CitySession::kBulldozeConfirmCost) {
+                // A5: one click used to clear a $400+ building for $1 with no
+                // undo. Ask first; the drag that began here does nothing.
+                bulldoze_x_ = x;
+                bulldoze_y_ = y;
+                bulldoze_cost_ = worth;
+                bulldoze_name_ = name;
+                map_.release();
+                open_dialog(Dialog::BulldozeConfirm);
+                return;
+            }
+        }
         session_.use_tool(tool->engine_id, x, y);
     };
     map_.on_tool_drag = [this](int x0, int y0, int x1, int y1) {
         const ToolDef *tool = tool_by_index(tool_index_);
         if (tool->engine_id == kSpecialEngineId) {
             return;
+        }
+        if (tool->engine_id == TOOL_BULLDOZER) {
+            // A bulldozer drag skips $400+ buildings; they need a click and a yes.
+            const int steps = std::max(std::abs(x1 - x0), std::abs(y1 - y0));
+            for (int i = 0; i <= steps; ++i) {
+                const int tx = steps == 0 ? x1 : x0 + (x1 - x0) * i / steps;
+                const int ty = steps == 0 ? y1 : y0 + (y1 - y0) * i / steps;
+                std::string name;
+                if (session_.bulldoze_worth(tx, ty, &name) >= CitySession::kBulldozeConfirmCost) {
+                    if (!bulldoze_drag_noted_) {
+                        bulldoze_drag_noted_ = true;
+                        session_.tell("Click the " + name + " to bulldoze it");
+                    }
+                    return;
+                }
+            }
         }
         session_.drag_tool(tool->engine_id, x0, y0, x1, y1);
     };
@@ -1088,7 +1120,9 @@ std::string Shell::visual_stamp() const
         << ' ' << static_cast<int>(menu_scroll_) << ' ' << menu_edge_dir_
         << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_
         << ' ' << drawn_look_ << ' ' << anim_epoch_ << ' ' << autosave_seconds_ << ' ' << notice_sticky_ << ' '
-        << notice_text_ << ' ' << bind_listen_ << ' ' << wheel_zooms_;
+        << notice_text_ << ' ' << bind_listen_ << ' ' << wheel_zooms_
+        // B1: the toolbar hint appears after a 350 ms hover; repaint then.
+        << ' ' << palette_.hover() << ' ' << (palette_.hover_ms() >= 350);
     for (int i = 0; i < KeyActCount; ++i) {
         out << ' ' << binds_.key[i];
     }
@@ -1207,6 +1241,10 @@ void Shell::loop()
                     timeout = std::max(1, std::min(timeout, ms));
                 }
                 timeout = std::max(1, std::min(timeout, toast_wake_ms(now_wait)));
+                if (palette_.hover() >= 0 && palette_.hover_ms() < 350) {
+                    // Wake when the hovered button's hint is due (B1).
+                    timeout = std::max(1, std::min(timeout, 360 - palette_.hover_ms()));
+                }
                 if (notice_sticky_ && notice_until_ > now_wait) {
                     const int ms = static_cast<int>(
                         std::chrono::duration_cast<std::chrono::milliseconds>(notice_until_ - now_wait).count());
@@ -2095,6 +2133,11 @@ void Shell::handle_event(const SDL_Event &event)
         pointer_x_ = motion_point.x;
         pointer_y_ = motion_point.y;
         hover_id_ = hit(pointer_x_, pointer_y_);
+        // The toolbar hover feeds the status line's name, price and lock
+        // reason. It ends as soon as the pointer is anywhere else.
+        if (hover_id_ != kPaletteId || dialog_ != Dialog::None || menu_.open()) {
+            palette_.leave();
+        }
         // Nothing is held. A scrollbar drag left over from a touch must not
         // follow the pointer.
         if (event.motion.state == 0) {
@@ -2134,6 +2177,11 @@ void Shell::handle_event(const SDL_Event &event)
             map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), pointer_down_ && pointer_on_map_);
         } else if (!pointer_down_ && !map_.dragging() && dialog_ == Dialog::None) {
             map_.clear_hover();
+            // Off the map with nothing held: over the toolbar this is a
+            // hover, which used to be swallowed here so no hint ever showed.
+            if (hover_id_ == kPaletteId) {
+                palette_.motion(pointer_x_ - side_x_, pointer_y_ - pal_y_);
+            }
         } else if (dialog_ == Dialog::Graphs && graph_chart_w_ > 1) {
             if (pointer_x_ >= graph_chart_x_ && pointer_x_ <= graph_chart_x_ + graph_chart_w_ &&
                 pointer_y_ >= graph_chart_y_ && pointer_y_ <= graph_chart_y_ + graph_chart_h_) {
@@ -2713,6 +2761,10 @@ void Shell::handle_event(const SDL_Event &event)
             }
             if (!menu_.open() && dialog_ == Dialog::None) {
                 cycle_tool(dir);
+                shoulder_hold_dir_ = dir;
+                shoulder_hold_fresh_ = true;
+                shoulder_hold_ms_ = 0;
+                shoulder_hold_steps_ = 0;
             }
             break;
         }
@@ -2737,6 +2789,15 @@ void Shell::handle_event(const SDL_Event &event)
         if (button == nav_repeat_button_) {
             nav_repeat_button_ = SDL_GAMEPAD_BUTTON_INVALID;
             pad_feel::repeat_clear(nav_repeat_);
+        }
+        {
+            const int up_act = pad_act_for_button(binds_, static_cast<int>(button));
+            if ((up_act == PadPrevTool && shoulder_hold_dir_ < 0) || (up_act == PadNextTool && shoulder_hold_dir_ > 0)) {
+                shoulder_hold_dir_ = 0;
+                shoulder_hold_fresh_ = false;
+                shoulder_hold_ms_ = 0;
+                shoulder_hold_steps_ = 0;
+            }
         }
         if (pad_act_for_button(binds_, static_cast<int>(button)) == PadPause) {
             if (y_hold_ && !y_hold_fired_ && dialog_ == Dialog::None && !menu_.open()) {

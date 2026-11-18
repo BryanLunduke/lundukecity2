@@ -20,20 +20,20 @@ const ToolDef kTools[] = {
     {TOOL_RESIDENTIAL, "Residential", 100, "Residential: $100"},
     {TOOL_COMMERCIAL, "Commercial", 100, "Commercial: $100"},
     {TOOL_INDUSTRIAL, "Industrial", 100, "Industrial: $100"},
-    {kSpecialEngineId, "Data Center", 400, "Data Center: $400. Industrial + commercial, no pollution",
+    {kSpecialEngineId, "Data Center", 400, "Data Center: $400. Needs power to open. Then industrial + commercial, no pollution",
      SPECIAL_DATACENTER_LOT},
     // Parks
     {TOOL_PARK, "Park", 10, "Park: $10"},
     {kSpecialEngineId, "Big Park", 100, "Big Park: $100. Raises nearby land value", SPECIAL_PARK},
     {kSpecialEngineId, "Fountain", 20, "Fountain: $20. Raises nearby land value", SPECIAL_FOUNTAIN},
     // Services
-    {TOOL_FIRESTATION, "Fire dept", 500, "Fire dept: $500"},
-    {TOOL_POLICESTATION, "Police", 500, "Police: $500"},
+    {TOOL_FIRESTATION, "Fire Station", 500, "Fire Station: $500"},
+    {TOOL_POLICESTATION, "Police Station", 500, "Police Station: $500"},
     {kSpecialEngineId, "Prison", 3000, "Prison: $3,000. Needs power and a road", SPECIAL_PRISON},
     // Utilities
-    {TOOL_COALPOWER, "Coal power", 3000, "Coal power: $3,000"},
-    {TOOL_NUCLEARPOWER, "Nuclear power", 5000, "Nuclear power: $5,000"},
-    {kSpecialEngineId, "Micro nuclear", 1000, "Micro nuclear: $1,000. 1/9 of a nuclear plant, no meltdown",
+    {TOOL_COALPOWER, "Coal Plant", 3000, "Coal Plant: $3,000"},
+    {TOOL_NUCLEARPOWER, "Nuclear Plant", 5000, "Nuclear Plant: $5,000"},
+    {kSpecialEngineId, "Micro Nuclear Plant", 1000, "Micro Nuclear Plant: $1,000. 1/9 of a nuclear plant, no meltdown",
      SPECIAL_MICRONUKE},
     // Special buildings
     {kSpecialEngineId, "Zoo", 100, "Zoo: $100. Raises nearby land value", SPECIAL_ZOO},
@@ -192,11 +192,11 @@ std::string tool_press_phrase(int engine_id, const char *button)
         verb = "zones";
         break;
     case TOOL_POLICESTATION:
-        name = "Police";
+        name = "Police Station";
         verb = "builds";
         break;
     case TOOL_FIRESTATION:
-        name = "Fire dept";
+        name = "Fire Station";
         verb = "builds";
         break;
     case TOOL_STADIUM:
@@ -208,11 +208,11 @@ std::string tool_press_phrase(int engine_id, const char *button)
         verb = "builds";
         break;
     case TOOL_COALPOWER:
-        name = "Coal power";
+        name = "Coal Plant";
         verb = "builds";
         break;
     case TOOL_NUCLEARPOWER:
-        name = "Nuclear power";
+        name = "Nuclear Plant";
         verb = "builds";
         break;
     case TOOL_AIRPORT:

@@ -881,6 +881,50 @@ int special_population(const Micropolis *sim)
     return static_cast<int>(people);
 }
 
+// The lock sentences come from the table, so a new threshold or cap reads
+// right without touching the text.
+std::string special_unlock_sentence(int population)
+{
+    std::string text = "Available at " + grouped_number(population) + " population";
+    // The engine's city classes (Micropolis::doPopNum): Town from 2,000,
+    // City from 10,000, Capital 50,000, Metropolis 100,000, Megalopolis 500,000.
+    const char *klass = population >= 500000   ? "Megalopolis"
+                        : population >= 100000 ? "Metropolis"
+                        : population >= 50000  ? "Capital"
+                        : population >= 10000  ? "City"
+                        : population >= 2000   ? "Town"
+                                               : nullptr;
+    if (klass != nullptr) {
+        text += std::string(" (") + klass + ")";
+    }
+    return text;
+}
+
+std::string special_cap_sentence(int index)
+{
+    if (index < 0 || index >= kBuildingRows || kBuildings[index].cap_group < 0 || kBuildings[index].cap_limit <= 0) {
+        return {};
+    }
+    const SpecialBuilding &building = kBuildings[index];
+    if (building.cap_limit == 1) {
+        return std::string("Only one ") + building.name + " in a city.";
+    }
+    // Every row in the group, newest row first ("Amusement Parks and Casinos").
+    std::string names;
+    int listed = 0;
+    for (int i = kBuildingRows - 1; i >= 0; --i) {
+        if (kBuildings[i].cap_group != building.cap_group) {
+            continue;
+        }
+        if (listed > 0) {
+            names += " and ";
+        }
+        names += std::string(kBuildings[i].name) + "s";
+        ++listed;
+    }
+    return names + (listed > 1 ? " are" : " is") + " limited to " + std::to_string(building.cap_limit) + ".";
+}
+
 std::string special_block_reason(const Micropolis *sim, int index)
 {
     if (sim == nullptr || index < 0 || index >= special_building_count()) {
@@ -888,13 +932,10 @@ std::string special_block_reason(const Micropolis *sim, int index)
     }
     const SpecialBuilding &building = kBuildings[index];
     if (building.unlock_population > 0 && special_population(sim) < building.unlock_population) {
-        return "Available at 2,000 population (Town)";
+        return special_unlock_sentence(building.unlock_population);
     }
     if (building.cap_group >= 0 && building.cap_limit > 0 && count_group(sim, building.cap_group) >= building.cap_limit) {
-        if (building.cap_limit == 1) {
-            return "Only one Mayor's House in a city.";
-        }
-        return "Amusement Parks and Casinos are limited to 3.";
+        return special_cap_sentence(index);
     }
     return {};
 }
@@ -1255,6 +1296,20 @@ std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y)
     text += ". Cost ";
     text += graph_money(building.cost);
     return text;
+}
+
+bool special_at(const Micropolis *sim, int tile_x, int tile_y, int &index, bool &intact)
+{
+    int cx = 0;
+    int cy = 0;
+    index = -1;
+    intact = false;
+    if (sim == nullptr || !find_center(sim, tile_x, tile_y, cx, cy, index)) {
+        index = -1;
+        return false;
+    }
+    intact = special_building_intact(sim, cx, cy);
+    return true;
 }
 
 std::string special_status_text(int index)

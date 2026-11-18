@@ -98,7 +98,8 @@ void paint_icon(cairo_t *cr, cairo_surface_t *icon, int index, double x, double 
         paint_tool_fallback(cr, index, x, y, s);
         return;
     }
-    const double scale = icon_pixel_scale(std::max(iw, ih), static_cast<int>(s));
+    bool smooth = false;
+    const double scale = icon_fit_scale(std::max(iw, ih), static_cast<int>(s), smooth);
     const double dw = static_cast<double>(iw) * scale;
     const double dh = static_cast<double>(ih) * scale;
     cairo_save(cr);
@@ -107,7 +108,7 @@ void paint_icon(cairo_t *cr, cairo_surface_t *icon, int index, double x, double 
     cairo_translate(cr, std::floor(x + (s - dw) / 2.0), std::floor(y + (s - dh) / 2.0));
     cairo_scale(cr, scale, scale);
     cairo_set_source_surface(cr, icon, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_pattern_set_filter(cairo_get_source(cr), smooth ? CAIRO_FILTER_GOOD : CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
     cairo_restore(cr);
 }
@@ -500,7 +501,9 @@ void ToolPalette::draw_slate(cairo_t *cr) const
         cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
         // The 40px icon art has its own transparent margin. Give it the whole
         // face when it fits 1:1, so it is not halved to 20px.
-        const double pad = bs >= 42.0 ? 1.0 : std::max(2.0, std::round(bs * 0.1));
+        // A face a little under 40px keeps a 1px pad and fits the icon to it
+        // (icon_fit_scale) instead of halving it.
+        const double pad = bs >= 42.0 ? 1.0 : (bs >= 30.0 ? 1.0 : std::max(2.0, std::round(bs * 0.1)));
         paint_icon(cr, icon, i, std::round(x + pad + shift), std::round(y + pad + shift), bs - pad * 2);
         cairo_restore(cr);
         if (dimmed(i)) {

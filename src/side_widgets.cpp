@@ -257,6 +257,15 @@ void MinimapView::draw(cairo_t *cr, int width, int height)
     } else {
         fill(cr, box.x, box.y, box.width, box.height, 0.86, 0.58, 0.26);
     }
+    if (night_) {
+        // Halfway between day and the map's dusk multiply (0.30, 0.36, 0.58).
+        cairo_save(cr);
+        cairo_set_operator(cr, CAIRO_OPERATOR_MULTIPLY);
+        cairo_set_source_rgb(cr, 0.55, 0.60, 0.80);
+        cairo_rectangle(cr, box.x, box.y, box.width, box.height);
+        cairo_fill(cr);
+        cairo_restore(cr);
+    }
     paint_viewport(cr, width, height);
 }
 

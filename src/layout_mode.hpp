@@ -45,7 +45,12 @@ inline bool use_handheld(int choice, bool deck, bool handheld_device)
 }
 
 // DMI product names of handheld PCs with a built-in pad: Steam Deck LCD
-// ("Jupiter") and OLED ("Galileo"), ROG Ally, Legion Go.
+// ("Jupiter") and OLED ("Galileo"), ROG Ally / Ally X and ROG Xbox Ally,
+// Legion Go (83E1), Legion Go S (83L3, 83N6, 83Q2, 83Q3) and Legion Go 2
+// (83N0, 83N1), MSI Claw ("Claw A1M", "Claw 7 AI+ ...", "Claw 8 AI+ ..."),
+// AYANEO, OneXPlayer, ZOTAC Zone, and GPD Win 4 / Win Mini (G1618, G1617).
+// Names are from public DMI dumps, not checked on every device; SteamDeck=1
+// or Settings > Layout still force the handheld layout on anything else.
 inline bool handheld_product(const std::string &product)
 {
     std::string name;
@@ -57,7 +62,19 @@ inline bool handheld_product(const std::string &product)
     while (!name.empty() && name.back() == ' ') {
         name.pop_back();
     }
-    return name == "Jupiter" || name == "Galileo" || name.rfind("ROG Ally", 0) == 0 || name.rfind("83E1", 0) == 0;
+    if (name == "Jupiter" || name == "Galileo") {
+        return true;
+    }
+    static const char *prefixes[] = {
+        "ROG Ally", "ROG Xbox Ally", "83E1", "83L3", "83N6", "83Q2", "83Q3", "83N0", "83N1", "Claw ", "Claw A1M",
+        "AYANEO",   "AYA NEO",       "ONEXPLAYER", "ONEXFLY", "ZOTAC GAMING ZONE", "G1618-", "G1617-",
+    };
+    for (const char *prefix : prefixes) {
+        if (name.rfind(prefix, 0) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace layout_mode

@@ -97,6 +97,8 @@ public:
     void set_night(bool on);
     void set_night_hold(bool hold) { night_hold_ = hold; }
     bool night() const { return night_; }
+    // True when the dusk tint is on screen (night, and no overlay holding it off).
+    bool night_shown() const { return night_ && !night_hold_; }
     // Slate look for the price and reason tag at the cursor.
     void set_slate_tags(bool on) { slate_tags_ = on; }
 

@@ -126,6 +126,10 @@ int special_population(const Micropolis *sim);
 // Empty when this building may be placed. Otherwise the sentence the
 // menu and the status line show (unlock or cap).
 std::string special_block_reason(const Micropolis *sim, int index);
+// Lock sentences built from the table: "Available at 2,000 population
+// (Town)" for an unlock threshold, the cap sentence for a capped row.
+std::string special_unlock_sentence(int population);
+std::string special_cap_sentence(int index);
 
 // The lock sentence, or the price ("$100"). The toolbar greys a locked
 // landmark and its hint carries the sentence.
@@ -141,6 +145,9 @@ bool bulldoze_special_at(Micropolis *sim, int tile_x, int tile_y);
 
 // Empty when the tile is not part of a special building.
 std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y);
+// The special building covering a tile: its table row and whether every
+// body tile is still standing. False (index -1) when there is none.
+bool special_at(const Micropolis *sim, int tile_x, int tile_y, int &index, bool &intact);
 
 // True when the tile is part of a special building that never takes power.
 bool special_skips_power_at(const Micropolis *sim, int tile_x, int tile_y);

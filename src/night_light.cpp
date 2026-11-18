@@ -268,6 +268,8 @@ void stamp_glass(const std::vector<int> &raw, int w, int h, int center_tile, int
                 }
             }
             if (!intact) {
+                // A3: a damaged Data Center counts as no zone in the census
+                // (zone.cpp, A1), so its windows stay dark too.
                 continue;
             }
             for (int dy = 0; dy < span; ++dy) {

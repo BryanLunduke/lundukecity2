@@ -21,6 +21,7 @@
 #include "tile_atlas.hpp"
 #include "placement_hint.hpp"
 #include "tools.hpp"
+#include "tool_groups.hpp"
 #include "version.hpp"
 #include "view_math.hpp"
 
@@ -131,6 +132,16 @@ void Shell::close_dialog()
     if (closing == Dialog::LoadError) {
         sync_title();
     }
+    // The hover card described the tile under the pointer before the card
+    // opened, and the view may have moved since (Inspect's Show power, a
+    // zoom). Read it again from where the pointer is now.
+    map_.clear_hover();
+    if (!gamepad_nav_ && !handheld_ && pointer_x_ >= view_x_ && pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ &&
+        pointer_y_ < view_y_ + view_h_ &&
+        !(mini_h_ > 0 && pointer_x_ >= mini_x_ - dp(4) && pointer_x_ < mini_x_ + mini_w_ + dp(4) &&
+          pointer_y_ >= mini_y_ - dp(4) && pointer_y_ < mini_y_ + mini_h_ + dp(4))) {
+        map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), false);
+    }
     set_paused_for_dialog();
 }
 
@@ -227,9 +238,9 @@ void Shell::begin_event_pan(int tile_x, int tile_y)
     }
     const double ax = view_x_ + view_w_ * 0.5;
     const double ay = view_y_ + view_h_ * 0.5;
-    double target_x = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox(view_w_, map_.pixel_width()), map_.pixel_width());
+    double target_x = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
     double target_y = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
-    const double max_x = std::max(0.0, static_cast<double>(map_.pixel_width() - view_w_));
+    const double max_x = scroll_max_x();
     const double max_y = std::max(0.0, static_cast<double>(map_.pixel_height() - view_h_));
     target_x = std::max(0.0, std::min(max_x, target_x));
     target_y = std::max(0.0, std::min(max_y, target_y));
@@ -472,8 +483,9 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         select_save_name();
     } else if (dialog == Dialog::FileDelete) {
         focus_id_ = kCancel;
-    } else if (dialog == Dialog::QuitConfirm) {
-        // Cancel is the focused button, so a stray A does not leave the game.
+    } else if (dialog == Dialog::QuitConfirm || dialog == Dialog::BulldozeConfirm) {
+        // Cancel is the focused button, so a stray A does not leave the game
+        // or knock down the building.
         focus_id_ = kCancel;
     } else if (dialog == Dialog::Outcome) {
         focus_id_ = kKeep;
@@ -637,6 +649,10 @@ std::string Shell::tool_hint_now(int index) const
 
 unsigned Shell::locked_tool_mask() const
 {
+    const std::string key = session_.change_fingerprint() + ":" + std::to_string(session_.population());
+    if (!key.empty() && key == locked_mask_key_) {
+        return locked_mask_;
+    }
     unsigned mask = 0;
     for (int i = 0; i < kPaletteToolCount && i < 32; ++i) {
         const int fixed = tool_fixed_special(tool_by_index(i));
@@ -648,6 +664,8 @@ unsigned Shell::locked_tool_mask() const
             mask |= 1u << i;
         }
     }
+    locked_mask_key_ = key;
+    locked_mask_ = mask;
     return mask;
 }
 
@@ -674,9 +692,31 @@ void Shell::press_palette(double x, double y)
     palette_.press(x, y);
 }
 
+int Shell::minimap_reserve_x() const
+{
+    // The minimap frame (dp(4) outside mini_w_) plus a small gap, measured
+    // from the right edge of the view.
+    if (mini_h_ <= 0 || mini_w_ <= 0) {
+        return 0;
+    }
+    return std::max(0, view_x_ + view_w_ - (mini_x_ - dp(4)) + dp(4));
+}
+
+int Shell::map_letterbox_x() const
+{
+    return map_letterbox_clear(view_w_, map_.pixel_width(), minimap_reserve_x());
+}
+
+double Shell::scroll_max_x() const
+{
+    // The minimap sits over the top-right corner of the map. The view may
+    // scroll past the right edge by its width so those tiles can be reached.
+    return map_scroll_limit(view_w_, map_.pixel_width(), map_letterbox_x(), minimap_reserve_x());
+}
+
 void Shell::clamp_scroll()
 {
-    const double max_x = std::max(0, map_.pixel_width() - view_w_);
+    const double max_x = scroll_max_x();
     const double max_y = std::max(0, map_.pixel_height() - view_h_);
     scroll_x_ = std::max(0.0, std::min(max_x, scroll_x_));
     scroll_y_ = std::max(0.0, std::min(max_y, scroll_y_));
@@ -697,12 +737,13 @@ void Shell::fit_map_to_view()
         const double fx = map_point_fraction(ax, view_x_, map_ox_, scroll_x_, map_.pixel_width());
         const double fy = map_point_fraction(ay, view_y_, map_oy_, scroll_y_, map_.pixel_height());
         map_.set_tile_size(cover);
-        scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox(view_w_, map_.pixel_width()), map_.pixel_width());
+        scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
         scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
         clamp_scroll();
     }
-    map_ox_ = map_letterbox(view_w_, map_.pixel_width());
+    map_ox_ = map_letterbox_x();
     map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+    clamp_scroll();
 }
 
 double Shell::map_local_x(double x) const
@@ -722,7 +763,7 @@ void Shell::center_on_fraction(double fx, double fy)
 {
     const double ax = view_x_ + view_w_ * 0.5;
     const double ay = view_y_ + view_h_ * 0.5;
-    scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox(view_w_, map_.pixel_width()), map_.pixel_width());
+    scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
     scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
     clamp_scroll();
 }
@@ -744,7 +785,7 @@ void Shell::zoom_by(int delta, double anchor_x, double anchor_y)
     if (map_.tile_size() == before) {
         return;
     }
-    const int ox = map_letterbox(view_w_, map_.pixel_width());
+    const int ox = map_letterbox_x();
     const int oy = map_letterbox(view_h_, map_.pixel_height());
     scroll_x_ = scroll_for_map_fraction(fx, anchor_x, view_x_, ox, map_.pixel_width());
     scroll_y_ = scroll_for_map_fraction(fy, anchor_y, view_y_, oy, map_.pixel_height());
@@ -1023,6 +1064,22 @@ void Shell::service_gamepad(int elapsed_ms)
             cycle_speed();
             note_speed_feedback();
             y_hold_fired_ = true;
+        }
+    }
+    if (shoulder_hold_fresh_) {
+        // Same as the Y hold: the press frame's idle wait is not hold time.
+        shoulder_hold_fresh_ = false;
+    } else if (shoulder_hold_dir_ != 0) {
+        if (dialog_ != Dialog::None || menu_.open()) {
+            shoulder_hold_dir_ = 0;
+        } else {
+            shoulder_hold_ms_ += elapsed_ms;
+            // First section jump after 450 ms, then one every 300 ms.
+            const int due = 450 + shoulder_hold_steps_ * 300;
+            if (shoulder_hold_ms_ >= due) {
+                select_tool(tool_groups::section_jump(tool_index_, shoulder_hold_dir_, kToolCount));
+                ++shoulder_hold_steps_;
+            }
         }
     }
     if (pad_dragging_ && pad_ != nullptr && dialog_ == Dialog::None && !menu_.open()) {
@@ -1457,7 +1514,22 @@ void Shell::autosave(bool force)
         note_background_write_failed("Autosave failed. This city will not be recovered if the game closes.");
         return;
     }
-    city_recovery::write_info(own_recovery_, session_.city_name(), session_.save_path(), session_.date_text());
+    // The view and the NEWS log ride along so Recover does not reset them.
+    std::vector<city_recovery::Entry::News> news;
+    for (const CitySession::CityNotice &notice : session_.notices()) {
+        city_recovery::Entry::News line;
+        line.text = notice.text;
+        line.tile_x = notice.tile_x;
+        line.tile_y = notice.tile_y;
+        line.month = notice.month;
+        line.year = notice.year;
+        line.has_place = notice.has_place;
+        news.push_back(line);
+    }
+    const double cx = map_point_fraction(view_x_ + view_w_ * 0.5, view_x_, map_ox_, scroll_x_, map_.pixel_width());
+    const double cy = map_point_fraction(view_y_ + view_h_ * 0.5, view_y_, map_oy_, scroll_y_, map_.pixel_height());
+    city_recovery::write_info(own_recovery_, session_.city_name(), session_.save_path(), session_.date_text(),
+                              map_.tile_size(), std::clamp(cx, 0.0, 1.0), std::clamp(cy, 0.0, 1.0), news);
     autosave_fingerprint_ = fingerprint;
 }
 
@@ -1720,7 +1792,35 @@ void Shell::proceed(AfterSave next)
         ++city_generation_;
         autosave_fingerprint_ = session_.change_fingerprint();
         set_speed(0);
-        center_on_fraction(0.5, 0.5);
+        {
+            // Put back the NEWS log and the view the autosave recorded.
+            const city_recovery::Entry saved = city_recovery::read_entry(recovery_.path);
+            std::vector<CitySession::CityNotice> notices;
+            for (const city_recovery::Entry::News &line : saved.news) {
+                CitySession::CityNotice notice;
+                notice.text = line.text;
+                notice.tile_x = line.tile_x;
+                notice.tile_y = line.tile_y;
+                notice.month = line.month;
+                notice.year = line.year;
+                notice.has_place = line.has_place;
+                notices.push_back(notice);
+            }
+            if (!notices.empty()) {
+                // Keep the "Recovered" line on top of the old log.
+                std::vector<CitySession::CityNotice> merged = session_.notices();
+                merged.insert(merged.end(), notices.begin(), notices.end());
+                session_.restore_notices(std::move(merged));
+            }
+            if (saved.tile_size > 0) {
+                map_.set_tile_size(saved.tile_size);
+                map_ox_ = map_letterbox_x();
+                map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+                center_on_fraction(saved.center_x, saved.center_y);
+            } else {
+                center_on_fraction(0.5, 0.5);
+            }
+        }
         sync_title();
         break;
     case AfterSave::Nothing:
@@ -2228,6 +2328,22 @@ void Shell::on_dialog_button(int id)
         // Quit, B, and Escape ask first. A second B from New City or the
         // scenario list must not leave the game.
         open_dialog(Dialog::QuitConfirm);
+        return;
+    }
+    if (dialog_ == Dialog::BulldozeConfirm) {
+        const int x = bulldoze_x_;
+        const int y = bulldoze_y_;
+        bulldoze_x_ = -1;
+        bulldoze_y_ = -1;
+        if (id == kOk) {
+            close_dialog();
+            if (x >= 0 && y >= 0) {
+                session_.use_tool(TOOL_BULLDOZER, x, y);
+                session_.end_tool_stroke();
+            }
+            return;
+        }
+        dismiss_dialog();
         return;
     }
     if (dialog_ == Dialog::QuitConfirm) {

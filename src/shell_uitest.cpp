@@ -328,7 +328,12 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
         int r = 0;
         int g = 0;
         int b = 0;
-        if (!channel_at(surface, sx, sy, r, g, b) || r < 160 || g < 160 || b < 160) {
+        // The pixel above Close must be bare page: cream paper, or the dark
+        // slate page (0x1E2631) when Slate dialogs are on (U4).
+        const bool got = channel_at(surface, sx, sy, r, g, b);
+        const bool bare = slate_ ? (std::abs(r - 0x1E) <= 12 && std::abs(g - 0x26) <= 12 && std::abs(b - 0x31) <= 12)
+                                 : (r >= 160 && g >= 160 && b >= 160);
+        if (!got || !bare) {
             ran_ok_ = false;
             smoke_error_ = "graphs legend overlaps Close (" + std::to_string(r) + "," + std::to_string(g) + "," +
                            std::to_string(b) + ")";
@@ -362,7 +367,10 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
             return;
         }
         // Map hover must not turn Cancel blue. Save itself stays the focused blue.
-        if (cb > cr + 20 || cr < 180) {
+        // Slate buttons have a dark face (U4); classic ones are light.
+        // A slate face is a little blue-grey (about 53,65,84); lit is the
+        // primary blue (about 51,107,184).
+        if (cb > cr + (slate_ ? 60 : 20) || (!slate_ && cr < 180)) {
             ran_ok_ = false;
             smoke_error_ = "Cancel lit up while the pointer was over the map (" + std::to_string(cr) + "," +
                            std::to_string(cg) + "," + std::to_string(cb) + ")";
@@ -487,16 +495,25 @@ void Shell::drive_ui_test()
         {
             // The sprite is centered in the first tool button. Sample that
             // interior, not the button bevel, which is only two or three greys.
+            // A balanced row is centred under its section header, so the
+            // button is not the palette's top-left corner.
+            double cell_x = 0;
+            double cell_y = 0;
+            if (!palette_.cell_origin(0, cell_x, cell_y)) {
+                fail("the first toolbar button has no cell");
+                return;
+            }
             const int cell = palette_.cell();
             const int box = std::max(8, cell - 12);
-            const int origin = 9;
+            const int origin_x = static_cast<int>(std::lround(cell_x)) + 5;
+            const int origin_y = static_cast<int>(std::lround(cell_y)) + 5;
             int colors = 0;
             int seen_r[25] = {};
             int seen_g[25] = {};
             int seen_b[25] = {};
             for (int i = 0; i < 25; ++i) {
-                const int sx = side_x_ + origin + (box * (1 + (i % 5))) / 6;
-                const int sy = pal_y_ + origin + (box * (1 + (i / 5))) / 6;
+                const int sx = side_x_ + origin_x + (box * (1 + (i % 5))) / 6;
+                const int sy = pal_y_ + origin_y + (box * (1 + (i / 5))) / 6;
                 int r = 0;
                 int g = 0;
                 int b = 0;
@@ -524,7 +541,8 @@ void Shell::drive_ui_test()
             // The sprite is authored to fill the button face. A 24px icon
             // centered in this slot covers about 60% and leaves a grey margin.
             const int slot = std::max(8, cell - 8);
-            const int face_origin = 8;
+            const int face_x = static_cast<int>(std::lround(cell_x)) + 4;
+            const int face_y = static_cast<int>(std::lround(cell_y)) + 4;
             int min_x = slot;
             int min_y = slot;
             int max_x = -1;
@@ -535,7 +553,7 @@ void Shell::drive_ui_test()
                     int r = 0;
                     int g = 0;
                     int b = 0;
-                    if (!channel_at(frame_surface_, side_x_ + face_origin + x, pal_y_ + face_origin + y, r, g, b)) {
+                    if (!channel_at(frame_surface_, side_x_ + face_x + x, pal_y_ + face_y + y, r, g, b)) {
                         continue;
                     }
                     if (std::abs(r - g) < 14 && std::abs(g - b) < 14 && r > 170) {

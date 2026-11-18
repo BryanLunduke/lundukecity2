@@ -350,17 +350,17 @@ BuildingSpec building_spec(int tool)
     case TOOL_INDUSTRIAL:
         return {3, 3, 100, "Industrial", false};
     case TOOL_FIRESTATION:
-        return {3, 3, 500, "Fire dept", false};
+        return {3, 3, 500, "Fire Station", false};
     case TOOL_POLICESTATION:
-        return {3, 3, 500, "Police", false};
+        return {3, 3, 500, "Police Station", false};
     case TOOL_STADIUM:
         return {4, 4, 5000, "Stadium", false};
     case TOOL_SEAPORT:
         return {4, 4, 3000, "Seaport", false};
     case TOOL_COALPOWER:
-        return {4, 4, 3000, "Coal power", false};
+        return {4, 4, 3000, "Coal Plant", false};
     case TOOL_NUCLEARPOWER:
-        return {4, 4, 5000, "Nuclear", false};
+        return {4, 4, 5000, "Nuclear Plant", false};
     case TOOL_AIRPORT:
         return {6, 6, 10000, "Airport", false};
     case TOOL_PARK:

@@ -201,6 +201,22 @@ CityGlance city_glance(const std::string &path)
         glance.summary = "Not a valid city";
         return glance;
     }
+    // C1: a newer save format is named, not shown as a broken city; a
+    // guarded corner tile reads as the real one.
+    unsigned format_version = 1;
+    unsigned format_flags = 0;
+    unsigned format_corner = 0;
+    const bool has_format =
+        city_format_marker(data.data(), data.size(), format_version, format_flags, format_corner);
+    if (has_format && format_version > static_cast<unsigned>(Micropolis::kCityFormatVersion)) {
+        glance.summary = "Saved by a newer Lunduke City 2";
+        return glance;
+    }
+    if (has_format && (format_flags & 1u) != 0 &&
+        static_cast<unsigned>(be_short(data.data() + kMap) & 0xFFFF) == kCityFormatGuardTile) {
+        data[kMap] = static_cast<unsigned char>((format_corner >> 8) & 0xFF);
+        data[kMap + 1] = static_cast<unsigned char>(format_corner & 0xFF);
+    }
     int unknown = 0;
     int centres = 0;
     int bad_centres = 0;

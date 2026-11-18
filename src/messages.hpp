@@ -20,6 +20,11 @@ std::string zone_status_text(int tile_category, int population, int land_value,
 // Disaster notices get a stronger bar and a red edge flash. Earthquake and
 // explosion also shake. Routine demands ("More roads needed") do not.
 bool notice_is_disaster(const std::string &text);
+// A tool's own feedback on the click just made ("Cannot build here.",
+// "Not enough funds to build that.", a bridge price). The placement tag
+// and the toast carry these; they are not city news for the NEWS line or
+// the Messages log.
+bool notice_is_tool_feedback(const std::string &text);
 bool notice_shakes(const std::string &text);
 
 // 0 general, 1 disaster, 2 money, 3 people, 4 power, 5 road. Message-list marks.

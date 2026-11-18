@@ -1995,6 +1995,14 @@ public:
     /** Reason the last load rejected the file's contents, or empty. */
     std::string loadErrorDetail;
 
+    /** Save format written by this build (C1). See fileio.cpp kCityFormatMagic. */
+    static const int kCityFormatVersion = 2;
+    /** Corner tile that builds before the format marker reject as unknown. */
+    static const unsigned short kCityFormatGuardTile = 1019;
+    /** Reads the trailing save-format marker; false (version 1) when absent. */
+    static bool readCityFormat(const unsigned char *bytes, std::size_t size, unsigned int &version,
+                               unsigned int &flags, unsigned int &corner);
+
     static std::string checkCityContents(const short *misc, const short *tiles, int tileCount,
                                          bool checkMisc, bool hasWideFunds, bool classicOnly,
                                          long long wideFundsRaw = 0);

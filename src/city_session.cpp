@@ -2546,13 +2546,26 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     const int crime = layer_value(MapLayer::Crime, x, y);
     const int pollution = layer_value(MapLayer::Pollution, x, y);
     // "Power: off" already says the zone is unpowered. The condition line
-    // keeps crime or pollution so the card does not repeat itself.
+    // keeps crime or pollution so the card does not repeat itself. Same
+    // percent of the 0-255 map as the Inspect card's bars.
     if (crime >= pollution && crime > 0) {
-        card.condition = "Crime " + std::to_string(crime);
+        card.condition = "Crime " + std::to_string(inspect_report::map_percent(crime)) + "%";
     } else if (pollution > 0) {
-        card.condition = "Pollution " + std::to_string(pollution);
+        card.condition = "Pollution " + std::to_string(inspect_report::map_percent(pollution)) + "%";
     } else {
         card.condition = "Quiet";
+    }
+    {
+        bool intact = true;
+        if (special_at(&engine_->sim, x, y, card.special, intact)) {
+            card.damaged = !intact;
+            if (card.damaged) {
+                card.condition = "Damaged: rebuild it";
+            } else if (card.special == special_datacenter_lot_index()) {
+                // The lot does nothing until power reaches it.
+                card.condition = "Opens once powered";
+            }
+        }
     }
     // The building under the tile: the nearest zone centre whose whole
     // footprint covers (x, y). Every engine building sits one tile up and
@@ -2635,10 +2648,20 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
             }
         }
     }
-    if (road) {
+    if (card.special >= 0) {
+        card.needs_road = special_building(card.special).needs_road;
+    } else {
+        card.needs_road = card.zone && !card.power_plant;
+    }
+    if (!card.zone && card.special < 0) {
+        // Water, dirt, trees, roads and rubble: road access means nothing.
+        card.access.clear();
+    } else if (road) {
         card.access = "Road access";
     } else if (rail) {
         card.access = "Rail access";
+    } else if (!card.needs_road) {
+        card.access = "No road needed";
     } else {
         card.access = "No direct road";
     }
@@ -2729,8 +2752,16 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
         notes.push_back("Then counts as 1 industrial + 1 commercial zone");
         notes.push_back("No pollution");
     } else if (index == special_datacenter_index()) {
-        notes.push_back(powered ? "Counts as 1 industrial + 1 commercial zone"
-                                : "Counts as 1 industrial + 1 commercial zone with power");
+        int found = -1;
+        bool intact = true;
+        special_at(&engine_->sim, x, y, found, intact);
+        if (!intact) {
+            // The census skips a damaged Data Center (zone.cpp), like a
+            // damaged landmark's income; the facts line says so.
+        } else {
+            notes.push_back(powered ? "Counts as 1 industrial + 1 commercial zone"
+                                    : "Counts as 1 industrial + 1 commercial zone with power");
+        }
         notes.push_back("No pollution");
     } else if (index == special_micro_nuclear_index()) {
         notes.push_back("Supplies 1/9 of a nuclear plant's power (about " +
@@ -2786,7 +2817,18 @@ CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
         facts.power = -1;
     }
     facts.access = card.access == "Road access" || card.access == "Rail access";
-    facts.needs_road = !card.power_plant;
+    facts.needs_road = card.needs_road;
+    if (card.special >= 0 && card.damaged) {
+        facts.damaged = true;
+        const SpecialBuilding &building = special_building(card.special);
+        if (special_is_datacenter(card.special)) {
+            facts.damage_effect = "Counts as no zones until rebuilt";
+        } else if (building.annual_income > 0) {
+            facts.damage_effect = "No income or land value boost while damaged";
+        } else {
+            facts.damage_effect = "No effect on the city while damaged";
+        }
+    }
     out.notes = special_inspect_notes(x, y);
     facts.density = layer_value(MapLayer::Population, x, y);
     facts.land_value = layer_value(MapLayer::LandValue, x, y);
@@ -2829,7 +2871,21 @@ int CitySession::layer_value(MapLayer layer, int x, int y) const
             return (raw & PWRBIT) != 0 ? 3 : 2;
         }
         if ((raw & CONDBIT) != 0) {
-            return 4;
+            // Only the wires are orange. A building's other tiles carry
+            // power too; they take the grid's state so a whole house or
+            // plant reads yellow (powered) or red (not), matching the legend.
+            const bool wire = (tile >= HROADPOWER && tile <= VROADPOWER) || (tile >= POWERBASE && tile <= LASTPOWER);
+            if (wire) {
+                return 4;
+            }
+            if (tile == SPECIAL_BODY) {
+                int index = -1;
+                bool intact = false;
+                if (special_at(&sim, x, y, index, intact) && !special_uses_power(index)) {
+                    return 0;
+                }
+            }
+            return sim.powerGridMap.worldGet(x, y) != 0 ? 3 : 2;
         }
         return 0;
     case MapLayer::Pollution:
@@ -2902,16 +2958,81 @@ void CitySession::clear_notices()
     notices_.clear();
 }
 
+int CitySession::bulldoze_worth(int tile_x, int tile_y, std::string *name) const
+{
+    if (!ready_ || !Micropolis::testBounds(tile_x, tile_y)) {
+        return 0;
+    }
+    const Micropolis &sim = engine_->sim;
+    int index = -1;
+    bool intact = false;
+    if (special_at(&sim, tile_x, tile_y, index, intact) && index >= 0) {
+        const SpecialBuilding &building = special_building(index);
+        if (name != nullptr) {
+            *name = building.name;
+        }
+        return building.cost;
+    }
+    // Engine buildings: the centre sits one tile in from the top-left corner.
+    struct Kind {
+        int center;
+        int size;
+        int cost;
+        const char *label;
+    };
+    static const Kind kinds[] = {
+        {POWERPLANT, 4, 3000, "Coal Plant"},     {NUCLEAR, 4, 5000, "Nuclear Plant"},
+        {FIRESTATION, 3, 500, "Fire Station"},   {POLICESTATION, 3, 500, "Police Station"},
+        {STADIUM, 4, 5000, "Stadium"},           {FULLSTADIUM, 4, 5000, "Stadium"},
+        {PORT, 4, 3000, "Seaport"},              {AIRPORT, 6, 10000, "Airport"},
+    };
+    for (int cy = tile_y - 4; cy <= tile_y + 1; ++cy) {
+        for (int cx = tile_x - 4; cx <= tile_x + 1; ++cx) {
+            if (!Micropolis::testBounds(cx, cy)) {
+                continue;
+            }
+            const unsigned short raw = sim.map[cx][cy];
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int tile = raw & LOMASK;
+            for (const Kind &kind : kinds) {
+                if (tile != kind.center) {
+                    continue;
+                }
+                const int left = cx - 1;
+                const int top = cy - 1;
+                if (tile_x >= left && tile_x < left + kind.size && tile_y >= top && tile_y < top + kind.size) {
+                    if (name != nullptr) {
+                        *name = kind.label;
+                    }
+                    return kind.cost;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+void CitySession::restore_notices(std::vector<CityNotice> notices)
+{
+    if (notices.size() > 50) {
+        notices.resize(50);
+    }
+    for (CityNotice &notice : notices) {
+        notice.has_place = notice.has_place && Micropolis::testBounds(notice.tile_x, notice.tile_y);
+        if (notice.month < 0 || notice.month > 11) {
+            notice.month = 0;
+        }
+    }
+    notices_ = std::move(notices);
+}
+
 void CitySession::remember_notice(std::string text, int tile_x, int tile_y, bool has_place)
 {
-    if (text.empty()) {
-        return;
-    }
-    // Dragging a blocked tile used to append the same line on every sample.
-    if (text == "Cannot build here." && !notices_.empty() && notices_.front().text == text) {
-        notices_.front().tile_x = tile_x;
-        notices_.front().tile_y = tile_y;
-        notices_.front().has_place = has_place && Micropolis::testBounds(tile_x, tile_y);
+    // A failed click is answered by the placement tag and the toast. It is
+    // not news, so it stays out of the NEWS line and the Messages log.
+    if (text.empty() || notice_is_tool_feedback(text)) {
         return;
     }
     CityNotice notice;
