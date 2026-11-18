@@ -84,8 +84,11 @@ void Micropolis::doDisasters()
     /* Chance of disasters at lev 0 1 2 */
     static const short DisChance[3] = {
         10 * 48, // Game level 0
-        5 * 48,  // Game level 1
-        60 // Game level 2
+        5 * 48,  // Game level 1: twice Easy
+        // Game level 2: three times Easy. The classic 60 was eight times
+        // Easy, about ten disasters every fifty years on top of Hard's
+        // money and tax pressure.
+        160
     };
     assert(LEVEL_COUNT == LENGTH_OF(DisChance));
 
