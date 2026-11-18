@@ -875,6 +875,10 @@ enum Scenario {
     SC_COUNT,          ///< Number of scenarios
 };
 
+/** Bern scenario: win with traffic below this and at least this many people. */
+static const int BERN_TRAFFIC_GOAL = 40;
+static const int BERN_POPULATION_GOAL = 90000;
+
 
 ///////////////////////////////////////////////////
 // Zones

@@ -151,7 +151,7 @@ const ScenarioEntry kScenarios[] = {
       "Keep the city a Metropolis (over 100,000) until 1949 despite the fire.", 5},
      "snro.333"},
     {{SC_BERN, "Bern", 1965, "Traffic is choking the streets.",
-      "Bring average traffic below 80 within 10 years.", 10},
+      "Bring average traffic below 40 and keep at least 90,000 people within 10 years.", 10},
      "snro.444"},
     {{SC_TOKYO, "Tokyo", 1957, "A monster is approaching.",
       "Keep the city score above 500 until 1962.", 5},
@@ -2171,7 +2171,9 @@ std::string CitySession::scenario_meter() const
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < 60";
     }
     if (id == SC_BERN) {
-        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < 80";
+        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < " +
+               std::to_string(BERN_TRAFFIC_GOAL) + ", population " + grouped_count(people > 0 ? people : 0) +
+               " → keep " + grouped_count(BERN_POPULATION_GOAL);
     }
     if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
         // Judged on the score at the deadline, after the disaster. A city
