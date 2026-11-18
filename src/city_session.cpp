@@ -85,7 +85,9 @@ Quad live_population_count(const Micropolis &sim)
     const Quad res = sim.censusSnapshotValid ? sim.snapResPop : sim.resPop;
     const Quad com = sim.censusSnapshotValid ? sim.snapComPop : sim.comPop;
     const Quad ind = sim.censusSnapshotValid ? sim.snapIndPop : sim.indPop;
-    return (res + (com + ind) * 8) * 20;
+    const Quad dc = sim.censusSnapshotValid ? sim.snapDataCenterPop : sim.dataCenterPop;
+    // Data Centers are jobs, not people (cityPopulationOf).
+    return static_cast<Quad>(cityPopulationOf(res, com, ind, dc));
 }
 
 CityClass live_city_class(Quad population)
@@ -1350,6 +1352,8 @@ void CitySession::set_census_residents(int residents)
     engine_->sim.indPop = 0;
     engine_->sim.snapComPop = 0;
     engine_->sim.snapIndPop = 0;
+    engine_->sim.dataCenterPop = 0;
+    engine_->sim.snapDataCenterPop = 0;
     engine_->sim.censusSnapshotValid = true;
 }
 
@@ -2372,6 +2376,8 @@ void CitySession::prepare_review_demo()
     sim.snapResPop = sim.resPop;
     sim.snapComPop = sim.comPop;
     sim.snapIndPop = sim.indPop;
+    sim.dataCenterPop = 0;
+    sim.snapDataCenterPop = 0;
     sim.censusSnapshotValid = true;
     sim.budgetAnchorFunds = 15200;
     sim.budgetAnchorValid = true;
@@ -3061,6 +3067,7 @@ void CitySession::recount_population_from_map()
     Quad res = 0;
     Quad com = 0;
     Quad ind = 0;
+    Quad dc = 0;
     for (int x = 0; x < kWorldW; ++x) {
         for (int y = 0; y < kWorldH; ++y) {
             const unsigned short raw = sim.map[x][y];
@@ -3085,7 +3092,9 @@ void CitySession::recount_population_from_map()
                     }
                 }
                 res += homes;
-            } else if (tile < HOSPITAL) {
+            } else if (tile >= RZB && tile < HOSPITAL) {
+                // Built houses only. The landmark centres 53-55 carry
+                // ZONEBIT below RESBASE and are not people.
                 res += ((tile - RZB) / 9) % 4 * 8 + 16;
             } else if (tile >= COMBASE && tile < INDBASE) {
                 if (tile != COMCLR) {
@@ -3095,11 +3104,17 @@ void CitySession::recount_population_from_map()
                 if (tile != INDCLR) {
                     ind += ((tile - IZB) / 9) % 4 + 1;
                 }
+            } else if (tile == SPECIAL_DATACENTER && (raw & PWRBIT) != 0) {
+                // The weight doZone gives a powered Data Center: jobs in
+                // comPop and indPop, no people (dataCenterPop).
+                com += DATACENTER_ZONE_DENSITY;
+                ind += DATACENTER_ZONE_DENSITY;
+                dc += DATACENTER_ZONE_DENSITY;
             }
         }
     }
-    const Quad people = (res + (com + ind) * 8) * 20;
-    const Quad saved = (sim.resPop + (sim.comPop + sim.indPop) * 8) * 20;
+    const Quad people = static_cast<Quad>(cityPopulationOf(res, com, ind, dc));
+    const Quad saved = static_cast<Quad>(cityPopulationOf(sim.resPop, sim.comPop, sim.indPop, dc));
     // An empty generated map can still carry a wide census that is not on
     // the tiles. A city with zones always shows the tiles, so a stale
     // stored "Town" does not sit on screen until the next census.
@@ -3114,6 +3129,8 @@ void CitySession::recount_population_from_map()
     sim.snapResPop = res;
     sim.snapComPop = com;
     sim.snapIndPop = ind;
+    sim.dataCenterPop = dc;
+    sim.snapDataCenterPop = dc;
     sim.censusSnapshotValid = true;
     sim.liveCensusComplete = true;
     sim.cityPop = people < 0 ? 0 : people;

@@ -795,6 +795,21 @@ enum MapTileCharacters {
  */
 static const int DATACENTER_ZONE_DENSITY = 2;
 
+/**
+ * City population from a census: residents plus the workers of ordinary
+ * commercial and industrial zones. dataCenter is the Data Centers' share of
+ * comPop and indPop (dataCenterPop). A Data Center adds jobs to the tax base
+ * and the valves, but no people, so it is taken out of both counts here.
+ */
+inline long long cityPopulationOf(long long res, long long com, long long ind, long long dataCenter)
+{
+    long long jobs = com + ind - 2 * dataCenter;
+    if (jobs < 0) {
+        jobs = 0;
+    }
+    return (res + jobs * 8) * 20;
+}
+
 // The shipped tiles.png is 256 by 960, so it draws indices 0 through 959.
 // TILE_COUNT is larger: later ids are simulator values the sheet does not
 // draw. Raise this when the sheet actually contains the extra church
@@ -1185,6 +1200,14 @@ public:
      * Depends on level of zone development. Same width as resPop.
      */
     Quad comPop;
+
+    /**
+     * Census weight the powered Data Centers added to comPop and indPop
+     * (DATACENTER_ZONE_DENSITY each per Data Center, counted once here).
+     * Those are jobs for the tax base and demand, not people: the city
+     * population leaves them out (cityPopulationOf).
+     */
+    Quad dataCenterPop;
 
     /**
      * Industrial zone population.
@@ -2634,6 +2657,7 @@ public:
     Quad snapResPop;
     Quad snapComPop;
     Quad snapIndPop;
+    Quad snapDataCenterPop;
     short snapRoadTotal;
     short snapRailTotal;
     short snapPolicePop;

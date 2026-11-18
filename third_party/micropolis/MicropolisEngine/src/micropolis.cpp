@@ -127,6 +127,7 @@ void Micropolis::init()
 
     // Quad comPop;
     comPop = 0;
+    dataCenterPop = 0;
 
     // Quad indPop;
     indPop = 0;
@@ -662,6 +663,7 @@ void Micropolis::init()
     snapCoalPop = 0;
     snapNuclearPop = 0;
     snapMicroNuclearPop = 0;
+    snapDataCenterPop = 0;
 
     // short speedCycle;
     speedCycle = 0;

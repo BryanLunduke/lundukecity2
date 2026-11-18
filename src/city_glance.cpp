@@ -111,13 +111,15 @@ int tile_of(const unsigned char *map, int x, int y)
     return (static_cast<int>(p[0]) << 8) | static_cast<int>(p[1]);
 }
 
-std::int64_t population_on_map(const unsigned char *map)
+// dc_out: the Data Centers' census weight on the map (jobs, not people).
+std::int64_t population_on_map(const unsigned char *map, int &dc_out)
 {
     constexpr int kW = 120;
     constexpr int kH = 100;
     int res = 0;
     int com = 0;
     int ind = 0;
+    int dc = 0;
     for (int x = 0; x < kW; ++x) {
         for (int y = 0; y < kH; ++y) {
             const int raw = tile_of(map, x, y);
@@ -139,7 +141,8 @@ std::int64_t population_on_map(const unsigned char *map)
                     }
                 }
                 res += homes;
-            } else if (tile < HOSPITAL) {
+            } else if (tile >= RZB && tile < HOSPITAL) {
+                // Built houses only; landmark centres 53-55 are not people.
                 res += ((tile - RZB) / 9) % 4 * 8 + 16;
             } else if (tile >= COMBASE && tile < INDBASE) {
                 if (tile != COMCLR) {
@@ -154,10 +157,12 @@ std::int64_t population_on_map(const unsigned char *map)
                 // zone, the same weight doZone gives it.
                 com += DATACENTER_ZONE_DENSITY;
                 ind += DATACENTER_ZONE_DENSITY;
+                dc += DATACENTER_ZONE_DENSITY;
             }
         }
     }
-    const std::int64_t people = (static_cast<std::int64_t>(res) + (static_cast<std::int64_t>(com) + ind) * 8) * 20;
+    dc_out = dc;
+    const std::int64_t people = cityPopulationOf(res, com, ind, dc);
     return people > 0 ? people : 0;
 }
 
@@ -248,7 +253,11 @@ CityGlance city_glance(const std::string &path)
     const int res = be_short(data.data() + kMisc + 4);
     const int com = be_short(data.data() + kMisc + 6);
     const int ind = be_short(data.data() + kMisc + 8);
-    std::int64_t stored = static_cast<std::int64_t>(res + (com + ind) * 8) * 20;
+    int dc_on_map = 0;
+    const std::int64_t on_map = population_on_map(data.data() + kMap, dc_on_map);
+    // The stored census counts powered Data Centers in com and ind; they
+    // are jobs, not people.
+    std::int64_t stored = cityPopulationOf(res, com, ind, dc_on_map);
     if (stored < 0) {
         stored = 0;
     }
@@ -274,7 +283,7 @@ CityGlance city_glance(const std::string &path)
                 const std::int64_t wide_res = read_i64(cursor);
                 const std::int64_t wide_com = read_i64(cursor + 8);
                 const std::int64_t wide_ind = read_i64(cursor + 16);
-                stored = (wide_res + (wide_com + wide_ind) * 8) * 20;
+                stored = cityPopulationOf(wide_res, wide_com, wide_ind, dc_on_map);
                 if (stored < 0) {
                     stored = 0;
                 }
@@ -282,7 +291,6 @@ CityGlance city_glance(const std::string &path)
             break;
         }
     }
-    const std::int64_t on_map = population_on_map(data.data() + kMap);
     glance.population = on_map > 0 ? on_map : stored;
     const std::int64_t time = be_long(data.data() + kMisc + 16);
     // The engine clamps a loaded city to Jan 9999. The list used to show the raw word.

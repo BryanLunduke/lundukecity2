@@ -870,8 +870,9 @@ int special_population(const Micropolis *sim)
     const Quad res = sim->censusSnapshotValid ? sim->snapResPop : sim->resPop;
     const Quad com = sim->censusSnapshotValid ? sim->snapComPop : sim->comPop;
     const Quad ind = sim->censusSnapshotValid ? sim->snapIndPop : sim->indPop;
-    const long long people =
-        (static_cast<long long>(res) + (static_cast<long long>(com) + static_cast<long long>(ind)) * 8LL) * 20LL;
+    const Quad dc = sim->censusSnapshotValid ? sim->snapDataCenterPop : sim->dataCenterPop;
+    // Data Centers are jobs, not people: they cannot unlock Mayor's House.
+    const long long people = cityPopulationOf(res, com, ind, dc);
     if (people < 0) {
         return 0;
     }

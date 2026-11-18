@@ -710,6 +710,7 @@ void Micropolis::clearCensus()
     resPop = 0;
     comPop = 0;
     indPop = 0;
+    dataCenterPop = 0;
     resZonePop = 0;
     comZonePop = 0;
     indZonePop = 0;
@@ -739,6 +740,7 @@ void Micropolis::captureCensusSnapshot()
     snapResPop = resPop;
     snapComPop = comPop;
     snapIndPop = indPop;
+    snapDataCenterPop = dataCenterPop;
     snapRoadTotal = roadTotal;
     snapRailTotal = railTotal;
     snapPolicePop = policeStationPop;

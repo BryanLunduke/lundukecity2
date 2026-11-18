@@ -248,6 +248,14 @@ int main()
         if (sim.comPop != DATACENTER_ZONE_DENSITY || sim.indPop != DATACENTER_ZONE_DENSITY) {
             return fail(20, "a powered Data Center has the wrong density");
         }
+        // Review nov18 B2: the jobs count for demand and tax, but nobody
+        // lives in a Data Center, so it adds no population.
+        if (sim.dataCenterPop != DATACENTER_ZONE_DENSITY || cityPopulationOf(sim.resPop, sim.comPop, sim.indPop, sim.dataCenterPop) != 0 ||
+            special_population(&sim) != 0) {
+            std::fprintf(stderr, "dc %d population %lld special %d\n", static_cast<int>(sim.dataCenterPop),
+                         cityPopulationOf(sim.resPop, sim.comPop, sim.indPop, sim.dataCenterPop), special_population(&sim));
+            return fail(70, "a Data Center counted as population");
+        }
         if (sim.microNuclearPop != 1 || sim.nuclearPowerPop != 0) {
             return fail(21, "the micro plant was not counted");
         }
@@ -313,14 +321,15 @@ int main()
             (back.map[49][49] & LOMASK) != kSpecialBodyTile) {
             return fail(27, "the buildings did not survive save and load");
         }
-        // The city glance counts a powered Data Center as 2 commercial + 2
-        // industrial population units, the same as the census.
+        // Review nov18 B2: a powered Data Center is jobs, not people. The
+        // city glance, like the census population, counts no one for it.
         const CityGlance glance = city_glance(path);
         if (!glance.ok) {
             return fail(28, "city glance could not read the file");
         }
-        if (glance.population <= 0) {
-            return fail(29, "city glance did not count the Data Center");
+        if (glance.population != 0) {
+            std::fprintf(stderr, "glance population %lld\n", static_cast<long long>(glance.population));
+            return fail(29, "city glance counted people for a Data Center");
         }
         // The vacant lot saves and loads too, and stays vacant: the scan
         // right after a load must not open it on the previous city's grid
