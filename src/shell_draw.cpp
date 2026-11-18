@@ -1534,7 +1534,13 @@ void Shell::draw_dialog(cairo_t *cr)
             label(cr, ui_font(), land_intro, x + margin, y + dp(46), static_cast<int>(dw - 2 * margin));
             const double block_top = y + dp(46) + land_intro_h + dp(10);
             const char *groups[] = {"Difficulty", "Island", "Rivers", "Lakes", "Trees"};
-            const char *options[][3] = {{"Easy", "Medium", "Hard"},
+            // Each difficulty names its starting funds.
+            const std::string level_names[3] = {
+                "Easy · " + graph_money(CitySession::starting_funds(CitySession::kLevelEasy)),
+                "Medium · " + graph_money(CitySession::starting_funds(CitySession::kLevelMedium)),
+                "Hard · " + graph_money(CitySession::starting_funds(CitySession::kLevelHard)),
+            };
+            const char *options[][3] = {{level_names[0].c_str(), level_names[1].c_str(), level_names[2].c_str()},
                                         {"Default", "None", "Island"},
                                         {"Default", "None", "Curvy"},
                                         {"Default", "None", "Many"},

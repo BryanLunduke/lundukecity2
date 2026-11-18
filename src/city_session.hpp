@@ -112,6 +112,11 @@ public:
     static constexpr int kLevelEasy = 0;
     static constexpr int kLevelMedium = 1;
     static constexpr int kLevelHard = 2;
+    // The funds a new city starts with (Micropolis::setGameLevelFunds).
+    static constexpr int starting_funds(int level)
+    {
+        return level == kLevelHard ? 5000 : level == kLevelMedium ? 10000 : 20000;
+    }
 
     // Terrain knobs are the engine fields used by generateMap().
     // -1 is the generator default. 0 turns that feature off.
