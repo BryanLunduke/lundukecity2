@@ -2707,7 +2707,10 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
         }
     }
     if (card.special >= 0) {
-        card.needs_road = special_building(card.special).needs_road;
+        // Income buildings (Casino, Amusement Park, Marina) open without a
+        // road but only earn with one, so their card asks for it.
+        const SpecialBuilding &building = special_building(card.special);
+        card.needs_road = building.needs_road || building.annual_income > 0;
     } else {
         card.needs_road = card.zone && !card.power_plant;
     }

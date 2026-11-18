@@ -13,6 +13,7 @@
 #include "controls_page.hpp"
 #include "dialog_copy.hpp"
 #include "overlay_map.hpp"
+#include "special_buildings.hpp"
 
 #include "micropolis.h"
 #include "text.h"
@@ -259,6 +260,38 @@ int check_text()
     return 0;
 }
 
+int check_casino_card()
+{
+    // A casino opens without a road but earns nothing without one, so its
+    // card asks for a road instead of reading "No road needed".
+    CitySession city;
+    CitySession::NewCitySpec spec;
+    spec.name = "Card Town";
+    spec.seed = 12;
+    spec.seed_was_set = true;
+    spec.island = CitySession::kTerrainOff;
+    spec.rivers = CitySession::kTerrainOff;
+    spec.lakes = CitySession::kTerrainOff;
+    spec.trees = CitySession::kTerrainOff;
+    city.new_city(spec);
+    city.set_auto_bulldoze(true);
+    int casino = -1;
+    for (int i = 0; i < special_building_count(); ++i) {
+        if (std::string(special_building(i).name) == "Casino") {
+            casino = i;
+        }
+    }
+    if (casino < 0 || !city.place_special(casino, 60, 50)) {
+        return fail(70, "could not place a casino");
+    }
+    const CitySession::InspectFacts facts = city.inspect_facts(60, 50);
+    if (!facts.valid || !facts.facts.needs_road || city.inspect_tile(60, 50).access != "No direct road") {
+        std::fprintf(stderr, "access '%s'\n", city.inspect_tile(60, 50).access.c_str());
+        return fail(71, "a casino with no road does not ask for one");
+    }
+    return 0;
+}
+
 int check_eval_after_load()
 {
     // The Evaluation's change-since-last-year survives save and load, so a
@@ -320,6 +353,9 @@ int main()
         return r;
     }
     if (const int r = check_text()) {
+        return r;
+    }
+    if (const int r = check_casino_card()) {
         return r;
     }
     if (const int r = check_eval_after_load()) {
