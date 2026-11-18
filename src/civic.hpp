@@ -35,6 +35,10 @@ struct MilestoneHit {
     bool earned = false;
     int year = 1900;
     int month = 0;
+    // Already true when the city was loaded or a scenario started (the
+    // silent catch-up). The date is the load date, not when it happened,
+    // so the Year in Review leaves it out and the Milestones list says "By".
+    bool before_start = false;
 };
 
 struct Ledger {
@@ -194,7 +198,8 @@ inline std::string milestone_date(const MilestoneHit &hit)
     if (!hit.earned) {
         return "Not yet";
     }
-    return std::string(month_name(hit.month)) + " " + std::to_string(hit.year);
+    const std::string date = std::string(month_name(hit.month)) + " " + std::to_string(hit.year);
+    return hit.before_start ? "By " + date : date;
 }
 
 inline Advice advice_for(int problem)
@@ -300,7 +305,9 @@ inline int population_milestone(std::int64_t population)
     return -1;
 }
 
-inline bool award(Ledger &ledger, int id, int year, int month, std::vector<int> *fresh)
+// before_start: the silent catch-up after a load or a scenario start. The
+// city had the milestone already; the date is only when it was noticed.
+inline bool award(Ledger &ledger, int id, int year, int month, std::vector<int> *fresh, bool before_start = false)
 {
     if (id < 0 || id >= kMilestones || ledger.hit[id].earned) {
         return false;
@@ -308,6 +315,7 @@ inline bool award(Ledger &ledger, int id, int year, int month, std::vector<int> 
     ledger.hit[id].earned = true;
     ledger.hit[id].year = year;
     ledger.hit[id].month = month < 0 ? 0 : (month > 11 ? 11 : month);
+    ledger.hit[id].before_start = before_start;
     if (fresh != nullptr) {
         fresh->push_back(id);
     }
@@ -322,7 +330,7 @@ inline std::vector<int> note_population(Ledger &ledger, std::int64_t population,
         return fresh;
     }
     for (int id = Town; id <= reached; ++id) {
-        award(ledger, id, year, month, announce ? &fresh : nullptr);
+        award(ledger, id, year, month, announce ? &fresh : nullptr, !announce);
     }
     return fresh;
 }
@@ -331,7 +339,7 @@ inline std::vector<int> note_powered(Ledger &ledger, bool powered, int year, int
 {
     std::vector<int> fresh;
     if (powered) {
-        award(ledger, Powered, year, month, announce ? &fresh : nullptr);
+        award(ledger, Powered, year, month, announce ? &fresh : nullptr, !announce);
     }
     return fresh;
 }
@@ -582,13 +590,13 @@ inline YearDigest make_year_digest(std::int64_t opening, std::int64_t closing, b
     int biggest = -1;
     for (int id = Town; id <= Megalopolis; ++id) {
         const MilestoneHit &hit = ledger.hit[id];
-        if (hit.earned && digest_in_year(hit.year, hit.month, city_year)) {
+        if (hit.earned && !hit.before_start && digest_in_year(hit.year, hit.month, city_year)) {
             biggest = id;
         }
     }
     for (int id = 0; id < kMilestones; ++id) {
         const MilestoneHit &hit = ledger.hit[id];
-        if (!hit.earned || !digest_in_year(hit.year, hit.month, city_year)) {
+        if (!hit.earned || hit.before_start || !digest_in_year(hit.year, hit.month, city_year)) {
             continue;
         }
         if (milestone_notice(id)[0] != '\0') {
@@ -795,6 +803,10 @@ inline std::string encode_ledger(const Ledger &ledger)
         }
         out += "m" + std::to_string(i) + "=" + std::to_string(ledger.hit[i].year) + "." +
                std::to_string(ledger.hit[i].month);
+        if (ledger.hit[i].before_start) {
+            // An older reader stops atoi at the "b" and keeps the date.
+            out.push_back('b');
+        }
     }
     if (ledger.have_prior) {
         if (!out.empty()) {
@@ -835,6 +847,7 @@ inline bool decode_ledger(const std::string &text, Ledger &ledger)
             parsed.hit[id].earned = true;
             parsed.hit[id].year = year;
             parsed.hit[id].month = month < 0 ? 0 : (month > 11 ? 11 : month);
+            parsed.hit[id].before_start = part.back() == 'b';
             any = true;
         } else if (part[0] == 'p' && part[1] == '=') {
             parsed.have_prior = true;
