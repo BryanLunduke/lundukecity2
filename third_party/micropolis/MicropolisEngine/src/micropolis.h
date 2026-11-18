@@ -2731,6 +2731,17 @@ private:
 
     void setValves();
 
+ public:
+    /**
+     * The tax table's push on all three valves for a tax rate at a game
+     * level (setValves adds the level to the rate). Positive helps growth,
+     * 0 at an effective 7%, -10 at 8%, -40 at 9%, -100 at 10%. The budget
+     * window's tax warning reads the same table.
+     */
+    static short taxGrowthEffect(int tax, int level);
+
+ private:
+
     void clearCensus();
 
     void captureCensusSnapshot();

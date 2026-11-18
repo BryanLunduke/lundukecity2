@@ -572,13 +572,25 @@ void Micropolis::setCommonInits()
 
 
 /* comefrom: simulate doSimInit */
-void Micropolis::setValves()
+short Micropolis::taxGrowthEffect(int tax, int level)
 {
     /// @todo Break the tax table out into configurable parameters.
     static const short taxTable[21] = {
         200, 150, 120, 100, 80, 50, 30, 0, -10, -40, -100,
         -150, -200, -250, -300, -350, -400, -450, -500, -550, -600,
     };
+    int z = tax + level;
+    if (z < 0) {
+        z = 0;
+    }
+    if (z > 20) {
+        z = 20;
+    }
+    return taxTable[z];
+}
+
+void Micropolis::setValves()
+{
     static const float extMarketParamTable[3] = {
         1.2f, 1.1f, 0.98f,
     };
@@ -673,10 +685,10 @@ void Micropolis::setValves()
     indRatio = min(indRatio, indRatioMax);
 
     // Global tax and game level effects.
-    short z = min((short)(cityTax + gameLevel), taxMax);
-    resRatio = (resRatio - 1) * taxTableScale + taxTable[z];
-    comRatio = (comRatio - 1) * taxTableScale + taxTable[z];
-    indRatio = (indRatio - 1) * taxTableScale + taxTable[z];
+    const short taxEffect = taxGrowthEffect(min((short)(cityTax + gameLevel), taxMax), 0);
+    resRatio = (resRatio - 1) * taxTableScale + taxEffect;
+    comRatio = (comRatio - 1) * taxTableScale + taxEffect;
+    indRatio = (indRatio - 1) * taxTableScale + taxEffect;
 
     // Ratios are velocity changes to valves.
     resValve = clamp(resValve + (short)resRatio, -RES_VALVE_RANGE, RES_VALVE_RANGE);

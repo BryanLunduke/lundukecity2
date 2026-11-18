@@ -2741,7 +2741,9 @@ void Shell::draw_dialog(cairo_t *cr)
             return h;
         };
         const double fund_gap = static_cast<double>(dp(14));
-        const double blocks = block_h(copy.tax_title, copy.tax_value, "") + fund_gap +
+        // The tax slider warns before the cliff (dialog_copy.hpp tax_warning).
+        const TaxWarning tax_warn = tax_warning(tax_, session_.difficulty());
+        const double blocks = block_h(copy.tax_title, copy.tax_value, tax_warn.note) + fund_gap +
                               block_h("Road fund", std::to_string(road_) + "%", copy.road) +
                               block_h("Police fund", std::to_string(police_) + "%", copy.police) +
                               block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
@@ -2801,11 +2803,21 @@ void Shell::draw_dialog(cairo_t *cr)
             place_line(bold_font(), value_text, x + dw - margin - value_w, cursor, std::max(1.0, value_w), theme::kTextR,
                        theme::kTextG, theme::kTextB);
             cursor += cap_h + gap;
+            const bool tax_row = index == 1;
             if (!detail.empty()) {
                 double note_r = 0;
                 double note_g = 0;
                 double note_b = 0;
                 theme::reading_ink(note_r, note_g, note_b);
+                if (tax_row && tax_warn.level == 2) {
+                    note_r = 0.70;
+                    note_g = 0.12;
+                    note_b = 0.08;
+                } else if (tax_row && tax_warn.level == 1) {
+                    note_r = 0.60;
+                    note_g = 0.38;
+                    note_b = 0.02;
+                }
                 const double detail_h = place_line(ui_font(), detail, x + margin, cursor, live_inner, note_r, note_g, note_b);
                 cursor += detail_h + gap;
             }
@@ -2814,8 +2826,36 @@ void Shell::draw_dialog(cairo_t *cr)
             const double sx = x + margin;
             const double sw = live_inner;
             fill(cr, sx, bar_y, sw, dp(16), 1, 1, 1);
-            const double t = (value - min) / static_cast<double>(std::max(1, max - min));
-            fill(cr, sx, bar_y, sw * t, dp(16), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
+            const double span = static_cast<double>(std::max(1, max - min));
+            if (tax_row) {
+                // Shade the rates that slow growth (amber) and drive people
+                // away (red) for this difficulty, so the cliff shows before
+                // the thumb reaches it.
+                auto band = [&](int from, int to, double r, double g, double b) {
+                    if (from > to) {
+                        return;
+                    }
+                    const double x0 = sx + sw * (from - min) / span;
+                    const double x1 = sx + sw * (to - min) / span;
+                    fill(cr, x0, bar_y, std::max(1.0, x1 - x0), dp(16), r, g, b);
+                };
+                band(tax_warn.slows_from, std::min(max, tax_warn.leaves_from), 1.0, 0.86, 0.55);
+                band(tax_warn.leaves_from, max, 0.96, 0.62, 0.58);
+            }
+            const double t = (value - min) / span;
+            double sel_r = theme::chrome_select_r();
+            double sel_g = theme::chrome_select_g();
+            double sel_b = theme::chrome_select_b();
+            if (tax_row && tax_warn.level == 2) {
+                sel_r = 0.78;
+                sel_g = 0.16;
+                sel_b = 0.10;
+            } else if (tax_row && tax_warn.level == 1) {
+                sel_r = 0.86;
+                sel_g = 0.56;
+                sel_b = 0.06;
+            }
+            fill(cr, sx, bar_y, sw * t, dp(16), sel_r, sel_g, sel_b);
             const double thumb = dp(14);
             const double thumb_x = slider_thumb_x(sx, sw, thumb, t);
             fill(cr, thumb_x, bar_y - dp(4), thumb, dp(24), 1, 1, 1);
@@ -2831,7 +2871,7 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             cursor += dp(16) + tail;
         };
-        slider(1, copy.tax_title, copy.tax_value, "", tax_, 0, 20);
+        slider(1, copy.tax_title, copy.tax_value, tax_warn.note, tax_, 0, 20);
         cursor += fund_gap;
         auto funded = [](int percent, std::int64_t need) {
             return std::to_string(percent) + "%  " + graph_money(need * percent / 100);

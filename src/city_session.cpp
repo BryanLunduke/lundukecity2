@@ -868,6 +868,11 @@ void CitySession::rename_city(const std::string &name)
     notify();
 }
 
+int CitySession::tax_growth_effect(int tax, int level)
+{
+    return static_cast<int>(Micropolis::taxGrowthEffect(tax, level));
+}
+
 int CitySession::difficulty() const
 {
     return static_cast<int>(engine_->sim.gameLevel);

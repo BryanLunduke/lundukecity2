@@ -102,6 +102,44 @@ struct BudgetCopy {
     std::string fire;
 };
 
+// The tax slider's warning, from the engine's own tax table. The table pushes
+// every growth valve by taxGrowthEffect(tax + level): 0 at an effective 7%,
+// -10 at 8% (growth slows), -40 at 9% and -100 at 10% (people leave). Hard
+// adds 2, so 7% on Hard already drives people away. slows_from and
+// leaves_from are the first rates in each band for this level.
+struct TaxWarning {
+    int level = 0; // 0 fine, 1 growth slows, 2 people leave
+    int slows_from = 21;
+    int leaves_from = 21;
+    std::string note;
+};
+
+inline TaxWarning tax_warning(int tax, int game_level)
+{
+    TaxWarning warning;
+    for (int rate = 20; rate >= 0; --rate) {
+        const int effect = CitySession::tax_growth_effect(rate, game_level);
+        if (effect < 0) {
+            warning.slows_from = rate;
+        }
+        if (effect <= -40) {
+            warning.leaves_from = rate;
+        }
+    }
+    const char *names[] = {"Easy", "Medium", "Hard"};
+    const std::string level_name = names[game_level < 0 ? 0 : (game_level > 2 ? 2 : game_level)];
+    if (tax >= warning.leaves_from) {
+        warning.level = 2;
+        warning.note = "Too high for " + level_name + ": people and businesses move away. " +
+                       std::to_string(std::max(0, warning.slows_from - 1)) + "% or lower keeps the city growing.";
+    } else if (tax >= warning.slows_from) {
+        warning.level = 1;
+        warning.note = "Growth slows at this rate on " + level_name + ". At " + std::to_string(warning.leaves_from) +
+                       "% people start to leave.";
+    }
+    return warning;
+}
+
 inline BudgetCopy budget_copy(const CitySession::BudgetBook &book, bool tax_year)
 {
     BudgetCopy copy;

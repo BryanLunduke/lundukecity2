@@ -167,6 +167,9 @@ public:
     static bool name_is_usable(const std::string &name);
 
     int difficulty() const;
+    // The engine's tax-table push on growth at this rate and level
+    // (Micropolis::taxGrowthEffect): 0 at an effective 7%, negative above.
+    static int tax_growth_effect(int tax, int level);
     std::int64_t funds() const;
     int generated_seed() const;
 
