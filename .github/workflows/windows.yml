@@ -24,14 +24,14 @@ jobs:
       - name: Host packages
         run: |
           sudo dpkg --add-architecture i386
-          # ubuntu-24.04 runners try azure.archive.ubuntu.com first
-          # (priority 1 in /etc/apt/apt-mirrors.txt) and only then
-          # archive.ubuntu.com. A stalled Azure mirror never falls through,
-          # and apt ignores SIGTERM, so `timeout` without -k never returns.
-          # The last green run on master (00:22Z) used that Azure mirror and
-          # finished this step in 41s; later runners sat here past 15 minutes.
-          # Prefer the public archive, abort a quiet socket, and SIGKILL a
-          # stuck apt. A killed install can leave dpkg half-configured.
+          # AWS-backed ubuntu-24.04 runners list
+          # us-east-2.ec2.archive.ubuntu.com first. That mirror was still
+          # sending data, but at tens of KB/s (a 35 MB compiler package took
+          # about four minutes), so Host packages never finished. The last
+          # green master run used azure.archive.ubuntu.com and this step took
+          # 41s. Priority is a tab-separated field; a space is taken as part
+          # of the URI and the archive answers 400. Apt ignores SIGTERM, so
+          # the backstop timeout must be followed by SIGKILL.
           sudo systemctl stop --no-block apt-daily.timer apt-daily-upgrade.timer || true
           sudo systemctl kill --kill-who=all apt-daily.service apt-daily-upgrade.service unattended-upgrades.service || true
           sudo tee /etc/apt/apt.conf.d/99ci-acquire >/dev/null <<'EOF'
@@ -40,11 +40,11 @@ jobs:
           Acquire::Retries "3";
           DPkg::Lock::Timeout "30";
           EOF
-          sudo tee /etc/apt/apt-mirrors.txt >/dev/null <<'EOF'
-          https://archive.ubuntu.com/ubuntu/ priority:1
-          https://security.ubuntu.com/ubuntu/ priority:2
-          http://azure.archive.ubuntu.com/ubuntu/ priority:3
-          EOF
+          {
+            printf '%s\tpriority:1\n' 'https://archive.ubuntu.com/ubuntu/'
+            printf '%s\tpriority:2\n' 'http://azure.archive.ubuntu.com/ubuntu/'
+            printf '%s\tpriority:3\n' 'http://security.ubuntu.com/ubuntu/'
+          } | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           export DEBIAN_FRONTEND=noninteractive
           n=0
           while [ "$n" -lt 3 ]; do
