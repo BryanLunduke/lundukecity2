@@ -2152,6 +2152,49 @@ std::string CitySession::scenario_clock_text() const
     return text;
 }
 
+std::string CitySession::scenario_clock_short() const
+{
+    const Micropolis &sim = engine_->sim;
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+        return {};
+    }
+    if (sim.scoreWait <= 0) {
+        return "Time is up";
+    }
+    const int cycles = static_cast<int>(sim.scoreWait);
+    const int years = cycles / 48;
+    const int months = (cycles % 48) / 4;
+    if (years <= 0) {
+        return std::to_string(months) + "m left";
+    }
+    if (months <= 0) {
+        return std::to_string(years) + "y left";
+    }
+    return std::to_string(years) + "y " + std::to_string(months) + "m left";
+}
+
+std::string CitySession::scenario_meter_short() const
+{
+    const int id = scenario_id();
+    if (id == 0 || scenario_years_left() < 0) {
+        return {};
+    }
+    const Micropolis &sim = engine_->sim;
+    const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
+    if (id == SC_DETROIT) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <60";
+    }
+    if (id == SC_BERN) {
+        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → <" +
+               std::to_string(BERN_TRAFFIC_GOAL) + " · " + grouped_count(people > 0 ? people : 0) + " → " +
+               grouped_count(BERN_POPULATION_GOAL);
+    }
+    if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
+        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + " → >500";
+    }
+    return grouped_count(people > 0 ? people : 0) + " → 100,000";
+}
+
 std::string CitySession::scenario_progress() const
 {
     const int id = scenario_id();

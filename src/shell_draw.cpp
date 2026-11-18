@@ -4023,10 +4023,22 @@ void Shell::draw(cairo_t *cr)
         paint_text(cr, ui_font(), legend, lx + pad, ly + pad, legend_ink_r, legend_ink_g, legend_ink_b, wrap);
         const double ramp_y = ly + lh - dp(10);
         const CitySession::MapLayer shown = overlay_.layer();
+        // Categorical layers get colour keys, never the heat ramp.
         const bool on_off = shown == CitySession::MapLayer::Residential || shown == CitySession::MapLayer::Commercial ||
                             shown == CitySession::MapLayer::Industrial || shown == CitySession::MapLayer::Transportation ||
-                            shown == CitySession::MapLayer::Power;
-        if (shown == CitySession::MapLayer::Power) {
+                            shown == CitySession::MapLayer::Power || shown == CitySession::MapLayer::Zones;
+        if (shown == CitySession::MapLayer::Zones) {
+            // The six Zones colours, in the legend's word order: homes,
+            // shops, industry, roads, rail, water (overlay_map.cpp).
+            static const unsigned char keys[6][3] = {
+                {40, 170, 48}, {168, 72, 200}, {230, 190, 32}, {48, 48, 52}, {140, 84, 36}, {40, 110, 230},
+            };
+            const double step = std::min(static_cast<double>(dp(28)), (lw - pad * 2) / 6.0);
+            for (int i = 0; i < 6; ++i) {
+                fill(cr, lx + pad + i * step, ramp_y, step - dp(4), dp(6), keys[i][0] / 255.0, keys[i][1] / 255.0,
+                     keys[i][2] / 255.0);
+            }
+        } else if (shown == CitySession::MapLayer::Power) {
             fill(cr, lx + pad, ramp_y, dp(28), dp(6), 220 / 255.0, 40 / 255.0, 32 / 255.0);
             fill(cr, lx + pad + dp(34), ramp_y, dp(28), dp(6), 240 / 255.0, 140 / 255.0, 24 / 255.0);
             fill(cr, lx + pad + dp(68), ramp_y, dp(28), dp(6), 250 / 255.0, 220 / 255.0, 40 / 255.0);
@@ -5382,7 +5394,38 @@ void Shell::draw_info_band(cairo_t *cr)
             break;
         }
         case Goal: {
-            const std::string shown_goal = fit_text(cr, bold_font(), goal, static_cast<int>(goal_room));
+            // The full meter and clock, then shorter forms, before an
+            // ellipsis: at 200% the clock was cut to "8 years, 11 mon…".
+            std::string shown_goal = goal;
+            const int goal_px = static_cast<int>(goal_room);
+            if (measure_text(cr, bold_font(), shown_goal, -1).width > goal_px) {
+                const std::string short_clock = session_.scenario_clock_short();
+                const std::string candidates[] = {
+                    session_.scenario_meter() + (short_clock.empty() ? "" : "  \u00b7  " + short_clock),
+                    session_.scenario_meter_short() + (short_clock.empty() ? "" : "  \u00b7  " + short_clock),
+                    session_.scenario_meter_short() + (short_clock.empty() ? "" : " \u00b7 " + short_clock),
+                };
+                bool fitted = false;
+                for (const std::string &candidate : candidates) {
+                    if (measure_text(cr, bold_font(), candidate, -1).width <= goal_px) {
+                        shown_goal = candidate;
+                        fitted = true;
+                        break;
+                    }
+                }
+                if (!fitted && !short_clock.empty()) {
+                    // Keep the clock whole and shorten the meter in front of it.
+                    const std::string tail = " \u00b7 " + short_clock;
+                    const int meter_px = goal_px - measure_text(cr, bold_font(), tail, -1).width;
+                    if (meter_px > dp(40)) {
+                        shown_goal = fit_text(cr, bold_font(), session_.scenario_meter_short(), meter_px) + tail;
+                        fitted = true;
+                    }
+                }
+                if (!fitted) {
+                    shown_goal = fit_text(cr, bold_font(), candidates[2], goal_px);
+                }
+            }
             slate_text(cr, bold_font(), shown_goal, x, value_y, kSlateInk);
             w = std::min(w, goal_room);
             break;
@@ -5472,20 +5515,26 @@ void Shell::draw_hover_card(cairo_t *cr)
         return;
     }
     const double card_w = std::min(static_cast<double>(dp(220)), std::max(80.0, view_w_ * 0.34));
-    const double card_h = (card.offer_power ? dp(132) : dp(96)) - (card.access.empty() ? dp(18) : 0);
+    // Water, roads and bare land have no power state: no "Power: —" line.
+    const bool power_line = card.power != "Power: —";
+    const double card_h =
+        (card.offer_power ? dp(132) : dp(96)) - (card.access.empty() ? dp(18) : 0) - (power_line ? 0 : dp(18));
     inspect_card_shown_ = true;
     inspect_card_w_ = card_w;
     inspect_card_h_ = card_h;
     const double card_x = view_x_ + view_w_ - card_w - dp(12) - hud_right_;
     const double card_y = view_y_ + dp(8) + minimap_clearance();
+    const double first_y = card_y + (power_line ? dp(44) : dp(26));
     if (!slate_ && !handheld_) {
         fill(cr, card_x, card_y, card_w, card_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
         stroke_rect(cr, card_x, card_y, card_w, card_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
         paint_text(cr, bold_font(), card.name, card_x + 8, card_y + 6, theme::kTextR, theme::kTextG, theme::kTextB,
                    static_cast<int>(card_w - 16));
-        paint_text(cr, ui_font(), card.power, card_x + 8, card_y + dp(26), theme::kTextR, theme::kTextG, theme::kTextB,
-                   static_cast<int>(card_w - 16));
-        double line_y = card_y + dp(44);
+        if (power_line) {
+            paint_text(cr, ui_font(), card.power, card_x + 8, card_y + dp(26), theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(card_w - 16));
+        }
+        double line_y = first_y;
         if (!card.access.empty()) {
             paint_text(cr, ui_font(), card.access, card_x + 8, line_y, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(card_w - 16));
@@ -5514,8 +5563,10 @@ void Shell::draw_hover_card(cairo_t *cr)
             cairo_fill(cr);
             paint_text(cr, ui_font(), text, card_x + 24, ly, kSlateInk.r, kSlateInk.g, kSlateInk.b, wrap - 14);
         };
-        dot_line(card.power, card_y + dp(26), on ? 1 : (off ? 0 : -1));
-        double line_y = card_y + dp(44);
+        if (power_line) {
+            dot_line(card.power, card_y + dp(26), on ? 1 : (off ? 0 : -1));
+        }
+        double line_y = first_y;
         if (!card.access.empty()) {
             // Green with a road, red when the building needs one, grey
             // ("No road needed") for plants, the Data Center and landmarks.

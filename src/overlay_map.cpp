@@ -104,6 +104,11 @@ const char *overlay_title(CitySession::MapLayer layer)
     return "Map";
 }
 
+// Shops are purple, not blue, so they never read as water (40, 110, 230).
+constexpr unsigned char kShopR = 168;
+constexpr unsigned char kShopG = 72;
+constexpr unsigned char kShopB = 200;
+
 const char *overlay_legend(CitySession::MapLayer layer)
 {
     switch (layer) {
@@ -128,11 +133,11 @@ const char *overlay_legend(CitySession::MapLayer layer)
     case CitySession::MapLayer::Growth:
         return "Red means the block is growing. Blue means it is shrinking. Clear means no change.";
     case CitySession::MapLayer::Zones:
-        return "Green homes, blue shops, yellow industry, gray roads, brown rail, blue water.";
+        return "Green homes, purple shops, yellow industry, gray roads, brown rail, blue water.";
     case CitySession::MapLayer::Residential:
         return "Green is a residential zone. Everything else stays clear.";
     case CitySession::MapLayer::Commercial:
-        return "Blue is a commercial zone. Everything else stays clear.";
+        return "Purple is a commercial zone. Everything else stays clear.";
     case CitySession::MapLayer::Industrial:
         return "Yellow is an industrial zone. Everything else stays clear.";
     case CitySession::MapLayer::Transportation:
@@ -316,7 +321,7 @@ void OverlayMap::rebuild()
                 if (value == 1) {
                     solid(40, 170, 48, 200, pixel);
                 } else if (value == 2) {
-                    solid(48, 96, 210, 200, pixel);
+                    solid(kShopR, kShopG, kShopB, 200, pixel);
                 } else if (value == 3) {
                     solid(230, 190, 32, 200, pixel);
                 } else if (value == 4) {
@@ -344,7 +349,7 @@ void OverlayMap::rebuild()
                 continue;
             case CitySession::MapLayer::Commercial:
                 if (value > 0) {
-                    solid(48, 96, 210, 200, pixel);
+                    solid(kShopR, kShopG, kShopB, 200, pixel);
                 }
                 continue;
             case CitySession::MapLayer::Industrial:

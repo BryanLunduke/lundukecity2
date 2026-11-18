@@ -424,6 +424,10 @@ public:
     std::string scenario_progress() const;
     // The number the scenario is chasing, with the live reading.
     std::string scenario_meter() const;
+    // Narrow forms for a tight status band (200% UI): "8y 11m left" and
+    // "Traffic 62 → <40 · 92,140 → 90,000".
+    std::string scenario_clock_short() const;
+    std::string scenario_meter_short() const;
 
     // Public-opinion and score data from the last cityEvaluation().
     // update_evaluation() runs that pass; evaluation() only reads it.
