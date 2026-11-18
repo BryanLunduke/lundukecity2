@@ -116,6 +116,27 @@ bool special_uses_power(int index);
 // open-air one. Returns the number of tiles changed. Call after a load.
 int wire_special_buildings(Micropolis *sim);
 
+// Income buildings (a positive annual_income: Casino, Amusement Park,
+// Marina) pay only while intact, powered and touching a road, and only in
+// proportion to the people living within kIncomeCatchmentRadius tiles of
+// the centre: nothing with no residents, the full annual_income from
+// kIncomeFullResidents people up.
+inline constexpr int kIncomeCatchmentRadius = 16;
+inline constexpr int kIncomeFullResidents = 2000;
+struct SpecialIncome {
+    bool earns = false; // the row has an annual_income at all
+    bool intact = false;
+    bool powered = false;
+    bool road = false;
+    int residents = 0;  // people living in the catchment
+    int full = 0;       // the row's annual_income
+    int dollars = 0;    // what it pays this January
+};
+// Residents (people, not census units) in residential zones whose centre
+// is within radius tiles (Chebyshev) of the centre.
+int special_residents_near(const Micropolis *sim, int center_x, int center_y, int radius);
+SpecialIncome special_income_at(const Micropolis *sim, int center_x, int center_y);
+// The sum of special_income_at over the map, paid each January.
 int special_annual_income(const Micropolis *sim);
 void boost_special_land_value(Micropolis *sim);
 void boost_special_crime(Micropolis *sim);

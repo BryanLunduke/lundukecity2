@@ -127,6 +127,41 @@ int main()
     if (!place_special_building(&books, park, 10, 20, error) || !place_special_building(&books, casino, 20, 20, error)) {
         return fail(13, "park and casino could not be placed for the income check");
     }
+    // Review nov18 B1: on an empty map (no power, no road, nobody living
+    // nearby) the park and the casino earn nothing.
+    if (special_annual_income(&books) != 0) {
+        std::fprintf(stderr, "empty-map income %d\n", special_annual_income(&books));
+        return fail(20, "a casino and a park earned money with no power, road or residents");
+    }
+    // Power both centres and lay a road along the south edge of both footprints.
+    books.map[10][20] |= PWRBIT;
+    books.map[20][20] |= PWRBIT;
+    if (special_annual_income(&books) != 0) {
+        return fail(21, "income was paid without a road");
+    }
+    for (int x = 8; x <= 22; ++x) {
+        books.map[x][22] = ROADS | BULLBIT | BURNBIT;
+    }
+    if (special_annual_income(&books) != 0) {
+        return fail(22, "income was paid with no residents nearby");
+    }
+    // One dense residential zone (40 census units, 800 people) within 16
+    // tiles: 800 / 2,000 of the full income, $80 + $120.
+    const unsigned short dense_home = static_cast<unsigned short>((RZB + 3 * 9) | ZONEBIT | PWRBIT);
+    books.map[15][26] = dense_home;
+    if (special_residents_near(&books, 20, 20, kIncomeCatchmentRadius) != 800 || special_annual_income(&books) != 200) {
+        std::fprintf(stderr, "residents %d income %d\n", special_residents_near(&books, 20, 20, kIncomeCatchmentRadius),
+                     special_annual_income(&books));
+        return fail(23, "income did not scale with the residents nearby");
+    }
+    // A zone 17 tiles away is outside the catchment.
+    books.map[10][38] = dense_home;
+    if (special_annual_income(&books) != 200) {
+        return fail(24, "a zone outside the catchment counted");
+    }
+    // Two more dense zones: 2,400 residents is past the 2,000 cap.
+    books.map[10][26] = dense_home;
+    books.map[20][26] = dense_home;
     const long before = static_cast<long>(books.totalFunds);
     books.taxFlag = false;
     books.collectTax();

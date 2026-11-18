@@ -2773,6 +2773,23 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
         notes.push_back("Supplies 1/9 of a nuclear plant's power (about " +
                         std::to_string(kMicroNuclearPowerTiles) + " tiles)");
         notes.push_back("Cannot melt down. No pollution");
+    } else if (building.annual_income > 0) {
+        const SpecialIncome income = special_income_at(&engine_->sim, cx, cy);
+        if (income.intact) {
+            const std::string full = with_commas(income.full);
+            if (!income.powered) {
+                notes.push_back("No income: needs power");
+            } else if (!income.road) {
+                notes.push_back("No income: needs a road next to it");
+            } else if (income.dollars <= 0) {
+                notes.push_back("No income: no residents within " + std::to_string(kIncomeCatchmentRadius) + " tiles");
+            } else {
+                notes.push_back("Earns " + with_commas(income.dollars) + " a year (" + full + " at " +
+                                grouped_count(kIncomeFullResidents) + " residents)");
+            }
+            notes.push_back(grouped_count(income.residents) + " residents within " +
+                            std::to_string(kIncomeCatchmentRadius) + " tiles");
+        }
     }
     return notes;
 }

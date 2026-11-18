@@ -137,16 +137,16 @@ int main()
 
     // Prices and footprints.
     if (special_building(lot).cost != 400 || special_building(built).cost != 400 ||
-        special_building(micro).cost != 1000) {
-        return fail(2, "Data Center should cost $400 and micro nuclear $1,000");
+        special_building(micro).cost != 2000) {
+        return fail(2, "Data Center should cost $400 and micro nuclear $2,000");
     }
     const ToolDef *dc_tool = tool_for_tile(SPECIAL_DATACENTER_LOT);
     const ToolDef *mn_tool = tool_for_tile(SPECIAL_MICRONUKE);
-    if (dc_tool == nullptr || mn_tool == nullptr || dc_tool->cost != 400 || mn_tool->cost != 1000) {
+    if (dc_tool == nullptr || mn_tool == nullptr || dc_tool->cost != 400 || mn_tool->cost != 2000) {
         return fail(3, "toolbar prices do not match");
     }
     if (std::string(dc_tool->hint).find("$400") == std::string::npos ||
-        std::string(mn_tool->hint).find("$1,000") == std::string::npos) {
+        std::string(mn_tool->hint).find("$2,000") == std::string::npos) {
         return fail(4, "tooltips do not show the prices");
     }
     if (special_building(lot).width != 3 || special_building(lot).height != 3 ||
@@ -228,8 +228,8 @@ int main()
         if (!place(sim, micro, 44, 50, why)) {
             return fail(15, why);
         }
-        if (before - sim.totalFunds != 1000) {
-            return fail(16, "placing a micro nuclear plant did not charge $1,000");
+        if (before - sim.totalFunds != 2000) {
+            return fail(16, "placing a micro nuclear plant did not charge $2,000");
         }
         for (int x = 45; x <= 48; ++x) {
             if (sim.toolDown(TOOL_WIRE, static_cast<short>(x), 50) != TOOLRESULT_OK) {
