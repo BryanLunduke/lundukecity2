@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <memory>
@@ -1074,6 +1075,7 @@ bool CitySession::load_city(const std::string &path)
     recount_population_from_map();
     refresh_loaded_meters();
     arm_eval_baseline();
+    restore_loaded_eval();
     if (kind == CityFileKind::Incomplete) {
         post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
     } else {
@@ -3171,6 +3173,22 @@ void CitySession::refresh_loaded_meters()
     sim.cityEvaluation();
 }
 
+void CitySession::restore_loaded_eval()
+{
+    // A City 2 save or recovery file keeps the last yearly evaluation in its
+    // sidecar. Those numbers are this city's own, not a scenario file's
+    // stale ones, so the window shows them instead of dashes.
+    if (!loaded_eval_.valid || engine_ == nullptr) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    sim.cityScoreDelta = static_cast<short>(loaded_eval_.score_delta);
+    sim.cityPopDelta = static_cast<Quad>(loaded_eval_.migration);
+    sim.cityPop = static_cast<Quad>(loaded_eval_.population);
+    eval_deltas_ready_ = true;
+    loaded_eval_ = LoadedEval{};
+}
+
 void CitySession::arm_eval_baseline()
 {
     Micropolis &sim = engine_->sim;
@@ -3203,23 +3221,38 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     const long year = static_cast<long>(sim.cityYear);
     clock.year = static_cast<int>(year > 0 ? year : sim.startingYear);
     std::string text = scenario_sidecar_text(clock);
+    // One more "key": "value" line before the closing brace, with a comma
+    // after the line above it.
+    auto append_string = [&text](const char *key, const std::string &value) {
+        const auto brace = text.rfind('}');
+        if (brace == std::string::npos) {
+            return;
+        }
+        const auto last = text.find_last_not_of(" \n", brace == 0 ? 0 : brace - 1);
+        if (last != std::string::npos && text[last] != '{' && text[last] != ',') {
+            text.insert(last + 1, ",");
+        }
+        const auto close = text.rfind('}');
+        text.insert(close, std::string("  \"") + key + "\": \"" + value + "\"\n");
+    };
     const std::string encoded = civic::encode_ledger(ledger_);
     if (!encoded.empty()) {
-        const auto brace = text.rfind('}');
-        if (brace != std::string::npos) {
-            text.insert(brace, "  \"milestones\": \"" + encoded + "\"\n");
-            const auto year_line = text.rfind("\"year\"");
-            const auto year_nl = year_line == std::string::npos ? std::string::npos : text.find('\n', year_line);
-            if (year_nl != std::string::npos) {
-                text.insert(year_nl, ",");
-            }
-        }
+        append_string("milestones", encoded);
+    }
+    // The Evaluation window's yearly changes, so a recovered or reloaded
+    // city does not show dashes until another year passes.
+    const bool deltas_known = eval_deltas_ready_ || sim.cityTime >= eval_anchor_time_ + 48;
+    if (deltas_known) {
+        append_string("evaluation", "s=" + std::to_string(static_cast<long long>(sim.cityScoreDelta)) +
+                                        ".p=" + std::to_string(static_cast<long long>(sim.cityPopDelta)) +
+                                        ".c=" + std::to_string(static_cast<long long>(sim.cityPop)));
     }
     return write_text_atomic(scenario_sidecar_path(path), text);
 }
 
 void CitySession::read_scenario_sidecar(const std::string &path)
 {
+    loaded_eval_ = LoadedEval{};
     std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
         return;
@@ -3245,6 +3278,45 @@ void CitySession::read_scenario_sidecar(const std::string &path)
             civic::decode_ledger(text.substr(first + 1, second - first - 1), loaded)) {
             ledger_ = loaded;
             ledger_from_file_ = true;
+        }
+    }
+    loaded_eval_ = LoadedEval{};
+    const auto eval_key = text.find("\"evaluation\"");
+    if (eval_key != std::string::npos) {
+        const auto colon = text.find(':', eval_key);
+        const auto first = colon == std::string::npos ? std::string::npos : text.find('"', colon + 1);
+        const auto second = first == std::string::npos ? std::string::npos : text.find('"', first + 1);
+        if (first != std::string::npos && second != std::string::npos) {
+            const std::string body = text.substr(first + 1, second - first - 1);
+            // "s=<score change>.p=<migration>.c=<population>". Parsed with
+            // strtoll rather than a %lld format, which older MinGW C
+            // runtimes read differently.
+            long long values[3] = {0, 0, 0};
+            const char *const keys[3] = {"s=", ".p=", ".c="};
+            const char *cursor = body.c_str();
+            bool parsed = true;
+            for (int i = 0; i < 3 && parsed; ++i) {
+                const std::size_t key_len = std::strlen(keys[i]);
+                if (std::strncmp(cursor, keys[i], key_len) != 0) {
+                    parsed = false;
+                    break;
+                }
+                cursor += key_len;
+                char *stop = nullptr;
+                values[i] = std::strtoll(cursor, &stop, 10);
+                parsed = stop != cursor;
+                cursor = stop;
+            }
+            parsed = parsed && *cursor == '\0';
+            const long long score = values[0];
+            const long long migration = values[1];
+            const long long people = values[2];
+            if (parsed && score > -1000 && score < 1000 && people >= 0) {
+                loaded_eval_.valid = true;
+                loaded_eval_.score_delta = score;
+                loaded_eval_.migration = migration;
+                loaded_eval_.population = people;
+            }
         }
     }
     ScenarioClock clock;

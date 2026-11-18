@@ -554,6 +554,16 @@ private:
     int speed_before_outcome_ = 2;
     bool outcome_paused_ = false;
     bool eval_deltas_ready_ = false;
+    // The "evaluation" line of a loaded sidecar (score change, migration,
+    // and the population the next year's change is measured from).
+    struct LoadedEval {
+        bool valid = false;
+        long long score_delta = 0;
+        long long migration = 0;
+        long long population = 0;
+    };
+    LoadedEval loaded_eval_;
+    void restore_loaded_eval();
     long long eval_anchor_time_ = 0;
     int scenario_result_ = 0;
     bool query_has_tile_ = false;
