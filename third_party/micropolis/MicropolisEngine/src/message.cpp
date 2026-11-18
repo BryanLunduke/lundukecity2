@@ -161,7 +161,10 @@ void Micropolis::sendMessages()
 
     case 32:
         TM = (float)(unpoweredZoneCount + poweredZoneCount); /* dec score for unpowered zones */
-        if (TM > 0) {
+        // A blackout needs a grid. With no plant at all the zones (or a few
+        // unpowered landmarks) are simply unpowered; case 22 asks for a
+        // plant once there are people.
+        if (TM > 0 && PowerPop > 0) {
             if (poweredZoneCount / TM < 0.7) {
                 sendMessage(MESSAGE_BLACKOUTS_REPORTED);
             }
