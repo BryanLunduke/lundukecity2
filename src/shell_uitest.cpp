@@ -495,16 +495,25 @@ void Shell::drive_ui_test()
         {
             // The sprite is centered in the first tool button. Sample that
             // interior, not the button bevel, which is only two or three greys.
+            // A balanced row is centred under its section header, so the
+            // button is not the palette's top-left corner.
+            double cell_x = 0;
+            double cell_y = 0;
+            if (!palette_.cell_origin(0, cell_x, cell_y)) {
+                fail("the first toolbar button has no cell");
+                return;
+            }
             const int cell = palette_.cell();
             const int box = std::max(8, cell - 12);
-            const int origin = 9;
+            const int origin_x = static_cast<int>(std::lround(cell_x)) + 5;
+            const int origin_y = static_cast<int>(std::lround(cell_y)) + 5;
             int colors = 0;
             int seen_r[25] = {};
             int seen_g[25] = {};
             int seen_b[25] = {};
             for (int i = 0; i < 25; ++i) {
-                const int sx = side_x_ + origin + (box * (1 + (i % 5))) / 6;
-                const int sy = pal_y_ + origin + (box * (1 + (i / 5))) / 6;
+                const int sx = side_x_ + origin_x + (box * (1 + (i % 5))) / 6;
+                const int sy = pal_y_ + origin_y + (box * (1 + (i / 5))) / 6;
                 int r = 0;
                 int g = 0;
                 int b = 0;
@@ -532,7 +541,8 @@ void Shell::drive_ui_test()
             // The sprite is authored to fill the button face. A 24px icon
             // centered in this slot covers about 60% and leaves a grey margin.
             const int slot = std::max(8, cell - 8);
-            const int face_origin = 8;
+            const int face_x = static_cast<int>(std::lround(cell_x)) + 4;
+            const int face_y = static_cast<int>(std::lround(cell_y)) + 4;
             int min_x = slot;
             int min_y = slot;
             int max_x = -1;
@@ -543,7 +553,7 @@ void Shell::drive_ui_test()
                     int r = 0;
                     int g = 0;
                     int b = 0;
-                    if (!channel_at(frame_surface_, side_x_ + face_origin + x, pal_y_ + face_origin + y, r, g, b)) {
+                    if (!channel_at(frame_surface_, side_x_ + face_x + x, pal_y_ + face_y + y, r, g, b)) {
                         continue;
                     }
                     if (std::abs(r - g) < 14 && std::abs(g - b) < 14 && r > 170) {
