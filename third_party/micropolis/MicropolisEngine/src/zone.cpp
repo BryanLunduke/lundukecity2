@@ -157,6 +157,7 @@ void Micropolis::doZone(const Position &pos)
             indZonePop++;
             comPop += DATACENTER_ZONE_DENSITY;
             indPop += DATACENTER_ZONE_DENSITY;
+            dataCenterPop += DATACENTER_ZONE_DENSITY;
         }
         return;
     }

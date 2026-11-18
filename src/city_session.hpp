@@ -112,6 +112,11 @@ public:
     static constexpr int kLevelEasy = 0;
     static constexpr int kLevelMedium = 1;
     static constexpr int kLevelHard = 2;
+    // The funds a new city starts with (Micropolis::setGameLevelFunds).
+    static constexpr int starting_funds(int level)
+    {
+        return level == kLevelHard ? 5000 : level == kLevelMedium ? 10000 : 20000;
+    }
 
     // Terrain knobs are the engine fields used by generateMap().
     // -1 is the generator default. 0 turns that feature off.
@@ -167,6 +172,9 @@ public:
     static bool name_is_usable(const std::string &name);
 
     int difficulty() const;
+    // The engine's tax-table push on growth at this rate and level
+    // (Micropolis::taxGrowthEffect): 0 at an effective 7%, negative above.
+    static int tax_growth_effect(int tax, int level);
     std::int64_t funds() const;
     int generated_seed() const;
 
@@ -421,6 +429,10 @@ public:
     std::string scenario_progress() const;
     // The number the scenario is chasing, with the live reading.
     std::string scenario_meter() const;
+    // Narrow forms for a tight status band (200% UI): "8y 11m left" and
+    // "Traffic 62 → <40 · 92,140 → ≥90,000".
+    std::string scenario_clock_short() const;
+    std::string scenario_meter_short() const;
 
     // Public-opinion and score data from the last cityEvaluation().
     // update_evaluation() runs that pass; evaluation() only reads it.
@@ -554,6 +566,16 @@ private:
     int speed_before_outcome_ = 2;
     bool outcome_paused_ = false;
     bool eval_deltas_ready_ = false;
+    // The "evaluation" line of a loaded sidecar (score change, migration,
+    // and the population the next year's change is measured from).
+    struct LoadedEval {
+        bool valid = false;
+        long long score_delta = 0;
+        long long migration = 0;
+        long long population = 0;
+    };
+    LoadedEval loaded_eval_;
+    void restore_loaded_eval();
     long long eval_anchor_time_ = 0;
     int scenario_result_ = 0;
     bool query_has_tile_ = false;

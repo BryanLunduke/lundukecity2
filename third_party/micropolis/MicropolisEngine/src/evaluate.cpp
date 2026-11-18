@@ -245,8 +245,8 @@ void Micropolis::doPopNum()
 /** Compute city population. */
 Quad Micropolis::getPopulation()
 {
-    const Quad pop = (resPop + (comPop + indPop) * 8) * 20;
-    return pop;
+    // Data Centers are jobs, not people (cityPopulationOf).
+    return static_cast<Quad>(cityPopulationOf(resPop, comPop, indPop, dataCenterPop));
 }
 
 

@@ -460,6 +460,20 @@ void Micropolis::crimeScan()
     // After the police subtraction, so a station can still cut the bonus.
     if (specialCrimeFn != NULL) {
         specialCrimeFn(this);
+        // The special buildings changed the crime map (a casino adds, a
+        // prison takes away). Take the average again over the same blocks,
+        // so the evaluation, the complaints and the score see that change.
+        totz = 0;
+        numz = 0;
+        for (int x = 0; x < WORLD_W; x += crimeRateMap.MAP_BLOCKSIZE) {
+            for (int y = 0; y < WORLD_H; y += crimeRateMap.MAP_BLOCKSIZE) {
+                if (landValueMap.worldGet(x, y) > 0) {
+                    ++numz;
+                    totz += crimeRateMap.worldGet(x, y);
+                }
+            }
+        }
+        crimeAverage = numz > 0 ? (short)(totz / numz) : 0;
     }
 
     newMapFlags[MAP_TYPE_CRIME] = 1;

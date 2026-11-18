@@ -58,12 +58,19 @@ inline std::vector<HowToPlaySection> how_to_play_sections()
     return {
         {"Zones and roads",
          "Place residential, commercial, and industrial zones. That is where the city grows. Connect them with roads."},
-        {"Power", "Build a coal or nuclear plant, and run power lines from it to every zone."},
+        {"Power",
+         "Build a power plant and run power lines from it to every zone. Coal is cheap but dirty. Micro Nuclear "
+         "plants are clean and cannot melt down, but cost more."},
         {"Demand", "The R, C, and I meters show demand. A bar above the middle means the city wants more of that zone."},
         {"Budget",
          "Each January the budget opens. Set the tax and the road, police, and fire funding, then collect taxes. "
          "Auto budget does this for you. Police and fire stations need that funding, or they stop covering the "
-         "blocks around them."},
+         "blocks around them. The tax slider turns amber when the rate slows growth and red when people start to "
+         "leave."},
+        {"Special buildings",
+         "Parks, the Zoo, the Library and the Marina raise land value. Casinos, Amusement Parks and Marinas also pay "
+         "each year, but only with power, a road and residents nearby. A Prison cuts crime. A Data Center adds jobs "
+         "and taxes, not residents."},
         {"Finding your way",
          "A scenario names a goal and a deadline. Right-click the map, or press Q, to switch to Inspect, then click "
          "a tile for its card: power, road, and why it is or is not growing. The minimap jumps across the city."},

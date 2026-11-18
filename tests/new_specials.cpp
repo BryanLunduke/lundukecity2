@@ -84,12 +84,18 @@ int main()
     const SpecialBuilding &fountain_row = special_building(fountain);
     if (prison_row.cost != 3000 || prison_row.annual_income != 0 || prison_row.width != 4 || prison_row.height != 4 ||
         prison_row.anchor_x != 1 || prison_row.anchor_y != 1 || prison_row.center_tile != SPECIAL_PRISON ||
-        !prison_row.needs_road || !prison_row.needs_power || prison_row.land_bonus != -48 || prison_row.crime_bonus != -24) {
-        return fail(4, "prison cost, footprint, or effect does not match the first pass");
+        !prison_row.needs_road || !prison_row.needs_power || prison_row.land_bonus != -16 || prison_row.crime_bonus != -40 ||
+        prison_row.crime_radius != 8 || -prison_row.land_bonus >= -prison_row.crime_bonus) {
+        // Review nov18 B3: the land-value dip feeds crime one for one, so it
+        // must stay smaller than the crime cut.
+        return fail(4, "prison cost, footprint, or effect does not match the review nov18 rebalance");
     }
-    if (marina_row.cost != 1000 || marina_row.annual_income != 0 || marina_row.width != 3 || !marina_row.needs_south_water ||
-        marina_row.land_bonus != special_building(zoo).land_bonus || marina_row.center_tile != SPECIAL_MARINA) {
-        return fail(5, "marina cost, shoreline rule, or land value does not match the first pass");
+    // Review nov18 B6: the Marina earns its $1,000 with a wider, stronger lift
+    // than the $100 Zoo and up to $100 a year.
+    if (marina_row.cost != 1000 || marina_row.annual_income != 100 || marina_row.width != 3 || !marina_row.needs_south_water ||
+        marina_row.land_bonus <= special_building(zoo).land_bonus ||
+        marina_row.land_radius <= special_building(zoo).land_radius || marina_row.center_tile != SPECIAL_MARINA) {
+        return fail(5, "marina cost, shoreline rule, land value or income does not match the review nov18 rebalance");
     }
     if (fountain_row.cost != 20 || fountain_row.annual_income != 0 || fountain_row.width != 1 || fountain_row.height != 1 ||
         fountain_row.anchor_x != 0 || fountain_row.anchor_y != 0 || fountain_row.center_tile != SPECIAL_FOUNTAIN ||
@@ -237,8 +243,10 @@ int main()
     if (!place_special_building(&land, prison, 20, 10, error)) {
         return fail(30, "could not place a prison for the land-value check");
     }
-    land.map[30][12] = RIVER;
-    if (!place_special_building(&land, marina, 30, 10, error)) {
+    // Ten tiles clear of the prison and the fountain: the marina reaches
+    // ten tiles.
+    land.map[36][12] = RIVER;
+    if (!place_special_building(&land, marina, 36, 10, error)) {
         return fail(31, "could not place a marina for the land-value check");
     }
     if (!place_special_building(&land, fountain, 50, 10, error)) {
@@ -250,7 +258,7 @@ int main()
     const int zoo_y = 10 / block;
     const int prison_x = 20 / block;
     const int prison_y = 10 / block;
-    const int marina_x = 30 / block;
+    const int marina_x = 36 / block;
     const int marina_y = 10 / block;
     const int fountain_x = 50 / block;
     const int fountain_y = 10 / block;
@@ -263,19 +271,19 @@ int main()
     land.landValueMap.set(open_x, open_y, 40);
     land.landValueMap.set(prison_x, prison_y + 8, 10);
     boost_special_land_value(&land);
-    if (land.landValueMap.get(zoo_x, zoo_y) != 148 || land.landValueMap.get(marina_x, marina_y) != 148) {
+    if (land.landValueMap.get(zoo_x, zoo_y) != 148 || land.landValueMap.get(marina_x, marina_y) != 164) {
         std::fprintf(stderr, "zoo %d marina %d\n", land.landValueMap.get(zoo_x, zoo_y),
                      land.landValueMap.get(marina_x, marina_y));
-        return fail(33, "the marina land bonus is not the zoo bonus");
+        return fail(33, "the zoo did not add 48 or the marina did not add 64");
     }
     if (land.landValueMap.get(fountain_x, fountain_y) != 116 || land.landValueMap.get(open_x, open_y) != 40) {
         std::fprintf(stderr, "fountain %d open %d\n", land.landValueMap.get(fountain_x, fountain_y),
                      land.landValueMap.get(open_x, open_y));
         return fail(34, "the fountain did not add 16, or it reached a distant cell");
     }
-    if (land.landValueMap.get(prison_x, prison_y) != 52) {
+    if (land.landValueMap.get(prison_x, prison_y) != 84) {
         std::fprintf(stderr, "prison land %d\n", land.landValueMap.get(prison_x, prison_y));
-        return fail(35, "the prison did not lower developed land value by 48");
+        return fail(35, "the prison did not lower developed land value by 16");
     }
     land.landValueMap.set(prison_x, prison_y, 10);
     land.landValueMap.set(open_x, open_y, 0);
@@ -301,9 +309,9 @@ int main()
     }
     crime.map[20][20] |= PWRBIT;
     boost_special_crime(&crime);
-    if (crime.crimeRateMap.worldGet(20, 20) != 56) {
+    if (crime.crimeRateMap.worldGet(20, 20) != 40) {
         std::fprintf(stderr, "powered %d\n", crime.crimeRateMap.worldGet(20, 20));
-        return fail(39, "a powered prison on a road did not reduce crime by 24");
+        return fail(39, "a powered prison on a road did not reduce crime by 40");
     }
     crime.map[20][18] = DIRT;
     crime.crimeRateMap.worldSet(20, 20, 80);

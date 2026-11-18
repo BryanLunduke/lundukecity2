@@ -1534,7 +1534,13 @@ void Shell::draw_dialog(cairo_t *cr)
             label(cr, ui_font(), land_intro, x + margin, y + dp(46), static_cast<int>(dw - 2 * margin));
             const double block_top = y + dp(46) + land_intro_h + dp(10);
             const char *groups[] = {"Difficulty", "Island", "Rivers", "Lakes", "Trees"};
-            const char *options[][3] = {{"Easy", "Medium", "Hard"},
+            // Each difficulty names its starting funds.
+            const std::string level_names[3] = {
+                "Easy · " + graph_money(CitySession::starting_funds(CitySession::kLevelEasy)),
+                "Medium · " + graph_money(CitySession::starting_funds(CitySession::kLevelMedium)),
+                "Hard · " + graph_money(CitySession::starting_funds(CitySession::kLevelHard)),
+            };
+            const char *options[][3] = {{level_names[0].c_str(), level_names[1].c_str(), level_names[2].c_str()},
                                         {"Default", "None", "Island"},
                                         {"Default", "None", "Curvy"},
                                         {"Default", "None", "Many"},
@@ -2741,7 +2747,9 @@ void Shell::draw_dialog(cairo_t *cr)
             return h;
         };
         const double fund_gap = static_cast<double>(dp(14));
-        const double blocks = block_h(copy.tax_title, copy.tax_value, "") + fund_gap +
+        // The tax slider warns before the cliff (dialog_copy.hpp tax_warning).
+        const TaxWarning tax_warn = tax_warning(tax_, session_.difficulty());
+        const double blocks = block_h(copy.tax_title, copy.tax_value, tax_warn.note) + fund_gap +
                               block_h("Road fund", std::to_string(road_) + "%", copy.road) +
                               block_h("Police fund", std::to_string(police_) + "%", copy.police) +
                               block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
@@ -2801,11 +2809,21 @@ void Shell::draw_dialog(cairo_t *cr)
             place_line(bold_font(), value_text, x + dw - margin - value_w, cursor, std::max(1.0, value_w), theme::kTextR,
                        theme::kTextG, theme::kTextB);
             cursor += cap_h + gap;
+            const bool tax_row = index == 1;
             if (!detail.empty()) {
                 double note_r = 0;
                 double note_g = 0;
                 double note_b = 0;
                 theme::reading_ink(note_r, note_g, note_b);
+                if (tax_row && tax_warn.level == 2) {
+                    note_r = 0.70;
+                    note_g = 0.12;
+                    note_b = 0.08;
+                } else if (tax_row && tax_warn.level == 1) {
+                    note_r = 0.60;
+                    note_g = 0.38;
+                    note_b = 0.02;
+                }
                 const double detail_h = place_line(ui_font(), detail, x + margin, cursor, live_inner, note_r, note_g, note_b);
                 cursor += detail_h + gap;
             }
@@ -2814,8 +2832,36 @@ void Shell::draw_dialog(cairo_t *cr)
             const double sx = x + margin;
             const double sw = live_inner;
             fill(cr, sx, bar_y, sw, dp(16), 1, 1, 1);
-            const double t = (value - min) / static_cast<double>(std::max(1, max - min));
-            fill(cr, sx, bar_y, sw * t, dp(16), theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
+            const double span = static_cast<double>(std::max(1, max - min));
+            if (tax_row) {
+                // Shade the rates that slow growth (amber) and drive people
+                // away (red) for this difficulty, so the cliff shows before
+                // the thumb reaches it.
+                auto band = [&](int from, int to, double r, double g, double b) {
+                    if (from > to) {
+                        return;
+                    }
+                    const double x0 = sx + sw * (from - min) / span;
+                    const double x1 = sx + sw * (to - min) / span;
+                    fill(cr, x0, bar_y, std::max(1.0, x1 - x0), dp(16), r, g, b);
+                };
+                band(tax_warn.slows_from, std::min(max, tax_warn.leaves_from), 1.0, 0.86, 0.55);
+                band(tax_warn.leaves_from, max, 0.96, 0.62, 0.58);
+            }
+            const double t = (value - min) / span;
+            double sel_r = theme::chrome_select_r();
+            double sel_g = theme::chrome_select_g();
+            double sel_b = theme::chrome_select_b();
+            if (tax_row && tax_warn.level == 2) {
+                sel_r = 0.78;
+                sel_g = 0.16;
+                sel_b = 0.10;
+            } else if (tax_row && tax_warn.level == 1) {
+                sel_r = 0.86;
+                sel_g = 0.56;
+                sel_b = 0.06;
+            }
+            fill(cr, sx, bar_y, sw * t, dp(16), sel_r, sel_g, sel_b);
             const double thumb = dp(14);
             const double thumb_x = slider_thumb_x(sx, sw, thumb, t);
             fill(cr, thumb_x, bar_y - dp(4), thumb, dp(24), 1, 1, 1);
@@ -2831,7 +2877,7 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             cursor += dp(16) + tail;
         };
-        slider(1, copy.tax_title, copy.tax_value, "", tax_, 0, 20);
+        slider(1, copy.tax_title, copy.tax_value, tax_warn.note, tax_, 0, 20);
         cursor += fund_gap;
         auto funded = [](int percent, std::int64_t need) {
             return std::to_string(percent) + "%  " + graph_money(need * percent / 100);
@@ -3983,10 +4029,22 @@ void Shell::draw(cairo_t *cr)
         paint_text(cr, ui_font(), legend, lx + pad, ly + pad, legend_ink_r, legend_ink_g, legend_ink_b, wrap);
         const double ramp_y = ly + lh - dp(10);
         const CitySession::MapLayer shown = overlay_.layer();
+        // Categorical layers get colour keys, never the heat ramp.
         const bool on_off = shown == CitySession::MapLayer::Residential || shown == CitySession::MapLayer::Commercial ||
                             shown == CitySession::MapLayer::Industrial || shown == CitySession::MapLayer::Transportation ||
-                            shown == CitySession::MapLayer::Power;
-        if (shown == CitySession::MapLayer::Power) {
+                            shown == CitySession::MapLayer::Power || shown == CitySession::MapLayer::Zones;
+        if (shown == CitySession::MapLayer::Zones) {
+            // The six Zones colours, in the legend's word order: homes,
+            // shops, industry, roads, rail, water (overlay_map.cpp).
+            static const unsigned char keys[6][3] = {
+                {40, 170, 48}, {168, 72, 200}, {230, 190, 32}, {48, 48, 52}, {140, 84, 36}, {40, 110, 230},
+            };
+            const double step = std::min(static_cast<double>(dp(28)), (lw - pad * 2) / 6.0);
+            for (int i = 0; i < 6; ++i) {
+                fill(cr, lx + pad + i * step, ramp_y, step - dp(4), dp(6), keys[i][0] / 255.0, keys[i][1] / 255.0,
+                     keys[i][2] / 255.0);
+            }
+        } else if (shown == CitySession::MapLayer::Power) {
             fill(cr, lx + pad, ramp_y, dp(28), dp(6), 220 / 255.0, 40 / 255.0, 32 / 255.0);
             fill(cr, lx + pad + dp(34), ramp_y, dp(28), dp(6), 240 / 255.0, 140 / 255.0, 24 / 255.0);
             fill(cr, lx + pad + dp(68), ramp_y, dp(28), dp(6), 250 / 255.0, 220 / 255.0, 40 / 255.0);
@@ -5342,7 +5400,38 @@ void Shell::draw_info_band(cairo_t *cr)
             break;
         }
         case Goal: {
-            const std::string shown_goal = fit_text(cr, bold_font(), goal, static_cast<int>(goal_room));
+            // The full meter and clock, then shorter forms, before an
+            // ellipsis: at 200% the clock was cut to "8 years, 11 mon…".
+            std::string shown_goal = goal;
+            const int goal_px = static_cast<int>(goal_room);
+            if (measure_text(cr, bold_font(), shown_goal, -1).width > goal_px) {
+                const std::string short_clock = session_.scenario_clock_short();
+                const std::string candidates[] = {
+                    session_.scenario_meter() + (short_clock.empty() ? "" : "  \u00b7  " + short_clock),
+                    session_.scenario_meter_short() + (short_clock.empty() ? "" : "  \u00b7  " + short_clock),
+                    session_.scenario_meter_short() + (short_clock.empty() ? "" : " \u00b7 " + short_clock),
+                };
+                bool fitted = false;
+                for (const std::string &candidate : candidates) {
+                    if (measure_text(cr, bold_font(), candidate, -1).width <= goal_px) {
+                        shown_goal = candidate;
+                        fitted = true;
+                        break;
+                    }
+                }
+                if (!fitted && !short_clock.empty()) {
+                    // Keep the clock whole and shorten the meter in front of it.
+                    const std::string tail = " \u00b7 " + short_clock;
+                    const int meter_px = goal_px - measure_text(cr, bold_font(), tail, -1).width;
+                    if (meter_px > dp(40)) {
+                        shown_goal = fit_text(cr, bold_font(), session_.scenario_meter_short(), meter_px) + tail;
+                        fitted = true;
+                    }
+                }
+                if (!fitted) {
+                    shown_goal = fit_text(cr, bold_font(), candidates[2], goal_px);
+                }
+            }
             slate_text(cr, bold_font(), shown_goal, x, value_y, kSlateInk);
             w = std::min(w, goal_room);
             break;
@@ -5432,20 +5521,26 @@ void Shell::draw_hover_card(cairo_t *cr)
         return;
     }
     const double card_w = std::min(static_cast<double>(dp(220)), std::max(80.0, view_w_ * 0.34));
-    const double card_h = (card.offer_power ? dp(132) : dp(96)) - (card.access.empty() ? dp(18) : 0);
+    // Water, roads and bare land have no power state: no "Power: —" line.
+    const bool power_line = card.power != "Power: —";
+    const double card_h =
+        (card.offer_power ? dp(132) : dp(96)) - (card.access.empty() ? dp(18) : 0) - (power_line ? 0 : dp(18));
     inspect_card_shown_ = true;
     inspect_card_w_ = card_w;
     inspect_card_h_ = card_h;
     const double card_x = view_x_ + view_w_ - card_w - dp(12) - hud_right_;
     const double card_y = view_y_ + dp(8) + minimap_clearance();
+    const double first_y = card_y + (power_line ? dp(44) : dp(26));
     if (!slate_ && !handheld_) {
         fill(cr, card_x, card_y, card_w, card_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
         stroke_rect(cr, card_x, card_y, card_w, card_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
         paint_text(cr, bold_font(), card.name, card_x + 8, card_y + 6, theme::kTextR, theme::kTextG, theme::kTextB,
                    static_cast<int>(card_w - 16));
-        paint_text(cr, ui_font(), card.power, card_x + 8, card_y + dp(26), theme::kTextR, theme::kTextG, theme::kTextB,
-                   static_cast<int>(card_w - 16));
-        double line_y = card_y + dp(44);
+        if (power_line) {
+            paint_text(cr, ui_font(), card.power, card_x + 8, card_y + dp(26), theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(card_w - 16));
+        }
+        double line_y = first_y;
         if (!card.access.empty()) {
             paint_text(cr, ui_font(), card.access, card_x + 8, line_y, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(card_w - 16));
@@ -5474,8 +5569,10 @@ void Shell::draw_hover_card(cairo_t *cr)
             cairo_fill(cr);
             paint_text(cr, ui_font(), text, card_x + 24, ly, kSlateInk.r, kSlateInk.g, kSlateInk.b, wrap - 14);
         };
-        dot_line(card.power, card_y + dp(26), on ? 1 : (off ? 0 : -1));
-        double line_y = card_y + dp(44);
+        if (power_line) {
+            dot_line(card.power, card_y + dp(26), on ? 1 : (off ? 0 : -1));
+        }
+        double line_y = first_y;
         if (!card.access.empty()) {
             // Green with a road, red when the building needs one, grey
             // ("No road needed") for plants, the Data Center and landmarks.

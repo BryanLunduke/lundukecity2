@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <memory>
@@ -85,7 +86,9 @@ Quad live_population_count(const Micropolis &sim)
     const Quad res = sim.censusSnapshotValid ? sim.snapResPop : sim.resPop;
     const Quad com = sim.censusSnapshotValid ? sim.snapComPop : sim.comPop;
     const Quad ind = sim.censusSnapshotValid ? sim.snapIndPop : sim.indPop;
-    return (res + (com + ind) * 8) * 20;
+    const Quad dc = sim.censusSnapshotValid ? sim.snapDataCenterPop : sim.dataCenterPop;
+    // Data Centers are jobs, not people (cityPopulationOf).
+    return static_cast<Quad>(cityPopulationOf(res, com, ind, dc));
 }
 
 CityClass live_city_class(Quad population)
@@ -149,7 +152,7 @@ const ScenarioEntry kScenarios[] = {
       "Keep the city a Metropolis (over 100,000) until 1949 despite the fire.", 5},
      "snro.333"},
     {{SC_BERN, "Bern", 1965, "Traffic is choking the streets.",
-      "Bring average traffic below 80 within 10 years.", 10},
+      "Bring average traffic below 40 and keep at least 90,000 people within 10 years.", 10},
      "snro.444"},
     {{SC_TOKYO, "Tokyo", 1957, "A monster is approaching.",
       "Keep the city score above 500 until 1962.", 5},
@@ -865,6 +868,11 @@ void CitySession::rename_city(const std::string &name)
     notify();
 }
 
+int CitySession::tax_growth_effect(int tax, int level)
+{
+    return static_cast<int>(Micropolis::taxGrowthEffect(tax, level));
+}
+
 int CitySession::difficulty() const
 {
     return static_cast<int>(engine_->sim.gameLevel);
@@ -1072,6 +1080,7 @@ bool CitySession::load_city(const std::string &path)
     recount_population_from_map();
     refresh_loaded_meters();
     arm_eval_baseline();
+    restore_loaded_eval();
     if (kind == CityFileKind::Incomplete) {
         post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
     } else {
@@ -1350,6 +1359,8 @@ void CitySession::set_census_residents(int residents)
     engine_->sim.indPop = 0;
     engine_->sim.snapComPop = 0;
     engine_->sim.snapIndPop = 0;
+    engine_->sim.dataCenterPop = 0;
+    engine_->sim.snapDataCenterPop = 0;
     engine_->sim.censusSnapshotValid = true;
 }
 
@@ -2141,6 +2152,49 @@ std::string CitySession::scenario_clock_text() const
     return text;
 }
 
+std::string CitySession::scenario_clock_short() const
+{
+    const Micropolis &sim = engine_->sim;
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+        return {};
+    }
+    if (sim.scoreWait <= 0) {
+        return "Time is up";
+    }
+    const int cycles = static_cast<int>(sim.scoreWait);
+    const int years = cycles / 48;
+    const int months = (cycles % 48) / 4;
+    if (years <= 0) {
+        return std::to_string(months) + "m left";
+    }
+    if (months <= 0) {
+        return std::to_string(years) + "y left";
+    }
+    return std::to_string(years) + "y " + std::to_string(months) + "m left";
+}
+
+std::string CitySession::scenario_meter_short() const
+{
+    const int id = scenario_id();
+    if (id == 0 || scenario_years_left() < 0) {
+        return {};
+    }
+    const Micropolis &sim = engine_->sim;
+    const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
+    if (id == SC_DETROIT) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <60";
+    }
+    if (id == SC_BERN) {
+        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → <" +
+               std::to_string(BERN_TRAFFIC_GOAL) + " · " + grouped_count(people > 0 ? people : 0) + " → ≥" +
+               grouped_count(BERN_POPULATION_GOAL);
+    }
+    if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
+        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + " → >500";
+    }
+    return grouped_count(people > 0 ? people : 0) + " → 100,000";
+}
+
 std::string CitySession::scenario_progress() const
 {
     const int id = scenario_id();
@@ -2167,7 +2221,9 @@ std::string CitySession::scenario_meter() const
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < 60";
     }
     if (id == SC_BERN) {
-        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < 80";
+        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < " +
+               std::to_string(BERN_TRAFFIC_GOAL) + ", population " + grouped_count(people > 0 ? people : 0) +
+               " → keep " + grouped_count(BERN_POPULATION_GOAL);
     }
     if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
         // Judged on the score at the deadline, after the disaster. A city
@@ -2372,6 +2428,8 @@ void CitySession::prepare_review_demo()
     sim.snapResPop = sim.resPop;
     sim.snapComPop = sim.comPop;
     sim.snapIndPop = sim.indPop;
+    sim.dataCenterPop = 0;
+    sim.snapDataCenterPop = 0;
     sim.censusSnapshotValid = true;
     sim.budgetAnchorFunds = 15200;
     sim.budgetAnchorValid = true;
@@ -2649,7 +2707,10 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
         }
     }
     if (card.special >= 0) {
-        card.needs_road = special_building(card.special).needs_road;
+        // Income buildings (Casino, Amusement Park, Marina) open without a
+        // road but only earn with one, so their card asks for it.
+        const SpecialBuilding &building = special_building(card.special);
+        card.needs_road = building.needs_road || building.annual_income > 0;
     } else {
         card.needs_road = card.zone && !card.power_plant;
     }
@@ -2767,6 +2828,23 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
         notes.push_back("Supplies 1/9 of a nuclear plant's power (about " +
                         std::to_string(kMicroNuclearPowerTiles) + " tiles)");
         notes.push_back("Cannot melt down. No pollution");
+    } else if (building.annual_income > 0) {
+        const SpecialIncome income = special_income_at(&engine_->sim, cx, cy);
+        if (income.intact) {
+            const std::string full = with_commas(income.full);
+            if (!income.powered) {
+                notes.push_back("No income: needs power");
+            } else if (!income.road) {
+                notes.push_back("No income: needs a road next to it");
+            } else if (income.dollars <= 0) {
+                notes.push_back("No income: no residents within " + std::to_string(kIncomeCatchmentRadius) + " tiles");
+            } else {
+                notes.push_back("Earns " + with_commas(income.dollars) + " a year (" + full + " at " +
+                                grouped_count(kIncomeFullResidents) + " residents)");
+            }
+            notes.push_back(grouped_count(income.residents) + " residents within " +
+                            std::to_string(kIncomeCatchmentRadius) + " tiles");
+        }
     }
     return notes;
 }
@@ -3061,6 +3139,7 @@ void CitySession::recount_population_from_map()
     Quad res = 0;
     Quad com = 0;
     Quad ind = 0;
+    Quad dc = 0;
     for (int x = 0; x < kWorldW; ++x) {
         for (int y = 0; y < kWorldH; ++y) {
             const unsigned short raw = sim.map[x][y];
@@ -3085,7 +3164,9 @@ void CitySession::recount_population_from_map()
                     }
                 }
                 res += homes;
-            } else if (tile < HOSPITAL) {
+            } else if (tile >= RZB && tile < HOSPITAL) {
+                // Built houses only. The landmark centres 53-55 carry
+                // ZONEBIT below RESBASE and are not people.
                 res += ((tile - RZB) / 9) % 4 * 8 + 16;
             } else if (tile >= COMBASE && tile < INDBASE) {
                 if (tile != COMCLR) {
@@ -3095,11 +3176,17 @@ void CitySession::recount_population_from_map()
                 if (tile != INDCLR) {
                     ind += ((tile - IZB) / 9) % 4 + 1;
                 }
+            } else if (tile == SPECIAL_DATACENTER && (raw & PWRBIT) != 0) {
+                // The weight doZone gives a powered Data Center: jobs in
+                // comPop and indPop, no people (dataCenterPop).
+                com += DATACENTER_ZONE_DENSITY;
+                ind += DATACENTER_ZONE_DENSITY;
+                dc += DATACENTER_ZONE_DENSITY;
             }
         }
     }
-    const Quad people = (res + (com + ind) * 8) * 20;
-    const Quad saved = (sim.resPop + (sim.comPop + sim.indPop) * 8) * 20;
+    const Quad people = static_cast<Quad>(cityPopulationOf(res, com, ind, dc));
+    const Quad saved = static_cast<Quad>(cityPopulationOf(sim.resPop, sim.comPop, sim.indPop, dc));
     // An empty generated map can still carry a wide census that is not on
     // the tiles. A city with zones always shows the tiles, so a stale
     // stored "Town" does not sit on screen until the next census.
@@ -3114,6 +3201,8 @@ void CitySession::recount_population_from_map()
     sim.snapResPop = res;
     sim.snapComPop = com;
     sim.snapIndPop = ind;
+    sim.dataCenterPop = dc;
+    sim.snapDataCenterPop = dc;
     sim.censusSnapshotValid = true;
     sim.liveCensusComplete = true;
     sim.cityPop = people < 0 ? 0 : people;
@@ -3133,6 +3222,22 @@ void CitySession::refresh_loaded_meters()
     // score and the traffic average the scenario meter reads, which otherwise
     // stay on the file until the next evaluation.
     sim.cityEvaluation();
+}
+
+void CitySession::restore_loaded_eval()
+{
+    // A City 2 save or recovery file keeps the last yearly evaluation in its
+    // sidecar. Those numbers are this city's own, not a scenario file's
+    // stale ones, so the window shows them instead of dashes.
+    if (!loaded_eval_.valid || engine_ == nullptr) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    sim.cityScoreDelta = static_cast<short>(loaded_eval_.score_delta);
+    sim.cityPopDelta = static_cast<Quad>(loaded_eval_.migration);
+    sim.cityPop = static_cast<Quad>(loaded_eval_.population);
+    eval_deltas_ready_ = true;
+    loaded_eval_ = LoadedEval{};
 }
 
 void CitySession::arm_eval_baseline()
@@ -3167,23 +3272,38 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     const long year = static_cast<long>(sim.cityYear);
     clock.year = static_cast<int>(year > 0 ? year : sim.startingYear);
     std::string text = scenario_sidecar_text(clock);
+    // One more "key": "value" line before the closing brace, with a comma
+    // after the line above it.
+    auto append_string = [&text](const char *key, const std::string &value) {
+        const auto brace = text.rfind('}');
+        if (brace == std::string::npos) {
+            return;
+        }
+        const auto last = text.find_last_not_of(" \n", brace == 0 ? 0 : brace - 1);
+        if (last != std::string::npos && text[last] != '{' && text[last] != ',') {
+            text.insert(last + 1, ",");
+        }
+        const auto close = text.rfind('}');
+        text.insert(close, std::string("  \"") + key + "\": \"" + value + "\"\n");
+    };
     const std::string encoded = civic::encode_ledger(ledger_);
     if (!encoded.empty()) {
-        const auto brace = text.rfind('}');
-        if (brace != std::string::npos) {
-            text.insert(brace, "  \"milestones\": \"" + encoded + "\"\n");
-            const auto year_line = text.rfind("\"year\"");
-            const auto year_nl = year_line == std::string::npos ? std::string::npos : text.find('\n', year_line);
-            if (year_nl != std::string::npos) {
-                text.insert(year_nl, ",");
-            }
-        }
+        append_string("milestones", encoded);
+    }
+    // The Evaluation window's yearly changes, so a recovered or reloaded
+    // city does not show dashes until another year passes.
+    const bool deltas_known = eval_deltas_ready_ || sim.cityTime >= eval_anchor_time_ + 48;
+    if (deltas_known) {
+        append_string("evaluation", "s=" + std::to_string(static_cast<long long>(sim.cityScoreDelta)) +
+                                        ".p=" + std::to_string(static_cast<long long>(sim.cityPopDelta)) +
+                                        ".c=" + std::to_string(static_cast<long long>(sim.cityPop)));
     }
     return write_text_atomic(scenario_sidecar_path(path), text);
 }
 
 void CitySession::read_scenario_sidecar(const std::string &path)
 {
+    loaded_eval_ = LoadedEval{};
     std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
         return;
@@ -3209,6 +3329,45 @@ void CitySession::read_scenario_sidecar(const std::string &path)
             civic::decode_ledger(text.substr(first + 1, second - first - 1), loaded)) {
             ledger_ = loaded;
             ledger_from_file_ = true;
+        }
+    }
+    loaded_eval_ = LoadedEval{};
+    const auto eval_key = text.find("\"evaluation\"");
+    if (eval_key != std::string::npos) {
+        const auto colon = text.find(':', eval_key);
+        const auto first = colon == std::string::npos ? std::string::npos : text.find('"', colon + 1);
+        const auto second = first == std::string::npos ? std::string::npos : text.find('"', first + 1);
+        if (first != std::string::npos && second != std::string::npos) {
+            const std::string body = text.substr(first + 1, second - first - 1);
+            // "s=<score change>.p=<migration>.c=<population>". Parsed with
+            // strtoll rather than a %lld format, which older MinGW C
+            // runtimes read differently.
+            long long values[3] = {0, 0, 0};
+            const char *const keys[3] = {"s=", ".p=", ".c="};
+            const char *cursor = body.c_str();
+            bool parsed = true;
+            for (int i = 0; i < 3 && parsed; ++i) {
+                const std::size_t key_len = std::strlen(keys[i]);
+                if (std::strncmp(cursor, keys[i], key_len) != 0) {
+                    parsed = false;
+                    break;
+                }
+                cursor += key_len;
+                char *stop = nullptr;
+                values[i] = std::strtoll(cursor, &stop, 10);
+                parsed = stop != cursor;
+                cursor = stop;
+            }
+            parsed = parsed && *cursor == '\0';
+            const long long score = values[0];
+            const long long migration = values[1];
+            const long long people = values[2];
+            if (parsed && score > -1000 && score < 1000 && people >= 0) {
+                loaded_eval_.valid = true;
+                loaded_eval_.score_delta = score;
+                loaded_eval_.migration = migration;
+                loaded_eval_.population = people;
+            }
         }
     }
     ScenarioClock clock;

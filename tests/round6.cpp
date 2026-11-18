@@ -29,7 +29,7 @@ int main()
         "Turn this city into a Metropolis (more than 100,000 people) within 30 years.",
         "Keep the city a Metropolis (over 100,000) until 1911 despite the quake.",
         "Keep the city a Metropolis (over 100,000) until 1949 despite the fire.",
-        "Bring average traffic below 80 within 10 years.",
+        "Bring average traffic below 40 and keep at least 90,000 people within 10 years.",
         "Keep the city score above 500 until 1962.",
         "Bring average crime below 60 within 10 years.",
         "Keep the city score above 500 until 2015.",

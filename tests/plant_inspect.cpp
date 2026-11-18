@@ -155,7 +155,7 @@ int main()
         }
         // A5: every tile of these $400+ buildings asks before a bulldozer
         // clears it, and names the building and its price.
-        const int want_cost = what == "coal" ? 3000 : what == "nuclear" ? 5000 : what == "micro" ? 1000
+        const int want_cost = what == "coal" ? 3000 : what == "nuclear" ? 5000 : what == "micro" ? 2000
                               : what == "fire" ? 500 : 400;
         for (int dy = 0; dy < c.side; ++dy) {
             for (int dx = 0; dx < c.side; ++dx) {

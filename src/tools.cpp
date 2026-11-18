@@ -29,18 +29,18 @@ const ToolDef kTools[] = {
     // Services
     {TOOL_FIRESTATION, "Fire Station", 500, "Fire Station: $500"},
     {TOOL_POLICESTATION, "Police Station", 500, "Police Station: $500"},
-    {kSpecialEngineId, "Prison", 3000, "Prison: $3,000. Needs power and a road", SPECIAL_PRISON},
+    {kSpecialEngineId, "Prison", 3000, "Prison: $3,000. Needs power and a road. Cuts crime, slightly lowers land value", SPECIAL_PRISON},
     // Utilities
     {TOOL_COALPOWER, "Coal Plant", 3000, "Coal Plant: $3,000"},
     {TOOL_NUCLEARPOWER, "Nuclear Plant", 5000, "Nuclear Plant: $5,000"},
-    {kSpecialEngineId, "Micro Nuclear Plant", 1000, "Micro Nuclear Plant: $1,000. 1/9 of a nuclear plant, no meltdown",
+    {kSpecialEngineId, "Micro Nuclear Plant", 2000, "Micro Nuclear Plant: $2,000. 1/9 of a nuclear plant, clean, no meltdown",
      SPECIAL_MICRONUKE},
     // Special buildings
     {kSpecialEngineId, "Zoo", 100, "Zoo: $100. Raises nearby land value", SPECIAL_ZOO},
-    {kSpecialEngineId, "Amusement Park", 100, "Amusement Park: $100. Brings in $200 a year", SPECIAL_AMUSEMENT},
-    {kSpecialEngineId, "Casino", 100, "Casino: $100. Brings in $300 a year, raises crime", SPECIAL_CASINO},
+    {kSpecialEngineId, "Amusement Park", 100, "Amusement Park: $100. Raises land value. Up to $200 a year from nearby residents", SPECIAL_AMUSEMENT},
+    {kSpecialEngineId, "Casino", 100, "Casino: $100. Raises land value and crime. Up to $300 a year from nearby residents", SPECIAL_CASINO},
     {TOOL_STADIUM, "Stadium", 5000, "Stadium: $5,000"},
-    {kSpecialEngineId, "Marina", 1000, "Marina: $1,000. The south side is the dock", SPECIAL_MARINA},
+    {kSpecialEngineId, "Marina", 1000, "Marina: $1,000. Raises land value widely. Up to $100 a year. The south side is the dock", SPECIAL_MARINA},
     {kSpecialEngineId, "Library", 100, "Library: $100. Raises nearby land value", SPECIAL_LIBRARY},
     {kSpecialEngineId, "Mayor's House", 100, "Mayor's House: $100. One per city", SPECIAL_MAYOR},
     // Ports

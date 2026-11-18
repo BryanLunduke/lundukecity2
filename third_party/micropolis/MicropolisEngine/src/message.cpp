@@ -161,7 +161,10 @@ void Micropolis::sendMessages()
 
     case 32:
         TM = (float)(unpoweredZoneCount + poweredZoneCount); /* dec score for unpowered zones */
-        if (TM > 0) {
+        // A blackout needs a grid. With no plant at all the zones (or a few
+        // unpowered landmarks) are simply unpowered; case 22 asks for a
+        // plant once there are people.
+        if (TM > 0 && PowerPop > 0) {
             if (poweredZoneCount / TM < 0.7) {
                 sendMessage(MESSAGE_BLACKOUTS_REPORTED);
             }
@@ -326,11 +329,20 @@ void Micropolis::doScenarioScore(Scenario type)
         }
         break;
 
-    case SC_BERN:
-        if (trafficAverage < 80) {
+    case SC_BERN: {
+        // Lunduke City 2: the classic "traffic below 80" was met on the
+        // first day (Bern loads near 14 and an idle city peaks near 60),
+        // so the scenario was won by waiting. The city must now keep
+        // 90,000 people (it starts near 95,000 and an idle city falls to
+        // about 55,000) and bring traffic below 40.
+        const Quad people = censusSnapshotValid
+            ? static_cast<Quad>(cityPopulationOf(snapResPop, snapComPop, snapIndPop, snapDataCenterPop))
+            : getPopulation();
+        if (trafficAverage < BERN_TRAFFIC_GOAL && people >= BERN_POPULATION_GOAL) {
             z = MESSAGE_SCENARIO_WON;
         }
         break;
+    }
 
     case SC_TOKYO:
         if (cityScore > 500) {

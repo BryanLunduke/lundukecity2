@@ -87,15 +87,25 @@ constexpr SpecialBuilding kBuildings[] = {
     {53, "Mayor's House", "mayor", "mayor", 100, 0, 3, 3, 6, 48,
      "Raises nearby land value. Best near residential", 0, 0, 2000, 1, 1},
     {54, "Casino", "casino", "casino", 100, 300, 3, 3, 6, 96,
-     "Sharply raises nearby land value, brings in $300 a year, and raises local crime. A police station nearby matters",
+     "Sharply raises nearby land value and local crime. Pays up to $300 a year with power, a road and 2,000 residents "
+     "within 16 tiles. A police station nearby matters",
      8, 100, 0, 2, 3},
     {55, "Amusement Park", "amusement", "amusement", 100, 200, 3, 3, 6, 96,
-     "Sharply raises nearby land value and brings in $200 a year. Best near residential", 0, 0, 0, 2, 3},
-    {SPECIAL_PRISON, "Prison", "prison", "prison", 3000, 0, 4, 4, 6, -48,
-     "Lowers nearby land value and reduces crime a little while it has power and a road", 6, -24, 0, -1, 0, 1, 1, true,
-     true, false},
-    {SPECIAL_MARINA, "Marina", "marina", "marina", 1000, 0, 3, 3, 6, 48,
-     "Raises nearby land value. The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
+     "Sharply raises nearby land value. Pays up to $200 a year with power, a road and 2,000 residents within 16 "
+     "tiles", 0, 0, 0, 2, 3},
+    // Prison: the land-value dip (-16 in 6 tiles) is smaller than the crime
+    // cut (-40 in 8 tiles). Crime is 128 - land value + density - police,
+    // so a -48 dip used to add 48 crime and outweigh a -24 cut.
+    {SPECIAL_PRISON, "Prison", "prison", "prison", 3000, 0, 4, 4, 6, -16,
+     "Cuts crime across the neighbourhood while it has power and a road. Slightly lowers nearby land value", 8, -40,
+     0, -1, 0, 1, 1, true, true, false},
+    // Marina: ten times a Big Park's price buys a wider, stronger lift
+    // (+64 within 10 tiles, about 2.6 times the area) and up to $100 a year
+    // from the residents it serves, so it pays itself back in a decade.
+    {SPECIAL_MARINA, "Marina", "marina", "marina", 1000, 100, 3, 3, 10, 64,
+     "Raises land value across a wide area. Pays up to $100 a year with power, a road and 2,000 residents within 16 "
+     "tiles. "
+     "The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
     {SPECIAL_FOUNTAIN, "Fountain", "fountain", "fountain", 20, 0, 1, 1, 4, 16, "Raises nearby land value", 0, 0, 0, -1,
      0, 0, 0, false, false, false, true},
     // Rows below are not landmarks; the landmarks are the rows above. The Data
@@ -107,7 +117,10 @@ constexpr SpecialBuilding kBuildings[] = {
     {SPECIAL_DATACENTER_LOT, "Data Center", "datacenter", "datacenter-vacant", 400, 0, 3, 3, 0, 0,
      "Vacant lot. Opens once it has power, then counts as 1 industrial + 1 commercial zone. No pollution", 0, 0, 0,
      -1, 0, 1, 1, false, false, false, false, false},
-    {SPECIAL_MICRONUKE, "Micro Nuclear Plant", "micronuclear", "micro-nuclear", 1000, 0, 1, 1, 0, 0,
+    // $2,000 for 222 tiles is $9.01 a powered tile: about twice coal
+    // ($3,000 / 700 = $4.29) and 3.6 times nuclear ($2.50). Coal stays the
+    // cheap, dirty start; the micro is the clean premium with no meltdown.
+    {SPECIAL_MICRONUKE, "Micro Nuclear Plant", "micronuclear", "micro-nuclear", 2000, 0, 1, 1, 0, 0,
      "Supplies 1/9 the power of a nuclear plant. Cannot melt down", 0, 0, 0, -1, 0, 0, 0, false, false, false, false,
      false},
     {SPECIAL_DATACENTER, "Data Center", "datacenter", "datacenter", 400, 0, 3, 3, 0, 0,
@@ -870,8 +883,9 @@ int special_population(const Micropolis *sim)
     const Quad res = sim->censusSnapshotValid ? sim->snapResPop : sim->resPop;
     const Quad com = sim->censusSnapshotValid ? sim->snapComPop : sim->comPop;
     const Quad ind = sim->censusSnapshotValid ? sim->snapIndPop : sim->indPop;
-    const long long people =
-        (static_cast<long long>(res) + (static_cast<long long>(com) + static_cast<long long>(ind)) * 8LL) * 20LL;
+    const Quad dc = sim->censusSnapshotValid ? sim->snapDataCenterPop : sim->dataCenterPop;
+    // Data Centers are jobs, not people: they cannot unlock Mayor's House.
+    const long long people = cityPopulationOf(res, com, ind, dc);
     if (people < 0) {
         return 0;
     }
@@ -952,6 +966,71 @@ std::string special_menu_detail(const Micropolis *sim, int index)
     return graph_money(kBuildings[index].cost);
 }
 
+int special_residents_near(const Micropolis *sim, int center_x, int center_y, int radius)
+{
+    if (sim == nullptr || radius < 0) {
+        return 0;
+    }
+    long long units = 0;
+    for (int x = center_x - radius; x <= center_x + radius; ++x) {
+        for (int y = center_y - radius; y <= center_y + radius; ++y) {
+            if (!in_bounds(x, y)) {
+                continue;
+            }
+            const int raw = static_cast<int>(sim->map[x][y]);
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int tile = raw & LOMASK;
+            if (tile == FREEZ) {
+                // An empty residential zone's single houses, one unit each
+                // (Micropolis::doFreePop).
+                for (int hx = x - 1; hx <= x + 1; ++hx) {
+                    for (int hy = y - 1; hy <= y + 1; ++hy) {
+                        const int house = tile_of(sim, hx, hy);
+                        if (house >= LHTHR && house <= HHTHR) {
+                            ++units;
+                        }
+                    }
+                }
+            } else if (tile >= RZB && tile < HOSPITALBASE) {
+                // Micropolis::getResZonePop: 16, 24, 32 or 40 by density.
+                units += ((tile - RZB) / 9) % 4 * 8 + 16;
+            }
+        }
+    }
+    // One residential unit is 20 people (getPopulation's weight).
+    const long long people = units * 20;
+    return people > 2000000000LL ? 2000000000 : static_cast<int>(people);
+}
+
+SpecialIncome special_income_at(const Micropolis *sim, int center_x, int center_y)
+{
+    SpecialIncome income;
+    if (sim == nullptr || !in_bounds(center_x, center_y)) {
+        return income;
+    }
+    const int raw = static_cast<int>(sim->map[center_x][center_y]);
+    const int index = (raw & ZONEBIT) != 0 ? special_index_for_tile(raw & LOMASK) : -1;
+    if (index < 0 || kBuildings[index].annual_income <= 0) {
+        return income;
+    }
+    const SpecialBuilding &building = kBuildings[index];
+    income.earns = true;
+    income.full = building.annual_income;
+    income.intact = special_building_intact(sim, center_x, center_y);
+    income.powered = building.open_air || (raw & PWRBIT) != 0;
+    income.road = ring_has(center_x - building.anchor_x, center_y - building.anchor_y, building.width, building.height,
+                           sim_word, sim, road_word);
+    income.residents = special_residents_near(sim, center_x, center_y, kIncomeCatchmentRadius);
+    if (!income.intact || !income.powered || !income.road) {
+        return income;
+    }
+    const int served = income.residents < kIncomeFullResidents ? income.residents : kIncomeFullResidents;
+    income.dollars = static_cast<int>(static_cast<long long>(building.annual_income) * served / kIncomeFullResidents);
+    return income;
+}
+
 int special_annual_income(const Micropolis *sim)
 {
     if (sim == nullptr) {
@@ -961,10 +1040,10 @@ int special_annual_income(const Micropolis *sim)
     for (int x = 0; x < WORLD_W; ++x) {
         for (int y = 0; y < WORLD_H; ++y) {
             const int index = special_index_for_tile(tile_of(sim, x, y));
-            if (index < 0 || !special_building_intact(sim, x, y)) {
+            if (index < 0 || kBuildings[index].annual_income <= 0 || (sim->map[x][y] & ZONEBIT) == 0) {
                 continue;
             }
-            total += kBuildings[index].annual_income;
+            total += special_income_at(sim, x, y).dollars;
         }
     }
     return total;
