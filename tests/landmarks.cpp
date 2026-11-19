@@ -124,6 +124,8 @@ int main()
 
     Micropolis books;
     arm(books, 0);
+    // A city of 30,000: the attraction cap's floor is the full $300.
+    books.cityPop = 30000;
     if (!place_special_building(&books, park, 10, 20, error) || !place_special_building(&books, casino, 20, 20, error)) {
         return fail(13, "park and casino could not be placed for the income check");
     }
@@ -162,8 +164,8 @@ int main()
     }
     // Five more dense zones: 4,800 shared residents, 2,400 each, is past
     // the 2,000 for full income ($200 + $300 = $500). With no taxes yet
-    // collected the city-wide cap is its $300 floor, so the pair is scaled
-    // to $120 + $180.
+    // collected the city-wide cap is its floor, $300 for a city of 30,000,
+    // so the pair is scaled to $120 + $180.
     books.map[10][26] = dense_home;
     books.map[20][26] = dense_home;
     books.map[25][26] = dense_home;
@@ -174,6 +176,19 @@ int main()
         std::fprintf(stderr, "capped income %d\n", special_annual_income(&books));
         return fail(92, "the attraction income cap did not hold at its floor");
     }
+    // The floor grows with the city: $10 per 1,000 people, so a town of
+    // 5,000 caps the pair at $50 and a city of 45,000 still at $300.
+    books.cityPop = 5000;
+    if (special_income_floor(&books) != 50 || special_annual_income(&books) != 50 ||
+        !special_income_at(&books, 20, 20).capped) {
+        std::fprintf(stderr, "small floor %d income %d\n", special_income_floor(&books), special_annual_income(&books));
+        return fail(96, "the attraction income floor did not scale down with a small city");
+    }
+    books.cityPop = 45000;
+    if (special_income_floor(&books) != kIncomeCapFloor || special_annual_income(&books) != 300) {
+        return fail(97, "the attraction income floor went past $300");
+    }
+    books.cityPop = 30000;
     // A $2,000 tax year lifts the cap to 40%, $800: both pay in full.
     books.taxFund = 2000;
     if (special_annual_income(&books) != 500 || special_income_at(&books, 20, 20).capped) {

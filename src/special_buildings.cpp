@@ -1126,13 +1126,27 @@ int special_residents_near(const Micropolis *sim, int center_x, int center_y, in
     return people > 2000000000LL ? 2000000000 : static_cast<int>(people);
 }
 
-int special_income_cap(const Micropolis *sim)
+int special_income_floor(const Micropolis *sim)
 {
     if (sim == nullptr) {
         return kIncomeCapFloor;
     }
+    // Review nov19 #3: a flat $300 floor let one casino beat the whole tax
+    // roll of a small city (about half of all Medium income). The floor
+    // now grows with the city and reaches $300 at 30,000 people.
+    const long long people = sim->cityPop < 0 ? 0 : static_cast<long long>(sim->cityPop);
+    const long long grown = people / 1000 * kIncomeCapFloorPerThousand;
+    return grown < kIncomeCapFloor ? static_cast<int>(grown) : kIncomeCapFloor;
+}
+
+int special_income_cap(const Micropolis *sim)
+{
+    const int lowest = special_income_floor(sim);
+    if (sim == nullptr) {
+        return lowest;
+    }
     const long long share = static_cast<long long>(sim->taxFund) * kIncomeCapTaxPercent / 100;
-    return share > kIncomeCapFloor ? static_cast<int>(share > 2000000000LL ? 2000000000LL : share) : kIncomeCapFloor;
+    return share > lowest ? static_cast<int>(share > 2000000000LL ? 2000000000LL : share) : lowest;
 }
 
 SpecialIncome special_income_at(const Micropolis *sim, int center_x, int center_y)

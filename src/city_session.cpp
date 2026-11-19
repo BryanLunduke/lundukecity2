@@ -2934,7 +2934,7 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
             }
             if (income.capped) {
                 // Say "40% of taxes" only when that, not the floor, is the cap.
-                const bool floor = income.cap <= kIncomeCapFloor;
+                const bool floor = income.cap <= special_income_floor(&engine_->sim);
                 notes.push_back("All attractions together earn at most " + with_commas(income.cap) + " a year" +
                                 (floor ? std::string() : " (" + std::to_string(kIncomeCapTaxPercent) + "% of taxes)"));
             }
