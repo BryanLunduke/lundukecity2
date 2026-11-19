@@ -415,8 +415,13 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         }
         const std::string plain = strip_mnemonic(label);
         const TextMetrics metrics = measure_text(cr, ui_font(), plain, -1);
-        const double shift = selected ? 8.0 : 0.0;
-        const double tx = x + (w - metrics.width + shift) / 2.0;
+        // A chosen chip keeps its check mark clear of the label: center the
+        // label in the room right of the mark instead of nudging it 4px.
+        double tx = x + (w - metrics.width) / 2.0;
+        if (selected && enabled && w > 22 && h > 16) {
+            const double mark_room = 8.0 + std::min(h * 0.42, 14.0) + 6.0;
+            tx = x + mark_room + std::max(0.0, (w - mark_room - 6.0 - metrics.width) / 2.0);
+        }
         const double ty = y + (h - metrics.height) / 2.0;
         if (!enabled) {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.45, 0.42, 0.38);
@@ -1481,7 +1486,28 @@ void Shell::draw_dialog(cairo_t *cr)
             "Pick a difficulty and the kind of land. Default keeps the usual rivers, lakes, and trees.";
         double want_w = new_page_ == 1 ? dp(640) : dp(520);
         double want_h = new_page_ == 1 ? dp(560) : new_page_ == 0 ? (osk ? dp(190) : dp(236)) : dp(170);
-        const double land_intro_h = new_page_ == 1 ? text_block_height(land_intro, want_w - 2 * margin) : 0;
+        if (new_page_ == 1) {
+            // The difficulty chips name their funds. Make each chip wide
+            // enough for the longest name plus the check mark of a chosen chip.
+            double widest = 0;
+            for (int level : {CitySession::kLevelEasy, CitySession::kLevelMedium, CitySession::kLevelHard}) {
+                const std::string name = std::string(level == CitySession::kLevelEasy     ? "Easy · "
+                                                     : level == CitySession::kLevelMedium ? "Medium · "
+                                                                                          : "Hard · ") +
+                                         graph_money(CitySession::starting_funds(level));
+                widest = std::max(widest, static_cast<double>(measure_text(cr, ui_font(), name, -1).width));
+            }
+            const double chip_h = dp(32);
+            const double chip_w = widest + 8.0 + std::min(chip_h * 0.42, 14.0) + 6.0 + 6.0 + dp(4);
+            want_w = std::max(want_w, 2 * margin + dp(108) + dp(16) + 3.0 * (chip_w + dp(6)));
+        }
+        // Measure the intro in the font it is drawn in (ui_font) and at the
+        // width the dialog will have after the chips widened it, so a line
+        // that fits is not reserved twice.
+        auto intro_height = [&](double width) {
+            return std::max(static_cast<double>(dp(18)), line_height(ui_font(), land_intro, width));
+        };
+        const double land_intro_h = new_page_ == 1 ? intro_height(want_w - 2 * margin) : 0;
         if (new_page_ == 1) {
             want_h += std::max(0.0, land_intro_h - static_cast<double>(dp(22)));
             want_h += dp(28);
@@ -1532,7 +1558,10 @@ void Shell::draw_dialog(cairo_t *cr)
             buttons_at(x, dw, y + dh - margin - dp(36), {{"_Cancel", kCancel}, {"_Next", kNext}});
         } else if (new_page_ == 1) {
             label(cr, ui_font(), land_intro, x + margin, y + dp(46), static_cast<int>(dw - 2 * margin));
-            const double block_top = y + dp(46) + land_intro_h + dp(10);
+            // A narrow window can clamp the dialog below want_w; place the rows
+            // under the intro as it actually wraps at this width.
+            const double intro_h = std::max(land_intro_h, intro_height(dw - 2 * margin));
+            const double block_top = y + dp(46) + intro_h + dp(10);
             const char *groups[] = {"Difficulty", "Island", "Rivers", "Lakes", "Trees"};
             // Each difficulty names its starting funds.
             const std::string level_names[3] = {
