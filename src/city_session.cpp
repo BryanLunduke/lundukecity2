@@ -1219,6 +1219,9 @@ bool CitySession::load_recovery(const std::string &recovery_path, const std::str
     }
     save_path_ = origin_path;
     engine_->sim.cityFileName = origin_path;
+    // The shell puts back the NEWS log from the recovery info (up to 50
+    // lines); drop the sidecar's shorter copy so it is not listed twice.
+    clear_notices();
     // Recovered work is unsaved until the player saves it.
     dirty_ = true;
     post_message("Recovered an unsaved city. Save it to keep it.");
@@ -3301,6 +3304,27 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     if (!encoded.empty()) {
         append_string("milestones", encoded);
     }
+    // Where the player was looking and the NEWS log, so a load does not
+    // reset them. Older readers skip these keys.
+    const std::string view = save_view::encode_view(save_view_);
+    if (!view.empty()) {
+        append_string("view", view);
+    }
+    std::vector<save_view::News> lines;
+    for (const CityNotice &notice : notices_) {
+        save_view::News line;
+        line.text = notice.text;
+        line.tile_x = notice.tile_x;
+        line.tile_y = notice.tile_y;
+        line.month = notice.month;
+        line.year = notice.year;
+        line.has_place = notice.has_place;
+        lines.push_back(line);
+    }
+    const std::string news = save_view::encode_news(lines);
+    if (!news.empty()) {
+        append_string("news", news);
+    }
     // The Evaluation window's yearly changes, so a recovered or reloaded
     // city does not show dashes until another year passes.
     const bool deltas_known = eval_deltas_ready_ || sim.cityTime >= eval_anchor_time_ + 48;
@@ -3315,6 +3339,7 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
 void CitySession::read_scenario_sidecar(const std::string &path)
 {
     loaded_eval_ = LoadedEval{};
+    loaded_view_ = save_view::View{};
     std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
         return;
@@ -3341,6 +3366,35 @@ void CitySession::read_scenario_sidecar(const std::string &path)
             ledger_ = loaded;
             ledger_from_file_ = true;
         }
+    }
+    // The string value of "key", or empty. Values never hold a quote.
+    auto string_value = [&text](const char *key) -> std::string {
+        const auto at = text.find(std::string("\"") + key + "\"");
+        if (at == std::string::npos) {
+            return {};
+        }
+        const auto colon = text.find(':', at);
+        const auto first = colon == std::string::npos ? std::string::npos : text.find('"', colon + 1);
+        const auto second = first == std::string::npos ? std::string::npos : text.find('"', first + 1);
+        if (first == std::string::npos || second == std::string::npos) {
+            return {};
+        }
+        return text.substr(first + 1, second - first - 1);
+    };
+    save_view::decode_view(string_value("view"), loaded_view_);
+    std::vector<CityNotice> restored;
+    for (const save_view::News &line : save_view::decode_news(string_value("news"))) {
+        CityNotice notice;
+        notice.text = line.text;
+        notice.tile_x = line.tile_x;
+        notice.tile_y = line.tile_y;
+        notice.month = line.month;
+        notice.year = line.year;
+        notice.has_place = line.has_place;
+        restored.push_back(notice);
+    }
+    if (!restored.empty()) {
+        restore_notices(std::move(restored));
     }
     loaded_eval_ = LoadedEval{};
     const auto eval_key = text.find("\"evaluation\"");

@@ -7,6 +7,7 @@
 
 #include "city_seed.hpp"
 #include "civic.hpp"
+#include "save_view.hpp"
 
 #include <cstdio>
 #include <string>
@@ -81,6 +82,52 @@ int check_start_funds()
     return 0;
 }
 
+// A save keeps the camera and the NEWS log in its sidecar strings, a
+// quote or semicolon in a notice survives, and junk or an older sidecar
+// (no keys) loads with the default view and no news.
+int check_save_view()
+{
+    save_view::View view;
+    view.valid = true;
+    view.tile_size = 32;
+    view.center_x = 0.45;
+    view.center_y = 0.4612;
+    save_view::View back;
+    if (!save_view::decode_view(save_view::encode_view(view), back) || back.tile_size != 32 ||
+        back.center_x < 0.4499 || back.center_x > 0.4501 || back.center_y < 0.4611 || back.center_y > 0.4613) {
+        return fail(30, "view did not survive: " + save_view::encode_view(view));
+    }
+    save_view::View none;
+    if (save_view::decode_view("", none) || none.valid || save_view::decode_view("t=0,x=1,y=2", none) ||
+        save_view::decode_view("t=32,x=20000,y=5", none)) {
+        return fail(31, "a missing or bad view was accepted");
+    }
+    std::vector<save_view::News> news(2);
+    news[0].text = "Fire at \"Main\"; 50% lost | call 911";
+    news[0].month = 4;
+    news[0].year = 1903;
+    news[0].tile_x = 12;
+    news[0].tile_y = 34;
+    news[0].has_place = true;
+    news[1].text = "Blackouts reported. Check power.";
+    news[1].month = 11;
+    news[1].year = 1902;
+    const std::string encoded = save_view::encode_news(news);
+    if (encoded.find('"') != std::string::npos) {
+        return fail(32, "a quote leaked into the sidecar string: " + encoded);
+    }
+    const std::vector<save_view::News> read = save_view::decode_news(encoded);
+    if (read.size() != 2 || read[0].text != news[0].text || read[0].tile_x != 12 || read[0].tile_y != 34 ||
+        !read[0].has_place || read[0].month != 4 || read[0].year != 1903 || read[1].text != news[1].text ||
+        read[1].month != 11 || read[1].has_place) {
+        return fail(33, "news did not survive: " + encoded);
+    }
+    if (!save_view::decode_news("").empty() || !save_view::decode_news("x|y|z").empty()) {
+        return fail(34, "junk news was accepted");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -89,6 +136,9 @@ int main()
         return r;
     }
     if (const int r = check_start_funds()) {
+        return r;
+    }
+    if (const int r = check_save_view()) {
         return r;
     }
     std::puts("testpass_nov18 ok");

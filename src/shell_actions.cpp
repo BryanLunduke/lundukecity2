@@ -779,6 +779,32 @@ void Shell::center_on_fraction(double fx, double fy)
     clamp_scroll();
 }
 
+void Shell::note_view_for_save()
+{
+    save_view::View view;
+    view.valid = true;
+    view.tile_size = map_.tile_size();
+    view.center_x = std::clamp(map_point_fraction(view_x_ + view_w_ * 0.5, view_x_, map_ox_, scroll_x_, map_.pixel_width()),
+                               0.0, 1.0);
+    view.center_y = std::clamp(map_point_fraction(view_y_ + view_h_ * 0.5, view_y_, map_oy_, scroll_y_, map_.pixel_height()),
+                               0.0, 1.0);
+    session_.set_view_for_save(view);
+}
+
+void Shell::restore_loaded_view()
+{
+    const save_view::View &view = session_.loaded_view();
+    if (!view.valid) {
+        center_on_fraction(0.5, 0.5);
+        return;
+    }
+    // Same steps the Recover path uses for the autosave's view.
+    map_.set_tile_size(view.tile_size);
+    map_ox_ = map_letterbox_x();
+    map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+    center_on_fraction(view.center_x, view.center_y);
+}
+
 void Shell::zoom_by(int delta)
 {
     zoom_by(delta, view_x_ + view_w_ * 0.5, view_y_ + view_h_ * 0.5);
@@ -1563,6 +1589,7 @@ void Shell::finish_save(const std::string &path)
         open_dialog(Dialog::Info);
         return;
     }
+    note_view_for_save();
     if (!session_.save_city_as(path)) {
         info_title_ = "Save City";
         info_body_ = session_.message().empty() ? "Could not save the city." : session_.message();
@@ -1611,7 +1638,7 @@ void Shell::finish_open(const std::string &path)
         // was covered. restore_play_preferences may have stored the preference.
         adopt_loaded_speed(loaded_speed);
     }
-    center_on_fraction(0.5, 0.5);
+    restore_loaded_view();
     const std::string folder = parent_dir(path);
     if (!folder.empty()) {
         remember_city_folder(folder);
@@ -1880,6 +1907,8 @@ void Shell::apply_action(Action action)
         request_with_save(AfterSave::FilesLoad);
         break;
     case Action::Save:
+        // The camera rides along in the sidecar of a save to a known file.
+        note_view_for_save();
         if (session_.save_path().empty()) {
             // A Save from "Save changes?" has no file yet. Keep the pending
             // Quit / New / Load so it still runs after Save As succeeds.

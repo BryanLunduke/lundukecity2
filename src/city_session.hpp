@@ -6,6 +6,7 @@
 
 #include "civic.hpp"
 #include "inspect_report.hpp"
+#include "save_view.hpp"
 
 #include <cstdint>
 #include <cstdarg>
@@ -504,6 +505,10 @@ public:
     void tell(std::string text) { post_message(std::move(text)); }
     // Puts back a NEWS log saved with a recovery file (newest first).
     void restore_notices(std::vector<CityNotice> notices);
+    // The camera the next save stores in its sidecar, and the one the last
+    // load found there (invalid for an older save or a new city).
+    void set_view_for_save(const save_view::View &view) { save_view_ = view; }
+    const save_view::View &loaded_view() const { return loaded_view_; }
     // Terrain only, on a throwaway simulator. Does not touch this city.
     bool preview_terrain(int seed, int island, int rivers, int lakes, int trees, std::vector<unsigned short> &tiles) const;
     std::vector<SpriteDot> sprites() const;
@@ -581,6 +586,8 @@ private:
     };
     LoadedEval loaded_eval_;
     void restore_loaded_eval();
+    save_view::View save_view_;
+    save_view::View loaded_view_;
     long long eval_anchor_time_ = 0;
     int scenario_result_ = 0;
     bool query_has_tile_ = false;

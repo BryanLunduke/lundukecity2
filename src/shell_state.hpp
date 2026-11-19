@@ -184,6 +184,10 @@ private:
     void retarget_recent(const std::string &path, const std::string &replacement);
     void load_recent();
     void center_on_fraction(double fx, double fy);
+    // Hand the current camera to the session so the next save keeps it,
+    // and put back the camera a loaded save kept (else the map centre).
+    void note_view_for_save();
+    void restore_loaded_view();
     void clamp_scroll();
     void fit_map_to_view();
     double map_local_x(double x) const;
