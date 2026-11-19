@@ -20,8 +20,21 @@
 #include <string>
 #include <vector>
 
+// Reaches engine internals for the checks below (a friend of Micropolis).
 struct Nov19DisasterProbe {
     static void roll(Micropolis &sim) { sim.doDisasters(); }
+    static void growth(Micropolis &sim, Quad last_population, Quad res_pop)
+    {
+        sim.cityTime = 4;
+        sim.cityPopLast = last_population;
+        sim.categoryLast = 0;
+        sim.resPop = res_pop;
+        sim.comPop = 0;
+        sim.indPop = 0;
+        sim.dataCenterPop = 0;
+        sim.checkGrowth();
+    }
+    static Quad people(Micropolis &sim) { return sim.getPopulation(); }
 };
 
 namespace {
@@ -420,6 +433,33 @@ int check_year_funds()
     return 0;
 }
 
+// #14: population milestones are announced on the way up only.
+int check_growth_only()
+{
+    auto owned = std::make_unique<Micropolis>();
+    Micropolis &sim = *owned;
+    sim.generateSomeCity(3);
+    sim.setAutoGoto(false);
+    std::vector<Sent> heard;
+    listen(sim, heard);
+    // About 3,000 people: a town, down from a city of 12,000.
+    Nov19DisasterProbe::growth(sim, 12000, 150);
+    const Quad people = Nov19DisasterProbe::people(sim);
+    if (people < 2000 || people >= 10000) {
+        std::fprintf(stderr, "population %lld\n", static_cast<long long>(people));
+        return fail(100, "the growth check city is not a town");
+    }
+    if (count_of(heard, MESSAGE_REACHED_TOWN) != 0) {
+        return fail(101, "a shrinking city was told it reached 2,000");
+    }
+    // The same town, up from a village of 1,500.
+    Nov19DisasterProbe::growth(sim, 1500, 150);
+    if (count_of(heard, MESSAGE_REACHED_TOWN) != 1) {
+        return fail(102, "a growing city was not told it reached 2,000");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -449,6 +489,9 @@ int main()
         return r;
     }
     if (const int r = check_year_funds()) {
+        return r;
+    }
+    if (const int r = check_growth_only()) {
         return r;
     }
     std::puts("review_nov19 ok");

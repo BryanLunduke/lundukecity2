@@ -269,7 +269,9 @@ void Micropolis::checkGrowth()
             CityClass lastClass = getCityClass(cityPopLast);
             CityClass newClass = getCityClass(thisCityPop);
 
-            if (lastClass != newClass) {
+            // Review nov19 #14: only growth is news. A shrinking city used
+            // to hear "The population has reached 2,000." on its way down.
+            if (newClass > lastClass) {
 
                 // Switched class, find appropiate message.
                 switch (newClass) {
