@@ -314,6 +314,9 @@ void Shell::layout()
         mini_y_ = view_y_ + dp(10);
     }
     map_.set_slate_tags(slate_ || handheld_);
+    // At 1280x800 a 16px tile made 11px tags (about 9px capitals). The
+    // handheld tags follow the UI text size instead.
+    map_.set_tag_min_px(handheld_ ? static_cast<double>(dp(17)) : 11.0);
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
     cursor_y_ = std::max(0.0f, std::min(cursor_y_, static_cast<float>(win_h_ - 1)));
     fit_map_to_view();

@@ -853,16 +853,18 @@ void paint_corners(cairo_t *cr, double x, double y, double w, double h, double l
 }
 
 void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::string &text, int tile, int slot,
-               bool slate)
+               bool slate, double min_px)
 {
     if (text.empty()) {
         return;
     }
     cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, std::max(11.0, tile * 0.7));
+    const double font_px = std::max(min_px, tile * 0.7);
+    cairo_set_font_size(cr, font_px);
     cairo_text_extents_t extents;
     cairo_text_extents(cr, text.c_str(), &extents);
-    const double pad = 3.0;
+    // A raised (handheld) tag gets padding to match; the desktop keeps 3px.
+    const double pad = min_px > 11.0 ? std::max(3.0, font_px * 0.22) : 3.0;
     const double tw = extents.width + pad * 2;
     const double th = extents.height + pad * 2;
     double tx = w > tw ? x + (w - tw) / 2.0 : x;
@@ -1009,7 +1011,7 @@ void MapView::draw_footprint(cairo_t *cr) const
                 cairo_stroke(cr);
             }
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.55), cue_.mark);
-            paint_tag(cr, x, y, w, h, live_tag, tile_size_, 0, slate_tags_);
+            paint_tag(cr, x, y, w, h, live_tag, tile_size_, 0, slate_tags_, tag_min_px_);
         }
         if (cue_.receipt && cue_.rwidth > 0 && cue_.rheight > 0) {
             const double x = cue_.rleft * tile;
@@ -1018,7 +1020,7 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double h = cue_.rheight * tile;
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.6), cue_.receipt_ok ? 1 : 3);
             const int receipt_slot = cue_.active && !live_tag.empty() ? 1 : 0;
-            paint_tag(cr, x, y, w, h, cue_.receipt_text, tile_size_, receipt_slot, slate_tags_);
+            paint_tag(cr, x, y, w, h, cue_.receipt_text, tile_size_, receipt_slot, slate_tags_, tag_min_px_);
         }
         cairo_restore(cr);
         if (cue_.active) {
