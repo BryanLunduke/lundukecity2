@@ -251,6 +251,25 @@ int check_spelling()
     return 0;
 }
 
+// #13: the mouse and pad phrases start with the toolbar name.
+int check_click_phrases()
+{
+    for (int i = 0; i < kToolCount; ++i) {
+        const ToolDef *tool = tool_by_index(i);
+        if (tool == nullptr || tool->engine_id == TOOL_QUERY) {
+            continue;
+        }
+        const std::string name = std::string(tool->name) + ": ";
+        const std::string click = tool_click_text(tool);
+        const std::string press = tool_press_text(tool, "A");
+        if (click.compare(0, name.size(), name) != 0 || press.compare(0, name.size(), name) != 0) {
+            std::fprintf(stderr, "tool '%s': click '%s' press '%s'\n", tool->name, click.c_str(), press.c_str());
+            return fail(60, "a click or press phrase does not use the toolbar name");
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -271,6 +290,9 @@ int main()
         return r;
     }
     if (const int r = check_spelling()) {
+        return r;
+    }
+    if (const int r = check_click_phrases()) {
         return r;
     }
     std::puts("review_nov18b ok");

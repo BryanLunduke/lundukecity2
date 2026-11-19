@@ -104,6 +104,8 @@ std::string tool_press_text(const ToolDef *tool, const char *button)
     return tool_press_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY, button);
 }
 
+// The names match the toolbar (kTools), so the mouse and the pad call a
+// tool the same thing (review nov18b #13).
 const char *tool_click_phrase(int engine_id)
 {
     switch (engine_id) {
@@ -114,7 +116,7 @@ const char *tool_click_phrase(int engine_id)
     case TOOL_RAILROAD:
         return "Rail: click to lay";
     case TOOL_WIRE:
-        return "Wire: click to lay";
+        return "Power lines: click to lay";
     case TOOL_PARK:
         return "Park: click to plant";
     case TOOL_RESIDENTIAL:
@@ -124,17 +126,17 @@ const char *tool_click_phrase(int engine_id)
     case TOOL_INDUSTRIAL:
         return "Industrial: click to zone";
     case TOOL_POLICESTATION:
-        return "Police: click to build";
+        return "Police Station: click to build";
     case TOOL_FIRESTATION:
-        return "Fire dept: click to build";
+        return "Fire Station: click to build";
     case TOOL_STADIUM:
         return "Stadium: click to build";
     case TOOL_SEAPORT:
         return "Seaport: click to build";
     case TOOL_COALPOWER:
-        return "Coal power: click to build";
+        return "Coal Plant: click to build";
     case TOOL_NUCLEARPOWER:
-        return "Nuclear power: click to build";
+        return "Nuclear Plant: click to build";
     case TOOL_AIRPORT:
         return "Airport: click to build";
     case kSpecialEngineId:
@@ -172,7 +174,7 @@ std::string tool_press_phrase(int engine_id, const char *button)
         verb = "lays";
         break;
     case TOOL_WIRE:
-        name = "Wire";
+        name = "Power lines";
         verb = "lays";
         break;
     case TOOL_PARK:
