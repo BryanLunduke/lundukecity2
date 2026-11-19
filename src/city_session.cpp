@@ -2917,8 +2917,14 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
             } else if (income.dollars <= 0) {
                 notes.push_back("No income yet");
             } else {
-                notes.push_back("Earns " + with_commas(income.dollars) + " a year (" + full + " at " +
-                                grouped_count(kIncomeFullResidents) + " residents)");
+                // The bracket only when too few residents are the reason: at
+                // full pay it would repeat the number, and a capped payout
+                // has its own line below (review nov18b #10).
+                std::string line = "Earns " + with_commas(income.dollars) + " a year";
+                if (income.dollars < income.full && !income.capped) {
+                    line += " (" + full + " at " + grouped_count(kIncomeFullResidents) + " residents)";
+                }
+                notes.push_back(line);
             }
             notes.push_back(grouped_count(income.residents) + " residents within " +
                             std::to_string(kIncomeCatchmentRadius) + " tiles");
