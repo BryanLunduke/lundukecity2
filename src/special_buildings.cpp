@@ -99,9 +99,14 @@ constexpr SpecialBuilding kBuildings[] = {
     // Prison: the land-value dip (-16 in 6 tiles) is smaller than the crime
     // cut (-40 in 8 tiles). Crime is 128 - land value + density - police,
     // so a -48 dip used to add 48 crime and outweigh a -24 cut.
+    // Review nov18b #3: it also takes 15% off crime across the whole city
+    // (two Prisons reach the 30% cap). In a ~23k town that is about -16 on
+    // the city average, a little more than one $500 Police Station's -12,
+    // while high-crime blocks still need police coverage.
     {SPECIAL_PRISON, "Prison", "prison", "prison", 3000, 0, 4, 4, 6, -16,
-     "Cuts crime across the neighbourhood while it has power and a road. Slightly lowers nearby land value", 8, -40,
-     0, -1, 0, 1, 1, true, true, false},
+     "Cuts crime across the neighbourhood, and by 15% across the city, while it has power and a road. Slightly "
+     "lowers nearby land value",
+     8, -40, 0, -1, 0, 1, 1, true, true, false, false, true, 15},
     // Marina: ten times a Big Park's price buys a wider, stronger lift
     // (+64 within 10 tiles, about 2.6 times the area) and up to $100 a year
     // from the residents it serves, so it pays itself back in a decade.
@@ -1208,6 +1213,7 @@ void boost_special_crime(Micropolis *sim)
     if (block < 1) {
         return;
     }
+    int city_cut = 0;
     for (int x = 0; x < WORLD_W; ++x) {
         for (int y = 0; y < WORLD_H; ++y) {
             const int index = special_index_for_tile(tile_of(sim, x, y));
@@ -1215,6 +1221,9 @@ void boost_special_crime(Micropolis *sim)
                 continue;
             }
             const SpecialBuilding &building = kBuildings[index];
+            if (building.city_crime_percent > 0 && crime_service_ready(sim, index, x, y)) {
+                city_cut += building.city_crime_percent;
+            }
             if (building.crime_bonus == 0 || building.crime_radius <= 0) {
                 continue;
             }
@@ -1271,6 +1280,20 @@ void boost_special_crime(Micropolis *sim)
                     }
                     sim->crimeRateMap.worldSet(wx, wy, static_cast<Byte>(raised));
                 }
+            }
+        }
+    }
+    if (city_cut <= 0) {
+        return;
+    }
+    if (city_cut > kCityCrimeCutCapPercent) {
+        city_cut = kCityCrimeCutCapPercent;
+    }
+    for (int by = 0; by < sim->crimeRateMap.MAP_H; ++by) {
+        for (int bx = 0; bx < sim->crimeRateMap.MAP_W; ++bx) {
+            const int current = sim->crimeRateMap.get(bx, by);
+            if (current > 0) {
+                sim->crimeRateMap.set(bx, by, static_cast<Byte>(current - current * city_cut / 100));
             }
         }
     }

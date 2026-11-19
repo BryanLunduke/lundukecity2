@@ -79,7 +79,13 @@ struct SpecialBuilding {
     // Center lot and the Micro Nuclear Plant (Zones and Utilities buttons)
     // and the built Data Center, which only the lot grows into.
     bool in_menu = true;
+    // Percent taken off every block of the crime map while this building
+    // works (crime_service_ready). All such buildings together cut at most
+    // kCityCrimeCutCapPercent. 0 means no city-wide effect.
+    int city_crime_percent = 0;
 };
+
+inline constexpr int kCityCrimeCutCapPercent = 30;
 
 // Shared non-center tile. The center tile id says which building it is.
 inline constexpr int kSpecialBodyTile = 1023;

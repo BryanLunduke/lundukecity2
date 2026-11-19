@@ -313,15 +313,39 @@ int main()
         return fail(38, "an unpowered prison reduced crime");
     }
     crime.map[20][20] |= PWRBIT;
+    // Review nov18b #3: -40 nearby, then 15% off every block in the city:
+    // 80 - 40 = 40, less 15% = 34. A block 60 tiles away goes 100 -> 85.
+    crime.crimeRateMap.worldSet(80, 80, 100);
     boost_special_crime(&crime);
-    if (crime.crimeRateMap.worldGet(20, 20) != 40) {
-        std::fprintf(stderr, "powered %d\n", crime.crimeRateMap.worldGet(20, 20));
-        return fail(39, "a powered prison on a road did not reduce crime by 40");
+    if (crime.crimeRateMap.worldGet(20, 20) != 34 || crime.crimeRateMap.worldGet(80, 80) != 85) {
+        std::fprintf(stderr, "powered %d city %d\n", crime.crimeRateMap.worldGet(20, 20),
+                     crime.crimeRateMap.worldGet(80, 80));
+        return fail(39, "a powered prison on a road did not cut crime by 40 nearby and 15% city-wide");
     }
+    // A second Prison adds another 15%; a third stops at the 30% cap.
+    crime.map[40][38] = ROADBASE | BULLBIT;
+    crime.map[38][40] = HPOWER | CONDBIT | BULLBIT;
+    crime.map[60][58] = ROADBASE | BULLBIT;
+    crime.map[58][60] = HPOWER | CONDBIT | BULLBIT;
+    if (!place_special_building(&crime, prison, 40, 40, error) ||
+        !place_special_building(&crime, prison, 60, 60, error)) {
+        return fail(100, "could not place more prisons for the city-wide cap check");
+    }
+    crime.map[40][40] |= PWRBIT;
+    crime.map[60][60] |= PWRBIT;
+    crime.crimeRateMap.worldSet(80, 80, 100);
+    boost_special_crime(&crime);
+    if (crime.crimeRateMap.worldGet(80, 80) != 70) {
+        std::fprintf(stderr, "three prisons city %d\n", crime.crimeRateMap.worldGet(80, 80));
+        return fail(101, "three prisons did not stop at the 30% city-wide cap");
+    }
+    crime.map[40][40] &= static_cast<unsigned short>(~PWRBIT);
+    crime.map[60][60] &= static_cast<unsigned short>(~PWRBIT);
     crime.map[20][18] = DIRT;
     crime.crimeRateMap.worldSet(20, 20, 80);
+    crime.crimeRateMap.worldSet(80, 80, 100);
     boost_special_crime(&crime);
-    if (crime.crimeRateMap.worldGet(20, 20) != 80) {
+    if (crime.crimeRateMap.worldGet(20, 20) != 80 || crime.crimeRateMap.worldGet(80, 80) != 100) {
         return fail(40, "a prison with no road still reduced crime");
     }
 
