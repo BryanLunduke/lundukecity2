@@ -328,6 +328,17 @@ void round_dialog_rect(cairo_t *cr, double x, double y, double w, double h, doub
     cairo_close_path(cr);
 }
 
+// Pale outline for the road key swatch so it reads on dark and light keys.
+static void road_key_outline(cairo_t *cr, double x, double y, double w, double h)
+{
+    cairo_save(cr);
+    cairo_set_source_rgb(cr, 0xD8 / 255.0, 0xD8 / 255.0, 0xE0 / 255.0);
+    cairo_set_line_width(cr, 1.0);
+    cairo_rectangle(cr, x + 0.5, y + 0.5, std::max(1.0, w - 1.0), std::max(1.0, h - 1.0));
+    cairo_stroke(cr);
+    cairo_restore(cr);
+}
+
 void Shell::button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary,
                     bool selected, bool enabled)
 {
@@ -4056,13 +4067,18 @@ void Shell::draw(cairo_t *cr)
         if (shown == CitySession::MapLayer::Zones) {
             // The six Zones colours, in the legend's word order: homes,
             // shops, industry, roads, rail, water (overlay_map.cpp).
+            // The map's road gray (48,48,52) vanishes on the dark key, so
+            // the key shows roads as a lighter gray with a pale outline.
             static const unsigned char keys[6][3] = {
-                {40, 170, 48}, {168, 72, 200}, {230, 190, 32}, {48, 48, 52}, {140, 84, 36}, {40, 110, 230},
+                {40, 170, 48}, {168, 72, 200}, {230, 190, 32}, {128, 128, 136}, {140, 84, 36}, {40, 110, 230},
             };
             const double step = std::min(static_cast<double>(dp(28)), (lw - pad * 2) / 6.0);
             for (int i = 0; i < 6; ++i) {
                 fill(cr, lx + pad + i * step, ramp_y, step - dp(4), dp(6), keys[i][0] / 255.0, keys[i][1] / 255.0,
                      keys[i][2] / 255.0);
+                if (i == 3) {
+                    road_key_outline(cr, lx + pad + i * step, ramp_y, step - dp(4), dp(6));
+                }
             }
         } else if (shown == CitySession::MapLayer::Power) {
             fill(cr, lx + pad, ramp_y, dp(28), dp(6), 220 / 255.0, 40 / 255.0, 32 / 255.0);
@@ -4088,7 +4104,8 @@ void Shell::draw(cairo_t *cr)
                 cairo_fill(cr);
             }
         } else if (shown == CitySession::MapLayer::Transportation) {
-            fill(cr, lx + pad, ramp_y, dp(28), dp(6), 48 / 255.0, 48 / 255.0, 52 / 255.0);
+            fill(cr, lx + pad, ramp_y, dp(28), dp(6), 128 / 255.0, 128 / 255.0, 136 / 255.0);
+            road_key_outline(cr, lx + pad, ramp_y, dp(28), dp(6));
             fill(cr, lx + pad + dp(34), ramp_y, dp(28), dp(6), 140 / 255.0, 84 / 255.0, 36 / 255.0);
         } else if (shown == CitySession::MapLayer::Commercial) {
             fill(cr, lx + pad, ramp_y, dp(28), dp(6), 48 / 255.0, 96 / 255.0, 210 / 255.0);
