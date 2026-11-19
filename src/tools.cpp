@@ -25,7 +25,7 @@ const ToolDef kTools[] = {
     // Parks
     {TOOL_PARK, "Park", 10, "Park: $10"},
     {kSpecialEngineId, "Big Park", 100, "Big Park: $100. Raises nearby land value", SPECIAL_PARK},
-    {kSpecialEngineId, "Fountain", 20, "Fountain: $20. Raises nearby land value", SPECIAL_FOUNTAIN},
+    {kSpecialEngineId, "Fountain", 20, "Fountain: $20. Raises nearby land value. Fountains close together add less", SPECIAL_FOUNTAIN},
     // Services
     {TOOL_FIRESTATION, "Fire Station", 500, "Fire Station: $500"},
     {TOOL_POLICESTATION, "Police Station", 500, "Police Station: $500"},

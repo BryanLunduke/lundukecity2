@@ -797,6 +797,28 @@ int main()
         }
     }
 
+    // Review nov18b #6: stacked fountains add with diminishing returns.
+    {
+        const int fountain_row = index_named("Fountain");
+        Micropolis plaza;
+        arm(plaza, 23);
+        std::string why;
+        const int spots[][2] = {{60, 60}, {62, 60}, {60, 62}, {62, 62}, {64, 64}, {58, 58}};
+        const int expect[] = {116, 120, 124, 128, 132, 132};
+        for (int i = 0; i < 6; ++i) {
+            if (!place_special_building(&plaza, fountain_row, spots[i][0], spots[i][1], why)) {
+                return fail(108, "could not place a fountain for the stacking check");
+            }
+            plaza.landValueMap.clear();
+            plaza.landValueMap.worldSet(61, 61, 100);
+            boost_special_land_value(&plaza);
+            if (plaza.landValueMap.worldGet(61, 61) != expect[i]) {
+                std::fprintf(stderr, "%d fountains: land %d\n", i + 1, plaza.landValueMap.worldGet(61, 61));
+                return fail(109, "stacked fountains did not add 16, then 4 each, up to 32");
+            }
+        }
+    }
+
     std::printf("new specials ok\n");
     return 0;
 }

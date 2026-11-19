@@ -122,7 +122,8 @@ constexpr SpecialBuilding kBuildings[] = {
      "Raises land value across a wide area. Pays up to $100 a year with power, a road and 2,000 residents within 16 "
      "tiles. "
      "Nearby attractions share them. The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
-    {SPECIAL_FOUNTAIN, "Fountain", "fountain", "fountain", 20, 0, 1, 1, 4, 16, "Raises nearby land value", 0, 0, 0, -1,
+    {SPECIAL_FOUNTAIN, "Fountain", "fountain", "fountain", 20, 0, 1, 1, 4, 16,
+     "Raises nearby land value. Fountains close together add less", 0, 0, 0, -1,
      0, 0, 0, false, false, false, true},
     // Rows below are not landmarks; the landmarks are the rows above. The Data
     // Center is a zone, not a landmark: no land-value bump, no income.
@@ -1171,6 +1172,14 @@ void boost_special_land_value(Micropolis *sim)
         return;
     }
     int city_bonus = 0;
+    // Review nov18b #6: fountains reaching the same block add with
+    // diminishing returns. The first gives its full bonus, each further one
+    // a quarter of it, and the block never gains more than twice one
+    // fountain (+16, +20, +24, +28, then +32 at most).
+    const int map_w = sim->landValueMap.MAP_W;
+    const int map_h = sim->landValueMap.MAP_H;
+    std::vector<unsigned short> fountains(static_cast<std::size_t>(map_w) * static_cast<std::size_t>(map_h), 0);
+    int fountain_bonus = 0;
     for (int x = 0; x < WORLD_W; ++x) {
         for (int y = 0; y < WORLD_H; ++y) {
             const int index = special_index_for_tile(tile_of(sim, x, y));
@@ -1178,6 +1187,7 @@ void boost_special_land_value(Micropolis *sim)
                 continue;
             }
             const SpecialBuilding &building = kBuildings[index];
+            const bool fountain = building.center_tile == SPECIAL_FOUNTAIN;
             if (building.city_land_bonus > 0 && landmark_running(sim, index, x, y)) {
                 city_bonus += building.city_land_bonus;
             }
@@ -1202,6 +1212,14 @@ void boost_special_land_value(Micropolis *sim)
                     if (value <= 0) {
                         continue;
                     }
+                    if (fountain) {
+                        unsigned short &count = fountains[static_cast<std::size_t>(by) * map_w + bx];
+                        if (count < 0xFFFF) {
+                            ++count;
+                        }
+                        fountain_bonus = building.land_bonus;
+                        continue;
+                    }
                     int raised = value + building.land_bonus;
                     if (raised > 250) {
                         raised = 250;
@@ -1211,6 +1229,22 @@ void boost_special_land_value(Micropolis *sim)
                     }
                     sim->landValueMap.set(bx, by, static_cast<Byte>(raised));
                 }
+            }
+        }
+    }
+    if (fountain_bonus > 0) {
+        for (int by = 0; by < map_h; ++by) {
+            for (int bx = 0; bx < map_w; ++bx) {
+                const int count = fountains[static_cast<std::size_t>(by) * map_w + bx];
+                if (count == 0) {
+                    continue;
+                }
+                int bonus = fountain_bonus + (count - 1) * fountain_bonus / 4;
+                if (bonus > 2 * fountain_bonus) {
+                    bonus = 2 * fountain_bonus;
+                }
+                const int value = sim->landValueMap.get(bx, by);
+                sim->landValueMap.set(bx, by, static_cast<Byte>(value + bonus > 250 ? 250 : value + bonus));
             }
         }
     }
