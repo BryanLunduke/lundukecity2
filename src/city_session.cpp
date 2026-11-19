@@ -826,6 +826,9 @@ void CitySession::new_city(const NewCitySpec &spec)
     clear_scenario_clock();
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
+    // A new city's first year starts with its difficulty funds.
+    ledger_.have_start_funds = true;
+    ledger_.start_funds = static_cast<std::int64_t>(sim.totalFunds);
     arm_eval_baseline();
     ready_ = true;
     notify();
@@ -1796,6 +1799,9 @@ void CitySession::finish_budget_edit()
 {
     if (engine_->sim.budgetAwaitingAccept) {
         commit_pending_budget();
+        // The new tax year starts with what is left after the budget.
+        ledger_.have_start_funds = true;
+        ledger_.start_funds = static_cast<std::int64_t>(engine_->sim.totalFunds);
         return;
     }
     engine_->sim.applyFundingLevels();

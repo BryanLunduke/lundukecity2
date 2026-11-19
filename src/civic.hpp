@@ -46,6 +46,12 @@ struct Ledger {
     bool have_prior = false;
     int prior_votes[kProblems]{};
     std::int64_t prior_population = 0;
+    // Funds when this tax year began: the balance right after last year's
+    // budget was paid, or a new city's starting funds. The Year in Review
+    // shows it as "Start of year". Unknown for a city saved before this
+    // was kept; the review then falls back to the pre-collection balance.
+    bool have_start_funds = false;
+    std::int64_t start_funds = 0;
 
     bool any() const
     {
@@ -817,6 +823,13 @@ inline std::string encode_ledger(const Ledger &ledger)
             out += "." + std::to_string(ledger.prior_votes[i]);
         }
     }
+    if (ledger.have_start_funds) {
+        // Older readers skip parts that are not m or p.
+        if (!out.empty()) {
+            out.push_back(',');
+        }
+        out += "f=" + std::to_string(ledger.start_funds);
+    }
     return out;
 }
 
@@ -861,6 +874,10 @@ inline bool decode_ledger(const std::string &text, Ledger &ledger)
                 cursor = dot + 1;
                 parsed.prior_votes[v] = std::atoi(cursor);
             }
+            any = true;
+        } else if (part[0] == 'f' && part[1] == '=') {
+            parsed.have_start_funds = true;
+            parsed.start_funds = std::atoll(part.c_str() + 2);
             any = true;
         }
     }

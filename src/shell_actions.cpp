@@ -403,11 +403,16 @@ civic::YearDigest Shell::year_digest() const
         one.tile_y = notice.tile_y;
         notes.push_back(one);
     }
+    // Start of year is the balance when the year began, so Gained/Lost
+    // covers the whole year's building and income, not just January's
+    // collection. Older saves without it keep the pre-collection balance.
+    const civic::Ledger &ledger = session_.ledger();
+    const std::int64_t opening = ledger.have_start_funds ? ledger.start_funds : book.previous_funds;
     civic::YearDigest digest = civic::make_year_digest(
-        book.previous_funds, book.funds, true, book.estimates, report.population, session_.ledger(), votes, top_name,
+        opening, book.funds, true, book.estimates, report.population, session_.ledger(), votes, top_name,
         top_votes, top_kind, report.score_delta, report.deltas_known, session_.city_year(), notes);
     digest.ended_year = session_.review_year();
-    digest.opening_funds = book.previous_funds;
+    digest.opening_funds = opening;
     digest.closing_funds = book.funds;
     digest.tax_percent = book.tax_percent;
     return digest;

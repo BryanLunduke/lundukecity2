@@ -6,6 +6,7 @@
 // and the display fixes that followed it.
 
 #include "city_seed.hpp"
+#include "civic.hpp"
 
 #include <cstdio>
 #include <string>
@@ -52,11 +53,42 @@ int check_auto_seed()
     return 0;
 }
 
+// The Year in Review's start-of-year funds survive a save, and a sidecar
+// from before they were kept still loads with them unknown.
+int check_start_funds()
+{
+    civic::Ledger ledger;
+    ledger.have_start_funds = true;
+    ledger.start_funds = 10179;
+    const std::string text = civic::encode_ledger(ledger);
+    civic::Ledger back;
+    if (!civic::decode_ledger(text, back) || !back.have_start_funds || back.start_funds != 10179) {
+        return fail(20, "start funds lost in the sidecar: " + text);
+    }
+    civic::Ledger old;
+    if (!civic::decode_ledger("m1=1901.0,p=480.1.2.3.4.5.6.7", old) || old.have_start_funds ||
+        old.prior_population != 480 || !old.hit[1].earned) {
+        return fail(21, "older sidecar did not load the same");
+    }
+    civic::YearDigest digest;
+    digest.opening_funds = 20000;
+    digest.closing_funds = 10251;
+    const civic::ReviewText review = civic::make_review_text(digest, 0, 0, 0, true, "Village", 0, 0);
+    if (review.funds.find("Start of year $20,000") == std::string::npos ||
+        review.funds.find("Lost $9,749") == std::string::npos) {
+        return fail(22, "review funds text: " + review.funds);
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
 {
     if (const int r = check_auto_seed()) {
+        return r;
+    }
+    if (const int r = check_start_funds()) {
         return r;
     }
     std::puts("testpass_nov18 ok");
