@@ -2187,6 +2187,16 @@ std::string CitySession::scenario_clock_short() const
     return std::to_string(years) + "y " + std::to_string(months) + "m left";
 }
 
+bool CitySession::traffic_measured() const
+{
+    // The engine runs cityEvaluation (and so getTrafficAverage) with each
+    // January's tax collection, every 48 ticks of cityTime. A load reads
+    // an empty traffic map, so the figure before that is not the city's.
+    constexpr long long kTaxTicks = 48;
+    const long long now = static_cast<long long>(engine_->sim.cityTime);
+    return now >= 0 && now / kTaxTicks > traffic_anchor_time_ / kTaxTicks;
+}
+
 std::string CitySession::scenario_meter_short() const
 {
     const int id = scenario_id();
@@ -2199,7 +2209,8 @@ std::string CitySession::scenario_meter_short() const
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <60";
     }
     if (id == SC_BERN) {
-        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → <" +
+        const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
+        return "Traffic " + traffic + " → <" +
                std::to_string(BERN_TRAFFIC_GOAL) + " · " + grouped_count(people > 0 ? people : 0) + " → ≥" +
                grouped_count(BERN_POPULATION_GOAL);
     }
@@ -2235,7 +2246,8 @@ std::string CitySession::scenario_meter() const
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < 60";
     }
     if (id == SC_BERN) {
-        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < " +
+        const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
+        return "Traffic " + traffic + " → goal < " +
                std::to_string(BERN_TRAFFIC_GOAL) + ", population " + grouped_count(people > 0 ? people : 0) +
                " → keep " + grouped_count(BERN_POPULATION_GOAL);
     }
@@ -3260,6 +3272,7 @@ void CitySession::arm_eval_baseline()
     eval_deltas_ready_ = false;
     const Quad time = sim.cityTime < 0 ? static_cast<Quad>(0) : sim.cityTime;
     eval_anchor_time_ = static_cast<long long>(time);
+    traffic_anchor_time_ = static_cast<long long>(time);
     const Quad people = live_population_count(sim);
     sim.cityPop = people < 0 ? 0 : people;
     sim.cityPopDelta = 0;

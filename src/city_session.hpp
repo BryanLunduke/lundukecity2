@@ -589,6 +589,11 @@ private:
     save_view::View save_view_;
     save_view::View loaded_view_;
     long long eval_anchor_time_ = 0;
+    // cityTime when this city was made, loaded or started. The traffic
+    // average is not measured until the engine's January evaluation after
+    // it; until then the Bern meter shows a dash, not the empty-map figure.
+    long long traffic_anchor_time_ = 0;
+    bool traffic_measured() const;
     int scenario_result_ = 0;
     bool query_has_tile_ = false;
     int query_x_ = 0;
