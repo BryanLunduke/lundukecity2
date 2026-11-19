@@ -46,10 +46,11 @@ struct Ledger {
     bool have_prior = false;
     int prior_votes[kProblems]{};
     std::int64_t prior_population = 0;
-    // Funds when this tax year began: the balance right after last year's
-    // budget was paid, or a new city's starting funds. The Year in Review
-    // shows it as "Start of year". Unknown for a city saved before this
-    // was kept; the review then falls back to the pre-collection balance.
+    // Funds when this tax year began: the treasury the last year ended
+    // with, just before its January budget was paid (the Funds readout at
+    // the time), or a new city's starting funds. The Year in Review shows
+    // it as "Start of year". Unknown for a city saved before this was
+    // kept; the review then falls back to the pre-collection balance.
     bool have_start_funds = false;
     std::int64_t start_funds = 0;
 

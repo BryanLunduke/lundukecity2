@@ -392,6 +392,34 @@ int check_load_without_sidecar()
     return 0;
 }
 
+// #13: the year a budget closes ends with the Funds readout's number,
+// and the next year starts from it.
+int check_year_funds()
+{
+    CitySession city;
+    CitySession::NewCitySpec spec;
+    spec.name = "Ledger";
+    spec.seed = 5;
+    spec.seed_was_set = true;
+    city.new_city(spec);
+    city.set_speed(3);
+    city.set_simulation_paused(false);
+    for (int i = 0; i < 400000 && !city.budget_pending(); ++i) {
+        city.tick();
+    }
+    if (!city.budget_pending()) {
+        return fail(90, "the first January budget never came");
+    }
+    const std::int64_t shown = city.funds();
+    city.finish_budget_edit();
+    if (!city.ledger().have_start_funds || city.ledger().start_funds != shown) {
+        std::fprintf(stderr, "shown %lld start %lld\n", static_cast<long long>(shown),
+                     static_cast<long long>(city.ledger().start_funds));
+        return fail(91, "the new year does not start from the funds shown when the old one ended");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -418,6 +446,9 @@ int main()
         return r;
     }
     if (const int r = check_load_without_sidecar()) {
+        return r;
+    }
+    if (const int r = check_year_funds()) {
         return r;
     }
     std::puts("review_nov19 ok");

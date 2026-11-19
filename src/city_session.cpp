@@ -1837,10 +1837,14 @@ void CitySession::discard_pending_budget()
 void CitySession::finish_budget_edit()
 {
     if (engine_->sim.budgetAwaitingAccept) {
-        commit_pending_budget();
-        // The new tax year starts with what is left after the budget.
+        // Review nov19 #13: the new year starts with the treasury the old
+        // one ended with, the Funds readout before this budget is paid.
+        // The Year in Review's "End of year" is that same number, so the
+        // two never disagree, and each year's review starts where the
+        // last one ended. This January's budget counts in the new year.
         ledger_.have_start_funds = true;
         ledger_.start_funds = static_cast<std::int64_t>(engine_->sim.totalFunds);
+        commit_pending_budget();
         return;
     }
     engine_->sim.applyFundingLevels();

@@ -406,14 +406,18 @@ civic::YearDigest Shell::year_digest() const
     // Start of year is the balance when the year began, so Gained/Lost
     // covers the whole year's building and income, not just January's
     // collection. Older saves without it keep the pre-collection balance.
+    // Review nov19 #13: End of year is the treasury now, the same number
+    // as the Funds readout behind the review. It used to add this
+    // January's pending budget ($817 here, $912 in the top bar).
     const civic::Ledger &ledger = session_.ledger();
     const std::int64_t opening = ledger.have_start_funds ? ledger.start_funds : book.previous_funds;
+    const std::int64_t closing = session_.funds();
     civic::YearDigest digest = civic::make_year_digest(
-        opening, book.funds, true, book.estimates, report.population, session_.ledger(), votes, top_name,
-        top_votes, top_kind, report.score_delta, report.deltas_known, session_.city_year(), notes);
+        opening, closing, true, false, report.population, session_.ledger(), votes, top_name, top_votes, top_kind,
+        report.score_delta, report.deltas_known, session_.city_year(), notes);
     digest.ended_year = session_.review_year();
     digest.opening_funds = opening;
-    digest.closing_funds = book.funds;
+    digest.closing_funds = closing;
     digest.tax_percent = book.tax_percent;
     return digest;
 }
