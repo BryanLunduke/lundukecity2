@@ -40,34 +40,10 @@ std::uint32_t pack_rgb(double r, double g, double b)
 
 void minimap_tile_rgb(int raw, double &r, double &g, double &b)
 {
-    const int kind = raw & LOMASK;
-    // Tiles 53-55 are civic centres. The atlas still has the old trash
-    // graphic there. Paint them as a small civic lot instead.
-    if (kind == 53 || kind == 54 || kind == 55) {
-        r = 0.44;
-        g = 0.40;
-        b = 0.28;
-        return;
-    }
-    // Data Center and Micro Nuclear Plant centres sit on the old explosion
-    // ids, so the atlas average would be a blast. Lot gold, glass blue, and
-    // concrete grey instead.
-    if (kind == SPECIAL_DATACENTER_LOT) {
-        r = 0.80;
-        g = 0.70;
-        b = 0.25;
-        return;
-    }
-    if (kind == SPECIAL_DATACENTER) {
-        r = 0.25;
-        g = 0.35;
-        b = 0.62;
-        return;
-    }
-    if (kind == SPECIAL_MICRONUKE) {
-        r = 0.60;
-        g = 0.60;
-        b = 0.62;
+    // Special buildings sit on ids the atlas averages wrongly (old trash and
+    // explosion art) or does not have at all (1020-1023 are past its 960
+    // tiles), so they take their colour from the building table instead.
+    if (special_minimap_rgb(raw & LOMASK, r, g, b)) {
         return;
     }
     const TileAtlas &atlas = tile_atlas();

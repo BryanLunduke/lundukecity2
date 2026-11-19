@@ -202,6 +202,12 @@ std::string special_status_text(int index);
 // Same line, plus the unlock or cap sentence when the city cannot buy it.
 std::string special_status_text(const Micropolis *sim, int index);
 
+// Minimap and preview colour for a special-building tile: a civic lot
+// tone for landmark centres and the shared body tile, gold for the vacant
+// Data Center lot, glass blue for the built one, concrete for the Micro
+// Nuclear Plant. False for every other tile (use the atlas average).
+bool special_minimap_rgb(int tile, double &r, double &g, double &b);
+
 // True when the special at this centre is doing its job: intact, powered
 // unless open air, and touching a road when its row needs one.
 bool special_effect_active(const Micropolis *sim, int center_x, int center_y);

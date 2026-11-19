@@ -187,6 +187,30 @@ int check_landmark_notes()
     return 0;
 }
 
+// #9: tiles past the atlas get a civic colour, not the salmon fallback.
+int check_minimap_colours()
+{
+    const int civic[] = {kSpecialBodyTile, SPECIAL_ZOO, SPECIAL_PARK, SPECIAL_LIBRARY, SPECIAL_MAYOR, SPECIAL_CASINO,
+                         SPECIAL_AMUSEMENT};
+    for (const int tile : civic) {
+        double r = 0;
+        double g = 0;
+        double b = 0;
+        if (!special_minimap_rgb(tile, r, g, b) || r > 0.6 || g > 0.6 || b > 0.6 || (r == 0.80 && g == 0.50)) {
+            std::fprintf(stderr, "tile %d -> %d %.2f %.2f %.2f\n", tile, static_cast<int>(special_minimap_rgb(tile, r, g, b)), r,
+                         g, b);
+            return fail(30, "a special tile has no civic minimap colour");
+        }
+    }
+    double r = 0;
+    double g = 0;
+    double b = 0;
+    if (special_minimap_rgb(DIRT, r, g, b) || special_minimap_rgb(SPECIAL_PRISON, r, g, b)) {
+        return fail(31, "dirt or the prison centre left the atlas colour");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -198,6 +222,9 @@ int main()
         return r;
     }
     if (const int r = check_landmark_notes()) {
+        return r;
+    }
+    if (const int r = check_minimap_colours()) {
         return r;
     }
     std::puts("review_nov18b ok");

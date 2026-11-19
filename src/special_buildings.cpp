@@ -1568,6 +1568,41 @@ std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y)
     return text;
 }
 
+bool special_minimap_rgb(int tile, double &r, double &g, double &b)
+{
+    // Data Center and Micro Nuclear Plant centres sit on the old explosion
+    // ids, so the atlas average would be a blast.
+    if (tile == SPECIAL_DATACENTER_LOT) {
+        r = 0.80;
+        g = 0.70;
+        b = 0.25;
+        return true;
+    }
+    if (tile == SPECIAL_DATACENTER) {
+        r = 0.25;
+        g = 0.35;
+        b = 0.62;
+        return true;
+    }
+    if (tile == SPECIAL_MICRONUKE) {
+        r = 0.60;
+        g = 0.60;
+        b = 0.62;
+        return true;
+    }
+    // Landmark centres on the old trash ids (53-55) and every id past the
+    // atlas (Zoo, Big Park and Library centres 1020-1022 and the shared
+    // body tile 1023): a small civic lot. Review nov18b #9: the atlas had
+    // no colour for the last four and painted them salmon.
+    if (tile == kSpecialBodyTile || (special_index_for_tile(tile) >= 0 && (tile < 256 || tile >= 960))) {
+        r = 0.44;
+        g = 0.40;
+        b = 0.28;
+        return true;
+    }
+    return false;
+}
+
 bool special_effect_active(const Micropolis *sim, int center_x, int center_y)
 {
     if (sim == nullptr || !in_bounds(center_x, center_y)) {
