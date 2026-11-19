@@ -2872,8 +2872,12 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
                 notes.push_back("No income: needs power");
             } else if (!income.road) {
                 notes.push_back("No income: needs a road next to it");
-            } else if (income.dollars <= 0) {
+            } else if (income.residents <= 0) {
+                // One line: "0 residents within 16 tiles" would only repeat it.
                 notes.push_back("No income: no residents within " + std::to_string(kIncomeCatchmentRadius) + " tiles");
+                return notes;
+            } else if (income.dollars <= 0) {
+                notes.push_back("No income yet");
             } else {
                 notes.push_back("Earns " + with_commas(income.dollars) + " a year (" + full + " at " +
                                 grouped_count(kIncomeFullResidents) + " residents)");
@@ -2952,6 +2956,11 @@ CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
         } else {
             facts.damage_effect = "No effect on the city while damaged";
         }
+    }
+    if (card.special >= 0 && !card.damaged && special_building(card.special).annual_income > 0) {
+        const SpecialIncome income = special_income_at(&engine_->sim, card.left + special_building(card.special).anchor_x,
+                                                       card.top + special_building(card.special).anchor_y);
+        facts.idle = income.intact && income.powered && income.road && income.dollars <= 0;
     }
     out.notes = special_inspect_notes(x, y);
     facts.density = layer_value(MapLayer::Population, x, y);

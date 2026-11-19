@@ -7,6 +7,7 @@
 
 #include "city_session.hpp"
 #include "dialog_copy.hpp"
+#include "inspect_report.hpp"
 #include "special_buildings.hpp"
 
 #include "micropolis.h"
@@ -58,11 +59,69 @@ int check_default_tax()
     return 0;
 }
 
+int index_named(const char *name)
+{
+    for (int i = 0; i < special_building_count(); ++i) {
+        if (std::string(special_building(i).name) == name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void run_ticks(CitySession &city, int ticks)
+{
+    city.set_simulation_paused(false);
+    for (int i = 0; i < ticks; ++i) {
+        city.tick();
+        if (city.budget_pending()) {
+            city.commit_pending_budget();
+        }
+        (void)city.take_budget_request();
+    }
+}
+
+// A powered casino on a road, with nobody living anywhere: the Inspect
+// card says Idle and gives one note.
+int check_idle_card()
+{
+    CitySession city;
+    city.new_city(flat_spec("Idle Town", CitySession::kLevelEasy));
+    city.set_auto_bulldoze(true);
+    city.set_disasters(false);
+    city.use_tool(TOOL_COALPOWER, 50, 50);
+    city.drag_tool(TOOL_WIRE, 51, 53, 55, 53);
+    city.drag_tool(TOOL_ROAD, 54, 57, 58, 57);
+    const int casino = index_named("Casino");
+    if (casino < 0 || !city.place_special(casino, 56, 55)) {
+        return fail(10, "could not place the casino for the idle check");
+    }
+    run_ticks(city, 400);
+    const CitySession::InspectFacts facts = city.inspect_facts(56, 55);
+    const inspect_report::Report report = inspect_report::make(facts.facts);
+    if (facts.facts.power != 1 || !facts.facts.access) {
+        std::fprintf(stderr, "power %d access %d\n", facts.facts.power, static_cast<int>(facts.facts.access));
+        return fail(11, "the idle-check casino has no power or no road");
+    }
+    if (report.status != "Idle" || facts.notes.size() != 1 ||
+        facts.notes[0] != "No income: no residents within 16 tiles") {
+        std::fprintf(stderr, "status '%s' notes %zu\n", report.status.c_str(), facts.notes.size());
+        for (const std::string &note : facts.notes) {
+            std::fprintf(stderr, "  note '%s'\n", note.c_str());
+        }
+        return fail(12, "an income building with no residents is not Idle with one note");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
 {
     if (const int r = check_default_tax()) {
+        return r;
+    }
+    if (const int r = check_idle_card()) {
         return r;
     }
     std::puts("review_nov18b ok");
