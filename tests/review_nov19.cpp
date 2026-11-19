@@ -6,6 +6,8 @@
 
 #include "city_session.hpp"
 #include "messages.hpp"
+#include "civic.hpp"
+#include "scenario_sidecar.hpp"
 #include "placement_hint.hpp"
 #include "tools.hpp"
 
@@ -345,6 +347,51 @@ int check_boston_goal()
     return 0;
 }
 
+// #12: a city loaded without its sidecar knows the milestones it has
+// already reached, and announces none of them.
+int check_load_without_sidecar()
+{
+    const std::string path = "/tmp/lunduke-review-nov19-nosidecar.cty";
+    std::remove(path.c_str());
+    std::remove(scenario_sidecar_path(path).c_str());
+    std::int64_t people = 0;
+    {
+        CitySession source;
+        if (!source.load_scenario(SC_HAMBURG)) {
+            return fail(80, "could not load a scenario city for the sidecar check");
+        }
+        // One step of the sim starts a new scan, which clears the live
+        // census: a save made then stores no population, like a classic
+        // save or one made at that moment of the month.
+        source.set_speed(3);
+        source.set_simulation_paused(false);
+        source.tick();
+        if (!source.save_city_as(path)) {
+            return fail(80, "could not save a scenario city for the sidecar check");
+        }
+        people = source.evaluation().population;
+    }
+    std::remove(scenario_sidecar_path(path).c_str());
+    if (people < 10000) {
+        std::fprintf(stderr, "people %lld\n", static_cast<long long>(people));
+        return fail(81, "the sidecar check city is too small to test");
+    }
+    CitySession loaded;
+    if (!loaded.load_city(path)) {
+        return fail(82, "the city without a sidecar did not load");
+    }
+    const civic::Ledger &ledger = loaded.ledger();
+    if (!ledger.hit[civic::Town].earned || !ledger.hit[civic::City].earned || !ledger.hit[civic::Powered].earned ||
+        !ledger.hit[civic::City].before_start) {
+        return fail(83, "a city loaded without a sidecar did not mark its milestones as already reached");
+    }
+    if (!loaded.note_civic_month(true).empty()) {
+        return fail(84, "a city loaded without a sidecar announced a milestone it already had");
+    }
+    std::remove(path.c_str());
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -368,6 +415,9 @@ int main()
         return r;
     }
     if (const int r = check_boston_goal()) {
+        return r;
+    }
+    if (const int r = check_load_without_sidecar()) {
         return r;
     }
     std::puts("review_nov19 ok");

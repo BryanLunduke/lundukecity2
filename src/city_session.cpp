@@ -1093,11 +1093,14 @@ bool CitySession::load_city(const std::string &path)
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
     read_scenario_sidecar(path);
-    if (!ledger_from_file_) {
-        catch_up_ledger(false);
-    }
     recount_population_from_map();
     refresh_loaded_meters();
+    // Review nov19 #12: catch up after the recount, not before. A city with
+    // no sidecar (a classic save, a copied .cty) used to catch up on a
+    // stale census of 0, so the next month toasted Town and its first Year
+    // in Review said it grew into a city. A sidecar ledger is caught up as
+    // well, silently; award() skips what it already has.
+    catch_up_ledger(false);
     arm_eval_baseline();
     restore_loaded_eval();
     if (kind == CityFileKind::Incomplete) {
@@ -2545,6 +2548,14 @@ bool CitySession::powered_homes() const
 void CitySession::catch_up_ledger(bool announce)
 {
     note_civic_month(announce);
+    if (!announce && ready_) {
+        // A loaded town had power to grow that big, even if a blackout or
+        // the recount leaves no powered home this month.
+        const std::int64_t population = evaluation().population;
+        if (civic::population_milestone(population) >= civic::Town) {
+            civic::note_powered(ledger_, true, calendar_year(), calendar_month(), false);
+        }
+    }
 }
 
 std::vector<int> CitySession::note_civic_month(bool announce)
