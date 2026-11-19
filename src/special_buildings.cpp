@@ -91,8 +91,10 @@ constexpr SpecialBuilding kBuildings[] = {
      "Sharply raises nearby land value and local crime. Pays up to $300 a year with power, a road and 2,000 residents "
      "within 16 tiles. Nearby attractions share them. A police station nearby matters",
      8, 100, 0, 2, 3},
-    {55, "Amusement Park", "amusement", "amusement", 100, 200, 3, 3, 6, 96,
-     "Sharply raises nearby land value. Pays up to $200 a year with power, a road and 2,000 residents within 16 "
+    // Review nov18b #2: the same +48 as the other $100 landmarks; its
+    // income is what sets it apart.
+    {55, "Amusement Park", "amusement", "amusement", 100, 200, 3, 3, 6, 48,
+     "Raises nearby land value while powered. Pays up to $200 a year with power, a road and 2,000 residents within 16 "
      "tiles. Nearby attractions share them", 0, 0, 0, 2, 3},
     // Prison: the land-value dip (-16 in 6 tiles) is smaller than the crime
     // cut (-40 in 8 tiles). Crime is 128 - land value + density - police,
@@ -584,6 +586,17 @@ bool crime_service_ready(const Micropolis *sim, int index, int center_x, int cen
         return false;
     }
     return true;
+}
+
+// A landmark that uses electricity only lifts land value (or draws a crowd
+// and its crime) while the power scan powers its centre. An open-air one
+// (Big Park, Fountain) always works. Review nov18b #2/#5.
+bool landmark_running(const Micropolis *sim, int index, int center_x, int center_y)
+{
+    if (kBuildings[index].open_air) {
+        return true;
+    }
+    return in_bounds(center_x, center_y) && (sim->map[center_x][center_y] & PWRBIT) != 0;
 }
 
 bool explosion_tile(int tile)
@@ -1154,6 +1167,11 @@ void boost_special_land_value(Micropolis *sim)
             if (building.land_bonus == 0 || building.land_radius <= 0) {
                 continue;
             }
+            // A dip (the Prison) stays while the building stands; a lift
+            // needs the building to be running.
+            if (building.land_bonus > 0 && !landmark_running(sim, index, x, y)) {
+                continue;
+            }
             const int x0 = (x - building.land_radius) / sim->landValueMap.MAP_BLOCKSIZE;
             const int y0 = (y - building.land_radius) / sim->landValueMap.MAP_BLOCKSIZE;
             const int x1 = (x + building.land_radius) / sim->landValueMap.MAP_BLOCKSIZE;
@@ -1201,6 +1219,9 @@ void boost_special_crime(Micropolis *sim)
                 continue;
             }
             if (building.crime_bonus < 0 && !crime_service_ready(sim, index, x, y)) {
+                continue;
+            }
+            if (building.crime_bonus > 0 && !landmark_running(sim, index, x, y)) {
                 continue;
             }
             const int x0 = (x - building.crime_radius) / block;

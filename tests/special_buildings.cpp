@@ -37,6 +37,15 @@ bool is_rubble(int raw)
     return (raw & LOMASK) == RUBBLE;
 }
 
+// The test map has no plant, so the power scan clears the zoo's power bit
+// every pass. The zoo lifts land value only while powered (review nov18b
+// #5), so this hook stands in for a wired grid before the real boost.
+void powered_zoo_land(Micropolis *sim)
+{
+    sim->map[10][10] |= PWRBIT;
+    boost_special_land_value(sim);
+}
+
 } // namespace
 
 int main()
@@ -106,6 +115,12 @@ int main()
     sim.landValueMap.set(zoo_block_x, zoo_block_y, 230);
     sim.landValueMap.set(far_x, far_y, 15);
     sim.landValueMap.set(open_x, open_y, 0);
+    // Review nov18b #5: the zoo only lifts land value while powered.
+    boost_special_land_value(&sim);
+    if (sim.landValueMap.get(zoo_block_x, zoo_block_y) != 230) {
+        return fail(49, "an unpowered zoo raised land value");
+    }
+    sim.map[10][10] |= PWRBIT;
     boost_special_land_value(&sim);
     if (sim.landValueMap.get(zoo_block_x, zoo_block_y) != 250 ||
         sim.landValueMap.get(far_x, far_y) != 15 ||
@@ -140,7 +155,7 @@ int main()
         std::fprintf(stderr, "plain land %d steady %d\n", plain, steady);
         return fail(37, "land value around the zoo did not settle");
     }
-    sim.specialLandFn = boost_special_land_value;
+    sim.specialLandFn = powered_zoo_land;
     int boosted = plain;
     for (int i = 0; i < 600 && boosted == plain; ++i) {
         sim.simTick();

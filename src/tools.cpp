@@ -37,7 +37,7 @@ const ToolDef kTools[] = {
      SPECIAL_MICRONUKE},
     // Special buildings
     {kSpecialEngineId, "Zoo", 100, "Zoo: $100. Raises nearby land value", SPECIAL_ZOO},
-    {kSpecialEngineId, "Amusement Park", 100, "Amusement Park: $100. Raises land value. Up to $200 a year from nearby residents", SPECIAL_AMUSEMENT},
+    {kSpecialEngineId, "Amusement Park", 100, "Amusement Park: $100. Raises land value with power. Up to $200 a year from nearby residents", SPECIAL_AMUSEMENT},
     {kSpecialEngineId, "Casino", 100, "Casino: $100. Raises land value and crime. Up to $300 a year from nearby residents", SPECIAL_CASINO},
     {TOOL_STADIUM, "Stadium", 5000, "Stadium: $5,000"},
     {kSpecialEngineId, "Marina", 1000, "Marina: $1,000. Raises land value widely. Up to $100 a year. The south side is the dock", SPECIAL_MARINA},

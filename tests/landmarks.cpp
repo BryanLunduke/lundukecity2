@@ -172,13 +172,13 @@ int main()
     if (special_annual_income(&books) != 300 || !special_income_at(&books, 20, 20).capped ||
         special_income_at(&books, 20, 20).dollars != 180 || special_income_at(&books, 10, 20).dollars != 120) {
         std::fprintf(stderr, "capped income %d\n", special_annual_income(&books));
-        return fail(25, "the attraction income cap did not hold at its floor");
+        return fail(92, "the attraction income cap did not hold at its floor");
     }
     // A $2,000 tax year lifts the cap to 40%, $800: both pay in full.
     books.taxFund = 2000;
     if (special_annual_income(&books) != 500 || special_income_at(&books, 20, 20).capped) {
         std::fprintf(stderr, "uncapped income %d\n", special_annual_income(&books));
-        return fail(26, "the attraction income cap ignored the tax income");
+        return fail(93, "the attraction income cap ignored the tax income");
     }
     books.taxFund = 0;
     const long before = static_cast<long>(books.totalFunds);
@@ -214,6 +214,15 @@ int main()
     if (!place_special_building(&crime, casino, 30, 30, error)) {
         return fail(18, "the casino could not be placed for the crime check");
     }
+    // Review nov18b #2: an unpowered casino draws no crowd and no crime.
+    crime.crimeRateMap.clear();
+    crime.policeStationMap.clear();
+    crime.crimeRateMap.worldSet(30, 30, 20);
+    boost_special_crime(&crime);
+    if (crime.crimeRateMap.worldGet(30, 30) != 20) {
+        return fail(94, "an unpowered casino raised crime");
+    }
+    crime.map[30][30] |= PWRBIT;
     crime.crimeRateMap.clear();
     crime.policeStationMap.clear();
     const int sample_x = 30;

@@ -260,6 +260,21 @@ int main()
     land.landValueMap.set(fountain_x, fountain_y, 100);
     land.landValueMap.set(open_x, open_y, 40);
     land.landValueMap.set(prison_x, prison_y + 8, 10);
+    // Review nov18b #2/#5: an unpowered zoo or marina lifts nothing.
+    boost_special_land_value(&land);
+    if (land.landValueMap.get(zoo_x, zoo_y) != 100 || land.landValueMap.get(marina_x, marina_y) != 100) {
+        std::fprintf(stderr, "unpowered zoo %d marina %d\n", land.landValueMap.get(zoo_x, zoo_y),
+                     land.landValueMap.get(marina_x, marina_y));
+        return fail(99, "an unpowered zoo or marina raised land value");
+    }
+    land.landValueMap.set(zoo_x, zoo_y, 100);
+    land.landValueMap.set(prison_x, prison_y, 100);
+    land.landValueMap.set(marina_x, marina_y, 100);
+    land.landValueMap.set(fountain_x, fountain_y, 100);
+    land.landValueMap.set(open_x, open_y, 40);
+    land.landValueMap.set(prison_x, prison_y + 8, 10);
+    land.map[10][10] |= PWRBIT;
+    land.map[36][10] |= PWRBIT;
     boost_special_land_value(&land);
     if (land.landValueMap.get(zoo_x, zoo_y) != 148 || land.landValueMap.get(marina_x, marina_y) != 164) {
         std::fprintf(stderr, "zoo %d marina %d\n", land.landValueMap.get(zoo_x, zoo_y),
