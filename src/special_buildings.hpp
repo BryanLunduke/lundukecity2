@@ -202,6 +202,10 @@ std::string special_status_text(int index);
 // Same line, plus the unlock or cap sentence when the city cannot buy it.
 std::string special_status_text(const Micropolis *sim, int index);
 
+// True when the special at this centre is doing its job: intact, powered
+// unless open air, and touching a road when its row needs one.
+bool special_effect_active(const Micropolis *sim, int center_x, int center_y);
+
 // True when the footprint around a center tile is still the building we placed.
 bool special_building_intact(const Micropolis *sim, int center_x, int center_y);
 

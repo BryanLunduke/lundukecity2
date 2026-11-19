@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -114,6 +115,78 @@ int check_idle_card()
     return 0;
 }
 
+bool has_note(const std::vector<std::string> &notes, const std::string &want)
+{
+    for (const std::string &note : notes) {
+        if (note == want) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void dump_notes(const char *what, const std::vector<std::string> &notes)
+{
+    std::fprintf(stderr, "%s:\n", what);
+    for (const std::string &note : notes) {
+        std::fprintf(stderr, "  '%s'\n", note.c_str());
+    }
+}
+
+// #8: the landmarks without income say what they do (or why they don't).
+int check_landmark_notes()
+{
+    CitySession city;
+    city.new_city(flat_spec("Note Town", CitySession::kLevelEasy));
+    city.set_auto_bulldoze(true);
+    city.set_disasters(false);
+    city.use_tool(TOOL_COALPOWER, 50, 50);
+    city.drag_tool(TOOL_WIRE, 51, 53, 55, 53);
+    city.drag_tool(TOOL_ROAD, 54, 58, 62, 58);
+    if (!city.place_special(index_named("Library"), 56, 55) || !city.place_special(index_named("Prison"), 59, 55) ||
+        !city.place_special(index_named("Big Park"), 70, 70) || !city.place_special(index_named("Zoo"), 80, 70) ||
+        !city.place_special(index_named("Fountain"), 90, 70)) {
+        return fail(20, "could not place the landmarks for the note check");
+    }
+    run_ticks(city, 400);
+    const std::vector<std::string> library = city.inspect_facts(56, 55).notes;
+    if (!has_note(library, "Land value +19% within 6 tiles") || !has_note(library, "Crime \u22129% within 8 tiles")) {
+        dump_notes("library", library);
+        return fail(21, "the powered library card does not list its land value and crime effects");
+    }
+    const std::vector<std::string> prison = city.inspect_facts(59, 55).notes;
+    if (!has_note(prison, "Crime \u221216% within 8 tiles") || !has_note(prison, "Takes 15% off crime across the city") ||
+        !has_note(prison, "Land value \u22126% within 6 tiles")) {
+        dump_notes("prison", prison);
+        return fail(22, "the working prison card does not list its effects");
+    }
+    const std::vector<std::string> park = city.inspect_facts(70, 70).notes;
+    if (park.size() != 1 || park[0] != "Land value +19% within 6 tiles") {
+        dump_notes("big park", park);
+        return fail(23, "the Big Park card does not give its one effect line");
+    }
+    const std::vector<std::string> zoo = city.inspect_facts(80, 70).notes;
+    if (zoo.size() != 1 || zoo[0] != "No effect without power") {
+        dump_notes("zoo", zoo);
+        return fail(24, "the unpowered zoo card does not say it does nothing");
+    }
+    const std::vector<std::string> fountain = city.inspect_facts(90, 70).notes;
+    if (!has_note(fountain, "Land value +6% within 4 tiles") || !has_note(fountain, "Fountains close together add less")) {
+        dump_notes("fountain", fountain);
+        return fail(25, "the fountain card does not give its effect lines");
+    }
+    // No road: the prison says what it is missing.
+    for (int x = 54; x <= 62; ++x) {
+        city.use_tool(TOOL_BULLDOZER, x, 58);
+    }
+    const std::vector<std::string> cut_off = city.inspect_facts(59, 55).notes;
+    if (cut_off.size() != 1 || cut_off[0] != "No effect until it has power and a road") {
+        dump_notes("prison without a road", cut_off);
+        return fail(26, "the prison with no road does not say why it does nothing");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -122,6 +195,9 @@ int main()
         return r;
     }
     if (const int r = check_idle_card()) {
+        return r;
+    }
+    if (const int r = check_landmark_notes()) {
         return r;
     }
     std::puts("review_nov18b ok");

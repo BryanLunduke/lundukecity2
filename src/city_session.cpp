@@ -2864,7 +2864,45 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
         notes.push_back("Supplies 1/9 of a nuclear plant's power (about " +
                         std::to_string(kMicroNuclearPowerTiles) + " tiles)");
         notes.push_back("Cannot melt down. No pollution");
-    } else if (building.annual_income > 0) {
+    } else if (building.annual_income <= 0) {
+        // Review nov18b #8: the landmarks without income say what they do,
+        // in the same percent the bars use.
+        int found = -1;
+        bool intact = true;
+        special_at(&engine_->sim, x, y, found, intact);
+        if (!intact) {
+            return notes;
+        }
+        if (!special_effect_active(&engine_->sim, cx, cy)) {
+            notes.push_back(building.needs_road ? "No effect until it has power and a road" : "No effect without power");
+            return notes;
+        }
+        auto signed_percent = [](int value) {
+            const int percent = inspect_report::map_percent(value < 0 ? -value : value);
+            return std::string(value < 0 ? "\u2212" : "+") + std::to_string(percent) + "%";
+        };
+        if (building.land_bonus > 0) {
+            notes.push_back("Land value " + signed_percent(building.land_bonus) + " within " +
+                            std::to_string(building.land_radius) + " tiles");
+        }
+        if (building.crime_bonus != 0 && building.crime_radius > 0) {
+            notes.push_back("Crime " + signed_percent(building.crime_bonus) + " within " +
+                            std::to_string(building.crime_radius) + " tiles");
+        }
+        if (building.city_crime_percent > 0) {
+            notes.push_back("Takes " + std::to_string(building.city_crime_percent) + "% off crime across the city");
+        }
+        if (building.city_land_bonus > 0) {
+            notes.push_back("Land value " + signed_percent(building.city_land_bonus) + " across the city");
+        }
+        if (building.land_bonus < 0) {
+            notes.push_back("Land value " + signed_percent(building.land_bonus) + " within " +
+                            std::to_string(building.land_radius) + " tiles");
+        }
+        if (building.center_tile == SPECIAL_FOUNTAIN) {
+            notes.push_back("Fountains close together add less");
+        }
+    } else {
         const SpecialIncome income = special_income_at(&engine_->sim, cx, cy);
         if (income.intact) {
             const std::string full = with_commas(income.full);

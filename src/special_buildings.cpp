@@ -1568,6 +1568,19 @@ std::string special_query_at(const Micropolis *sim, int tile_x, int tile_y)
     return text;
 }
 
+bool special_effect_active(const Micropolis *sim, int center_x, int center_y)
+{
+    if (sim == nullptr || !in_bounds(center_x, center_y)) {
+        return false;
+    }
+    const int raw = static_cast<int>(sim->map[center_x][center_y]);
+    const int index = (raw & ZONEBIT) != 0 ? special_index_for_tile(raw & LOMASK) : -1;
+    if (index < 0 || !special_building_intact(sim, center_x, center_y)) {
+        return false;
+    }
+    return landmark_running(sim, index, center_x, center_y) && crime_service_ready(sim, index, center_x, center_y);
+}
+
 bool special_at(const Micropolis *sim, int tile_x, int tile_y, int &index, bool &intact)
 {
     int cx = 0;
