@@ -53,6 +53,9 @@
 
 namespace {
 
+// Status line tool text, cut to fit (defined with fit_text below).
+std::string fit_tool_line(cairo_t *cr, const char *font, const std::string &text, int room);
+
 const char *speed_word(int speed)
 {
     switch (speed) {
@@ -3927,11 +3930,14 @@ void Shell::draw(cairo_t *cr)
         }
         const int status_w = width_of(ui_font(), status);
         int right_x = win_w_ - 8;
-        const int tool_w = tool_text.empty() ? 0 : width_of(bold_font(), tool_text);
-        const bool tool_fits = tool_w > 0 && status_w + 24 + tool_w <= win_w_ - 16;
+        const int tool_room = win_w_ - 16 - status_w - 24;
+        const std::string tool_shown =
+            tool_text.empty() || tool_room < dp(160) ? std::string() : fit_tool_line(cr, bold_font(), tool_text, tool_room);
+        const int tool_w = tool_shown.empty() ? 0 : width_of(bold_font(), tool_shown);
+        const bool tool_fits = tool_w > 0;
         if (tool_fits) {
             right_x -= tool_w;
-            paint_text(cr, bold_font(), tool_text, right_x, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, -1);
+            paint_text(cr, bold_font(), tool_shown, right_x, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, -1);
             right_x -= dp(20);
         }
         std::string hint_line = hint;
@@ -5262,6 +5268,21 @@ std::string fit_text(cairo_t *cr, const char *font, std::string text, int room)
     return text.empty() ? std::string() : text + dots;
 }
 
+// The status line's tool text: the whole line when it fits, then without
+// its "  [key]" label, then cut with an ellipsis.
+std::string fit_tool_line(cairo_t *cr, const char *font, const std::string &text, int room)
+{
+    if (measure_text(cr, font, text, -1).width <= room) {
+        return text;
+    }
+    std::string bare = text;
+    const std::size_t key = bare.rfind("  [");
+    if (key != std::string::npos && !bare.empty() && bare.back() == ']') {
+        bare.erase(key);
+    }
+    return fit_text(cr, font, bare, room);
+}
+
 // Pause, slow, normal and fast drawn as shapes so no font needs the glyphs.
 void speed_glyph(cairo_t *cr, int speed, double cx, double cy, double size, const SlateInk &ink)
 {
@@ -5509,11 +5530,15 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     const double text_y = y + (status_h_ - measure_text(cr, ui_font(), "Ag", -1).height) / 2.0;
     double right = win_w_ - dp(10);
     // Right: the tool and its price, then what a click does.
+    // A long tool line (Marina's dock note, Prison's rules) used to vanish
+    // past half the window. It may take most of the line now, giving up its
+    // key label first and then its tail.
     if (!tool_text.empty()) {
-        const int w = measure_text(cr, bold_font(), tool_text, -1).width;
-        if (w < win_w_ / 2) {
+        const std::string shown = fit_tool_line(cr, bold_font(), tool_text, static_cast<int>(win_w_ * 0.62));
+        if (!shown.empty()) {
+            const int w = measure_text(cr, bold_font(), shown, -1).width;
             right -= w;
-            slate_text(cr, bold_font(), tool_text, right, text_y, kSlateGold);
+            slate_text(cr, bold_font(), shown, right, text_y, kSlateGold);
             right -= dp(18);
         }
     }
@@ -5967,14 +5992,31 @@ void Shell::draw_handheld_hud(cairo_t *cr)
                     caption = std::string(tool->name) + ": " + detail;
                 }
             }
+            // Under the name and price, what the tool does: the hint's text
+            // after its price ("Raises land value widely. Up to $100 a
+            // year..."). The handheld has no status line to carry it.
+            std::string about;
+            if (tool != nullptr && tool->hint != nullptr && caption.find(": ") == std::string::npos) {
+                const std::string hint = tool->hint;
+                const std::size_t cut = hint.find(". ");
+                if (cut != std::string::npos) {
+                    about = hint.substr(cut + 2);
+                }
+            }
             const TextMetrics m = measure_text(cr, bold_font(), caption, -1);
-            const double cw = m.width + dp(16);
-            const double ch = m.height + dp(8);
+            const int about_room = static_cast<int>(std::max(1.0, std::min(win_w_ - dp(32) * 1.0, dp(560) * 1.0)));
+            const TextMetrics am = about.empty() ? TextMetrics{} : measure_text(cr, ui_font(), about, about_room);
+            const double cw = std::max(static_cast<double>(m.width), static_cast<double>(am.width)) + dp(16);
+            const double ch = m.height + (about.empty() ? 0.0 : am.height + dp(2)) + dp(8);
             double cx = xs[tool_index_] + ws[tool_index_] / 2.0 - cw / 2.0;
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
             slate_text(cr, bold_font(), caption, cx + dp(8), cy + dp(4), kSlateGold);
+            if (!about.empty()) {
+                paint_text(cr, ui_font(), about, cx + dp(8), cy + dp(4) + m.height + dp(2), kSlateInk.r, kSlateInk.g,
+                           kSlateInk.b, about_room);
+            }
         }
     }
     // Button hints along the bottom edge.
