@@ -201,6 +201,68 @@ int check_tax_growth()
     return 0;
 }
 
+// #6: auto budget that the engine switched off for lack of money comes
+// back on, with the player's funding, once the treasury has recovered.
+// A player's own switch-off stays off.
+int check_auto_budget_recovers()
+{
+    auto owned = std::make_unique<Micropolis>();
+    Micropolis &sim = *owned;
+    sim.generateSomeCity(3);
+    std::vector<Sent> heard;
+    listen(sim, heard);
+    auto short_year = [&sim]() {
+        sim.setAutoBudget(true);
+        sim.roadFund = 400;
+        sim.policeFund = 300;
+        sim.fireFund = 300;
+        sim.roadPercent = 1.0f;
+        sim.policePercent = 0.0f;
+        sim.firePercent = 0.1f;
+        sim.roadPercentWanted = 1.0f;
+        sim.policePercentWanted = 1.0f;
+        sim.firePercentWanted = 1.0f;
+        // What budget.cpp does when the year cannot be paid.
+        sim.setAutoBudget(false);
+        sim.autoBudgetForcedOff = true;
+    };
+    short_year();
+    sim.taxFund = 500;
+    sim.setFunds(1000);
+    sim.restoreWantedFunding();
+    if (sim.autoBudget || sim.policePercent != 0.0f) {
+        return fail(30, "auto budget came back before the treasury could pay twice the request");
+    }
+    sim.setFunds(1600);
+    sim.restoreWantedFunding();
+    if (!sim.autoBudget || sim.autoBudgetForcedOff || sim.policePercent != 1.0f || sim.firePercent != 1.0f ||
+        count_of(heard, MESSAGE_AUTO_BUDGET_RESTORED) != 1) {
+        return fail(31, "auto budget and full funding did not come back once funds recovered");
+    }
+    if (message_for_number(MESSAGE_AUTO_BUDGET_RESTORED).find("Auto budget is back on") == std::string::npos) {
+        return fail(32, "the auto budget notice has no text");
+    }
+    // The player turned it off (CitySession::set_auto_budget clears the
+    // engine's flag): it stays off, whatever the treasury.
+    short_year();
+    sim.autoBudgetForcedOff = false;
+    sim.setFunds(100000);
+    sim.restoreWantedFunding();
+    if (sim.autoBudget || sim.policePercent != 0.0f) {
+        return fail(33, "auto budget came back after the player switched it off");
+    }
+    // Auto budget left on with a cut from an earlier short year: the cut
+    // is lifted without a notice.
+    short_year();
+    sim.setAutoBudget(true);
+    heard.clear();
+    sim.restoreWantedFunding();
+    if (sim.policePercent != 1.0f || count_of(heard, MESSAGE_AUTO_BUDGET_RESTORED) != 0) {
+        return fail(34, "auto budget kept a short year's cut after the money came back");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -209,6 +271,9 @@ int main()
         return r;
     }
     if (const int r = check_tax_growth()) {
+        return r;
+    }
+    if (const int r = check_auto_budget_recovers()) {
         return r;
     }
     std::puts("review_nov19 ok");

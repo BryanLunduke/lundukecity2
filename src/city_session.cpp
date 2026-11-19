@@ -1016,6 +1016,10 @@ void raise_unspecified_funding(Micropolis &sim)
     raise(sim.roadPercent);
     raise(sim.policePercent);
     raise(sim.firePercent);
+    sim.roadPercentWanted = sim.roadPercent;
+    sim.policePercentWanted = sim.policePercent;
+    sim.firePercentWanted = sim.firePercent;
+    sim.autoBudgetForcedOff = false;
     sim.roadEffect = static_cast<Quad>(sim.roadPercent * static_cast<float>(MAX_ROAD_EFFECT));
     sim.policeEffect = static_cast<Quad>(sim.policePercent * static_cast<float>(MAX_POLICE_STATION_EFFECT));
     sim.fireEffect = static_cast<Quad>(sim.firePercent * static_cast<float>(MAX_FIRE_STATION_EFFECT));
@@ -1474,6 +1478,9 @@ int CitySession::game_month_index() const
 
 void CitySession::set_auto_budget(bool on)
 {
+    // Review nov19 #6: the player's own switch is final; only an engine
+    // switch-off comes back by itself.
+    engine_->sim.autoBudgetForcedOff = false;
     if (engine_->sim.autoBudget == on) {
         return;
     }
@@ -1586,6 +1593,15 @@ void CitySession::set_service_funding(int kind, int percent)
     // Effects wait until the budget window commits. Moving a slider used
     // to drop road and coverage before any money moved.
     *slot = fraction;
+    // Review nov19 #6: this is the level auto budget asks for again after
+    // a short year.
+    if (kind == 1) {
+        sim.policePercentWanted = fraction;
+    } else if (kind == 2) {
+        sim.firePercentWanted = fraction;
+    } else {
+        sim.roadPercentWanted = fraction;
+    }
     mark_dirty();
 }
 

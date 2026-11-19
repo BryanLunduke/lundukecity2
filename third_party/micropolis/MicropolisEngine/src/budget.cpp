@@ -81,7 +81,44 @@ void Micropolis::initFundingLevel()
     policeValue = 0;
     roadPercent = 1.0;
     roadValue = 0;
+    roadPercentWanted = 1.0f;
+    firePercentWanted = 1.0f;
+    policePercentWanted = 1.0f;
+    autoBudgetForcedOff = false;
     mustDrawBudget = 1;
+}
+
+
+/**
+ * Review nov19 #6: a short year used to leave police and fire at the cut
+ * share for good, even with auto budget on and the treasury full again
+ * (the cut percent became next year's request). With auto budget on, or
+ * switched off by the engine for lack of money, each year asks for the
+ * funding the player chose again once taxes plus cash can pay all of it.
+ * If the engine had switched auto budget off, it comes back on and the
+ * player is told.
+ */
+void Micropolis::restoreWantedFunding()
+{
+    if (!autoBudget && !autoBudgetForcedOff) {
+        return;
+    }
+    const Quad want = (Quad)(roadFund * roadPercentWanted) + (Quad)(fireFund * firePercentWanted) +
+                      (Quad)(policeFund * policePercentWanted);
+    // Only once the treasury has recovered: this year's taxes plus cash
+    // must cover two years of the full request, so a city that just
+    // scraped through is not sent straight back to $0.
+    if ((Quad)taxFund + (Quad)totalFunds < want * 2) {
+        return;
+    }
+    roadPercent = roadPercentWanted;
+    firePercent = firePercentWanted;
+    policePercent = policePercentWanted;
+    if (autoBudgetForcedOff) {
+        autoBudgetForcedOff = false;
+        setAutoBudget(true);
+        sendMessage(MESSAGE_AUTO_BUDGET_RESTORED, NOWHERE, NOWHERE, false, true);
+    }
 }
 
 /** Game decided to show the budget window */
@@ -505,6 +542,7 @@ noMoney:
         } else {
 
             setAutoBudget(false); /* force autobudget */
+            autoBudgetForcedOff = true;
             mustUpdateOptions = true;
             sendMessage(MESSAGE_NO_MONEY, NOWHERE, NOWHERE, false, true);
             goto noMoney;

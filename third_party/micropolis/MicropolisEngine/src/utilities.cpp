@@ -403,6 +403,9 @@ void Micropolis::setEnableDisasters(bool value)
 void Micropolis::setAutoBudget(bool value)
 {
     autoBudget = value;
+    if (value) {
+        autoBudgetForcedOff = false;
+    }
     mustUpdateOptions = true;
 }
 

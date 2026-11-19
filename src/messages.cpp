@@ -73,6 +73,7 @@ const char *kMessages[] = {
     "Underwater wire: $25",
     "No place to land a power line.",
     "Fire spreading. Send help.",
+    "Funds recovered. Auto budget is back on and services are fully funded.",
 };
 
 const char *kCategories[] = {

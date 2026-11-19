@@ -981,6 +981,9 @@ void Micropolis::collectTax()
         // no residents and a tax of $0. Auto budget still applies at once when
         // doBudgetNow is called directly; the tax year itself is the cover
         // the player sees before the sliders.
+        // Review nov19 #6: before the window opens, ask for the player's
+        // funding again if auto budget is on and the city can pay it.
+        restoreWantedFunding();
         const bool savedAuto = autoBudget;
         autoBudget = false;
         doBudget();

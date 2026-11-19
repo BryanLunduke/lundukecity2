@@ -1822,6 +1822,24 @@ public:
     bool fireFundingTouched;
     bool policeFundingTouched;
 
+    /**
+     * Funding the player chose on the sliders (1.0 unless they moved one).
+     * A short year scales the live percent down to what the treasury can
+     * pay; with auto budget on, the next year asks for this level again.
+     */
+    float roadPercentWanted;
+    float firePercentWanted;
+    float policePercentWanted;
+
+    /**
+     * True when the engine, not the player, switched auto budget off
+     * because the city could not pay. collectTax turns it back on once
+     * taxes plus cash cover twice the full request again.
+     */
+    bool autoBudgetForcedOff;
+
+    void restoreWantedFunding();
+
     void updateBudget();
 
     void showBudgetWindowAndStartWaiting();
