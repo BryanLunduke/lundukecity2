@@ -717,6 +717,8 @@ void Micropolis::clearCensus()
     poweredZoneCount = 0;
     unpoweredZoneCount = 0;
     firePop = 0;
+    fireSpotX = -1;
+    fireSpotY = -1;
     roadTotal = 0;
     railTotal = 0;
     resPop = 0;
@@ -1117,6 +1119,8 @@ void Micropolis::mapScan(int x1, int x2)
 
                 if (tile >= FIREBASE) {
                     firePop++;
+                    fireSpotX = x;
+                    fireSpotY = y;
                     if (!(getRandom16() & 3)) {
                         doFire(pos);    /* 1 in 4 times */
                     }

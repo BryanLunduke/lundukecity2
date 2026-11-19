@@ -1190,6 +1190,27 @@ public:
     short firePop;
 
     /**
+     * A burning tile from the last census, or -1. The "Fire spreading"
+     * notice points here.
+     */
+    short fireSpotX;
+    short fireSpotY;
+
+    /** Easy cities have no random disasters for this many years. */
+    static const int EASY_DISASTER_GRACE_YEARS = 5;
+
+    /** Fires burning at once before "Fire spreading" is sent. */
+    static const int FIRE_SPREADING_TILES = 6;
+
+    /**
+     * True while a fire is big enough for the "Fire spreading" notice,
+     * and the cityTime it was last sent. A new outbreak is reported at
+     * once; one that keeps burning is reminded about once a year.
+     */
+    bool fireSpreading;
+    Quad fireSpreadingNoticeTime;
+
+    /**
      * Number of people in the residential zones.
      *
      * Depends on level of zone development. Wide on purpose: a signed
@@ -1847,6 +1868,8 @@ public:
     void fireBomb();
 
   private:
+
+    friend struct Nov19DisasterProbe;
 
     void doDisasters();
 

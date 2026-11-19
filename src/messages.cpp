@@ -72,6 +72,7 @@ const char *kMessages[] = {
     "Rail bridge: $100",
     "Underwater wire: $25",
     "No place to land a power line.",
+    "Fire spreading. Send help.",
 };
 
 const char *kCategories[] = {
@@ -139,6 +140,7 @@ bool listed(const std::string &text, const char *const *rows, int count)
 
 const char *kDisasters[] = {
     "Fire reported.",
+    "Fire spreading. Send help.",
     "A monster has been sighted.",
     "A tornado has been reported.",
     "An earthquake has been reported.",

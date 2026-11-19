@@ -109,7 +109,15 @@ void Micropolis::doDisasters()
         x = LEVEL_EASY;
     }
 
-    if (!getRandom(DisChance[x])) {
+    // Review nov19 #4: an Easy city gets five calm years to find its feet.
+    // The roll still happens so the random sequence after the grace years
+    // is the same as before.
+    const bool strike = !getRandom(DisChance[x]);
+    if (x == LEVEL_EASY && cityTime < EASY_DISASTER_GRACE_YEARS * 48) {
+        return;
+    }
+
+    if (strike) {
         switch (getRandom(8)) {
             case 0:
             case 1:

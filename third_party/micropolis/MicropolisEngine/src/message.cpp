@@ -94,6 +94,22 @@ void Micropolis::sendMessages()
     // micro plants does not need the "build a power plant" nag.
     PowerPop = nuclearPowerPop + coalPowerPop + microNuclearPop;
 
+    // Review nov19 #4: a fire that has caught on (several tiles burning
+    // at once) gets its own notice that points at it: at once when it
+    // catches on, then once a year while it keeps burning. Only the first
+    // tile used to be reported.
+    if ((cityTime & 7) == 0) {
+        if (firePop >= FIRE_SPREADING_TILES && testBounds(fireSpotX, fireSpotY)) {
+            if (!fireSpreading || cityTime - fireSpreadingNoticeTime >= 48) {
+                sendMessage(MESSAGE_FIRE_SPREADING, fireSpotX, fireSpotY, false, true);
+                fireSpreadingNoticeTime = cityTime;
+            }
+            fireSpreading = true;
+        } else {
+            fireSpreading = false;
+        }
+    }
+
     switch (cityTime & 63) {
 
     case 1:
@@ -399,6 +415,7 @@ static bool message_moves_view(short mesgNum)
 {
     switch (mesgNum) {
         case MESSAGE_FIRE_REPORTED:
+        case MESSAGE_FIRE_SPREADING:
         case MESSAGE_MONSTER_SIGHTED:
         case MESSAGE_TORNADO_SIGHTED:
         case MESSAGE_EARTHQUAKE:
@@ -462,6 +479,7 @@ void Micropolis::doMakeSound(int mesgNum, int x, int y)
 
         case MESSAGE_HIGH_CRIME:
         case MESSAGE_FIRE_REPORTED:
+        case MESSAGE_FIRE_SPREADING:
         case MESSAGE_TORNADO_SIGHTED:
         case MESSAGE_EARTHQUAKE:
         case MESSAGE_PLANE_CRASHED:

@@ -540,9 +540,9 @@ inline bool digest_routine(const std::string &text)
 inline bool digest_notable(const std::string &text)
 {
     static const char *keys[] = {
-        "Fire reported", "monster",    "tornado",  "earthquake", "crashed",    "wrecked",
-        "explosion",     "Flooding",   "meltdown", "Riots",      "Firebombing", "reached",
-        "Scenario won",  "Scenario lost", "Blackouts", "out of funds",
+        "Fire reported", "Fire spreading", "monster",  "tornado",       "earthquake", "crashed",
+        "wrecked",       "explosion",      "Flooding", "meltdown",      "Riots",      "Firebombing",
+        "reached",       "Scenario won",   "Scenario lost", "Blackouts", "out of funds",
     };
     for (const char *key : keys) {
         if (text.find(key) != std::string::npos) {

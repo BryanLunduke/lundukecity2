@@ -121,6 +121,10 @@ void Micropolis::init()
 
     // short firePop;
     firePop = 0;
+    fireSpotX = -1;
+    fireSpotY = -1;
+    fireSpreading = false;
+    fireSpreadingNoticeTime = 0;
 
     // Quad resPop. A short wrapped a megalopolis.
     resPop = 0;
