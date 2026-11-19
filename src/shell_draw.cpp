@@ -3864,7 +3864,13 @@ void Shell::draw(cairo_t *cr)
         const double card_w = std::min(static_cast<double>(dp(280)), std::max(120.0, view_w_ * 0.4));
         const double card_h = dp(78);
         const double card_x = view_x_ + view_w_ - hud_right_ - card_w - dp(12);
-        const double card_y = view_y_ + view_h_ - hud_bottom_ - card_h - dp(16);
+        double card_y = view_y_ + view_h_ - hud_bottom_ - card_h - dp(16);
+        if (handheld_ && !menu_.open()) {
+            // Review nov19 #10: clear of the chosen tool's name and price
+            // above the raised quick-bar slot, the same lift draw_toasts
+            // gives the alerts stacked above this card.
+            card_y -= dp(44);
+        }
         if (slate_ || handheld_) {
             draw_slate_milestone(cr, card_x, card_y, card_w, card_h);
         } else {
