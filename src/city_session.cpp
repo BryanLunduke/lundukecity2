@@ -767,7 +767,6 @@ void CitySession::new_city(const NewCitySpec &spec)
     sim.terrainCurveLevel = spec.rivers;
     sim.terrainLakeLevel = spec.lakes;
     sim.terrainTreeLevel = spec.trees;
-    sim.setCityTax(7);
     sim.setAutoBudget(true);
     sim.setAutoBulldoze(true);
     sim.setEnableDisasters(true);
@@ -786,6 +785,9 @@ void CitySession::new_city(const NewCitySpec &spec)
         level = kLevelEasy;
     }
     sim.setGameLevelFunds(static_cast<GameLevel>(level));
+    // Review nov18b #4: the highest rate that does not slow growth on this
+    // level (7/6/5%), so a new city never opens on a Budget warning.
+    sim.setCityTax(static_cast<short>(default_tax(level)));
     // generateSomeCity() already ran setValves at the previous city's
     // level. Store this city's level before the next even sim cycle.
     if (sim.miscHist != nullptr && sim.gameLevel >= LEVEL_FIRST && sim.gameLevel <= LEVEL_LAST) {
@@ -874,6 +876,14 @@ void CitySession::rename_city(const std::string &name)
 int CitySession::tax_growth_effect(int tax, int level)
 {
     return static_cast<int>(Micropolis::taxGrowthEffect(tax, level));
+}
+
+int CitySession::default_tax(int level)
+{
+    if (level < kLevelEasy || level > kLevelHard) {
+        level = kLevelEasy;
+    }
+    return 7 - level;
 }
 
 int CitySession::difficulty() const
