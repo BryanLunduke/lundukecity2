@@ -204,6 +204,17 @@ void Micropolis::commitBudgetPayment()
 }
 
 
+Quad Micropolis::taxGrowthPercent() const
+{
+    if (cityPop <= TAX_GROWTH_FROM_POPULATION) {
+        return 0;
+    }
+    const Quad steps = (cityPop - TAX_GROWTH_FROM_POPULATION) / 1000;
+    const Quad percent = steps * TAX_GROWTH_PERCENT_PER_THOUSAND;
+    return percent > TAX_GROWTH_PERCENT_MAX ? TAX_GROWTH_PERCENT_MAX : percent;
+}
+
+
 Micropolis::BudgetBases Micropolis::projectBudget(short roads, short rails, short policePop, short firePop, Quad pop,
                                                    short landValue, short taxRate) const
 {
@@ -241,6 +252,14 @@ Micropolis::BudgetBases Micropolis::projectBudget(short roads, short rails, shor
     out.fire = (Quad)firePop * 100;
     out.road = (Quad)((roads + (rails * 2)) * RLevels[level]);
     out.tax = (Quad)((((Quad)pop * (Quad)landValue) / 120) * (Quad)taxRate * FLevels[level]);
+    // Review nov19 #5: upkeep grows with every road and station, but the
+    // tax roll flattened out, so a big city could never afford a second
+    // wave of building. A city past 10,000 people (the last evaluation's
+    // cityPop) now collects 2% more per 1,000 people, at most 30% more.
+    const Quad bonus = taxGrowthPercent();
+    if (bonus > 0 && out.tax > 0) {
+        out.tax += out.tax * bonus / 100;
+    }
     if (out.tax < 0) {
         out.tax = 0;
     }

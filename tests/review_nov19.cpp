@@ -174,11 +174,41 @@ int check_easy_disasters()
     return 0;
 }
 
+// #5: a city past 10,000 people collects 2% more tax per 1,000 people,
+// at most 30%; smaller cities are unchanged.
+int check_tax_growth()
+{
+    auto owned = std::make_unique<Micropolis>();
+    Micropolis &sim = *owned;
+    sim.generateSomeCity(3);
+    sim.setGameLevel(LEVEL_MEDIUM);
+    const int pops[] = {0, 10000, 10999, 15000, 25000, 200000};
+    const int expect[] = {0, 0, 0, 10, 30, 30};
+    sim.cityPop = 0;
+    const Quad base = sim.projectBudget(0, 0, 0, 0, 2000, 100, 7).tax;
+    if (base <= 0) {
+        return fail(20, "the tax projection is empty");
+    }
+    for (int i = 0; i < 6; ++i) {
+        sim.cityPop = pops[i];
+        const Quad tax = sim.projectBudget(0, 0, 0, 0, 2000, 100, 7).tax;
+        if (sim.taxGrowthPercent() != expect[i] || tax != base + base * expect[i] / 100) {
+            std::fprintf(stderr, "pop %d percent %d tax %d base %d\n", pops[i], static_cast<int>(sim.taxGrowthPercent()),
+                         static_cast<int>(tax), static_cast<int>(base));
+            return fail(21, "big-city tax growth is not 2% per 1,000 people past 10,000, capped at 30%");
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
 {
     if (const int r = check_easy_disasters()) {
+        return r;
+    }
+    if (const int r = check_tax_growth()) {
         return r;
     }
     std::puts("review_nov19 ok");

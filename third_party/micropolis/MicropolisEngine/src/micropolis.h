@@ -1765,6 +1765,16 @@ public:
         Quad police = 0;
         Quad fire = 0;
     };
+    /**
+     * Extra tax income a big city collects, in percent: from
+     * TAX_GROWTH_FROM_POPULATION people, TAX_GROWTH_PERCENT_PER_THOUSAND
+     * per 1,000 more (cityPop), at most TAX_GROWTH_PERCENT_MAX.
+     */
+    Quad taxGrowthPercent() const;
+    static const int TAX_GROWTH_FROM_POPULATION = 10000;
+    static const int TAX_GROWTH_PERCENT_PER_THOUSAND = 2;
+    static const int TAX_GROWTH_PERCENT_MAX = 30;
+
     BudgetBases projectBudget(short roads, short rails, short policePop, short firePop, Quad pop, short landValue,
                               short taxRate) const;
 
