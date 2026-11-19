@@ -1596,22 +1596,34 @@ void Shell::draw_dialog(cairo_t *cr)
                               new_rivers_ == CitySession::kTerrainOff ? 1 : new_rivers_ == CitySession::kRiversCurvy ? 2 : 0,
                               new_lakes_ == CitySession::kTerrainOff ? 1 : new_lakes_ == CitySession::kLakesMany ? 2 : 0,
                               new_trees_ == CitySession::kTerrainOff ? 1 : new_trees_ == CitySession::kTreesWooded ? 2 : 0};
+            // One grid for the whole page: a label column, then three equal
+            // columns that end at the same right margin as the buttons.
             const double label_w = dp(108);
-            const double choice_w = std::max(static_cast<double>(dp(96)), (dw - 2 * margin - label_w - dp(16)) / 3.0 - dp(6));
+            const double row_h = dp(32);
+            const double row_step = dp(40);
+            const double col_gap = dp(8);
+            const double cols_x = x + margin + label_w;
+            const double cols_w = std::max(1.0, x + dw - margin - cols_x);
+            const double choice_w = std::max(1.0, (cols_w - 2.0 * col_gap) / 3.0);
+            auto col_x = [&](int column) { return cols_x + column * (choice_w + col_gap); };
+            auto row_label = [&](const char *text, double row_y) {
+                const double text_h = static_cast<double>(measure_text(cr, ui_font(), text, -1).height);
+                paint_text(cr, ui_font(), text, x + margin, row_y + (row_h - text_h) / 2.0, theme::kTextR, theme::kTextG,
+                           theme::kTextB, static_cast<int>(label_w));
+            };
             for (int g = 0; g < 5; ++g) {
-                const double gy = block_top + g * dp(40);
-                paint_text(cr, ui_font(), groups[g], x + margin, gy + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
-                           static_cast<int>(label_w));
+                const double gy = block_top + g * row_step;
+                row_label(groups[g], gy);
                 for (int o = 0; o < 3; ++o) {
-                    button(cr, x + margin + label_w + o * (choice_w + dp(6)), gy, choice_w, dp(32), options[g][o],
-                           kChoice + g * 10 + o, false, selected[g] == o);
+                    button(cr, col_x(o), gy, choice_w, row_h, options[g][o], kChoice + g * 10 + o, false, selected[g] == o);
                 }
             }
-            const double seed_y = block_top + 5 * dp(40);
-            paint_text(cr, ui_font(), "Seed", x + margin, seed_y + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(label_w));
-            const double seed_x = x + margin + label_w;
-            const double seed_w = std::min(static_cast<double>(dp(220)), dw - margin - seed_x + x);
+            const double seed_y = block_top + 5 * row_step;
+            row_label("Seed", seed_y);
+            // The seed box spans the first two columns; New terrain, which
+            // rolls a new seed, sits in the third on the same row.
+            const double seed_x = cols_x;
+            const double seed_w = choice_w * 2.0 + col_gap;
             fill(cr, seed_x, seed_y, seed_w, dp(32), 1, 1, 1);
             stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
             push_hot(seed_x, seed_y, seed_w, dp(32), kFieldSeed);
@@ -1645,6 +1657,8 @@ void Shell::draw_dialog(cairo_t *cr)
                             seed_y, seed_w, dp(32));
                 cairo_restore(cr);
             }
+            // After the seed box, so Tab still goes seed, then New terrain.
+            button(cr, col_x(2), seed_y, choice_w, row_h, "New terrain", kNewTerrain, false);
             const int preview_seed = preview_seed_for_field(field_b_, auto_seed_);
             const int preview_key = static_cast<int>(terrain_preview_key(preview_seed, new_island_, new_rivers_, new_lakes_,
                                                                          new_trees_));
@@ -1680,34 +1694,34 @@ void Shell::draw_dialog(cairo_t *cr)
                     cairo_surface_mark_dirty(terrain_preview_);
                 }
             }
-            double preview_y = seed_y + dp(40);
+            double preview_y = seed_y + row_step;
             if (!dialog_error_.empty()) {
-                paint_text(cr, ui_font(), dialog_error_, x + margin, seed_y + dp(34), 0.6, 0.1, 0.1,
-                           static_cast<int>(dw - 2 * margin));
+                paint_text(cr, ui_font(), dialog_error_, cols_x, seed_y + row_h + dp(4), 0.6, 0.1, 0.1,
+                           static_cast<int>(cols_w));
                 preview_y += dp(22);
             }
             const double buttons_y = y + dh - margin - dp(36);
-            const double summary_y = buttons_y - dp(6) - dp(20);
-            // The map preview is 120x100. A clamped dialog (1011x601) used to
-            // draw it through the Generate line. Scale it into the gap.
-            const double preview_room = std::max(0.0, summary_y - dp(8) - preview_y);
-            // Grow into the gap under the preview on a tall window (1280x800).
-            // A short window still shrinks the 120x100 map so it stays above
-            // the Generate line. The New terrain button sits to the right.
-            const double beside = std::max(1.0, static_cast<double>(dp(260) - dp(8)));
-            const double max_by_width = beside / 120.0;
-            const double max_by_height = preview_room / 100.0;
-            const double preview_scale = std::min(max_by_width, max_by_height);
+            const double summary_y = buttons_y - dp(10) - dp(20);
+            // The 120x100 map sits in the column grid under the seed row,
+            // centred across the three columns and scaled to the room left
+            // above the Generate line, with the same gap above and below.
+            const double preview_room = std::max(0.0, summary_y - dp(10) - preview_y);
+            const double preview_scale = std::min(cols_w / 120.0, preview_room / 100.0);
             if (terrain_preview_ != nullptr && preview_scale >= 0.35) {
+                const double map_w = std::floor(120.0 * preview_scale);
+                const double map_h = std::floor(100.0 * preview_scale);
+                const double map_x = std::round(cols_x + (cols_w - map_w) / 2.0);
+                row_label("Map", preview_y);
                 cairo_save(cr);
-                cairo_translate(cr, x + margin, preview_y);
-                cairo_scale(cr, preview_scale, preview_scale);
+                cairo_translate(cr, map_x, preview_y);
+                cairo_scale(cr, map_w / 120.0, map_h / 100.0);
                 cairo_set_source_surface(cr, terrain_preview_, 0, 0);
                 cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
                 cairo_paint(cr);
                 cairo_restore(cr);
+                stroke_rect(cr, map_x - 1, preview_y - 1, map_w + 2, map_h + 2, theme::kMenuFrameR, theme::kMenuFrameG,
+                            theme::kMenuFrameB);
             }
-            button(cr, x + margin + dp(260), preview_y, dp(160), dp(32), "New terrain", kNewTerrain, false);
             std::string summary = "Generate \"" + field_a_ + "\".";
             if (city_chosen_) {
                 summary += " This replaces the city on the map.";
