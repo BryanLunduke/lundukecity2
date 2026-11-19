@@ -31,6 +31,9 @@ struct Facts {
     // what the city loses (empty when there is nothing to add).
     bool damaged = false;
     std::string damage_effect;
+    // An income building with power and a road that earns nothing (no
+    // residents in reach). Its badge says Idle instead of Working.
+    bool idle = false;
     // 0..255 from the simulator maps.
     int density = 0;
     int land_value = 0;
@@ -128,6 +131,10 @@ inline Report make(const Facts &facts)
         if (facts.kind == Kind::Building) {
             report.status = report.reasons.empty() ? "Working" : "Needs attention";
             report.tone = report.reasons.empty() ? Tone::Good : Tone::Bad;
+            if (report.reasons.empty() && facts.idle) {
+                report.status = "Idle";
+                report.tone = Tone::Neutral;
+            }
         } else {
             report.tone = Tone::Neutral;
             switch (facts.kind) {

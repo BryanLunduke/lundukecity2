@@ -79,7 +79,16 @@ struct SpecialBuilding {
     // Center lot and the Micro Nuclear Plant (Zones and Utilities buttons)
     // and the built Data Center, which only the lot grows into.
     bool in_menu = true;
+    // Percent taken off every block of the crime map while this building
+    // works (crime_service_ready). All such buildings together cut at most
+    // kCityCrimeCutCapPercent. 0 means no city-wide effect.
+    int city_crime_percent = 0;
+    // Added to every developed land-value block while this building is
+    // running (powered, unless open air). 0 means no city-wide effect.
+    int city_land_bonus = 0;
 };
+
+inline constexpr int kCityCrimeCutCapPercent = 30;
 
 // Shared non-center tile. The center tile id says which building it is.
 inline constexpr int kSpecialBodyTile = 1023;
@@ -120,22 +129,37 @@ int wire_special_buildings(Micropolis *sim);
 // Marina) pay only while intact, powered and touching a road, and only in
 // proportion to the people living within kIncomeCatchmentRadius tiles of
 // the centre: nothing with no residents, the full annual_income from
-// kIncomeFullResidents people up.
+// kIncomeFullResidents people up. Working attractions share those people:
+// a home inside k catchments counts 1/k toward each, so a second casino on
+// the same neighborhood splits the visitors instead of doubling them.
+// The yearly total is then capped at kIncomeCapTaxPercent of the city's
+// tax income, but never below kIncomeCapFloor (one full casino), so a
+// single attraction still earns what its row says while a stack of them
+// cannot out-earn the taxes.
 inline constexpr int kIncomeCatchmentRadius = 16;
 inline constexpr int kIncomeFullResidents = 2000;
+inline constexpr int kIncomeCapTaxPercent = 40;
+inline constexpr int kIncomeCapFloor = 300;
 struct SpecialIncome {
     bool earns = false; // the row has an annual_income at all
     bool intact = false;
     bool powered = false;
     bool road = false;
     int residents = 0;  // people living in the catchment
+    int shared = 0;     // of those, the share this building counts
+    int others = 0;     // most other working attractions sharing one home
     int full = 0;       // the row's annual_income
     int dollars = 0;    // what it pays this January
+    bool capped = false; // the city-wide cap cut this payout
+    int cap = 0;        // that cap, in dollars a year
 };
 // Residents (people, not census units) in residential zones whose centre
 // is within radius tiles (Chebyshev) of the centre.
 int special_residents_near(const Micropolis *sim, int center_x, int center_y, int radius);
 SpecialIncome special_income_at(const Micropolis *sim, int center_x, int center_y);
+// The most all income buildings together pay in a year: kIncomeCapTaxPercent
+// of the last tax collection (taxFund), at least kIncomeCapFloor.
+int special_income_cap(const Micropolis *sim);
 // The sum of special_income_at over the map, paid each January.
 int special_annual_income(const Micropolis *sim);
 void boost_special_land_value(Micropolis *sim);
@@ -177,6 +201,16 @@ bool special_skips_power_at(const Micropolis *sim, int tile_x, int tile_y);
 std::string special_status_text(int index);
 // Same line, plus the unlock or cap sentence when the city cannot buy it.
 std::string special_status_text(const Micropolis *sim, int index);
+
+// Minimap and preview colour for a special-building tile: a civic lot
+// tone for landmark centres and the shared body tile, gold for the vacant
+// Data Center lot, glass blue for the built one, concrete for the Micro
+// Nuclear Plant. False for every other tile (use the atlas average).
+bool special_minimap_rgb(int tile, double &r, double &g, double &b);
+
+// True when the special at this centre is doing its job: intact, powered
+// unless open air, and touching a road when its row needs one.
+bool special_effect_active(const Micropolis *sim, int center_x, int center_y);
 
 // True when the footprint around a center tile is still the building we placed.
 bool special_building_intact(const Micropolis *sim, int center_x, int center_y);

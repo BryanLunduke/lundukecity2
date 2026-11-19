@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "scenario_preview.hpp"
+#include "special_buildings.hpp"
 
 #include "city_session.hpp"
 #include "tile_atlas.hpp"
@@ -47,7 +48,9 @@ void paint_map(CitySession &session, cairo_surface_t *surface)
             double r = 0.55;
             double g = 0.42;
             double b = 0.24;
-            if (tiles) {
+            if (special_minimap_rgb(raw & LOMASK, r, g, b)) {
+                // Special buildings: the same colours as the minimap.
+            } else if (tiles) {
                 atlas.average_color(raw & LOMASK, r, g, b);
             }
             auto channel = [](double value) {

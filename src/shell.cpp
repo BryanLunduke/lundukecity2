@@ -406,6 +406,18 @@ void Shell::refresh_ui_scale()
     font_bold_ = ui_scale::scaled_font("Sans Bold", 13, ui_scale_);
 }
 
+int Shell::auto_scale_percent() const
+{
+    float display = 1.0f;
+    if (window_ != nullptr) {
+        const float reported = SDL_GetWindowDisplayScale(window_);
+        if (reported > 0.0f) {
+            display = reported;
+        }
+    }
+    return static_cast<int>(std::lround(ui_scale::resolve_ui_scale(display, 0.0f) * 100.0f));
+}
+
 bool Shell::allow_saved_settings() const
 {
     return !headless_ && !size_override_ && !smoke_ && !ui_test_ && !review_ && demo_.empty() && shot_path_.empty();

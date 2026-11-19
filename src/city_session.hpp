@@ -181,6 +181,9 @@ public:
     // The engine's tax-table push on growth at this rate and level
     // (Micropolis::taxGrowthEffect): 0 at an effective 7%, negative above.
     static int tax_growth_effect(int tax, int level);
+    // A new city's tax: 7% Easy, 6% Medium, 5% Hard. Each is the highest
+    // rate whose growth effect is not negative on that level.
+    static int default_tax(int level);
     std::int64_t funds() const;
     int generated_seed() const;
 

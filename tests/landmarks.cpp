@@ -146,32 +146,52 @@ int main()
         return fail(22, "income was paid with no residents nearby");
     }
     // One dense residential zone (40 census units, 800 people) within 16
-    // tiles: 800 / 2,000 of the full income, $80 + $120.
+    // tiles of both. Review nov18b #1: the two attractions share it, 400
+    // people each: 400 / 2,000 of the full income, $40 + $60.
     const unsigned short dense_home = static_cast<unsigned short>((RZB + 3 * 9) | ZONEBIT | PWRBIT);
     books.map[15][26] = dense_home;
-    if (special_residents_near(&books, 20, 20, kIncomeCatchmentRadius) != 800 || special_annual_income(&books) != 200) {
+    if (special_residents_near(&books, 20, 20, kIncomeCatchmentRadius) != 800 || special_annual_income(&books) != 100) {
         std::fprintf(stderr, "residents %d income %d\n", special_residents_near(&books, 20, 20, kIncomeCatchmentRadius),
                      special_annual_income(&books));
         return fail(23, "income did not scale with the residents nearby");
     }
     // A zone 17 tiles away is outside the catchment.
     books.map[10][38] = dense_home;
-    if (special_annual_income(&books) != 200) {
+    if (special_annual_income(&books) != 100) {
         return fail(24, "a zone outside the catchment counted");
     }
-    // Two more dense zones: 2,400 residents is past the 2,000 cap.
+    // Five more dense zones: 4,800 shared residents, 2,400 each, is past
+    // the 2,000 for full income ($200 + $300 = $500). With no taxes yet
+    // collected the city-wide cap is its $300 floor, so the pair is scaled
+    // to $120 + $180.
     books.map[10][26] = dense_home;
     books.map[20][26] = dense_home;
+    books.map[25][26] = dense_home;
+    books.map[5][26] = dense_home;
+    books.map[12][30] = dense_home;
+    if (special_annual_income(&books) != 300 || !special_income_at(&books, 20, 20).capped ||
+        special_income_at(&books, 20, 20).dollars != 180 || special_income_at(&books, 10, 20).dollars != 120) {
+        std::fprintf(stderr, "capped income %d\n", special_annual_income(&books));
+        return fail(92, "the attraction income cap did not hold at its floor");
+    }
+    // A $2,000 tax year lifts the cap to 40%, $800: both pay in full.
+    books.taxFund = 2000;
+    if (special_annual_income(&books) != 500 || special_income_at(&books, 20, 20).capped) {
+        std::fprintf(stderr, "uncapped income %d\n", special_annual_income(&books));
+        return fail(93, "the attraction income cap ignored the tax income");
+    }
+    books.taxFund = 0;
     const long before = static_cast<long>(books.totalFunds);
     books.taxFlag = false;
     books.collectTax();
-    if (books.specialIncome != 500 || static_cast<long>(books.totalFunds) != before) {
+    // The census is empty, so the tax year is $0 and the cap stays at $300.
+    if (books.specialIncome != 300 || static_cast<long>(books.totalFunds) != before) {
         std::fprintf(stderr, "income %ld funds %ld\n", static_cast<long>(books.specialIncome),
                      static_cast<long>(books.totalFunds));
-        return fail(14, "January did not record $200 plus $300 without paying it early");
+        return fail(14, "January did not record the capped $300 without paying it early");
     }
     books.commitBudgetPayment();
-    if (books.specialIncome != 0 || static_cast<long>(books.totalFunds) != before + 500) {
+    if (books.specialIncome != 0 || static_cast<long>(books.totalFunds) != before + 300) {
         std::fprintf(stderr, "paid %ld funds %ld\n", static_cast<long>(books.specialIncome),
                      static_cast<long>(books.totalFunds));
         return fail(15, "collecting the year did not pay the park and the casino");
@@ -194,6 +214,15 @@ int main()
     if (!place_special_building(&crime, casino, 30, 30, error)) {
         return fail(18, "the casino could not be placed for the crime check");
     }
+    // Review nov18b #2: an unpowered casino draws no crowd and no crime.
+    crime.crimeRateMap.clear();
+    crime.policeStationMap.clear();
+    crime.crimeRateMap.worldSet(30, 30, 20);
+    boost_special_crime(&crime);
+    if (crime.crimeRateMap.worldGet(30, 30) != 20) {
+        return fail(94, "an unpowered casino raised crime");
+    }
+    crime.map[30][30] |= PWRBIT;
     crime.crimeRateMap.clear();
     crime.policeStationMap.clear();
     const int sample_x = 30;

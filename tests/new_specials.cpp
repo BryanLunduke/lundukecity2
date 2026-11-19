@@ -260,6 +260,21 @@ int main()
     land.landValueMap.set(fountain_x, fountain_y, 100);
     land.landValueMap.set(open_x, open_y, 40);
     land.landValueMap.set(prison_x, prison_y + 8, 10);
+    // Review nov18b #2/#5: an unpowered zoo or marina lifts nothing.
+    boost_special_land_value(&land);
+    if (land.landValueMap.get(zoo_x, zoo_y) != 100 || land.landValueMap.get(marina_x, marina_y) != 100) {
+        std::fprintf(stderr, "unpowered zoo %d marina %d\n", land.landValueMap.get(zoo_x, zoo_y),
+                     land.landValueMap.get(marina_x, marina_y));
+        return fail(99, "an unpowered zoo or marina raised land value");
+    }
+    land.landValueMap.set(zoo_x, zoo_y, 100);
+    land.landValueMap.set(prison_x, prison_y, 100);
+    land.landValueMap.set(marina_x, marina_y, 100);
+    land.landValueMap.set(fountain_x, fountain_y, 100);
+    land.landValueMap.set(open_x, open_y, 40);
+    land.landValueMap.set(prison_x, prison_y + 8, 10);
+    land.map[10][10] |= PWRBIT;
+    land.map[36][10] |= PWRBIT;
     boost_special_land_value(&land);
     if (land.landValueMap.get(zoo_x, zoo_y) != 148 || land.landValueMap.get(marina_x, marina_y) != 164) {
         std::fprintf(stderr, "zoo %d marina %d\n", land.landValueMap.get(zoo_x, zoo_y),
@@ -298,15 +313,39 @@ int main()
         return fail(38, "an unpowered prison reduced crime");
     }
     crime.map[20][20] |= PWRBIT;
+    // Review nov18b #3: -40 nearby, then 15% off every block in the city:
+    // 80 - 40 = 40, less 15% = 34. A block 60 tiles away goes 100 -> 85.
+    crime.crimeRateMap.worldSet(80, 80, 100);
     boost_special_crime(&crime);
-    if (crime.crimeRateMap.worldGet(20, 20) != 40) {
-        std::fprintf(stderr, "powered %d\n", crime.crimeRateMap.worldGet(20, 20));
-        return fail(39, "a powered prison on a road did not reduce crime by 40");
+    if (crime.crimeRateMap.worldGet(20, 20) != 34 || crime.crimeRateMap.worldGet(80, 80) != 85) {
+        std::fprintf(stderr, "powered %d city %d\n", crime.crimeRateMap.worldGet(20, 20),
+                     crime.crimeRateMap.worldGet(80, 80));
+        return fail(39, "a powered prison on a road did not cut crime by 40 nearby and 15% city-wide");
     }
+    // A second Prison adds another 15%; a third stops at the 30% cap.
+    crime.map[40][38] = ROADBASE | BULLBIT;
+    crime.map[38][40] = HPOWER | CONDBIT | BULLBIT;
+    crime.map[60][58] = ROADBASE | BULLBIT;
+    crime.map[58][60] = HPOWER | CONDBIT | BULLBIT;
+    if (!place_special_building(&crime, prison, 40, 40, error) ||
+        !place_special_building(&crime, prison, 60, 60, error)) {
+        return fail(100, "could not place more prisons for the city-wide cap check");
+    }
+    crime.map[40][40] |= PWRBIT;
+    crime.map[60][60] |= PWRBIT;
+    crime.crimeRateMap.worldSet(80, 80, 100);
+    boost_special_crime(&crime);
+    if (crime.crimeRateMap.worldGet(80, 80) != 70) {
+        std::fprintf(stderr, "three prisons city %d\n", crime.crimeRateMap.worldGet(80, 80));
+        return fail(101, "three prisons did not stop at the 30% city-wide cap");
+    }
+    crime.map[40][40] &= static_cast<unsigned short>(~PWRBIT);
+    crime.map[60][60] &= static_cast<unsigned short>(~PWRBIT);
     crime.map[20][18] = DIRT;
     crime.crimeRateMap.worldSet(20, 20, 80);
+    crime.crimeRateMap.worldSet(80, 80, 100);
     boost_special_crime(&crime);
-    if (crime.crimeRateMap.worldGet(20, 20) != 80) {
+    if (crime.crimeRateMap.worldGet(20, 20) != 80 || crime.crimeRateMap.worldGet(80, 80) != 100) {
         return fail(40, "a prison with no road still reduced crime");
     }
 
@@ -705,6 +744,79 @@ int main()
     }
     if (bulldoze_special_at(&rubble_dock, 29, 31) || rubble_dock.map[29][31] != REDGE) {
         return fail(98, "a second bulldoze treated the restored shoreline as a marina");
+    }
+
+    // Review nov18b #5: what power buys each civic landmark.
+    {
+        const int zoo_row = index_named("Zoo");
+        const int library_row = index_named("Library");
+        const int mayor_row = index_named("Mayor's House");
+        if (special_building(zoo_row).land_radius != 8 || special_building(index_named("Big Park")).land_radius != 6) {
+            return fail(102, "the zoo does not reach further than the Big Park");
+        }
+        Micropolis civic;
+        arm(civic, 21);
+        std::string why;
+        if (!place_special_building(&civic, library_row, 20, 20, why)) {
+            return fail(103, "could not place a library for the civic check");
+        }
+        civic.crimeRateMap.clear();
+        civic.crimeRateMap.worldSet(20, 20, 60);
+        boost_special_crime(&civic);
+        if (civic.crimeRateMap.worldGet(20, 20) != 60) {
+            return fail(104, "an unpowered library cut crime");
+        }
+        civic.map[20][20] |= PWRBIT;
+        boost_special_crime(&civic);
+        if (civic.crimeRateMap.worldGet(20, 20) != 36) {
+            std::fprintf(stderr, "library crime %d\n", civic.crimeRateMap.worldGet(20, 20));
+            return fail(105, "a powered library did not cut nearby crime by 24");
+        }
+        // The Mayor's House needs 2,000 people; the check only needs the
+        // building, so it is written onto the map directly.
+        Micropolis mayor;
+        arm(mayor, 22);
+        const SpecialBuilding &house = special_building(mayor_row);
+        for (int dy = 0; dy < house.height; ++dy) {
+            for (int dx = 0; dx < house.width; ++dx) {
+                mayor.map[29 + dx][29 + dy] = kSpecialBodyTile | BULLBIT | CONDBIT;
+            }
+        }
+        mayor.map[30][30] = static_cast<unsigned short>(house.center_tile | ZONEBIT | BULLBIT | CONDBIT);
+        mayor.landValueMap.clear();
+        mayor.landValueMap.worldSet(90, 90, 50);
+        boost_special_land_value(&mayor);
+        if (mayor.landValueMap.worldGet(90, 90) != 50) {
+            return fail(106, "an unpowered Mayor's House lifted land value across the city");
+        }
+        mayor.map[30][30] |= PWRBIT;
+        boost_special_land_value(&mayor);
+        if (mayor.landValueMap.worldGet(90, 90) != 54) {
+            std::fprintf(stderr, "mayor city land %d\n", mayor.landValueMap.worldGet(90, 90));
+            return fail(107, "a powered Mayor's House did not add 4 across the city");
+        }
+    }
+
+    // Review nov18b #6: stacked fountains add with diminishing returns.
+    {
+        const int fountain_row = index_named("Fountain");
+        Micropolis plaza;
+        arm(plaza, 23);
+        std::string why;
+        const int spots[][2] = {{60, 60}, {62, 60}, {60, 62}, {62, 62}, {64, 64}, {58, 58}};
+        const int expect[] = {116, 120, 124, 128, 132, 132};
+        for (int i = 0; i < 6; ++i) {
+            if (!place_special_building(&plaza, fountain_row, spots[i][0], spots[i][1], why)) {
+                return fail(108, "could not place a fountain for the stacking check");
+            }
+            plaza.landValueMap.clear();
+            plaza.landValueMap.worldSet(61, 61, 100);
+            boost_special_land_value(&plaza);
+            if (plaza.landValueMap.worldGet(61, 61) != expect[i]) {
+                std::fprintf(stderr, "%d fountains: land %d\n", i + 1, plaza.landValueMap.worldGet(61, 61));
+                return fail(109, "stacked fountains did not add 16, then 4 each, up to 32");
+            }
+        }
     }
 
     std::printf("new specials ok\n");

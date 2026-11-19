@@ -25,24 +25,24 @@ const ToolDef kTools[] = {
     // Parks
     {TOOL_PARK, "Park", 10, "Park: $10"},
     {kSpecialEngineId, "Big Park", 100, "Big Park: $100. Raises nearby land value", SPECIAL_PARK},
-    {kSpecialEngineId, "Fountain", 20, "Fountain: $20. Raises nearby land value", SPECIAL_FOUNTAIN},
+    {kSpecialEngineId, "Fountain", 20, "Fountain: $20. Raises nearby land value. Fountains close together add less", SPECIAL_FOUNTAIN},
     // Services
     {TOOL_FIRESTATION, "Fire Station", 500, "Fire Station: $500"},
     {TOOL_POLICESTATION, "Police Station", 500, "Police Station: $500"},
-    {kSpecialEngineId, "Prison", 3000, "Prison: $3,000. Cuts crime once it has power and a road. Slightly lowers land value", SPECIAL_PRISON},
+    {kSpecialEngineId, "Prison", 3000, "Prison: $3,000. Cuts crime nearby and 15% city-wide with power and a road. Lowers land value nearby", SPECIAL_PRISON},
     // Utilities
     {TOOL_COALPOWER, "Coal Plant", 3000, "Coal Plant: $3,000"},
     {TOOL_NUCLEARPOWER, "Nuclear Plant", 5000, "Nuclear Plant: $5,000"},
     {kSpecialEngineId, "Micro Nuclear Plant", 2000, "Micro Nuclear Plant: $2,000. 1/9 of a nuclear plant, clean, no meltdown",
      SPECIAL_MICRONUKE},
     // Special buildings
-    {kSpecialEngineId, "Zoo", 100, "Zoo: $100. Raises nearby land value", SPECIAL_ZOO},
-    {kSpecialEngineId, "Amusement Park", 100, "Amusement Park: $100. Raises land value. Up to $200 a year from nearby residents", SPECIAL_AMUSEMENT},
+    {kSpecialEngineId, "Zoo", 100, "Zoo: $100. Raises land value in a wide area with power", SPECIAL_ZOO},
+    {kSpecialEngineId, "Amusement Park", 100, "Amusement Park: $100. Raises land value with power. Up to $200 a year from nearby residents", SPECIAL_AMUSEMENT},
     {kSpecialEngineId, "Casino", 100, "Casino: $100. Raises land value and crime. Up to $300 a year from nearby residents", SPECIAL_CASINO},
     {TOOL_STADIUM, "Stadium", 5000, "Stadium: $5,000"},
     {kSpecialEngineId, "Marina", 1000, "Marina: $1,000. Raises land value widely. Up to $100 a year. The south side is the dock", SPECIAL_MARINA},
-    {kSpecialEngineId, "Library", 100, "Library: $100. Raises nearby land value", SPECIAL_LIBRARY},
-    {kSpecialEngineId, "Mayor's House", 100, "Mayor's House: $100. One per city", SPECIAL_MAYOR},
+    {kSpecialEngineId, "Library", 100, "Library: $100. Raises land value and cuts crime nearby with power", SPECIAL_LIBRARY},
+    {kSpecialEngineId, "Mayor's House", 100, "Mayor's House: $100. Lifts land value, a bit city-wide, with power", SPECIAL_MAYOR},
     // Ports
     {TOOL_AIRPORT, "Airport", 10000, "Airport: $10,000"},
     {TOOL_SEAPORT, "Seaport", 3000, "Seaport: $3,000"},
@@ -104,6 +104,8 @@ std::string tool_press_text(const ToolDef *tool, const char *button)
     return tool_press_phrase(tool != nullptr ? tool->engine_id : TOOL_QUERY, button);
 }
 
+// The names match the toolbar (kTools), so the mouse and the pad call a
+// tool the same thing (review nov18b #13).
 const char *tool_click_phrase(int engine_id)
 {
     switch (engine_id) {
@@ -114,7 +116,7 @@ const char *tool_click_phrase(int engine_id)
     case TOOL_RAILROAD:
         return "Rail: click to lay";
     case TOOL_WIRE:
-        return "Wire: click to lay";
+        return "Power lines: click to lay";
     case TOOL_PARK:
         return "Park: click to plant";
     case TOOL_RESIDENTIAL:
@@ -124,17 +126,17 @@ const char *tool_click_phrase(int engine_id)
     case TOOL_INDUSTRIAL:
         return "Industrial: click to zone";
     case TOOL_POLICESTATION:
-        return "Police: click to build";
+        return "Police Station: click to build";
     case TOOL_FIRESTATION:
-        return "Fire dept: click to build";
+        return "Fire Station: click to build";
     case TOOL_STADIUM:
         return "Stadium: click to build";
     case TOOL_SEAPORT:
         return "Seaport: click to build";
     case TOOL_COALPOWER:
-        return "Coal power: click to build";
+        return "Coal Plant: click to build";
     case TOOL_NUCLEARPOWER:
-        return "Nuclear power: click to build";
+        return "Nuclear Plant: click to build";
     case TOOL_AIRPORT:
         return "Airport: click to build";
     case kSpecialEngineId:
@@ -172,7 +174,7 @@ std::string tool_press_phrase(int engine_id, const char *button)
         verb = "lays";
         break;
     case TOOL_WIRE:
-        name = "Wire";
+        name = "Power lines";
         verb = "lays";
         break;
     case TOOL_PARK:

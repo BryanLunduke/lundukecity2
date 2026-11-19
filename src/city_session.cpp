@@ -767,7 +767,6 @@ void CitySession::new_city(const NewCitySpec &spec)
     sim.terrainCurveLevel = spec.rivers;
     sim.terrainLakeLevel = spec.lakes;
     sim.terrainTreeLevel = spec.trees;
-    sim.setCityTax(7);
     sim.setAutoBudget(true);
     sim.setAutoBulldoze(true);
     sim.setEnableDisasters(true);
@@ -786,6 +785,9 @@ void CitySession::new_city(const NewCitySpec &spec)
         level = kLevelEasy;
     }
     sim.setGameLevelFunds(static_cast<GameLevel>(level));
+    // Review nov18b #4: the highest rate that does not slow growth on this
+    // level (7/6/5%), so a new city never opens on a Budget warning.
+    sim.setCityTax(static_cast<short>(default_tax(level)));
     // generateSomeCity() already ran setValves at the previous city's
     // level. Store this city's level before the next even sim cycle.
     if (sim.miscHist != nullptr && sim.gameLevel >= LEVEL_FIRST && sim.gameLevel <= LEVEL_LAST) {
@@ -874,6 +876,14 @@ void CitySession::rename_city(const std::string &name)
 int CitySession::tax_growth_effect(int tax, int level)
 {
     return static_cast<int>(Micropolis::taxGrowthEffect(tax, level));
+}
+
+int CitySession::default_tax(int level)
+{
+    if (level < kLevelEasy || level > kLevelHard) {
+        level = kLevelEasy;
+    }
+    return 7 - level;
 }
 
 int CitySession::difficulty() const
@@ -2854,7 +2864,45 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
         notes.push_back("Supplies 1/9 of a nuclear plant's power (about " +
                         std::to_string(kMicroNuclearPowerTiles) + " tiles)");
         notes.push_back("Cannot melt down. No pollution");
-    } else if (building.annual_income > 0) {
+    } else if (building.annual_income <= 0) {
+        // Review nov18b #8: the landmarks without income say what they do,
+        // in the same percent the bars use.
+        int found = -1;
+        bool intact = true;
+        special_at(&engine_->sim, x, y, found, intact);
+        if (!intact) {
+            return notes;
+        }
+        if (!special_effect_active(&engine_->sim, cx, cy)) {
+            notes.push_back(building.needs_road ? "No effect until it has power and a road" : "No effect without power");
+            return notes;
+        }
+        auto signed_percent = [](int value) {
+            const int percent = inspect_report::map_percent(value < 0 ? -value : value);
+            return std::string(value < 0 ? "\u2212" : "+") + std::to_string(percent) + "%";
+        };
+        if (building.land_bonus > 0) {
+            notes.push_back("Land value " + signed_percent(building.land_bonus) + " within " +
+                            std::to_string(building.land_radius) + " tiles");
+        }
+        if (building.crime_bonus != 0 && building.crime_radius > 0) {
+            notes.push_back("Crime " + signed_percent(building.crime_bonus) + " within " +
+                            std::to_string(building.crime_radius) + " tiles");
+        }
+        if (building.city_crime_percent > 0) {
+            notes.push_back("Takes " + std::to_string(building.city_crime_percent) + "% off crime across the city");
+        }
+        if (building.city_land_bonus > 0) {
+            notes.push_back("Land value " + signed_percent(building.city_land_bonus) + " across the city");
+        }
+        if (building.land_bonus < 0) {
+            notes.push_back("Land value " + signed_percent(building.land_bonus) + " within " +
+                            std::to_string(building.land_radius) + " tiles");
+        }
+        if (building.center_tile == SPECIAL_FOUNTAIN) {
+            notes.push_back("Fountains close together add less");
+        }
+    } else {
         const SpecialIncome income = special_income_at(&engine_->sim, cx, cy);
         if (income.intact) {
             const std::string full = with_commas(income.full);
@@ -2862,14 +2910,34 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
                 notes.push_back("No income: needs power");
             } else if (!income.road) {
                 notes.push_back("No income: needs a road next to it");
-            } else if (income.dollars <= 0) {
+            } else if (income.residents <= 0) {
+                // One line: "0 residents within 16 tiles" would only repeat it.
                 notes.push_back("No income: no residents within " + std::to_string(kIncomeCatchmentRadius) + " tiles");
+                return notes;
+            } else if (income.dollars <= 0) {
+                notes.push_back("No income yet");
             } else {
-                notes.push_back("Earns " + with_commas(income.dollars) + " a year (" + full + " at " +
-                                grouped_count(kIncomeFullResidents) + " residents)");
+                // The bracket only when too few residents are the reason: at
+                // full pay it would repeat the number, and a capped payout
+                // has its own line below (review nov18b #10).
+                std::string line = "Earns " + with_commas(income.dollars) + " a year";
+                if (income.dollars < income.full && !income.capped) {
+                    line += " (" + full + " at " + grouped_count(kIncomeFullResidents) + " residents)";
+                }
+                notes.push_back(line);
             }
             notes.push_back(grouped_count(income.residents) + " residents within " +
                             std::to_string(kIncomeCatchmentRadius) + " tiles");
+            if (income.dollars > 0 && income.others > 0) {
+                notes.push_back("Shares them with " + std::to_string(income.others) + " other attraction" +
+                                (income.others == 1 ? "" : "s"));
+            }
+            if (income.capped) {
+                // Say "40% of taxes" only when that, not the floor, is the cap.
+                const bool floor = income.cap <= kIncomeCapFloor;
+                notes.push_back("All attractions together earn at most " + with_commas(income.cap) + " a year" +
+                                (floor ? std::string() : " (" + std::to_string(kIncomeCapTaxPercent) + "% of taxes)"));
+            }
         }
     }
     return notes;
@@ -2932,6 +3000,11 @@ CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
         } else {
             facts.damage_effect = "No effect on the city while damaged";
         }
+    }
+    if (card.special >= 0 && !card.damaged && special_building(card.special).annual_income > 0) {
+        const SpecialIncome income = special_income_at(&engine_->sim, card.left + special_building(card.special).anchor_x,
+                                                       card.top + special_building(card.special).anchor_y);
+        facts.idle = income.intact && income.powered && income.road && income.dollars <= 0;
     }
     out.notes = special_inspect_notes(x, y);
     facts.density = layer_value(MapLayer::Population, x, y);

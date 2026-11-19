@@ -23,6 +23,7 @@
 
 #include "micropolis.h"
 
+#include <cmath>
 #include <csignal>
 #include <cstring>
 #include <filesystem>
@@ -841,6 +842,15 @@ void Shell::run_review_checks()
     on_dialog_button(kCancel);
     if (volume_ != 80 || dialog_ != Dialog::None) {
         fail("settings cancel did not restore the volume");
+        return;
+    }
+    // Settings names the scale Auto picked: it must match the scale in use
+    // when nothing overrides it (review nov18b #14).
+    const int auto_percent = auto_scale_percent();
+    if (auto_percent < 50 || auto_percent > 400 ||
+        (user_scale_ <= 0.05f && scale_env_ <= 0.05f &&
+         auto_percent != static_cast<int>(std::lround(ui_scale_ * 100.0f)))) {
+        fail("Settings would label Auto with a scale it does not use");
         return;
     }
     const int tax_before = session_.tax();
