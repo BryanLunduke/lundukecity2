@@ -32,7 +32,7 @@ int main()
         "Bring average traffic below 40 and keep at least 90,000 people within 10 years.",
         "Keep the city score above 500 until 1962.",
         "Bring average crime below 60 within 10 years.",
-        "Keep the city score above 500 until 2015.",
+        "Raise the score above 500 by 2015.",
         "Keep the city score above 500 until 2057.",
     };
     static const int kYears[] = {30, 5, 5, 10, 5, 10, 5, 10};

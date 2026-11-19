@@ -325,6 +325,26 @@ int check_news_staleness()
     return 0;
 }
 
+// #11: Boston starts below 500, so its goal and meter ask for a rise.
+int check_boston_goal()
+{
+    const CitySession::ScenarioDef &def = CitySession::scenario_def(SC_BOSTON - SC_DULLSVILLE);
+    if (std::string(def.goal) != "Raise the score above 500 by 2015.") {
+        std::fprintf(stderr, "goal '%s'\n", def.goal);
+        return fail(70, "the Boston goal does not ask to raise the score");
+    }
+    CitySession boston;
+    if (!boston.load_scenario(SC_BOSTON)) {
+        return fail(71, "Boston did not load");
+    }
+    const std::string meter = boston.scenario_meter();
+    if (meter.find("raise it above 500 by 2015") == std::string::npos || meter.find("keep it") != std::string::npos) {
+        std::fprintf(stderr, "meter '%s'\n", meter.c_str());
+        return fail(72, "the Boston meter does not ask to raise the score");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -345,6 +365,9 @@ int main()
         return r;
     }
     if (const int r = check_news_staleness()) {
+        return r;
+    }
+    if (const int r = check_boston_goal()) {
         return r;
     }
     std::puts("review_nov19 ok");

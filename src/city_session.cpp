@@ -160,8 +160,10 @@ const ScenarioEntry kScenarios[] = {
     {{SC_DETROIT, "Detroit", 1972, "Crime is out of control.",
       "Bring average crime below 60 within 10 years.", 10},
      "snro.666"},
+    // Review nov19 #11: Boston opens at a score of about 320-420 and is
+    // judged at the deadline, so the goal is to raise the score.
     {{SC_BOSTON, "Boston", 2010, "A nuclear meltdown is coming.",
-      "Keep the city score above 500 until 2015.", 5},
+      "Raise the score above 500 by 2015.", 5},
      "snro.777"},
     {{SC_RIO, "Rio de Janeiro", 2047, "Flooding threatens the city.",
       "Keep the city score above 500 until 2057.", 10},
@@ -2282,8 +2284,9 @@ std::string CitySession::scenario_meter() const
         // that already sits above 500 has not won yet.
         const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
         const int deadline = def.year + def.years;
-        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + ", keep it above 500 until " +
-               std::to_string(deadline);
+        // Boston starts below 500, so its meter asks for a rise.
+        const char *ask = id == SC_BOSTON ? ", raise it above 500 by " : ", keep it above 500 until ";
+        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + ask + std::to_string(deadline);
     }
     return "Population " + grouped_count(people > 0 ? people : 0) + " → 100,000";
 }
