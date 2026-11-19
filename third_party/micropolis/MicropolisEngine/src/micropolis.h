@@ -1897,7 +1897,7 @@ public:
 
   private:
 
-    friend struct Nov19DisasterProbe;
+    friend struct Nov19Probe;
 
     void doDisasters();
 

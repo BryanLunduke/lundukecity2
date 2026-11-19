@@ -119,7 +119,10 @@ void Micropolis::sendMessages()
         break;
 
     case 5:
-        if (totalZonePop / 8 >= comZonePop) {
+        // Review nov19 #15: only while shops are in demand. The zone ratio
+        // alone asked for commercial every four months with C demand at
+        // its minimum.
+        if (totalZonePop / 8 >= comZonePop && comValve > 0) {
             sendMessage(MESSAGE_NEED_MORE_COMMERCIAL);
         }
         break;

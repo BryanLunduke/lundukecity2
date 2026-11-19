@@ -21,7 +21,7 @@
 #include <vector>
 
 // Reaches engine internals for the checks below (a friend of Micropolis).
-struct Nov19DisasterProbe {
+struct Nov19Probe {
     static void roll(Micropolis &sim) { sim.doDisasters(); }
     static void growth(Micropolis &sim, Quad last_population, Quad res_pop)
     {
@@ -35,6 +35,7 @@ struct Nov19DisasterProbe {
         sim.checkGrowth();
     }
     static Quad people(Micropolis &sim) { return sim.getPopulation(); }
+    static void set_commercial_demand(Micropolis &sim, short valve) { sim.comValve = valve; }
 };
 
 namespace {
@@ -105,7 +106,7 @@ int check_easy_disasters()
         listen(sim, heard);
         sim.cityTime = pass == 0 ? 4 * 48 + 47 : 5 * 48;
         for (int i = 0; i < 20000; ++i) {
-            Nov19DisasterProbe::roll(sim);
+            Nov19Probe::roll(sim);
         }
         const int fires = count_of(heard, MESSAGE_FIRE_REPORTED);
         if (pass == 0 && fires != 0) {
@@ -131,7 +132,7 @@ int check_easy_disasters()
     listen(hard, hard_heard);
     hard.cityTime = 10;
     for (int i = 0; i < 20000; ++i) {
-        Nov19DisasterProbe::roll(hard);
+        Nov19Probe::roll(hard);
     }
     if (count_of(hard_heard, MESSAGE_FIRE_REPORTED) == 0) {
         return fail(3, "the Easy grace years reached Hard");
@@ -443,8 +444,8 @@ int check_growth_only()
     std::vector<Sent> heard;
     listen(sim, heard);
     // About 3,000 people: a town, down from a city of 12,000.
-    Nov19DisasterProbe::growth(sim, 12000, 150);
-    const Quad people = Nov19DisasterProbe::people(sim);
+    Nov19Probe::growth(sim, 12000, 150);
+    const Quad people = Nov19Probe::people(sim);
     if (people < 2000 || people >= 10000) {
         std::fprintf(stderr, "population %lld\n", static_cast<long long>(people));
         return fail(100, "the growth check city is not a town");
@@ -453,9 +454,36 @@ int check_growth_only()
         return fail(101, "a shrinking city was told it reached 2,000");
     }
     // The same town, up from a village of 1,500.
-    Nov19DisasterProbe::growth(sim, 1500, 150);
+    Nov19Probe::growth(sim, 1500, 150);
     if (count_of(heard, MESSAGE_REACHED_TOWN) != 1) {
         return fail(102, "a growing city was not told it reached 2,000");
+    }
+    return 0;
+}
+
+// #15: "More commercial zones needed." only while commercial demand is up.
+int check_commercial_advice()
+{
+    for (int pass = 0; pass < 2; ++pass) {
+        auto owned = std::make_unique<Micropolis>();
+        Micropolis &sim = *owned;
+        sim.generateSomeCity(3);
+        sim.setAutoGoto(false);
+        std::vector<Sent> heard;
+        listen(sim, heard);
+        sim.cityTime = 64 + 5;
+        sim.resZonePop = 20;
+        sim.comZonePop = 0;
+        sim.indZonePop = 6;
+        Nov19Probe::set_commercial_demand(sim, pass == 0 ? -1500 : 600);
+        sim.sendMessages();
+        const int asked = count_of(heard, MESSAGE_NEED_MORE_COMMERCIAL);
+        if (pass == 0 && asked != 0) {
+            return fail(110, "the advisor asked for shops with commercial demand at its minimum");
+        }
+        if (pass == 1 && asked != 1) {
+            return fail(111, "the advisor no longer asks for shops when they are in demand");
+        }
     }
     return 0;
 }
@@ -492,6 +520,9 @@ int main()
         return r;
     }
     if (const int r = check_growth_only()) {
+        return r;
+    }
+    if (const int r = check_commercial_advice()) {
         return r;
     }
     std::puts("review_nov19 ok");
