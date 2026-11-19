@@ -2870,6 +2870,16 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
             }
             notes.push_back(grouped_count(income.residents) + " residents within " +
                             std::to_string(kIncomeCatchmentRadius) + " tiles");
+            if (income.dollars > 0 && income.others > 0) {
+                notes.push_back("Shares them with " + std::to_string(income.others) + " other attraction" +
+                                (income.others == 1 ? "" : "s"));
+            }
+            if (income.capped) {
+                // Say "40% of taxes" only when that, not the floor, is the cap.
+                const bool floor = income.cap <= kIncomeCapFloor;
+                notes.push_back("All attractions together earn at most " + with_commas(income.cap) + " a year" +
+                                (floor ? std::string() : " (" + std::to_string(kIncomeCapTaxPercent) + "% of taxes)"));
+            }
         }
     }
     return notes;

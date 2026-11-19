@@ -8,6 +8,7 @@
 #include "micropolis.h"
 
 #include <string>
+#include <vector>
 
 bool special_auto_clearable(int raw)
 {
@@ -88,11 +89,11 @@ constexpr SpecialBuilding kBuildings[] = {
      "Raises nearby land value. Best near residential", 0, 0, 2000, 1, 1},
     {54, "Casino", "casino", "casino", 100, 300, 3, 3, 6, 96,
      "Sharply raises nearby land value and local crime. Pays up to $300 a year with power, a road and 2,000 residents "
-     "within 16 tiles. A police station nearby matters",
+     "within 16 tiles. Nearby attractions share them. A police station nearby matters",
      8, 100, 0, 2, 3},
     {55, "Amusement Park", "amusement", "amusement", 100, 200, 3, 3, 6, 96,
      "Sharply raises nearby land value. Pays up to $200 a year with power, a road and 2,000 residents within 16 "
-     "tiles", 0, 0, 0, 2, 3},
+     "tiles. Nearby attractions share them", 0, 0, 0, 2, 3},
     // Prison: the land-value dip (-16 in 6 tiles) is smaller than the crime
     // cut (-40 in 8 tiles). Crime is 128 - land value + density - police,
     // so a -48 dip used to add 48 crime and outweigh a -24 cut.
@@ -105,7 +106,7 @@ constexpr SpecialBuilding kBuildings[] = {
     {SPECIAL_MARINA, "Marina", "marina", "marina", 1000, 100, 3, 3, 10, 64,
      "Raises land value across a wide area. Pays up to $100 a year with power, a road and 2,000 residents within 16 "
      "tiles. "
-     "The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
+     "Nearby attractions share them. The south side is the dock", 0, 0, 0, -1, 0, 1, 1, false, false, true},
     {SPECIAL_FOUNTAIN, "Fountain", "fountain", "fountain", 20, 0, 1, 1, 4, 16, "Raises nearby land value", 0, 0, 0, -1,
      0, 0, 0, false, false, false, true},
     // Rows below are not landmarks; the landmarks are the rows above. The Data
@@ -950,42 +951,161 @@ std::string special_menu_detail(const Micropolis *sim, int index)
     return graph_money(kBuildings[index].cost);
 }
 
+namespace {
+
+// People living in one residential zone, by its centre tile. 0 for any
+// other tile. One residential census unit is 20 people (getPopulation).
+long long zone_people(const Micropolis *sim, int x, int y)
+{
+    const int raw = static_cast<int>(sim->map[x][y]);
+    if ((raw & ZONEBIT) == 0) {
+        return 0;
+    }
+    const int tile = raw & LOMASK;
+    long long units = 0;
+    if (tile == FREEZ) {
+        // An empty residential zone's single houses, one unit each
+        // (Micropolis::doFreePop).
+        for (int hx = x - 1; hx <= x + 1; ++hx) {
+            for (int hy = y - 1; hy <= y + 1; ++hy) {
+                const int house = tile_of(sim, hx, hy);
+                if (house >= LHTHR && house <= HHTHR) {
+                    ++units;
+                }
+            }
+        }
+    } else if (tile >= RZB && tile < HOSPITALBASE) {
+        // Micropolis::getResZonePop: 16, 24, 32 or 40 by density.
+        units = ((tile - RZB) / 9) % 4 * 8 + 16;
+    }
+    return units * 20;
+}
+
+struct IncomeSite {
+    int x = 0;
+    int y = 0;
+    SpecialIncome income;
+    double served = 0.0; // residents after sharing
+};
+
+int chebyshev(int ax, int ay, int bx, int by)
+{
+    const int dx = ax > bx ? ax - bx : bx - ax;
+    const int dy = ay > by ? ay - by : by - ay;
+    return dx > dy ? dx : dy;
+}
+
+// Every income building on the map with its January payout. Residents are
+// shared: a home inside the catchment of k working attractions counts 1/k
+// toward each, so stacking attractions on one neighborhood splits its
+// visitors instead of multiplying them. The total is then capped
+// (special_income_cap) and every site scaled down by the same factor.
+std::vector<IncomeSite> income_sites(const Micropolis *sim)
+{
+    std::vector<IncomeSite> sites;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const int raw = static_cast<int>(sim->map[x][y]);
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int index = special_index_for_tile(raw & LOMASK);
+            if (index < 0 || kBuildings[index].annual_income <= 0) {
+                continue;
+            }
+            const SpecialBuilding &building = kBuildings[index];
+            IncomeSite site;
+            site.x = x;
+            site.y = y;
+            site.income.earns = true;
+            site.income.full = building.annual_income;
+            site.income.intact = special_building_intact(sim, x, y);
+            site.income.powered = building.open_air || (raw & PWRBIT) != 0;
+            site.income.road = ring_has(x - building.anchor_x, y - building.anchor_y, building.width,
+                                        building.height, sim_word, sim, road_word);
+            site.income.residents = special_residents_near(sim, x, y, kIncomeCatchmentRadius);
+            sites.push_back(site);
+        }
+    }
+    auto working = [](const IncomeSite &site) {
+        return site.income.intact && site.income.powered && site.income.road;
+    };
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const long long people = zone_people(sim, x, y);
+            if (people <= 0) {
+                continue;
+            }
+            int sharing = 0;
+            for (const IncomeSite &site : sites) {
+                if (working(site) && chebyshev(site.x, site.y, x, y) <= kIncomeCatchmentRadius) {
+                    ++sharing;
+                }
+            }
+            if (sharing == 0) {
+                continue;
+            }
+            for (IncomeSite &site : sites) {
+                if (working(site) && chebyshev(site.x, site.y, x, y) <= kIncomeCatchmentRadius) {
+                    site.served += static_cast<double>(people) / sharing;
+                    site.income.others = sharing - 1 > site.income.others ? sharing - 1 : site.income.others;
+                }
+            }
+        }
+    }
+    long long total = 0;
+    for (IncomeSite &site : sites) {
+        if (!working(site)) {
+            continue;
+        }
+        double served = site.served < kIncomeFullResidents ? site.served : kIncomeFullResidents;
+        site.income.shared = static_cast<int>(site.served + 0.5);
+        site.income.dollars = static_cast<int>(site.income.full * served / kIncomeFullResidents);
+        total += site.income.dollars;
+    }
+    const int cap = special_income_cap(sim);
+    if (total > cap) {
+        for (IncomeSite &site : sites) {
+            site.income.cap = cap;
+            if (!working(site)) {
+                continue;
+            }
+            site.income.capped = true;
+            site.income.dollars = static_cast<int>(static_cast<long long>(site.income.dollars) * cap / total);
+        }
+    } else {
+        for (IncomeSite &site : sites) {
+            site.income.cap = cap;
+        }
+    }
+    return sites;
+}
+
+} // namespace
+
 int special_residents_near(const Micropolis *sim, int center_x, int center_y, int radius)
 {
     if (sim == nullptr || radius < 0) {
         return 0;
     }
-    long long units = 0;
+    long long people = 0;
     for (int x = center_x - radius; x <= center_x + radius; ++x) {
         for (int y = center_y - radius; y <= center_y + radius; ++y) {
-            if (!in_bounds(x, y)) {
-                continue;
-            }
-            const int raw = static_cast<int>(sim->map[x][y]);
-            if ((raw & ZONEBIT) == 0) {
-                continue;
-            }
-            const int tile = raw & LOMASK;
-            if (tile == FREEZ) {
-                // An empty residential zone's single houses, one unit each
-                // (Micropolis::doFreePop).
-                for (int hx = x - 1; hx <= x + 1; ++hx) {
-                    for (int hy = y - 1; hy <= y + 1; ++hy) {
-                        const int house = tile_of(sim, hx, hy);
-                        if (house >= LHTHR && house <= HHTHR) {
-                            ++units;
-                        }
-                    }
-                }
-            } else if (tile >= RZB && tile < HOSPITALBASE) {
-                // Micropolis::getResZonePop: 16, 24, 32 or 40 by density.
-                units += ((tile - RZB) / 9) % 4 * 8 + 16;
+            if (in_bounds(x, y)) {
+                people += zone_people(sim, x, y);
             }
         }
     }
-    // One residential unit is 20 people (getPopulation's weight).
-    const long long people = units * 20;
     return people > 2000000000LL ? 2000000000 : static_cast<int>(people);
+}
+
+int special_income_cap(const Micropolis *sim)
+{
+    if (sim == nullptr) {
+        return kIncomeCapFloor;
+    }
+    const long long share = static_cast<long long>(sim->taxFund) * kIncomeCapTaxPercent / 100;
+    return share > kIncomeCapFloor ? static_cast<int>(share > 2000000000LL ? 2000000000LL : share) : kIncomeCapFloor;
 }
 
 SpecialIncome special_income_at(const Micropolis *sim, int center_x, int center_y)
@@ -999,19 +1119,11 @@ SpecialIncome special_income_at(const Micropolis *sim, int center_x, int center_
     if (index < 0 || kBuildings[index].annual_income <= 0) {
         return income;
     }
-    const SpecialBuilding &building = kBuildings[index];
-    income.earns = true;
-    income.full = building.annual_income;
-    income.intact = special_building_intact(sim, center_x, center_y);
-    income.powered = building.open_air || (raw & PWRBIT) != 0;
-    income.road = ring_has(center_x - building.anchor_x, center_y - building.anchor_y, building.width, building.height,
-                           sim_word, sim, road_word);
-    income.residents = special_residents_near(sim, center_x, center_y, kIncomeCatchmentRadius);
-    if (!income.intact || !income.powered || !income.road) {
-        return income;
+    for (const IncomeSite &site : income_sites(sim)) {
+        if (site.x == center_x && site.y == center_y) {
+            return site.income;
+        }
     }
-    const int served = income.residents < kIncomeFullResidents ? income.residents : kIncomeFullResidents;
-    income.dollars = static_cast<int>(static_cast<long long>(building.annual_income) * served / kIncomeFullResidents);
     return income;
 }
 
@@ -1020,17 +1132,11 @@ int special_annual_income(const Micropolis *sim)
     if (sim == nullptr) {
         return 0;
     }
-    int total = 0;
-    for (int x = 0; x < WORLD_W; ++x) {
-        for (int y = 0; y < WORLD_H; ++y) {
-            const int index = special_index_for_tile(tile_of(sim, x, y));
-            if (index < 0 || kBuildings[index].annual_income <= 0 || (sim->map[x][y] & ZONEBIT) == 0) {
-                continue;
-            }
-            total += special_income_at(sim, x, y).dollars;
-        }
+    long long total = 0;
+    for (const IncomeSite &site : income_sites(sim)) {
+        total += site.income.dollars;
     }
-    return total;
+    return total > 2000000000LL ? 2000000000 : static_cast<int>(total);
 }
 
 void boost_special_land_value(Micropolis *sim)
