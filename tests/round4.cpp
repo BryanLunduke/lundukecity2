@@ -278,7 +278,7 @@ int main()
     const ToolDef *road = tool_named(TOOL_ROAD);
     if (rail == nullptr || wire == nullptr || road == nullptr ||
         std::string(rail->hint).find("Rail bridge: $100") == std::string::npos ||
-        std::string(wire->hint).find("Underwater wire: $25") == std::string::npos ||
+        std::string(wire->hint).find("Underwater power line: $25") == std::string::npos ||
         std::string(road->hint).find("Bridge: $50") == std::string::npos) {
         return fail(30, "a crossing hint does not include the water price");
     }
@@ -308,17 +308,17 @@ int main()
     }
     const long wire_start = crossing.funds();
     crossing.use_tool(TOOL_WIRE, 6, 6);
-    if (crossing.funds() != wire_start - 5 || crossing.message().find("Underwater wire") != std::string::npos) {
+    if (crossing.funds() != wire_start - 5 || crossing.message().find("Underwater power line") != std::string::npos) {
         std::fprintf(stderr, "dry wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(36, "a power line on land did not cost $5, or it claimed water");
     }
     crossing.use_tool(TOOL_WIRE, 10, 14);
-    if (crossing.funds() != wire_start - 30 || crossing.message().find("Underwater wire: $25") == std::string::npos) {
+    if (crossing.funds() != wire_start - 30 || crossing.message().find("Underwater power line: $25") == std::string::npos) {
         std::fprintf(stderr, "h wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(37, "a horizontal power line across water did not cost $25 or stay silent");
     }
     crossing.use_tool(TOOL_WIRE, 14, 10);
-    if (crossing.funds() != wire_start - 55 || crossing.message().find("Underwater wire: $25") == std::string::npos) {
+    if (crossing.funds() != wire_start - 55 || crossing.message().find("Underwater power line: $25") == std::string::npos) {
         std::fprintf(stderr, "v wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(38, "a vertical power line across water did not cost $25");
     }

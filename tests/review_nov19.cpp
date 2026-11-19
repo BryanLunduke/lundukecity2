@@ -6,6 +6,7 @@
 
 #include "city_session.hpp"
 #include "messages.hpp"
+#include "placement_hint.hpp"
 #include "tools.hpp"
 
 #include "micropolis.h"
@@ -291,6 +292,28 @@ int check_attraction_hints()
     return 0;
 }
 
+// #8: the power line tool has one name: the toolbar's.
+int check_power_line_name()
+{
+    const ToolDef *lines = nullptr;
+    for (int i = 0; i < kToolCount; ++i) {
+        const ToolDef *tool = tool_by_index(i);
+        if (tool != nullptr && tool->engine_id == TOOL_WIRE) {
+            lines = tool;
+        }
+    }
+    if (lines == nullptr || std::string(lines->name) != "Power lines" ||
+        std::string(lines->hint) != "Power lines: $5. Underwater power line: $25") {
+        return fail(50, "the power line tool hint does not use the toolbar name");
+    }
+    if (message_for_number(MESSAGE_UNDERWATER_WIRE) != "Underwater power line: $25" ||
+        short_build_reason("No place to land a power line.") != "No power line landing" ||
+        short_build_reason("Underwater power line: $25") == "No power line landing") {
+        return fail(51, "a power line message still says wire");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -305,6 +328,9 @@ int main()
         return r;
     }
     if (const int r = check_attraction_hints()) {
+        return r;
+    }
+    if (const int r = check_power_line_name()) {
         return r;
     }
     std::puts("review_nov19 ok");

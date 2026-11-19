@@ -70,7 +70,7 @@ const char *kMessages[] = {
     "No place to anchor a bridge.",
     "Bridge: $50",
     "Rail bridge: $100",
-    "Underwater wire: $25",
+    "Underwater power line: $25",
     "No place to land a power line.",
     "Fire spreading. Send help.",
     "Funds recovered. Auto budget is back on and services are fully funded.",
@@ -223,9 +223,9 @@ std::string zone_status_text(int tile_category, int population, int land_value,
 bool notice_is_tool_feedback(const std::string &text)
 {
     static const char *kTool[] = {
-        "Not enough funds to build that.", "Bulldoze that area first.",  "Cannot build here.",
+        "Not enough funds to build that.", "Bulldoze that area first.",    "Cannot build here.",
         "That would be off the map.",      "No place to anchor a bridge.", "Bridge: $50",
-        "Rail bridge: $100",               "Underwater wire: $25",       "No place to land a power line.",
+        "Rail bridge: $100",               "Underwater power line: $25",   "No place to land a power line.",
     };
     for (const char *line : kTool) {
         if (text == line) {

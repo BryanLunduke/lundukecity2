@@ -527,7 +527,7 @@ inline bool digest_routine(const std::string &text)
         "No place to land a power line.",
         "Bridge: $50",
         "Rail bridge: $100",
-        "Underwater wire: $25",
+        "Underwater power line: $25",
     };
     for (const char *one : skip) {
         if (text == one) {
