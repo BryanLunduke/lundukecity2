@@ -2780,7 +2780,17 @@ void Shell::draw_dialog(cairo_t *cr)
         const double fund_gap = static_cast<double>(dp(14));
         // The tax slider warns before the cliff (dialog_copy.hpp tax_warning).
         const TaxWarning tax_warn = tax_warning(tax_, session_.difficulty());
-        const double blocks = block_h(copy.tax_title, copy.tax_value, tax_warn.note) + fund_gap +
+        // The warning sits under the tax bar in room kept for the longest
+        // warning at any rate, so the bar and the window do not move while
+        // the thumb is dragged into the amber or red band.
+        double tax_note_room = 0;
+        for (int rate = 0; rate <= 20; ++rate) {
+            const TaxWarning w = tax_warning(rate, session_.difficulty());
+            if (!w.note.empty()) {
+                tax_note_room = std::max(tax_note_room, line_height(ui_font(), w.note, inner) + gap);
+            }
+        }
+        const double blocks = block_h(copy.tax_title, copy.tax_value, std::string()) + tax_note_room + fund_gap +
                               block_h("Road fund", std::to_string(road_) + "%", copy.road) +
                               block_h("Police fund", std::to_string(police_) + "%", copy.police) +
                               block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
@@ -2841,20 +2851,11 @@ void Shell::draw_dialog(cairo_t *cr)
                        theme::kTextG, theme::kTextB);
             cursor += cap_h + gap;
             const bool tax_row = index == 1;
-            if (!detail.empty()) {
+            if (!detail.empty() && !tax_row) {
                 double note_r = 0;
                 double note_g = 0;
                 double note_b = 0;
                 theme::reading_ink(note_r, note_g, note_b);
-                if (tax_row && tax_warn.level == 2) {
-                    note_r = 0.70;
-                    note_g = 0.12;
-                    note_b = 0.08;
-                } else if (tax_row && tax_warn.level == 1) {
-                    note_r = 0.60;
-                    note_g = 0.38;
-                    note_b = 0.02;
-                }
                 const double detail_h = place_line(ui_font(), detail, x + margin, cursor, live_inner, note_r, note_g, note_b);
                 cursor += detail_h + gap;
             }
@@ -2907,6 +2908,25 @@ void Shell::draw_dialog(cairo_t *cr)
                 stroke_slider_focus(cr, sx + 1, bar_y - dp(4), sw - 2, dp(24));
             }
             cursor += dp(16) + tail;
+            if (tax_row) {
+                if (!detail.empty()) {
+                    double note_r = 0;
+                    double note_g = 0;
+                    double note_b = 0;
+                    theme::reading_ink(note_r, note_g, note_b);
+                    if (tax_warn.level == 2) {
+                        note_r = 0.70;
+                        note_g = 0.12;
+                        note_b = 0.08;
+                    } else if (tax_warn.level == 1) {
+                        note_r = 0.60;
+                        note_g = 0.38;
+                        note_b = 0.02;
+                    }
+                    place_line(ui_font(), detail, x + margin, cursor, live_inner, note_r, note_g, note_b);
+                }
+                cursor += tax_note_room;
+            }
         };
         slider(1, copy.tax_title, copy.tax_value, tax_warn.note, tax_, 0, 20);
         cursor += fund_gap;
