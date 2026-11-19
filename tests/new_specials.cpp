@@ -746,6 +746,57 @@ int main()
         return fail(98, "a second bulldoze treated the restored shoreline as a marina");
     }
 
+    // Review nov18b #5: what power buys each civic landmark.
+    {
+        const int zoo_row = index_named("Zoo");
+        const int library_row = index_named("Library");
+        const int mayor_row = index_named("Mayor's House");
+        if (special_building(zoo_row).land_radius != 8 || special_building(index_named("Big Park")).land_radius != 6) {
+            return fail(102, "the zoo does not reach further than the Big Park");
+        }
+        Micropolis civic;
+        arm(civic, 21);
+        std::string why;
+        if (!place_special_building(&civic, library_row, 20, 20, why)) {
+            return fail(103, "could not place a library for the civic check");
+        }
+        civic.crimeRateMap.clear();
+        civic.crimeRateMap.worldSet(20, 20, 60);
+        boost_special_crime(&civic);
+        if (civic.crimeRateMap.worldGet(20, 20) != 60) {
+            return fail(104, "an unpowered library cut crime");
+        }
+        civic.map[20][20] |= PWRBIT;
+        boost_special_crime(&civic);
+        if (civic.crimeRateMap.worldGet(20, 20) != 36) {
+            std::fprintf(stderr, "library crime %d\n", civic.crimeRateMap.worldGet(20, 20));
+            return fail(105, "a powered library did not cut nearby crime by 24");
+        }
+        // The Mayor's House needs 2,000 people; the check only needs the
+        // building, so it is written onto the map directly.
+        Micropolis mayor;
+        arm(mayor, 22);
+        const SpecialBuilding &house = special_building(mayor_row);
+        for (int dy = 0; dy < house.height; ++dy) {
+            for (int dx = 0; dx < house.width; ++dx) {
+                mayor.map[29 + dx][29 + dy] = kSpecialBodyTile | BULLBIT | CONDBIT;
+            }
+        }
+        mayor.map[30][30] = static_cast<unsigned short>(house.center_tile | ZONEBIT | BULLBIT | CONDBIT);
+        mayor.landValueMap.clear();
+        mayor.landValueMap.worldSet(90, 90, 50);
+        boost_special_land_value(&mayor);
+        if (mayor.landValueMap.worldGet(90, 90) != 50) {
+            return fail(106, "an unpowered Mayor's House lifted land value across the city");
+        }
+        mayor.map[30][30] |= PWRBIT;
+        boost_special_land_value(&mayor);
+        if (mayor.landValueMap.worldGet(90, 90) != 54) {
+            std::fprintf(stderr, "mayor city land %d\n", mayor.landValueMap.worldGet(90, 90));
+            return fail(107, "a powered Mayor's House did not add 4 across the city");
+        }
+    }
+
     std::printf("new specials ok\n");
     return 0;
 }

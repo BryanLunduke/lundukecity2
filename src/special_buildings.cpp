@@ -81,12 +81,20 @@ namespace {
 // open-air landmarks: no power. Everything else uses electricity, conducts
 // like a zone, and needs a powered grid.
 constexpr SpecialBuilding kBuildings[] = {
-    {1020, "Zoo", "zoo", "zoo", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
+    // Review nov18b #5: the powered landmarks each do one thing a Big Park
+    // does not. Zoo: the same +48, reaching 8 tiles instead of 6. Library:
+    // +48 in 6 tiles and -24 crime in 8 tiles (a Prison's local cut is -40,
+    // a Police Station's about -39 on its own block). Mayor's House: +48 in 6
+    // tiles and +4 on every developed block of the city. None of it works
+    // without power (landmark_running, crime_service_ready).
+    {1020, "Zoo", "zoo", "zoo", 100, 0, 3, 3, 8, 48, "Raises land value in a wide area while powered"},
     {1021, "Big Park", "bigpark", "big-park", 100, 0, 3, 3, 6, 48, "Raises nearby land value", 0, 0, 0, -1, 0, 1, 1,
      false, false, false, true},
-    {1022, "Library", "library", "library", 100, 0, 3, 3, 6, 48, "Raises nearby land value"},
+    {1022, "Library", "library", "library", 100, 0, 3, 3, 6, 48,
+     "Raises nearby land value and cuts nearby crime while powered", 8, -24, 0, -1, 0, 1, 1, false, true},
     {53, "Mayor's House", "mayor", "mayor", 100, 0, 3, 3, 6, 48,
-     "Raises nearby land value. Best near residential", 0, 0, 2000, 1, 1},
+     "Raises nearby land value, and a little across the city, while powered. Best near residential", 0, 0, 2000, 1,
+     1, 1, 1, false, false, false, false, true, 0, 4},
     {54, "Casino", "casino", "casino", 100, 300, 3, 3, 6, 96,
      "Sharply raises nearby land value and local crime. Pays up to $300 a year with power, a road and 2,000 residents "
      "within 16 tiles. Nearby attractions share them. A police station nearby matters",
@@ -1162,6 +1170,7 @@ void boost_special_land_value(Micropolis *sim)
     if (sim == nullptr) {
         return;
     }
+    int city_bonus = 0;
     for (int x = 0; x < WORLD_W; ++x) {
         for (int y = 0; y < WORLD_H; ++y) {
             const int index = special_index_for_tile(tile_of(sim, x, y));
@@ -1169,6 +1178,9 @@ void boost_special_land_value(Micropolis *sim)
                 continue;
             }
             const SpecialBuilding &building = kBuildings[index];
+            if (building.city_land_bonus > 0 && landmark_running(sim, index, x, y)) {
+                city_bonus += building.city_land_bonus;
+            }
             if (building.land_bonus == 0 || building.land_radius <= 0) {
                 continue;
             }
@@ -1199,6 +1211,17 @@ void boost_special_land_value(Micropolis *sim)
                     }
                     sim->landValueMap.set(bx, by, static_cast<Byte>(raised));
                 }
+            }
+        }
+    }
+    if (city_bonus <= 0) {
+        return;
+    }
+    for (int by = 0; by < sim->landValueMap.MAP_H; ++by) {
+        for (int bx = 0; bx < sim->landValueMap.MAP_W; ++bx) {
+            const int value = sim->landValueMap.get(bx, by);
+            if (value > 0) {
+                sim->landValueMap.set(bx, by, static_cast<Byte>(value + city_bonus > 250 ? 250 : value + city_bonus));
             }
         }
     }

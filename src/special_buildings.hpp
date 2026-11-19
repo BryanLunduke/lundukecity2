@@ -83,6 +83,9 @@ struct SpecialBuilding {
     // works (crime_service_ready). All such buildings together cut at most
     // kCityCrimeCutCapPercent. 0 means no city-wide effect.
     int city_crime_percent = 0;
+    // Added to every developed land-value block while this building is
+    // running (powered, unless open air). 0 means no city-wide effect.
+    int city_land_bonus = 0;
 };
 
 inline constexpr int kCityCrimeCutCapPercent = 30;
