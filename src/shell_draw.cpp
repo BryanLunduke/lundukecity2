@@ -30,6 +30,7 @@
 #include "theme.hpp"
 #include "tile_atlas.hpp"
 #include "scenario_preview.hpp"
+#include "side_widgets.hpp"
 #include "special_buildings.hpp"
 #include "tool_keys.hpp"
 #include "placement_hint.hpp"
@@ -1627,7 +1628,7 @@ void Shell::draw_dialog(cairo_t *cr)
                             seed_y, seed_w, dp(32));
                 cairo_restore(cr);
             }
-            const int preview_seed = preview_seed_from_field(field_b_);
+            const int preview_seed = preview_seed_for_field(field_b_, auto_seed_);
             const int preview_key = static_cast<int>(terrain_preview_key(preview_seed, new_island_, new_rivers_, new_lakes_,
                                                                          new_trees_));
             if (terrain_key_ != preview_key) {
@@ -1645,23 +1646,13 @@ void Shell::draw_dialog(cairo_t *cr)
                     for (int ty = 0; ty < CitySession::kWorldH; ++ty) {
                         for (int tx = 0; tx < CitySession::kWorldW; ++tx) {
                             const unsigned short raw = tiles[static_cast<std::size_t>(ty * CitySession::kWorldW + tx)];
-                            const int t = raw & LOMASK;
-                            int sample = DIRT;
-                            if (t >= RIVER && t <= WATER_HIGH) {
-                                sample = RIVER;
-                            } else if (t >= TREEBASE && t <= WOODS5) {
-                                sample = WOODS;
-                            } else if (t >= RESBASE && t < COMBASE) {
-                                sample = RESBASE;
-                            } else if (t >= ROADBASE && t <= LASTRAIL) {
-                                sample = ROADBASE;
-                            }
-                            double sr = 219.0 / 255.0;
-                            double sg = 148.0 / 255.0;
-                            double sb = 66.0 / 255.0;
-                            if (tile_atlas().loaded()) {
-                                tile_atlas().average_color(sample, sr, sg, sb);
-                            }
+                            // Paint each tile the way the colour minimap does. Bucketing
+                            // every forest-edge tile as solid woods made the preview look
+                            // denser than the city Generate builds from the same tiles.
+                            double sr = 0.0;
+                            double sg = 0.0;
+                            double sb = 0.0;
+                            minimap_tile_rgb(raw, sr, sg, sb);
                             const unsigned char r = static_cast<unsigned char>(std::lround(std::max(0.0, std::min(1.0, sr)) * 255.0));
                             const unsigned char gch = static_cast<unsigned char>(std::lround(std::max(0.0, std::min(1.0, sg)) * 255.0));
                             const unsigned char b = static_cast<unsigned char>(std::lround(std::max(0.0, std::min(1.0, sb)) * 255.0));

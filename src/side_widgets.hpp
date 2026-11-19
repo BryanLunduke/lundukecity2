@@ -14,6 +14,10 @@
 
 class CitySession;
 
+// The colour the colour minimap paints one map tile. The New City land
+// preview uses it too, so the preview looks like the map Generate builds.
+void minimap_tile_rgb(int raw, double &r, double &g, double &b);
+
 class MinimapView {
 public:
     void set_session(CitySession *session);

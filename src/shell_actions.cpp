@@ -34,6 +34,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -437,6 +438,10 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     if (dialog == Dialog::NewCity) {
         field_a_ = "New City";
         field_b_ = "auto";
+        // "auto" means this seed until the dialog closes; the preview and
+        // Generate both use it.
+        auto_seed_ = roll_city_seed(static_cast<unsigned>(std::time(nullptr)), static_cast<unsigned>(SDL_GetTicks()));
+        terrain_key_ = 0;
         new_page_ = 0;
         new_level_ = CitySession::kLevelEasy;
         new_island_ = CitySession::kTerrainDefault;
@@ -2470,6 +2475,7 @@ void Shell::on_dialog_button(int id)
                 dialog_error_ = new_city_field_error(name_ok, seed_ok);
                 return;
             }
+            resolve_auto_seed(auto_seed_, seed, set);
             CitySession::NewCitySpec spec;
             spec.name = field_a_;
             spec.seed = seed;
