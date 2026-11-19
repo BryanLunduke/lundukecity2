@@ -160,8 +160,10 @@ const ScenarioEntry kScenarios[] = {
     {{SC_DETROIT, "Detroit", 1972, "Crime is out of control.",
       "Bring average crime below 60 within 10 years.", 10},
      "snro.666"},
+    // Review nov19 #11: Boston opens at a score of about 320-420 and is
+    // judged at the deadline, so the goal is to raise the score.
     {{SC_BOSTON, "Boston", 2010, "A nuclear meltdown is coming.",
-      "Keep the city score above 500 until 2015.", 5},
+      "Raise the score above 500 by 2015.", 5},
      "snro.777"},
     {{SC_RIO, "Rio de Janeiro", 2047, "Flooding threatens the city.",
       "Keep the city score above 500 until 2057.", 10},
@@ -1016,6 +1018,10 @@ void raise_unspecified_funding(Micropolis &sim)
     raise(sim.roadPercent);
     raise(sim.policePercent);
     raise(sim.firePercent);
+    sim.roadPercentWanted = sim.roadPercent;
+    sim.policePercentWanted = sim.policePercent;
+    sim.firePercentWanted = sim.firePercent;
+    sim.autoBudgetForcedOff = false;
     sim.roadEffect = static_cast<Quad>(sim.roadPercent * static_cast<float>(MAX_ROAD_EFFECT));
     sim.policeEffect = static_cast<Quad>(sim.policePercent * static_cast<float>(MAX_POLICE_STATION_EFFECT));
     sim.fireEffect = static_cast<Quad>(sim.firePercent * static_cast<float>(MAX_FIRE_STATION_EFFECT));
@@ -1087,11 +1093,14 @@ bool CitySession::load_city(const std::string &path)
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
     read_scenario_sidecar(path);
-    if (!ledger_from_file_) {
-        catch_up_ledger(false);
-    }
     recount_population_from_map();
     refresh_loaded_meters();
+    // Review nov19 #12: catch up after the recount, not before. A city with
+    // no sidecar (a classic save, a copied .cty) used to catch up on a
+    // stale census of 0, so the next month toasted Town and its first Year
+    // in Review said it grew into a city. A sidecar ledger is caught up as
+    // well, silently; award() skips what it already has.
+    catch_up_ledger(false);
     arm_eval_baseline();
     restore_loaded_eval();
     if (kind == CityFileKind::Incomplete) {
@@ -1474,6 +1483,9 @@ int CitySession::game_month_index() const
 
 void CitySession::set_auto_budget(bool on)
 {
+    // Review nov19 #6: the player's own switch is final; only an engine
+    // switch-off comes back by itself.
+    engine_->sim.autoBudgetForcedOff = false;
     if (engine_->sim.autoBudget == on) {
         return;
     }
@@ -1586,6 +1598,15 @@ void CitySession::set_service_funding(int kind, int percent)
     // Effects wait until the budget window commits. Moving a slider used
     // to drop road and coverage before any money moved.
     *slot = fraction;
+    // Review nov19 #6: this is the level auto budget asks for again after
+    // a short year.
+    if (kind == 1) {
+        sim.policePercentWanted = fraction;
+    } else if (kind == 2) {
+        sim.firePercentWanted = fraction;
+    } else {
+        sim.roadPercentWanted = fraction;
+    }
     mark_dirty();
 }
 
@@ -1816,10 +1837,14 @@ void CitySession::discard_pending_budget()
 void CitySession::finish_budget_edit()
 {
     if (engine_->sim.budgetAwaitingAccept) {
-        commit_pending_budget();
-        // The new tax year starts with what is left after the budget.
+        // Review nov19 #13: the new year starts with the treasury the old
+        // one ended with, the Funds readout before this budget is paid.
+        // The Year in Review's "End of year" is that same number, so the
+        // two never disagree, and each year's review starts where the
+        // last one ended. This January's budget counts in the new year.
         ledger_.have_start_funds = true;
         ledger_.start_funds = static_cast<std::int64_t>(engine_->sim.totalFunds);
+        commit_pending_budget();
         return;
     }
     engine_->sim.applyFundingLevels();
@@ -2266,8 +2291,9 @@ std::string CitySession::scenario_meter() const
         // that already sits above 500 has not won yet.
         const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
         const int deadline = def.year + def.years;
-        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + ", keep it above 500 until " +
-               std::to_string(deadline);
+        // Boston starts below 500, so its meter asks for a rise.
+        const char *ask = id == SC_BOSTON ? ", raise it above 500 by " : ", keep it above 500 until ";
+        return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + ask + std::to_string(deadline);
     }
     return "Population " + grouped_count(people > 0 ? people : 0) + " → 100,000";
 }
@@ -2526,6 +2552,14 @@ bool CitySession::powered_homes() const
 void CitySession::catch_up_ledger(bool announce)
 {
     note_civic_month(announce);
+    if (!announce && ready_) {
+        // A loaded town had power to grow that big, even if a blackout or
+        // the recount leaves no powered home this month.
+        const std::int64_t population = evaluation().population;
+        if (civic::population_milestone(population) >= civic::Town) {
+            civic::note_powered(ledger_, true, calendar_year(), calendar_month(), false);
+        }
+    }
 }
 
 std::vector<int> CitySession::note_civic_month(bool announce)
@@ -2934,7 +2968,7 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
             }
             if (income.capped) {
                 // Say "40% of taxes" only when that, not the floor, is the cap.
-                const bool floor = income.cap <= kIncomeCapFloor;
+                const bool floor = income.cap <= special_income_floor(&engine_->sim);
                 notes.push_back("All attractions together earn at most " + with_commas(income.cap) + " a year" +
                                 (floor ? std::string() : " (" + std::to_string(kIncomeCapTaxPercent) + "% of taxes)"));
             }

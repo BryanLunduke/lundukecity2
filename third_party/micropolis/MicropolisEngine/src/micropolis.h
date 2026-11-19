@@ -1190,6 +1190,27 @@ public:
     short firePop;
 
     /**
+     * A burning tile from the last census, or -1. The "Fire spreading"
+     * notice points here.
+     */
+    short fireSpotX;
+    short fireSpotY;
+
+    /** Easy cities have no random disasters for this many years. */
+    static const int EASY_DISASTER_GRACE_YEARS = 5;
+
+    /** Fires burning at once before "Fire spreading" is sent. */
+    static const int FIRE_SPREADING_TILES = 6;
+
+    /**
+     * True while a fire is big enough for the "Fire spreading" notice,
+     * and the cityTime it was last sent. A new outbreak is reported at
+     * once; one that keeps burning is reminded about once a year.
+     */
+    bool fireSpreading;
+    Quad fireSpreadingNoticeTime;
+
+    /**
      * Number of people in the residential zones.
      *
      * Depends on level of zone development. Wide on purpose: a signed
@@ -1744,6 +1765,16 @@ public:
         Quad police = 0;
         Quad fire = 0;
     };
+    /**
+     * Extra tax income a big city collects, in percent: from
+     * TAX_GROWTH_FROM_POPULATION people, TAX_GROWTH_PERCENT_PER_THOUSAND
+     * per 1,000 more (cityPop), at most TAX_GROWTH_PERCENT_MAX.
+     */
+    Quad taxGrowthPercent() const;
+    static const int TAX_GROWTH_FROM_POPULATION = 10000;
+    static const int TAX_GROWTH_PERCENT_PER_THOUSAND = 2;
+    static const int TAX_GROWTH_PERCENT_MAX = 30;
+
     BudgetBases projectBudget(short roads, short rails, short policePop, short firePop, Quad pop, short landValue,
                               short taxRate) const;
 
@@ -1790,6 +1821,24 @@ public:
     bool roadFundingTouched;
     bool fireFundingTouched;
     bool policeFundingTouched;
+
+    /**
+     * Funding the player chose on the sliders (1.0 unless they moved one).
+     * A short year scales the live percent down to what the treasury can
+     * pay; with auto budget on, the next year asks for this level again.
+     */
+    float roadPercentWanted;
+    float firePercentWanted;
+    float policePercentWanted;
+
+    /**
+     * True when the engine, not the player, switched auto budget off
+     * because the city could not pay. collectTax turns it back on once
+     * taxes plus cash cover twice the full request again.
+     */
+    bool autoBudgetForcedOff;
+
+    void restoreWantedFunding();
 
     void updateBudget();
 
@@ -1847,6 +1896,8 @@ public:
     void fireBomb();
 
   private:
+
+    friend struct Nov19Probe;
 
     void doDisasters();
 

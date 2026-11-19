@@ -74,7 +74,7 @@ int main()
     CitySession paused;
     paused.set_speed(0);
     paused.new_city(spec_for("Hardville", 4, CitySession::kLevelHard));
-    if (paused.funds() != 5000 || paused.difficulty() != CitySession::kLevelHard || paused.speed() != 0 ||
+    if (paused.funds() != 7500 || paused.difficulty() != CitySession::kLevelHard || paused.speed() != 0 ||
         !paused.save_city_as(path) || file_slot(path, 15) != CitySession::kLevelHard ||
         file_slot(path, 64) != 1) {
         std::fprintf(stderr, "hard funds %" PRId64 " level %d slot %d disasters %d\n", paused.funds(), paused.difficulty(),
@@ -84,11 +84,11 @@ int main()
     CitySession loaded_hard;
     loaded_hard.set_speed(3);
     if (!loaded_hard.load_city(path) || loaded_hard.difficulty() != CitySession::kLevelHard ||
-        loaded_hard.funds() != 5000 || loaded_hard.speed() != 0 ||
+        loaded_hard.funds() != 7500 || loaded_hard.speed() != 0 ||
         loaded_hard.evaluation().difficulty != "Hard" || !loaded_hard.disasters()) {
         std::fprintf(stderr, "reloaded level %d funds %" PRId64 " speed %d diff '%s'\n", loaded_hard.difficulty(),
                      loaded_hard.funds(), loaded_hard.speed(), loaded_hard.evaluation().difficulty.c_str());
-        return fail(2, "reloading the paused Hard city did not keep Hard, $5,000, and pause");
+        return fail(2, "reloading the paused Hard city did not keep Hard, $7,500, and pause");
     }
 
     loaded_hard.new_city(spec_for("Easyville", 5, CitySession::kLevelEasy));
@@ -109,14 +109,14 @@ int main()
     medium.set_speed(0);
     medium.new_city(spec_for("Hard Again", 6, CitySession::kLevelHard));
     medium.new_city(spec_for("Midville", 7, CitySession::kLevelMedium));
-    if (!medium.save_city_as(path) || file_slot(path, 15) != CitySession::kLevelMedium || medium.funds() != 10000) {
+    if (!medium.save_city_as(path) || file_slot(path, 15) != CitySession::kLevelMedium || medium.funds() != 12500) {
         std::fprintf(stderr, "medium slot %d funds %" PRId64 "\n", file_slot(path, 15), medium.funds());
         return fail(5, "a paused Medium city was not saved as Medium");
     }
     CitySession loaded_medium;
     if (!loaded_medium.load_city(path) || loaded_medium.difficulty() != CitySession::kLevelMedium ||
-        loaded_medium.funds() != 10000) {
-        return fail(6, "reloading Medium did not keep Medium and $10,000");
+        loaded_medium.funds() != 12500) {
+        return fail(6, "reloading Medium did not keep Medium and $12,500");
     }
 
     Micropolis stale;
@@ -278,7 +278,7 @@ int main()
     const ToolDef *road = tool_named(TOOL_ROAD);
     if (rail == nullptr || wire == nullptr || road == nullptr ||
         std::string(rail->hint).find("Rail bridge: $100") == std::string::npos ||
-        std::string(wire->hint).find("Underwater wire: $25") == std::string::npos ||
+        std::string(wire->hint).find("Underwater power line: $25") == std::string::npos ||
         std::string(road->hint).find("Bridge: $50") == std::string::npos) {
         return fail(30, "a crossing hint does not include the water price");
     }
@@ -308,17 +308,17 @@ int main()
     }
     const long wire_start = crossing.funds();
     crossing.use_tool(TOOL_WIRE, 6, 6);
-    if (crossing.funds() != wire_start - 5 || crossing.message().find("Underwater wire") != std::string::npos) {
+    if (crossing.funds() != wire_start - 5 || crossing.message().find("Underwater power line") != std::string::npos) {
         std::fprintf(stderr, "dry wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(36, "a power line on land did not cost $5, or it claimed water");
     }
     crossing.use_tool(TOOL_WIRE, 10, 14);
-    if (crossing.funds() != wire_start - 30 || crossing.message().find("Underwater wire: $25") == std::string::npos) {
+    if (crossing.funds() != wire_start - 30 || crossing.message().find("Underwater power line: $25") == std::string::npos) {
         std::fprintf(stderr, "h wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(37, "a horizontal power line across water did not cost $25 or stay silent");
     }
     crossing.use_tool(TOOL_WIRE, 14, 10);
-    if (crossing.funds() != wire_start - 55 || crossing.message().find("Underwater wire: $25") == std::string::npos) {
+    if (crossing.funds() != wire_start - 55 || crossing.message().find("Underwater power line: $25") == std::string::npos) {
         std::fprintf(stderr, "v wire funds %" PRId64 " msg '%s'\n", crossing.funds(), crossing.message().c_str());
         return fail(38, "a vertical power line across water did not cost $25");
     }

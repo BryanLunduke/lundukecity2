@@ -298,7 +298,7 @@ Attempt lay_wire(Scratch &map, int x, int y, bool auto_bulldoze)
     if (tile == DIRT) {
         attempt.outcome = Outcome::Ok;
         attempt.cost = 5 + extra;
-        attempt.reason = "Wire $5";
+        attempt.reason = "Power line $5";
         map.set(x, y, LHPOWER | CONDBIT | BURNBIT | BULLBIT);
         return attempt;
     }
@@ -314,18 +314,18 @@ Attempt lay_wire(Scratch &map, int x, int y, bool auto_bulldoze)
             placed = true;
         }
         if (!placed) {
-            return blocked_at("No wire landing", x, y);
+            return blocked_at("No power line landing", x, y);
         }
         attempt.outcome = Outcome::Caution;
         attempt.cost = 25 + extra;
-        attempt.reason = "Underwater wire $25";
+        attempt.reason = "Underwater power line $25";
         map.set(x, y, HPOWER | CONDBIT | BULLBIT);
         return attempt;
     }
     if (tile == ROADS || tile == ROADS2 || tile == LHRAIL || tile == LVRAIL) {
         attempt.outcome = Outcome::Ok;
         attempt.cost = 5 + extra;
-        attempt.reason = "Wire $5";
+        attempt.reason = "Power line $5";
         map.set(x, y, LHPOWER | CONDBIT | BURNBIT | BULLBIT);
         return attempt;
     }
@@ -742,8 +742,8 @@ std::string short_build_reason(const std::string &message)
     if (message.find("anchor") != std::string::npos) {
         return "No bridge anchor";
     }
-    if (message.find("power line") != std::string::npos) {
-        return "No wire landing";
+    if (message.find("land a power line") != std::string::npos) {
+        return "No power line landing";
     }
     if (message.find("water") != std::string::npos) {
         return "Can't build on water";

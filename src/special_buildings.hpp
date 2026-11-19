@@ -133,13 +133,15 @@ int wire_special_buildings(Micropolis *sim);
 // a home inside k catchments counts 1/k toward each, so a second casino on
 // the same neighborhood splits the visitors instead of doubling them.
 // The yearly total is then capped at kIncomeCapTaxPercent of the city's
-// tax income, but never below kIncomeCapFloor (one full casino), so a
-// single attraction still earns what its row says while a stack of them
-// cannot out-earn the taxes.
+// tax income, but never below a floor that grows with the city:
+// kIncomeCapFloorPerThousand for each 1,000 people, up to kIncomeCapFloor
+// (one full casino). A big city's attraction still earns what its row
+// says, while a small city's casino can no longer out-earn its taxes.
 inline constexpr int kIncomeCatchmentRadius = 16;
 inline constexpr int kIncomeFullResidents = 2000;
 inline constexpr int kIncomeCapTaxPercent = 40;
 inline constexpr int kIncomeCapFloor = 300;
+inline constexpr int kIncomeCapFloorPerThousand = 10;
 struct SpecialIncome {
     bool earns = false; // the row has an annual_income at all
     bool intact = false;
@@ -157,8 +159,11 @@ struct SpecialIncome {
 // is within radius tiles (Chebyshev) of the centre.
 int special_residents_near(const Micropolis *sim, int center_x, int center_y, int radius);
 SpecialIncome special_income_at(const Micropolis *sim, int center_x, int center_y);
+// The least the cap can be: kIncomeCapFloorPerThousand per 1,000 people
+// (cityPop), at most kIncomeCapFloor.
+int special_income_floor(const Micropolis *sim);
 // The most all income buildings together pay in a year: kIncomeCapTaxPercent
-// of the last tax collection (taxFund), at least kIncomeCapFloor.
+// of the last tax collection (taxFund), at least special_income_floor.
 int special_income_cap(const Micropolis *sim);
 // The sum of special_income_at over the map, paid each January.
 int special_annual_income(const Micropolis *sim);

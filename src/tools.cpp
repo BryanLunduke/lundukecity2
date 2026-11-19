@@ -15,7 +15,7 @@ const ToolDef kTools[] = {
     {TOOL_BULLDOZER, "Bulldozer", 1, "Bulldozer: $1"},
     {TOOL_ROAD, "Roads", 10, "Roads: $10. Bridge: $50"},
     {TOOL_RAILROAD, "Rail", 20, "Rail: $20. Rail bridge: $100"},
-    {TOOL_WIRE, "Power lines", 5, "Power lines: $5. Underwater wire: $25"},
+    {TOOL_WIRE, "Power lines", 5, "Power lines: $5. Underwater power line: $25"},
     // Zones
     {TOOL_RESIDENTIAL, "Residential", 100, "Residential: $100"},
     {TOOL_COMMERCIAL, "Commercial", 100, "Commercial: $100"},
@@ -37,10 +37,10 @@ const ToolDef kTools[] = {
      SPECIAL_MICRONUKE},
     // Special buildings
     {kSpecialEngineId, "Zoo", 100, "Zoo: $100. Raises land value in a wide area with power", SPECIAL_ZOO},
-    {kSpecialEngineId, "Amusement Park", 100, "Amusement Park: $100. Raises land value with power. Up to $200 a year from nearby residents", SPECIAL_AMUSEMENT},
-    {kSpecialEngineId, "Casino", 100, "Casino: $100. Raises land value and crime. Up to $300 a year from nearby residents", SPECIAL_CASINO},
+    {kSpecialEngineId, "Amusement Park", 100, "Amusement Park: $100. Raises land value with power. Up to $200 a year with power, a road and 2,000 residents nearby", SPECIAL_AMUSEMENT},
+    {kSpecialEngineId, "Casino", 100, "Casino: $100. Raises land value and crime. Up to $300 a year with power, a road and 2,000 residents nearby", SPECIAL_CASINO},
     {TOOL_STADIUM, "Stadium", 5000, "Stadium: $5,000"},
-    {kSpecialEngineId, "Marina", 1000, "Marina: $1,000. Raises land value widely. Up to $100 a year. The south side is the dock", SPECIAL_MARINA},
+    {kSpecialEngineId, "Marina", 1000, "Marina: $1,000. Raises land value widely. Up to $100 a year with power, a road and 2,000 residents nearby. The south side is the dock", SPECIAL_MARINA},
     {kSpecialEngineId, "Library", 100, "Library: $100. Raises land value and cuts crime nearby with power", SPECIAL_LIBRARY},
     {kSpecialEngineId, "Mayor's House", 100, "Mayor's House: $100. Lifts land value, a bit city-wide, with power", SPECIAL_MAYOR},
     // Ports

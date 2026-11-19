@@ -944,3 +944,32 @@ test(
     'SDL_AUDIO_DRIVER=dummy',
   ],
 )
+
+# November 19 review: balance and playability fixes.
+review_nov19 = executable(
+  'review_nov19',
+  'review_nov19.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/special_buildings.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'review_nov19',
+  review_nov19,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+  timeout: 300,
+)

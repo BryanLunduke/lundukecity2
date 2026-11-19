@@ -46,10 +46,11 @@ struct Ledger {
     bool have_prior = false;
     int prior_votes[kProblems]{};
     std::int64_t prior_population = 0;
-    // Funds when this tax year began: the balance right after last year's
-    // budget was paid, or a new city's starting funds. The Year in Review
-    // shows it as "Start of year". Unknown for a city saved before this
-    // was kept; the review then falls back to the pre-collection balance.
+    // Funds when this tax year began: the treasury the last year ended
+    // with, just before its January budget was paid (the Funds readout at
+    // the time), or a new city's starting funds. The Year in Review shows
+    // it as "Start of year". Unknown for a city saved before this was
+    // kept; the review then falls back to the pre-collection balance.
     bool have_start_funds = false;
     std::int64_t start_funds = 0;
 
@@ -527,7 +528,7 @@ inline bool digest_routine(const std::string &text)
         "No place to land a power line.",
         "Bridge: $50",
         "Rail bridge: $100",
-        "Underwater wire: $25",
+        "Underwater power line: $25",
     };
     for (const char *one : skip) {
         if (text == one) {
@@ -540,9 +541,9 @@ inline bool digest_routine(const std::string &text)
 inline bool digest_notable(const std::string &text)
 {
     static const char *keys[] = {
-        "Fire reported", "monster",    "tornado",  "earthquake", "crashed",    "wrecked",
-        "explosion",     "Flooding",   "meltdown", "Riots",      "Firebombing", "reached",
-        "Scenario won",  "Scenario lost", "Blackouts", "out of funds",
+        "Fire reported", "Fire spreading", "monster",  "tornado",       "earthquake", "crashed",
+        "wrecked",       "explosion",      "Flooding", "meltdown",      "Riots",      "Firebombing",
+        "reached",       "Scenario won",   "Scenario lost", "Blackouts", "out of funds",
     };
     for (const char *key : keys) {
         if (text.find(key) != std::string::npos) {

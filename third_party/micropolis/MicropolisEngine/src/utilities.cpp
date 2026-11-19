@@ -208,12 +208,16 @@ void Micropolis::setGameLevelFunds(GameLevel level)
             break;
 
         case LEVEL_MEDIUM:
-            setFunds(10000);
+            // Review nov19 #2: with $10,000 a normal build order (plant,
+            // roads, zones, police and fire) went broke in years 2-10.
+            setFunds(12500);
             setGameLevel(LEVEL_MEDIUM);
             break;
 
         case LEVEL_HARD:
-            setFunds(5000);
+            // Review nov19 #1: $5,000 could not pay for a plant, roads and the
+            // first zones, so most Hard cities stalled near 2,000 people.
+            setFunds(7500);
             setGameLevel(LEVEL_HARD);
             break;
 
@@ -399,6 +403,9 @@ void Micropolis::setEnableDisasters(bool value)
 void Micropolis::setAutoBudget(bool value)
 {
     autoBudget = value;
+    if (value) {
+        autoBudgetForcedOff = false;
+    }
     mustUpdateOptions = true;
 }
 
