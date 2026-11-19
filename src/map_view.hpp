@@ -101,6 +101,10 @@ public:
     bool night_shown() const { return night_ && !night_hold_; }
     // Slate look for the price and reason tag at the cursor.
     void set_slate_tags(bool on) { slate_tags_ = on; }
+    // Smallest font size, in pixels, for the placement tags over the map
+    // ("Can't build on water", the price). The handheld raises it so a tag
+    // reads at arm's length; the desktop keeps 11.
+    void set_tag_min_px(double px) { tag_min_px_ = px > 1.0 ? px : 1.0; }
 
     // Coordinates are map-local pixels (after subtracting the scroll origin).
     bool press(double x, double y);
@@ -168,6 +172,7 @@ private:
     bool night_ = false;
     bool night_hold_ = false;
     bool slate_tags_ = false;
+    double tag_min_px_ = 11.0;
     bool light_dirty_ = true;
     std::chrono::steady_clock::time_point light_built_{};
     cairo_surface_t *light_pixels_ = nullptr;

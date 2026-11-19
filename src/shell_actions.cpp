@@ -34,6 +34,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -402,11 +403,16 @@ civic::YearDigest Shell::year_digest() const
         one.tile_y = notice.tile_y;
         notes.push_back(one);
     }
+    // Start of year is the balance when the year began, so Gained/Lost
+    // covers the whole year's building and income, not just January's
+    // collection. Older saves without it keep the pre-collection balance.
+    const civic::Ledger &ledger = session_.ledger();
+    const std::int64_t opening = ledger.have_start_funds ? ledger.start_funds : book.previous_funds;
     civic::YearDigest digest = civic::make_year_digest(
-        book.previous_funds, book.funds, true, book.estimates, report.population, session_.ledger(), votes, top_name,
+        opening, book.funds, true, book.estimates, report.population, session_.ledger(), votes, top_name,
         top_votes, top_kind, report.score_delta, report.deltas_known, session_.city_year(), notes);
     digest.ended_year = session_.review_year();
-    digest.opening_funds = book.previous_funds;
+    digest.opening_funds = opening;
     digest.closing_funds = book.funds;
     digest.tax_percent = book.tax_percent;
     return digest;
@@ -437,6 +443,10 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     if (dialog == Dialog::NewCity) {
         field_a_ = "New City";
         field_b_ = "auto";
+        // "auto" means this seed until the dialog closes; the preview and
+        // Generate both use it.
+        auto_seed_ = roll_city_seed(static_cast<unsigned>(std::time(nullptr)), static_cast<unsigned>(SDL_GetTicks()));
+        terrain_key_ = 0;
         new_page_ = 0;
         new_level_ = CitySession::kLevelEasy;
         new_island_ = CitySession::kTerrainDefault;
@@ -767,6 +777,32 @@ void Shell::center_on_fraction(double fx, double fy)
     scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
     scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
     clamp_scroll();
+}
+
+void Shell::note_view_for_save()
+{
+    save_view::View view;
+    view.valid = true;
+    view.tile_size = map_.tile_size();
+    view.center_x = std::clamp(map_point_fraction(view_x_ + view_w_ * 0.5, view_x_, map_ox_, scroll_x_, map_.pixel_width()),
+                               0.0, 1.0);
+    view.center_y = std::clamp(map_point_fraction(view_y_ + view_h_ * 0.5, view_y_, map_oy_, scroll_y_, map_.pixel_height()),
+                               0.0, 1.0);
+    session_.set_view_for_save(view);
+}
+
+void Shell::restore_loaded_view()
+{
+    const save_view::View &view = session_.loaded_view();
+    if (!view.valid) {
+        center_on_fraction(0.5, 0.5);
+        return;
+    }
+    // Same steps the Recover path uses for the autosave's view.
+    map_.set_tile_size(view.tile_size);
+    map_ox_ = map_letterbox_x();
+    map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+    center_on_fraction(view.center_x, view.center_y);
 }
 
 void Shell::zoom_by(int delta)
@@ -1553,6 +1589,7 @@ void Shell::finish_save(const std::string &path)
         open_dialog(Dialog::Info);
         return;
     }
+    note_view_for_save();
     if (!session_.save_city_as(path)) {
         info_title_ = "Save City";
         info_body_ = session_.message().empty() ? "Could not save the city." : session_.message();
@@ -1601,7 +1638,7 @@ void Shell::finish_open(const std::string &path)
         // was covered. restore_play_preferences may have stored the preference.
         adopt_loaded_speed(loaded_speed);
     }
-    center_on_fraction(0.5, 0.5);
+    restore_loaded_view();
     const std::string folder = parent_dir(path);
     if (!folder.empty()) {
         remember_city_folder(folder);
@@ -1870,6 +1907,8 @@ void Shell::apply_action(Action action)
         request_with_save(AfterSave::FilesLoad);
         break;
     case Action::Save:
+        // The camera rides along in the sidecar of a save to a known file.
+        note_view_for_save();
         if (session_.save_path().empty()) {
             // A Save from "Save changes?" has no file yet. Keep the pending
             // Quit / New / Load so it still runs after Save As succeeds.
@@ -2470,6 +2509,7 @@ void Shell::on_dialog_button(int id)
                 dialog_error_ = new_city_field_error(name_ok, seed_ok);
                 return;
             }
+            resolve_auto_seed(auto_seed_, seed, set);
             CitySession::NewCitySpec spec;
             spec.name = field_a_;
             spec.seed = seed;

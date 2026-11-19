@@ -879,29 +879,31 @@ def prison():
 
 
 def zoo():
+    """Giraffe, full body, side view facing left."""
     c = Canvas()
     Y = 'yellow'
-    # legs
-    for x in (7, 9, 13, 15):
-        c.vline(x, 11, 16, Y, 2 if x in (9, 15) else 1)
-        c.put(x, 17, 'stone', 3)
-    # body
-    c.rect(7, 8, 15, 11, Y, 1)
-    c.hline(8, 15, 8, Y, 0)
-    c.hline(7, 15, 11, Y, 2)
-    c.put(16, 8, Y, 2); c.put(17, 9, Y, 2); c.put(17, 10, Y, 3)  # tail
-    # neck to the upper left
-    for k in range(7):
-        c.rect(5 + k // 2 - 0, 7 - k, 6 + k // 2 + 1, 7 - k, Y, 1)
-        c.put(5 + k // 2, 7 - k, Y, 0)
-    # head
-    c.rect(1, 1, 5, 3, Y, 1); c.hline(2, 5, 1, Y, 0); c.put(1, 3, Y, 2)
-    c.put(3, 0, 'stone', 3); c.put(5, 0, 'stone', 3)  # ossicones
-    c.put(3, 2, 'ink', 0)
-    # patches
-    for (x, y) in ((9, 9), (12, 9), (14, 10), (10, 10), (7, 6), (6, 4), (8, 3)):
-        c.put(x, y, Y, 3)
-    c.put(13, 8, Y, 3)
+    art = [
+        "...h.h............",   # ossicone tips
+        "...1.1............",
+        "..01112...........",   # head, ear behind
+        ".01e1122..........",
+        "0011111...........",   # muzzle
+        ".2221s1...........",   # jaw, neck starts
+        ".....1s1..........",
+        ".....11s..........",
+        "......s11.........",
+        "......11s0000.....",   # shoulders, back slopes to the hips
+        "......1ss11ss100..",
+        "......11ss11ss12.2",   # tail
+        "......2ss12ss112.3",
+        "......2222222222..",   # belly
+        "......1.2....1.2..",   # legs
+        "......1.2....1.2..",
+        "......1.2....1.2..",
+        "......h.h....h.h..",   # hooves
+    ]
+    c.rows(0, 0, art, {'0': (Y, 0), '1': (Y, 1), '2': (Y, 2), '3': (Y, 3), 's': (Y, 3),
+                       'e': ('ink', 0), 'h': ('stone', 3)})
     return c
 
 

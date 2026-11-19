@@ -26,7 +26,19 @@ void fill(cairo_t *cr, double x, double y, double w, double h, double r, double 
     cairo_fill(cr);
 }
 
-void tile_rgb(int raw, double &r, double &g, double &b)
+
+std::uint32_t pack_rgb(double r, double g, double b)
+{
+    auto channel = [](double value) {
+        const int byte = static_cast<int>(value * 255.0 + 0.5);
+        return static_cast<std::uint32_t>(std::max(0, std::min(255, byte)));
+    };
+    return (channel(r) << 16) | (channel(g) << 8) | channel(b);
+}
+
+} // namespace
+
+void minimap_tile_rgb(int raw, double &r, double &g, double &b)
 {
     const int kind = raw & LOMASK;
     // Tiles 53-55 are civic centres. The atlas still has the old trash
@@ -106,17 +118,6 @@ void tile_rgb(int raw, double &r, double &g, double &b)
         b = 0.26;
     }
 }
-
-std::uint32_t pack_rgb(double r, double g, double b)
-{
-    auto channel = [](double value) {
-        const int byte = static_cast<int>(value * 255.0 + 0.5);
-        return static_cast<std::uint32_t>(std::max(0, std::min(255, byte)));
-    };
-    return (channel(r) << 16) | (channel(g) << 8) | channel(b);
-}
-
-} // namespace
 
 void MinimapView::set_session(CitySession *session)
 {
@@ -304,7 +305,7 @@ void MinimapView::sync()
             double r = 0;
             double g = 0;
             double b = 0;
-            tile_rgb(raw, r, g, b);
+            minimap_tile_rgb(raw, r, g, b);
             auto *pixel = reinterpret_cast<std::uint32_t *>(data + y * stride + x * 4);
             *pixel = pack_rgb(r, g, b);
             cached_raw_[index] = raw;

@@ -184,6 +184,10 @@ private:
     void retarget_recent(const std::string &path, const std::string &replacement);
     void load_recent();
     void center_on_fraction(double fx, double fy);
+    // Hand the current camera to the session so the next save keeps it,
+    // and put back the camera a loaded save kept (else the map centre).
+    void note_view_for_save();
+    void restore_loaded_view();
     void clamp_scroll();
     void fit_map_to_view();
     double map_local_x(double x) const;
@@ -621,6 +625,9 @@ private:
     double pan_scroll_x_ = 0;
     double pan_scroll_y_ = 0;
     int terrain_key_ = 0;
+    // The seed an "auto" field stands for while the New City dialog is up.
+    // The land preview draws it and Generate builds it, so they match.
+    int auto_seed_ = 1;
     cairo_surface_t *terrain_preview_ = nullptr;
     double overlay_x_ = 0;
     double overlay_y_ = 0;

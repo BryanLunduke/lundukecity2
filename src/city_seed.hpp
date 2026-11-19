@@ -131,6 +131,34 @@ inline int preview_seed_from_field(const std::string &field)
     return static_cast<int>(value);
 }
 
+// Seed the land preview draws. Blank or "auto" stands for the seed picked
+// when the dialog opened, the same one Generate passes to the city.
+inline int preview_seed_for_field(const std::string &field, int auto_seed)
+{
+    CitySeedParse parsed;
+    if (parse_city_seed(field, parsed) && parsed.from_clock) {
+        return auto_seed;
+    }
+    return preview_seed_from_field(field);
+}
+
+// Turn an "auto" seed into the dialog's picked seed so the city built is
+// the one the preview showed. An explicit seed is left alone.
+inline void resolve_auto_seed(int auto_seed, int &seed, bool &seed_was_set)
+{
+    if (!seed_was_set) {
+        seed = auto_seed;
+        seed_was_set = true;
+    }
+}
+
+// A fresh seed in the same range New terrain rolls (1000..900999).
+inline int roll_city_seed(unsigned clock_seconds, unsigned ticks)
+{
+    const unsigned salt = clock_seconds * 2654435761u ^ (ticks * 1103515245u + 12345u);
+    return 1000 + static_cast<int>(salt % 900000u);
+}
+
 inline unsigned terrain_preview_key(int seed, int island, int rivers, int lakes, int trees)
 {
     const auto bits = [](int value) { return static_cast<unsigned>(value); };

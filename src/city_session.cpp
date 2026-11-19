@@ -826,6 +826,9 @@ void CitySession::new_city(const NewCitySpec &spec)
     clear_scenario_clock();
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
+    // A new city's first year starts with its difficulty funds.
+    ledger_.have_start_funds = true;
+    ledger_.start_funds = static_cast<std::int64_t>(sim.totalFunds);
     arm_eval_baseline();
     ready_ = true;
     notify();
@@ -1216,6 +1219,9 @@ bool CitySession::load_recovery(const std::string &recovery_path, const std::str
     }
     save_path_ = origin_path;
     engine_->sim.cityFileName = origin_path;
+    // The shell puts back the NEWS log from the recovery info (up to 50
+    // lines); drop the sidecar's shorter copy so it is not listed twice.
+    clear_notices();
     // Recovered work is unsaved until the player saves it.
     dirty_ = true;
     post_message("Recovered an unsaved city. Save it to keep it.");
@@ -1667,6 +1673,8 @@ CitySession::BudgetBook CitySession::budget() const
         book.police_spent = static_cast<std::int64_t>(charge.policeTaken);
         book.fire_spent = static_cast<std::int64_t>(charge.fireTaken);
         book.cash_flow = static_cast<std::int64_t>(charge.posted) + static_cast<std::int64_t>(sim.specialIncome);
+        book.attraction_income = static_cast<std::int64_t>(sim.specialIncome);
+        book.attraction_collected = true;
         book.previous_funds = sim.budgetAnchorValid ? static_cast<std::int64_t>(sim.budgetAnchorFunds)
                                                     : static_cast<std::int64_t>(sim.totalFunds);
         book.funds = static_cast<std::int64_t>(sim.totalFunds) + book.cash_flow;
@@ -1716,6 +1724,9 @@ CitySession::BudgetBook CitySession::budget() const
 
     book.funds = static_cast<std::int64_t>(sim.totalFunds);
     book.previous_funds = book.funds;
+    // The same sum January pays (special_annual_income), shown on its own
+    // line. It is not added to this estimate's cash flow.
+    book.attraction_income = static_cast<std::int64_t>(special_annual_income(&sim));
     // Needs are the stored January bill, or the estimate filled in above.
     // Spending the stored fund here would print $0 for a city that has
     // not collected a tax year yet.
@@ -1796,6 +1807,9 @@ void CitySession::finish_budget_edit()
 {
     if (engine_->sim.budgetAwaitingAccept) {
         commit_pending_budget();
+        // The new tax year starts with what is left after the budget.
+        ledger_.have_start_funds = true;
+        ledger_.start_funds = static_cast<std::int64_t>(engine_->sim.totalFunds);
         return;
     }
     engine_->sim.applyFundingLevels();
@@ -2173,6 +2187,16 @@ std::string CitySession::scenario_clock_short() const
     return std::to_string(years) + "y " + std::to_string(months) + "m left";
 }
 
+bool CitySession::traffic_measured() const
+{
+    // The engine runs cityEvaluation (and so getTrafficAverage) with each
+    // January's tax collection, every 48 ticks of cityTime. A load reads
+    // an empty traffic map, so the figure before that is not the city's.
+    constexpr long long kTaxTicks = 48;
+    const long long now = static_cast<long long>(engine_->sim.cityTime);
+    return now >= 0 && now / kTaxTicks > traffic_anchor_time_ / kTaxTicks;
+}
+
 std::string CitySession::scenario_meter_short() const
 {
     const int id = scenario_id();
@@ -2185,7 +2209,8 @@ std::string CitySession::scenario_meter_short() const
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <60";
     }
     if (id == SC_BERN) {
-        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → <" +
+        const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
+        return "Traffic " + traffic + " → <" +
                std::to_string(BERN_TRAFFIC_GOAL) + " · " + grouped_count(people > 0 ? people : 0) + " → ≥" +
                grouped_count(BERN_POPULATION_GOAL);
     }
@@ -2221,7 +2246,8 @@ std::string CitySession::scenario_meter() const
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < 60";
     }
     if (id == SC_BERN) {
-        return "Traffic " + std::to_string(static_cast<int>(sim.trafficAverage)) + " → goal < " +
+        const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
+        return "Traffic " + traffic + " → goal < " +
                std::to_string(BERN_TRAFFIC_GOAL) + ", population " + grouped_count(people > 0 ? people : 0) +
                " → keep " + grouped_count(BERN_POPULATION_GOAL);
     }
@@ -3246,6 +3272,7 @@ void CitySession::arm_eval_baseline()
     eval_deltas_ready_ = false;
     const Quad time = sim.cityTime < 0 ? static_cast<Quad>(0) : sim.cityTime;
     eval_anchor_time_ = static_cast<long long>(time);
+    traffic_anchor_time_ = static_cast<long long>(time);
     const Quad people = live_population_count(sim);
     sim.cityPop = people < 0 ? 0 : people;
     sim.cityPopDelta = 0;
@@ -3290,6 +3317,27 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     if (!encoded.empty()) {
         append_string("milestones", encoded);
     }
+    // Where the player was looking and the NEWS log, so a load does not
+    // reset them. Older readers skip these keys.
+    const std::string view = save_view::encode_view(save_view_);
+    if (!view.empty()) {
+        append_string("view", view);
+    }
+    std::vector<save_view::News> lines;
+    for (const CityNotice &notice : notices_) {
+        save_view::News line;
+        line.text = notice.text;
+        line.tile_x = notice.tile_x;
+        line.tile_y = notice.tile_y;
+        line.month = notice.month;
+        line.year = notice.year;
+        line.has_place = notice.has_place;
+        lines.push_back(line);
+    }
+    const std::string news = save_view::encode_news(lines);
+    if (!news.empty()) {
+        append_string("news", news);
+    }
     // The Evaluation window's yearly changes, so a recovered or reloaded
     // city does not show dashes until another year passes.
     const bool deltas_known = eval_deltas_ready_ || sim.cityTime >= eval_anchor_time_ + 48;
@@ -3304,6 +3352,7 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
 void CitySession::read_scenario_sidecar(const std::string &path)
 {
     loaded_eval_ = LoadedEval{};
+    loaded_view_ = save_view::View{};
     std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
         return;
@@ -3330,6 +3379,35 @@ void CitySession::read_scenario_sidecar(const std::string &path)
             ledger_ = loaded;
             ledger_from_file_ = true;
         }
+    }
+    // The string value of "key", or empty. Values never hold a quote.
+    auto string_value = [&text](const char *key) -> std::string {
+        const auto at = text.find(std::string("\"") + key + "\"");
+        if (at == std::string::npos) {
+            return {};
+        }
+        const auto colon = text.find(':', at);
+        const auto first = colon == std::string::npos ? std::string::npos : text.find('"', colon + 1);
+        const auto second = first == std::string::npos ? std::string::npos : text.find('"', first + 1);
+        if (first == std::string::npos || second == std::string::npos) {
+            return {};
+        }
+        return text.substr(first + 1, second - first - 1);
+    };
+    save_view::decode_view(string_value("view"), loaded_view_);
+    std::vector<CityNotice> restored;
+    for (const save_view::News &line : save_view::decode_news(string_value("news"))) {
+        CityNotice notice;
+        notice.text = line.text;
+        notice.tile_x = line.tile_x;
+        notice.tile_y = line.tile_y;
+        notice.month = line.month;
+        notice.year = line.year;
+        notice.has_place = line.has_place;
+        restored.push_back(notice);
+    }
+    if (!restored.empty()) {
+        restore_notices(std::move(restored));
     }
     loaded_eval_ = LoadedEval{};
     const auto eval_key = text.find("\"evaluation\"");

@@ -110,29 +110,19 @@ int main()
     std::string error;
     Micropolis bare;
     arm(bare, 4);
-    if (place_special_building(&bare, prison, 20, 20, error) || error.find("power and a road") == std::string::npos) {
-        std::fprintf(stderr, "bare '%s'\n", error.c_str());
-        return fail(8, "a prison with no road and no power was accepted");
+    // Like the Casino and the Data Center, a Prison places with no road
+    // and no wire; it cuts crime only once it has both.
+    if (!special_requirement_at(prison, 18, 18, [](int, int, const void *) { return static_cast<int>(DIRT); }, nullptr)
+             .empty()) {
+        return fail(8, "a prison still refuses ground without a road and power");
     }
-    if ((bare.map[20][20] & LOMASK) != DIRT || bare.totalFunds != 50000) {
-        return fail(9, "a refused prison changed the map or the funds");
-    }
-    bare.map[20][18] = ROADBASE | BULLBIT | BURNBIT;
-    if (place_special_building(&bare, prison, 20, 20, error) || error.find("Needs power") == std::string::npos) {
-        std::fprintf(stderr, "road only '%s'\n", error.c_str());
-        return fail(10, "a prison with a road but no power was accepted");
-    }
-    bare.map[20][18] = DIRT;
-    bare.map[18][20] = HPOWER | CONDBIT | BULLBIT;
-    if (place_special_building(&bare, prison, 20, 20, error) || error.find("Needs a road") == std::string::npos) {
-        std::fprintf(stderr, "wire only '%s'\n", error.c_str());
-        return fail(11, "a prison with power but no road was accepted");
-    }
-    bare.map[20][18] = ROADBASE | BULLBIT | BURNBIT;
     if (!place_special_building(&bare, prison, 20, 20, error) || bare.totalFunds != 47000) {
         std::fprintf(stderr, "place '%s' funds %ld\n", error.c_str(), static_cast<long>(bare.totalFunds));
-        return fail(12, "a prison next to a road and a wire did not cost $3000");
+        return fail(12, "a prison with no road and no wire did not place for $3000");
     }
+    // The road and wire the later checks rely on.
+    bare.map[20][18] = ROADBASE | BULLBIT | BURNBIT;
+    bare.map[18][20] = HPOWER | CONDBIT | BULLBIT;
     if ((bare.map[20][20] & LOMASK) != SPECIAL_PRISON || (bare.map[20][20] & ZONEBIT) == 0 ||
         (bare.map[20][20] & CONDBIT) == 0 || (bare.map[19][19] & LOMASK) != kSpecialBodyTile ||
         (bare.map[22][22] & LOMASK) != kSpecialBodyTile || (bare.map[19][19] & ZONEBIT) != 0) {

@@ -6,6 +6,7 @@
 
 #include "civic.hpp"
 #include "inspect_report.hpp"
+#include "save_view.hpp"
 
 #include <cstdint>
 #include <cstdarg>
@@ -44,6 +45,11 @@ public:
         std::int64_t road_spent = 0;
         std::int64_t police_spent = 0;
         std::int64_t fire_spent = 0;
+        // Casino, Amusement Park, Marina and other income buildings. In a
+        // tax year: the amount this January added to cash_flow. Otherwise:
+        // what they would pay next January at today's count (display only).
+        std::int64_t attraction_income = 0;
+        bool attraction_collected = false;
         int tax_percent = 0;
         int road_percent = 100;
         int police_percent = 100;
@@ -499,6 +505,10 @@ public:
     void tell(std::string text) { post_message(std::move(text)); }
     // Puts back a NEWS log saved with a recovery file (newest first).
     void restore_notices(std::vector<CityNotice> notices);
+    // The camera the next save stores in its sidecar, and the one the last
+    // load found there (invalid for an older save or a new city).
+    void set_view_for_save(const save_view::View &view) { save_view_ = view; }
+    const save_view::View &loaded_view() const { return loaded_view_; }
     // Terrain only, on a throwaway simulator. Does not touch this city.
     bool preview_terrain(int seed, int island, int rivers, int lakes, int trees, std::vector<unsigned short> &tiles) const;
     std::vector<SpriteDot> sprites() const;
@@ -576,7 +586,14 @@ private:
     };
     LoadedEval loaded_eval_;
     void restore_loaded_eval();
+    save_view::View save_view_;
+    save_view::View loaded_view_;
     long long eval_anchor_time_ = 0;
+    // cityTime when this city was made, loaded or started. The traffic
+    // average is not measured until the engine's January evaluation after
+    // it; until then the Bern meter shows a dash, not the empty-map figure.
+    long long traffic_anchor_time_ = 0;
+    bool traffic_measured() const;
     int scenario_result_ = 0;
     bool query_has_tile_ = false;
     int query_x_ = 0;

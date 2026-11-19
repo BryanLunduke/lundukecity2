@@ -30,6 +30,7 @@
 #include "theme.hpp"
 #include "tile_atlas.hpp"
 #include "scenario_preview.hpp"
+#include "side_widgets.hpp"
 #include "special_buildings.hpp"
 #include "tool_keys.hpp"
 #include "placement_hint.hpp"
@@ -51,6 +52,9 @@
 #include <string>
 
 namespace {
+
+// Status line tool text, cut to fit (defined with fit_text below).
+std::string fit_tool_line(cairo_t *cr, const char *font, const std::string &text, int room);
 
 const char *speed_word(int speed)
 {
@@ -310,6 +314,9 @@ void Shell::layout()
         mini_y_ = view_y_ + dp(10);
     }
     map_.set_slate_tags(slate_ || handheld_);
+    // At 1280x800 a 16px tile made 11px tags (about 9px capitals). The
+    // handheld tags follow the UI text size instead.
+    map_.set_tag_min_px(handheld_ ? static_cast<double>(dp(17)) : 11.0);
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
     cursor_y_ = std::max(0.0f, std::min(cursor_y_, static_cast<float>(win_h_ - 1)));
     fit_map_to_view();
@@ -325,6 +332,17 @@ void round_dialog_rect(cairo_t *cr, double x, double y, double w, double h, doub
     cairo_arc(cr, x + rr, y + h - rr, rr, 1.5708, 3.1416);
     cairo_arc(cr, x + rr, y + rr, rr, 3.1416, 4.7124);
     cairo_close_path(cr);
+}
+
+// Pale outline for the road key swatch so it reads on dark and light keys.
+static void road_key_outline(cairo_t *cr, double x, double y, double w, double h)
+{
+    cairo_save(cr);
+    cairo_set_source_rgb(cr, 0xD8 / 255.0, 0xD8 / 255.0, 0xE0 / 255.0);
+    cairo_set_line_width(cr, 1.0);
+    cairo_rectangle(cr, x + 0.5, y + 0.5, std::max(1.0, w - 1.0), std::max(1.0, h - 1.0));
+    cairo_stroke(cr);
+    cairo_restore(cr);
 }
 
 void Shell::button(cairo_t *cr, double x, double y, double w, double h, const char *label, int id, bool primary,
@@ -415,8 +433,13 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         }
         const std::string plain = strip_mnemonic(label);
         const TextMetrics metrics = measure_text(cr, ui_font(), plain, -1);
-        const double shift = selected ? 8.0 : 0.0;
-        const double tx = x + (w - metrics.width + shift) / 2.0;
+        // A chosen chip keeps its check mark clear of the label: center the
+        // label in the room right of the mark instead of nudging it 4px.
+        double tx = x + (w - metrics.width) / 2.0;
+        if (selected && enabled && w > 22 && h > 16) {
+            const double mark_room = 8.0 + std::min(h * 0.42, 14.0) + 6.0;
+            tx = x + mark_room + std::max(0.0, (w - mark_room - 6.0 - metrics.width) / 2.0);
+        }
         const double ty = y + (h - metrics.height) / 2.0;
         if (!enabled) {
             paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.45, 0.42, 0.38);
@@ -1481,7 +1504,28 @@ void Shell::draw_dialog(cairo_t *cr)
             "Pick a difficulty and the kind of land. Default keeps the usual rivers, lakes, and trees.";
         double want_w = new_page_ == 1 ? dp(640) : dp(520);
         double want_h = new_page_ == 1 ? dp(560) : new_page_ == 0 ? (osk ? dp(190) : dp(236)) : dp(170);
-        const double land_intro_h = new_page_ == 1 ? text_block_height(land_intro, want_w - 2 * margin) : 0;
+        if (new_page_ == 1) {
+            // The difficulty chips name their funds. Make each chip wide
+            // enough for the longest name plus the check mark of a chosen chip.
+            double widest = 0;
+            for (int level : {CitySession::kLevelEasy, CitySession::kLevelMedium, CitySession::kLevelHard}) {
+                const std::string name = std::string(level == CitySession::kLevelEasy     ? "Easy · "
+                                                     : level == CitySession::kLevelMedium ? "Medium · "
+                                                                                          : "Hard · ") +
+                                         graph_money(CitySession::starting_funds(level));
+                widest = std::max(widest, static_cast<double>(measure_text(cr, ui_font(), name, -1).width));
+            }
+            const double chip_h = dp(32);
+            const double chip_w = widest + 8.0 + std::min(chip_h * 0.42, 14.0) + 6.0 + 6.0 + dp(4);
+            want_w = std::max(want_w, 2 * margin + dp(108) + dp(16) + 3.0 * (chip_w + dp(6)));
+        }
+        // Measure the intro in the font it is drawn in (ui_font) and at the
+        // width the dialog will have after the chips widened it, so a line
+        // that fits is not reserved twice.
+        auto intro_height = [&](double width) {
+            return std::max(static_cast<double>(dp(18)), line_height(ui_font(), land_intro, width));
+        };
+        const double land_intro_h = new_page_ == 1 ? intro_height(want_w - 2 * margin) : 0;
         if (new_page_ == 1) {
             want_h += std::max(0.0, land_intro_h - static_cast<double>(dp(22)));
             want_h += dp(28);
@@ -1532,7 +1576,10 @@ void Shell::draw_dialog(cairo_t *cr)
             buttons_at(x, dw, y + dh - margin - dp(36), {{"_Cancel", kCancel}, {"_Next", kNext}});
         } else if (new_page_ == 1) {
             label(cr, ui_font(), land_intro, x + margin, y + dp(46), static_cast<int>(dw - 2 * margin));
-            const double block_top = y + dp(46) + land_intro_h + dp(10);
+            // A narrow window can clamp the dialog below want_w; place the rows
+            // under the intro as it actually wraps at this width.
+            const double intro_h = std::max(land_intro_h, intro_height(dw - 2 * margin));
+            const double block_top = y + dp(46) + intro_h + dp(10);
             const char *groups[] = {"Difficulty", "Island", "Rivers", "Lakes", "Trees"};
             // Each difficulty names its starting funds.
             const std::string level_names[3] = {
@@ -1549,22 +1596,34 @@ void Shell::draw_dialog(cairo_t *cr)
                               new_rivers_ == CitySession::kTerrainOff ? 1 : new_rivers_ == CitySession::kRiversCurvy ? 2 : 0,
                               new_lakes_ == CitySession::kTerrainOff ? 1 : new_lakes_ == CitySession::kLakesMany ? 2 : 0,
                               new_trees_ == CitySession::kTerrainOff ? 1 : new_trees_ == CitySession::kTreesWooded ? 2 : 0};
+            // One grid for the whole page: a label column, then three equal
+            // columns that end at the same right margin as the buttons.
             const double label_w = dp(108);
-            const double choice_w = std::max(static_cast<double>(dp(96)), (dw - 2 * margin - label_w - dp(16)) / 3.0 - dp(6));
+            const double row_h = dp(32);
+            const double row_step = dp(40);
+            const double col_gap = dp(8);
+            const double cols_x = x + margin + label_w;
+            const double cols_w = std::max(1.0, x + dw - margin - cols_x);
+            const double choice_w = std::max(1.0, (cols_w - 2.0 * col_gap) / 3.0);
+            auto col_x = [&](int column) { return cols_x + column * (choice_w + col_gap); };
+            auto row_label = [&](const char *text, double row_y) {
+                const double text_h = static_cast<double>(measure_text(cr, ui_font(), text, -1).height);
+                paint_text(cr, ui_font(), text, x + margin, row_y + (row_h - text_h) / 2.0, theme::kTextR, theme::kTextG,
+                           theme::kTextB, static_cast<int>(label_w));
+            };
             for (int g = 0; g < 5; ++g) {
-                const double gy = block_top + g * dp(40);
-                paint_text(cr, ui_font(), groups[g], x + margin, gy + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
-                           static_cast<int>(label_w));
+                const double gy = block_top + g * row_step;
+                row_label(groups[g], gy);
                 for (int o = 0; o < 3; ++o) {
-                    button(cr, x + margin + label_w + o * (choice_w + dp(6)), gy, choice_w, dp(32), options[g][o],
-                           kChoice + g * 10 + o, false, selected[g] == o);
+                    button(cr, col_x(o), gy, choice_w, row_h, options[g][o], kChoice + g * 10 + o, false, selected[g] == o);
                 }
             }
-            const double seed_y = block_top + 5 * dp(40);
-            paint_text(cr, ui_font(), "Seed", x + margin, seed_y + dp(8), theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(label_w));
-            const double seed_x = x + margin + label_w;
-            const double seed_w = std::min(static_cast<double>(dp(220)), dw - margin - seed_x + x);
+            const double seed_y = block_top + 5 * row_step;
+            row_label("Seed", seed_y);
+            // The seed box spans the first two columns; New terrain, which
+            // rolls a new seed, sits in the third on the same row.
+            const double seed_x = cols_x;
+            const double seed_w = choice_w * 2.0 + col_gap;
             fill(cr, seed_x, seed_y, seed_w, dp(32), 1, 1, 1);
             stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
             push_hot(seed_x, seed_y, seed_w, dp(32), kFieldSeed);
@@ -1598,7 +1657,9 @@ void Shell::draw_dialog(cairo_t *cr)
                             seed_y, seed_w, dp(32));
                 cairo_restore(cr);
             }
-            const int preview_seed = preview_seed_from_field(field_b_);
+            // After the seed box, so Tab still goes seed, then New terrain.
+            button(cr, col_x(2), seed_y, choice_w, row_h, "New terrain", kNewTerrain, false);
+            const int preview_seed = preview_seed_for_field(field_b_, auto_seed_);
             const int preview_key = static_cast<int>(terrain_preview_key(preview_seed, new_island_, new_rivers_, new_lakes_,
                                                                          new_trees_));
             if (terrain_key_ != preview_key) {
@@ -1616,23 +1677,13 @@ void Shell::draw_dialog(cairo_t *cr)
                     for (int ty = 0; ty < CitySession::kWorldH; ++ty) {
                         for (int tx = 0; tx < CitySession::kWorldW; ++tx) {
                             const unsigned short raw = tiles[static_cast<std::size_t>(ty * CitySession::kWorldW + tx)];
-                            const int t = raw & LOMASK;
-                            int sample = DIRT;
-                            if (t >= RIVER && t <= WATER_HIGH) {
-                                sample = RIVER;
-                            } else if (t >= TREEBASE && t <= WOODS5) {
-                                sample = WOODS;
-                            } else if (t >= RESBASE && t < COMBASE) {
-                                sample = RESBASE;
-                            } else if (t >= ROADBASE && t <= LASTRAIL) {
-                                sample = ROADBASE;
-                            }
-                            double sr = 219.0 / 255.0;
-                            double sg = 148.0 / 255.0;
-                            double sb = 66.0 / 255.0;
-                            if (tile_atlas().loaded()) {
-                                tile_atlas().average_color(sample, sr, sg, sb);
-                            }
+                            // Paint each tile the way the colour minimap does. Bucketing
+                            // every forest-edge tile as solid woods made the preview look
+                            // denser than the city Generate builds from the same tiles.
+                            double sr = 0.0;
+                            double sg = 0.0;
+                            double sb = 0.0;
+                            minimap_tile_rgb(raw, sr, sg, sb);
                             const unsigned char r = static_cast<unsigned char>(std::lround(std::max(0.0, std::min(1.0, sr)) * 255.0));
                             const unsigned char gch = static_cast<unsigned char>(std::lround(std::max(0.0, std::min(1.0, sg)) * 255.0));
                             const unsigned char b = static_cast<unsigned char>(std::lround(std::max(0.0, std::min(1.0, sb)) * 255.0));
@@ -1643,34 +1694,34 @@ void Shell::draw_dialog(cairo_t *cr)
                     cairo_surface_mark_dirty(terrain_preview_);
                 }
             }
-            double preview_y = seed_y + dp(40);
+            double preview_y = seed_y + row_step;
             if (!dialog_error_.empty()) {
-                paint_text(cr, ui_font(), dialog_error_, x + margin, seed_y + dp(34), 0.6, 0.1, 0.1,
-                           static_cast<int>(dw - 2 * margin));
+                paint_text(cr, ui_font(), dialog_error_, cols_x, seed_y + row_h + dp(4), 0.6, 0.1, 0.1,
+                           static_cast<int>(cols_w));
                 preview_y += dp(22);
             }
             const double buttons_y = y + dh - margin - dp(36);
-            const double summary_y = buttons_y - dp(6) - dp(20);
-            // The map preview is 120x100. A clamped dialog (1011x601) used to
-            // draw it through the Generate line. Scale it into the gap.
-            const double preview_room = std::max(0.0, summary_y - dp(8) - preview_y);
-            // Grow into the gap under the preview on a tall window (1280x800).
-            // A short window still shrinks the 120x100 map so it stays above
-            // the Generate line. The New terrain button sits to the right.
-            const double beside = std::max(1.0, static_cast<double>(dp(260) - dp(8)));
-            const double max_by_width = beside / 120.0;
-            const double max_by_height = preview_room / 100.0;
-            const double preview_scale = std::min(max_by_width, max_by_height);
+            const double summary_y = buttons_y - dp(10) - dp(20);
+            // The 120x100 map sits in the column grid under the seed row,
+            // centred across the three columns and scaled to the room left
+            // above the Generate line, with the same gap above and below.
+            const double preview_room = std::max(0.0, summary_y - dp(10) - preview_y);
+            const double preview_scale = std::min(cols_w / 120.0, preview_room / 100.0);
             if (terrain_preview_ != nullptr && preview_scale >= 0.35) {
+                const double map_w = std::floor(120.0 * preview_scale);
+                const double map_h = std::floor(100.0 * preview_scale);
+                const double map_x = std::round(cols_x + (cols_w - map_w) / 2.0);
+                row_label("Map", preview_y);
                 cairo_save(cr);
-                cairo_translate(cr, x + margin, preview_y);
-                cairo_scale(cr, preview_scale, preview_scale);
+                cairo_translate(cr, map_x, preview_y);
+                cairo_scale(cr, map_w / 120.0, map_h / 100.0);
                 cairo_set_source_surface(cr, terrain_preview_, 0, 0);
                 cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
                 cairo_paint(cr);
                 cairo_restore(cr);
+                stroke_rect(cr, map_x - 1, preview_y - 1, map_w + 2, map_h + 2, theme::kMenuFrameR, theme::kMenuFrameG,
+                            theme::kMenuFrameB);
             }
-            button(cr, x + margin + dp(260), preview_y, dp(160), dp(32), "New terrain", kNewTerrain, false);
             std::string summary = "Generate \"" + field_a_ + "\".";
             if (city_chosen_) {
                 summary += " This replaces the city on the map.";
@@ -2735,6 +2786,11 @@ void Shell::draw_dialog(cairo_t *cr)
         const std::string funds = avoid_short_last_line(cr, ui_font(), copy.current_funds, col_px);
         const double row1 = std::max(line_height(ui_font(), taxes, col_w), line_height(ui_font(), previous, col_w));
         const double row2 = std::max(line_height(ui_font(), flow, col_w), line_height(ui_font(), funds, col_w));
+        // Casino, Amusement Park and Marina income gets its own line under
+        // cash flow, so the player can see what the attractions bring in.
+        const std::string attractions =
+            copy.attractions.empty() ? std::string() : avoid_short_last_line(cr, ui_font(), copy.attractions, col_px);
+        const double row3 = attractions.empty() ? 0.0 : line_height(ui_font(), attractions, col_w) + gap;
         const double note_h = copy.closing_note.empty() ? 0.0 : line_height(ui_font(), copy.closing_note, inner) + gap;
         auto block_h = [&](const std::string &caption, const std::string &value_text, const std::string &detail) {
             const double value_w = static_cast<double>(measure_text(cr, bold_font(), value_text, -1).width);
@@ -2749,13 +2805,23 @@ void Shell::draw_dialog(cairo_t *cr)
         const double fund_gap = static_cast<double>(dp(14));
         // The tax slider warns before the cliff (dialog_copy.hpp tax_warning).
         const TaxWarning tax_warn = tax_warning(tax_, session_.difficulty());
-        const double blocks = block_h(copy.tax_title, copy.tax_value, tax_warn.note) + fund_gap +
+        // The warning sits under the tax bar in room kept for the longest
+        // warning at any rate, so the bar and the window do not move while
+        // the thumb is dragged into the amber or red band.
+        double tax_note_room = 0;
+        for (int rate = 0; rate <= 20; ++rate) {
+            const TaxWarning w = tax_warning(rate, session_.difficulty());
+            if (!w.note.empty()) {
+                tax_note_room = std::max(tax_note_room, line_height(ui_font(), w.note, inner) + gap);
+            }
+        }
+        const double blocks = block_h(copy.tax_title, copy.tax_value, std::string()) + tax_note_room + fund_gap +
                               block_h("Road fund", std::to_string(road_) + "%", copy.road) +
                               block_h("Police fund", std::to_string(police_) + "%", copy.police) +
                               block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
         const double treasury_h = static_cast<double>(dp(28));
         const double height =
-            dp(40) + margin + treasury_h + row1 + gap + row2 + gap + note_h + blocks + dp(8) + dp(36) + margin;
+            dp(40) + margin + treasury_h + row1 + gap + row2 + gap + row3 + note_h + blocks + dp(8) + dp(36) + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
@@ -2791,6 +2857,9 @@ void Shell::draw_dialog(cairo_t *cr)
         const double flow_h = place_split(flow, x + margin, cursor, live_col);
         const double funds_h = place_split(funds, x + margin + live_col + col_gap, cursor, live_col);
         cursor += std::max(flow_h, funds_h) + gap;
+        if (!attractions.empty()) {
+            cursor += place_split(attractions, x + margin, cursor, live_col) + gap;
+        }
         if (!copy.closing_note.empty()) {
             double note_r = 0;
             double note_g = 0;
@@ -2810,20 +2879,11 @@ void Shell::draw_dialog(cairo_t *cr)
                        theme::kTextG, theme::kTextB);
             cursor += cap_h + gap;
             const bool tax_row = index == 1;
-            if (!detail.empty()) {
+            if (!detail.empty() && !tax_row) {
                 double note_r = 0;
                 double note_g = 0;
                 double note_b = 0;
                 theme::reading_ink(note_r, note_g, note_b);
-                if (tax_row && tax_warn.level == 2) {
-                    note_r = 0.70;
-                    note_g = 0.12;
-                    note_b = 0.08;
-                } else if (tax_row && tax_warn.level == 1) {
-                    note_r = 0.60;
-                    note_g = 0.38;
-                    note_b = 0.02;
-                }
                 const double detail_h = place_line(ui_font(), detail, x + margin, cursor, live_inner, note_r, note_g, note_b);
                 cursor += detail_h + gap;
             }
@@ -2876,6 +2936,25 @@ void Shell::draw_dialog(cairo_t *cr)
                 stroke_slider_focus(cr, sx + 1, bar_y - dp(4), sw - 2, dp(24));
             }
             cursor += dp(16) + tail;
+            if (tax_row) {
+                if (!detail.empty()) {
+                    double note_r = 0;
+                    double note_g = 0;
+                    double note_b = 0;
+                    theme::reading_ink(note_r, note_g, note_b);
+                    if (tax_warn.level == 2) {
+                        note_r = 0.70;
+                        note_g = 0.12;
+                        note_b = 0.08;
+                    } else if (tax_warn.level == 1) {
+                        note_r = 0.60;
+                        note_g = 0.38;
+                        note_b = 0.02;
+                    }
+                    place_line(ui_font(), detail, x + margin, cursor, live_inner, note_r, note_g, note_b);
+                }
+                cursor += tax_note_room;
+            }
         };
         slider(1, copy.tax_title, copy.tax_value, tax_warn.note, tax_, 0, 20);
         cursor += fund_gap;
@@ -3876,11 +3955,14 @@ void Shell::draw(cairo_t *cr)
         }
         const int status_w = width_of(ui_font(), status);
         int right_x = win_w_ - 8;
-        const int tool_w = tool_text.empty() ? 0 : width_of(bold_font(), tool_text);
-        const bool tool_fits = tool_w > 0 && status_w + 24 + tool_w <= win_w_ - 16;
+        const int tool_room = win_w_ - 16 - status_w - 24;
+        const std::string tool_shown =
+            tool_text.empty() || tool_room < dp(160) ? std::string() : fit_tool_line(cr, bold_font(), tool_text, tool_room);
+        const int tool_w = tool_shown.empty() ? 0 : width_of(bold_font(), tool_shown);
+        const bool tool_fits = tool_w > 0;
         if (tool_fits) {
             right_x -= tool_w;
-            paint_text(cr, bold_font(), tool_text, right_x, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, -1);
+            paint_text(cr, bold_font(), tool_shown, right_x, status_y + 8, theme::kTextR, theme::kTextG, theme::kTextB, -1);
             right_x -= dp(20);
         }
         std::string hint_line = hint;
@@ -4036,13 +4118,18 @@ void Shell::draw(cairo_t *cr)
         if (shown == CitySession::MapLayer::Zones) {
             // The six Zones colours, in the legend's word order: homes,
             // shops, industry, roads, rail, water (overlay_map.cpp).
+            // The map's road gray (48,48,52) vanishes on the dark key, so
+            // the key shows roads as a lighter gray with a pale outline.
             static const unsigned char keys[6][3] = {
-                {40, 170, 48}, {168, 72, 200}, {230, 190, 32}, {48, 48, 52}, {140, 84, 36}, {40, 110, 230},
+                {40, 170, 48}, {168, 72, 200}, {230, 190, 32}, {128, 128, 136}, {140, 84, 36}, {40, 110, 230},
             };
             const double step = std::min(static_cast<double>(dp(28)), (lw - pad * 2) / 6.0);
             for (int i = 0; i < 6; ++i) {
                 fill(cr, lx + pad + i * step, ramp_y, step - dp(4), dp(6), keys[i][0] / 255.0, keys[i][1] / 255.0,
                      keys[i][2] / 255.0);
+                if (i == 3) {
+                    road_key_outline(cr, lx + pad + i * step, ramp_y, step - dp(4), dp(6));
+                }
             }
         } else if (shown == CitySession::MapLayer::Power) {
             fill(cr, lx + pad, ramp_y, dp(28), dp(6), 220 / 255.0, 40 / 255.0, 32 / 255.0);
@@ -4068,7 +4155,8 @@ void Shell::draw(cairo_t *cr)
                 cairo_fill(cr);
             }
         } else if (shown == CitySession::MapLayer::Transportation) {
-            fill(cr, lx + pad, ramp_y, dp(28), dp(6), 48 / 255.0, 48 / 255.0, 52 / 255.0);
+            fill(cr, lx + pad, ramp_y, dp(28), dp(6), 128 / 255.0, 128 / 255.0, 136 / 255.0);
+            road_key_outline(cr, lx + pad, ramp_y, dp(28), dp(6));
             fill(cr, lx + pad + dp(34), ramp_y, dp(28), dp(6), 140 / 255.0, 84 / 255.0, 36 / 255.0);
         } else if (shown == CitySession::MapLayer::Commercial) {
             fill(cr, lx + pad, ramp_y, dp(28), dp(6), 48 / 255.0, 96 / 255.0, 210 / 255.0);
@@ -5205,6 +5293,21 @@ std::string fit_text(cairo_t *cr, const char *font, std::string text, int room)
     return text.empty() ? std::string() : text + dots;
 }
 
+// The status line's tool text: the whole line when it fits, then without
+// its "  [key]" label, then cut with an ellipsis.
+std::string fit_tool_line(cairo_t *cr, const char *font, const std::string &text, int room)
+{
+    if (measure_text(cr, font, text, -1).width <= room) {
+        return text;
+    }
+    std::string bare = text;
+    const std::size_t key = bare.rfind("  [");
+    if (key != std::string::npos && !bare.empty() && bare.back() == ']') {
+        bare.erase(key);
+    }
+    return fit_text(cr, font, bare, room);
+}
+
 // Pause, slow, normal and fast drawn as shapes so no font needs the glyphs.
 void speed_glyph(cairo_t *cr, int speed, double cx, double cy, double size, const SlateInk &ink)
 {
@@ -5452,11 +5555,15 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     const double text_y = y + (status_h_ - measure_text(cr, ui_font(), "Ag", -1).height) / 2.0;
     double right = win_w_ - dp(10);
     // Right: the tool and its price, then what a click does.
+    // A long tool line (Marina's dock note, Prison's rules) used to vanish
+    // past half the window. It may take most of the line now, giving up its
+    // key label first and then its tail.
     if (!tool_text.empty()) {
-        const int w = measure_text(cr, bold_font(), tool_text, -1).width;
-        if (w < win_w_ / 2) {
+        const std::string shown = fit_tool_line(cr, bold_font(), tool_text, static_cast<int>(win_w_ * 0.62));
+        if (!shown.empty()) {
+            const int w = measure_text(cr, bold_font(), shown, -1).width;
             right -= w;
-            slate_text(cr, bold_font(), tool_text, right, text_y, kSlateGold);
+            slate_text(cr, bold_font(), shown, right, text_y, kSlateGold);
             right -= dp(18);
         }
     }
@@ -5910,14 +6017,31 @@ void Shell::draw_handheld_hud(cairo_t *cr)
                     caption = std::string(tool->name) + ": " + detail;
                 }
             }
+            // Under the name and price, what the tool does: the hint's text
+            // after its price ("Raises land value widely. Up to $100 a
+            // year..."). The handheld has no status line to carry it.
+            std::string about;
+            if (tool != nullptr && tool->hint != nullptr && caption.find(": ") == std::string::npos) {
+                const std::string hint = tool->hint;
+                const std::size_t cut = hint.find(". ");
+                if (cut != std::string::npos) {
+                    about = hint.substr(cut + 2);
+                }
+            }
             const TextMetrics m = measure_text(cr, bold_font(), caption, -1);
-            const double cw = m.width + dp(16);
-            const double ch = m.height + dp(8);
+            const int about_room = static_cast<int>(std::max(1.0, std::min(win_w_ - dp(32) * 1.0, dp(560) * 1.0)));
+            const TextMetrics am = about.empty() ? TextMetrics{} : measure_text(cr, ui_font(), about, about_room);
+            const double cw = std::max(static_cast<double>(m.width), static_cast<double>(am.width)) + dp(16);
+            const double ch = m.height + (about.empty() ? 0.0 : am.height + dp(2)) + dp(8);
             double cx = xs[tool_index_] + ws[tool_index_] / 2.0 - cw / 2.0;
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
             slate_text(cr, bold_font(), caption, cx + dp(8), cy + dp(4), kSlateGold);
+            if (!about.empty()) {
+                paint_text(cr, ui_font(), about, cx + dp(8), cy + dp(4) + m.height + dp(2), kSlateInk.r, kSlateInk.g,
+                           kSlateInk.b, about_room);
+            }
         }
     }
     // Button hints along the bottom edge.
