@@ -213,7 +213,9 @@ void Micropolis::setGameLevelFunds(GameLevel level)
             break;
 
         case LEVEL_HARD:
-            setFunds(5000);
+            // Review nov19 #1: $5,000 could not pay for a plant, roads and the
+            // first zones, so most Hard cities stalled near 2,000 people.
+            setFunds(7500);
             setGameLevel(LEVEL_HARD);
             break;
 

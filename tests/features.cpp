@@ -245,7 +245,7 @@ int main()
     dry.lakes = CitySession::kTerrainOff;
     dry.trees = CitySession::kTerrainOff;
     session.new_city(dry);
-    if (session.funds() != 5000 || session.difficulty() != CitySession::kLevelHard ||
+    if (session.funds() != 7500 || session.difficulty() != CitySession::kLevelHard ||
         session.generated_seed() != 7 || session.city_name() != "Dryland") {
         return fail(24, "hard new city did not apply level, seed, or name");
     }

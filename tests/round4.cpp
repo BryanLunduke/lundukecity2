@@ -74,7 +74,7 @@ int main()
     CitySession paused;
     paused.set_speed(0);
     paused.new_city(spec_for("Hardville", 4, CitySession::kLevelHard));
-    if (paused.funds() != 5000 || paused.difficulty() != CitySession::kLevelHard || paused.speed() != 0 ||
+    if (paused.funds() != 7500 || paused.difficulty() != CitySession::kLevelHard || paused.speed() != 0 ||
         !paused.save_city_as(path) || file_slot(path, 15) != CitySession::kLevelHard ||
         file_slot(path, 64) != 1) {
         std::fprintf(stderr, "hard funds %" PRId64 " level %d slot %d disasters %d\n", paused.funds(), paused.difficulty(),
@@ -84,11 +84,11 @@ int main()
     CitySession loaded_hard;
     loaded_hard.set_speed(3);
     if (!loaded_hard.load_city(path) || loaded_hard.difficulty() != CitySession::kLevelHard ||
-        loaded_hard.funds() != 5000 || loaded_hard.speed() != 0 ||
+        loaded_hard.funds() != 7500 || loaded_hard.speed() != 0 ||
         loaded_hard.evaluation().difficulty != "Hard" || !loaded_hard.disasters()) {
         std::fprintf(stderr, "reloaded level %d funds %" PRId64 " speed %d diff '%s'\n", loaded_hard.difficulty(),
                      loaded_hard.funds(), loaded_hard.speed(), loaded_hard.evaluation().difficulty.c_str());
-        return fail(2, "reloading the paused Hard city did not keep Hard, $5,000, and pause");
+        return fail(2, "reloading the paused Hard city did not keep Hard, $7,500, and pause");
     }
 
     loaded_hard.new_city(spec_for("Easyville", 5, CitySession::kLevelEasy));

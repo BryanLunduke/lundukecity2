@@ -243,7 +243,7 @@ int check_text()
 {
     if (CitySession::starting_funds(CitySession::kLevelEasy) != 20000 ||
         CitySession::starting_funds(CitySession::kLevelMedium) != 10000 ||
-        CitySession::starting_funds(CitySession::kLevelHard) != 5000) {
+        CitySession::starting_funds(CitySession::kLevelHard) != 7500) {
         return fail(50, "New City shows the wrong starting funds");
     }
     const std::string help = how_to_play_text();
