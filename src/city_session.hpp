@@ -44,6 +44,11 @@ public:
         std::int64_t road_spent = 0;
         std::int64_t police_spent = 0;
         std::int64_t fire_spent = 0;
+        // Casino, Amusement Park, Marina and other income buildings. In a
+        // tax year: the amount this January added to cash_flow. Otherwise:
+        // what they would pay next January at today's count (display only).
+        std::int64_t attraction_income = 0;
+        bool attraction_collected = false;
         int tax_percent = 0;
         int road_percent = 100;
         int police_percent = 100;

@@ -95,6 +95,8 @@ struct BudgetCopy {
     std::string cash_flow;
     std::string current_funds;
     std::string closing_note;
+    // Income buildings, empty when they earn nothing.
+    std::string attractions;
     std::string tax_title;
     std::string tax_value;
     std::string road;
@@ -164,6 +166,11 @@ inline BudgetCopy budget_copy(const CitySession::BudgetBook &book, bool tax_year
     copy.cash_flow = std::string(book.estimates ? "Estimated cash flow: " : "Collected cash flow: ") + flow;
     copy.previous_funds = "Previous funds: " + graph_money(book.previous_funds);
     copy.current_funds = "Current funds: " + graph_money(book.funds);
+    if (book.attraction_income > 0) {
+        copy.attractions = book.attraction_collected
+                               ? "Attractions in cash flow: +" + graph_money(book.attraction_income)
+                               : "Attractions at today's homes: " + graph_money(book.attraction_income);
+    }
     copy.tax_value = std::to_string(book.tax_percent) + "%";
     const char *request = book.estimates ? "Estimated request " : "Request ";
     auto funding_line = [request](std::int64_t need, int percent, std::int64_t spent, const std::string &note) {

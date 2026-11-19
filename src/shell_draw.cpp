@@ -2769,6 +2769,11 @@ void Shell::draw_dialog(cairo_t *cr)
         const std::string funds = avoid_short_last_line(cr, ui_font(), copy.current_funds, col_px);
         const double row1 = std::max(line_height(ui_font(), taxes, col_w), line_height(ui_font(), previous, col_w));
         const double row2 = std::max(line_height(ui_font(), flow, col_w), line_height(ui_font(), funds, col_w));
+        // Casino, Amusement Park and Marina income gets its own line under
+        // cash flow, so the player can see what the attractions bring in.
+        const std::string attractions =
+            copy.attractions.empty() ? std::string() : avoid_short_last_line(cr, ui_font(), copy.attractions, col_px);
+        const double row3 = attractions.empty() ? 0.0 : line_height(ui_font(), attractions, col_w) + gap;
         const double note_h = copy.closing_note.empty() ? 0.0 : line_height(ui_font(), copy.closing_note, inner) + gap;
         auto block_h = [&](const std::string &caption, const std::string &value_text, const std::string &detail) {
             const double value_w = static_cast<double>(measure_text(cr, bold_font(), value_text, -1).width);
@@ -2799,7 +2804,7 @@ void Shell::draw_dialog(cairo_t *cr)
                               block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
         const double treasury_h = static_cast<double>(dp(28));
         const double height =
-            dp(40) + margin + treasury_h + row1 + gap + row2 + gap + note_h + blocks + dp(8) + dp(36) + margin;
+            dp(40) + margin + treasury_h + row1 + gap + row2 + gap + row3 + note_h + blocks + dp(8) + dp(36) + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
@@ -2835,6 +2840,9 @@ void Shell::draw_dialog(cairo_t *cr)
         const double flow_h = place_split(flow, x + margin, cursor, live_col);
         const double funds_h = place_split(funds, x + margin + live_col + col_gap, cursor, live_col);
         cursor += std::max(flow_h, funds_h) + gap;
+        if (!attractions.empty()) {
+            cursor += place_split(attractions, x + margin, cursor, live_col) + gap;
+        }
         if (!copy.closing_note.empty()) {
             double note_r = 0;
             double note_g = 0;

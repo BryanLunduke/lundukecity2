@@ -1670,6 +1670,8 @@ CitySession::BudgetBook CitySession::budget() const
         book.police_spent = static_cast<std::int64_t>(charge.policeTaken);
         book.fire_spent = static_cast<std::int64_t>(charge.fireTaken);
         book.cash_flow = static_cast<std::int64_t>(charge.posted) + static_cast<std::int64_t>(sim.specialIncome);
+        book.attraction_income = static_cast<std::int64_t>(sim.specialIncome);
+        book.attraction_collected = true;
         book.previous_funds = sim.budgetAnchorValid ? static_cast<std::int64_t>(sim.budgetAnchorFunds)
                                                     : static_cast<std::int64_t>(sim.totalFunds);
         book.funds = static_cast<std::int64_t>(sim.totalFunds) + book.cash_flow;
@@ -1719,6 +1721,9 @@ CitySession::BudgetBook CitySession::budget() const
 
     book.funds = static_cast<std::int64_t>(sim.totalFunds);
     book.previous_funds = book.funds;
+    // The same sum January pays (special_annual_income), shown on its own
+    // line. It is not added to this estimate's cash flow.
+    book.attraction_income = static_cast<std::int64_t>(special_annual_income(&sim));
     // Needs are the stored January bill, or the estimate filled in above.
     // Spending the stored fund here would print $0 for a city that has
     // not collected a tax year yet.
