@@ -190,6 +190,14 @@ int notice_mark(const std::string &text)
     return 0;
 }
 
+int news_staleness(int age_months)
+{
+    if (age_months >= kNewsOldMonths) {
+        return 2;
+    }
+    return age_months >= kNewsStaleMonths ? 1 : 0;
+}
+
 std::string message_for_number(int number)
 {
     const int count = static_cast<int>(sizeof(kMessages) / sizeof(kMessages[0]));

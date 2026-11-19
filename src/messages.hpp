@@ -27,5 +27,13 @@ bool notice_is_disaster(const std::string &text);
 bool notice_is_tool_feedback(const std::string &text);
 bool notice_shakes(const std::string &text);
 
+// How the NEWS line treats a notice this many game months old: 0 shows it
+// as news, 1 shows it greyed out (kNewsStaleMonths or older), 2 replaces
+// it with "No recent news." (kNewsOldMonths or older). A 14-month-old
+// "Crime is very high." used to read as current.
+constexpr int kNewsStaleMonths = 6;
+constexpr int kNewsOldMonths = 12;
+int news_staleness(int age_months);
+
 // 0 general, 1 disaster, 2 money, 3 people, 4 power, 5 road. Message-list marks.
 int notice_mark(const std::string &text);

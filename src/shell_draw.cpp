@@ -5587,9 +5587,14 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     const double news_x = dp(10) + tag_w + dp(10);
     std::string news = "No news yet.";
     const auto &notices = session_.notices();
+    // Review nov19 #9: old news greys out after six months and gives way
+    // to "No recent news." after a year.
+    int staleness = 0;
     if (!notices.empty()) {
         const CitySession::CityNotice &latest = notices.front();
-        news = latest.text + "   " + month_short(latest.month) + " " + std::to_string(latest.year);
+        staleness = news_staleness(session_.game_month_index() - (latest.year * 12 + latest.month));
+        news = staleness >= 2 ? std::string("No recent news.")
+                              : latest.text + "   " + month_short(latest.month) + " " + std::to_string(latest.year);
     }
     std::string hint_line = hint;
     const int news_w = measure_text(cr, ui_font(), news, -1).width;
@@ -5602,7 +5607,7 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
         right -= dp(24);
     }
     const std::string shown_news = fit_text(cr, ui_font(), news, static_cast<int>(right - news_x));
-    slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() ? kSlateDim : kSlateInk);
+    slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() || staleness > 0 ? kSlateDim : kSlateInk);
 }
 
 void Shell::draw_slate_milestone(cairo_t *cr, double card_x, double card_y, double card_w, double card_h)

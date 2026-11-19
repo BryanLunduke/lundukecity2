@@ -314,6 +314,17 @@ int check_power_line_name()
     return 0;
 }
 
+// #9: the NEWS line greys out a notice after six months and drops it
+// after a year.
+int check_news_staleness()
+{
+    if (news_staleness(0) != 0 || news_staleness(5) != 0 || news_staleness(6) != 1 || news_staleness(11) != 1 ||
+        news_staleness(12) != 2 || news_staleness(14) != 2) {
+        return fail(60, "news staleness is not 6 months grey, 12 months gone");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -331,6 +342,9 @@ int main()
         return r;
     }
     if (const int r = check_power_line_name()) {
+        return r;
+    }
+    if (const int r = check_news_staleness()) {
         return r;
     }
     std::puts("review_nov19 ok");
