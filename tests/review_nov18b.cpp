@@ -240,6 +240,17 @@ int check_mayor_key_and_hint()
     return 0;
 }
 
+// #12: player text uses US spelling.
+int check_spelling()
+{
+    for (int i = 0; i < special_building_count(); ++i) {
+        if (std::string(special_building(i).effect).find("neighbour") != std::string::npos) {
+            return fail(50, "a building description says 'neighbourhood'");
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -257,6 +268,9 @@ int main()
         return r;
     }
     if (const int r = check_mayor_key_and_hint()) {
+        return r;
+    }
+    if (const int r = check_spelling()) {
         return r;
     }
     std::puts("review_nov18b ok");

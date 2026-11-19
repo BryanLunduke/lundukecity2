@@ -112,7 +112,7 @@ constexpr SpecialBuilding kBuildings[] = {
     // the city average, a little more than one $500 Police Station's -12,
     // while high-crime blocks still need police coverage.
     {SPECIAL_PRISON, "Prison", "prison", "prison", 3000, 0, 4, 4, 6, -16,
-     "Cuts crime across the neighbourhood, and by 15% across the city, while it has power and a road. Slightly "
+     "Cuts crime across the neighborhood, and by 15% across the city, while it has power and a road. Slightly "
      "lowers nearby land value",
      8, -40, 0, -1, 0, 1, 1, true, true, false, false, true, 15},
     // Marina: ten times a Big Park's price buys a wider, stronger lift
