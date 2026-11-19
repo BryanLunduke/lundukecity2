@@ -208,7 +208,9 @@ void Micropolis::setGameLevelFunds(GameLevel level)
             break;
 
         case LEVEL_MEDIUM:
-            setFunds(10000);
+            // Review nov19 #2: with $10,000 a normal build order (plant,
+            // roads, zones, police and fire) went broke in years 2-10.
+            setFunds(12500);
             setGameLevel(LEVEL_MEDIUM);
             break;
 

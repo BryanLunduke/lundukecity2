@@ -109,14 +109,14 @@ int main()
     medium.set_speed(0);
     medium.new_city(spec_for("Hard Again", 6, CitySession::kLevelHard));
     medium.new_city(spec_for("Midville", 7, CitySession::kLevelMedium));
-    if (!medium.save_city_as(path) || file_slot(path, 15) != CitySession::kLevelMedium || medium.funds() != 10000) {
+    if (!medium.save_city_as(path) || file_slot(path, 15) != CitySession::kLevelMedium || medium.funds() != 12500) {
         std::fprintf(stderr, "medium slot %d funds %" PRId64 "\n", file_slot(path, 15), medium.funds());
         return fail(5, "a paused Medium city was not saved as Medium");
     }
     CitySession loaded_medium;
     if (!loaded_medium.load_city(path) || loaded_medium.difficulty() != CitySession::kLevelMedium ||
-        loaded_medium.funds() != 10000) {
-        return fail(6, "reloading Medium did not keep Medium and $10,000");
+        loaded_medium.funds() != 12500) {
+        return fail(6, "reloading Medium did not keep Medium and $12,500");
     }
 
     Micropolis stale;

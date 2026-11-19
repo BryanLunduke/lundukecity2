@@ -282,8 +282,8 @@ int main()
     medium.seed = 3;
     medium.difficulty = CitySession::kLevelMedium;
     session.new_city(medium);
-    if (session.funds() != 10000 || session.difficulty() != CitySession::kLevelMedium) {
-        return fail(29, "medium difficulty should start with $10,000");
+    if (session.funds() != 12500 || session.difficulty() != CitySession::kLevelMedium) {
+        return fail(29, "medium difficulty should start with $12,500");
     }
     const unsigned first_map = map_hash(session);
     medium.seed = 99;

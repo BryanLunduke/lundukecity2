@@ -113,7 +113,7 @@ public:
     static constexpr int kScenarioCount = 8;
     static const ScenarioDef &scenario_def(int index);
 
-    // Difficulty is the engine GameLevel: easy $20,000, medium $10,000,
+    // Difficulty is the engine GameLevel: easy $20,000, medium $12,500,
     // hard $7,500. It also changes the tax and road-cost tables.
     static constexpr int kLevelEasy = 0;
     static constexpr int kLevelMedium = 1;
@@ -121,7 +121,7 @@ public:
     // The funds a new city starts with (Micropolis::setGameLevelFunds).
     static constexpr int starting_funds(int level)
     {
-        return level == kLevelHard ? 7500 : level == kLevelMedium ? 10000 : 20000;
+        return level == kLevelHard ? 7500 : level == kLevelMedium ? 12500 : 20000;
     }
 
     // Terrain knobs are the engine fields used by generateMap().
