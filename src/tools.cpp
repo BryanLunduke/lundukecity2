@@ -42,7 +42,7 @@ const ToolDef kTools[] = {
     {TOOL_STADIUM, "Stadium", 5000, "Stadium: $5,000"},
     {kSpecialEngineId, "Marina", 1000, "Marina: $1,000. Raises land value widely. Up to $100 a year. The south side is the dock", SPECIAL_MARINA},
     {kSpecialEngineId, "Library", 100, "Library: $100. Raises land value and cuts crime nearby with power", SPECIAL_LIBRARY},
-    {kSpecialEngineId, "Mayor's House", 100, "Mayor's House: $100. One per city", SPECIAL_MAYOR},
+    {kSpecialEngineId, "Mayor's House", 100, "Mayor's House: $100. Lifts land value, a bit city-wide, with power", SPECIAL_MAYOR},
     // Ports
     {TOOL_AIRPORT, "Airport", 10000, "Airport: $10,000"},
     {TOOL_SEAPORT, "Seaport", 3000, "Seaport: $3,000"},

@@ -5,10 +5,12 @@
 // Regressions for the second November 18 review (nov18b) that the
 // special-building tests do not already cover.
 
+#include "bindings.hpp"
 #include "city_session.hpp"
 #include "dialog_copy.hpp"
 #include "inspect_report.hpp"
 #include "special_buildings.hpp"
+#include "tools.hpp"
 
 #include "micropolis.h"
 
@@ -211,6 +213,33 @@ int check_minimap_colours()
     return 0;
 }
 
+// #11: the Mayor's House has a factory key and its hint does not say the
+// cap twice.
+int check_mayor_key_and_hint()
+{
+    const int act = key_act_from_id("mayor");
+    if (act < KeyTool0 || factory_key(act) != "shift+m" || chord_label(factory_key(act)) != "Shift+M") {
+        return fail(40, "the Mayor's House has no Shift+M factory key");
+    }
+    for (int i = 0; i < KeyActCount; ++i) {
+        if (i != act && factory_key(i) == factory_key(act)) {
+            return fail(41, "Shift+M is already another action's factory key");
+        }
+    }
+    const ControlBinds binds = default_binds();
+    if (key_act_for_token(binds, "shift+m") != act || key_act_for_token(binds, "m") == act) {
+        return fail(42, "Shift+M does not pick the Mayor's House");
+    }
+    for (int i = 0; i < kToolCount; ++i) {
+        const ToolDef *tool = tool_by_index(i);
+        if (tool != nullptr && std::string(tool->name) == "Mayor's House" &&
+            std::string(tool->hint).find("One per city") != std::string::npos) {
+            return fail(43, "the Mayor's House hint still says 'One per city'");
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -225,6 +254,9 @@ int main()
         return r;
     }
     if (const int r = check_minimap_colours()) {
+        return r;
+    }
+    if (const int r = check_mayor_key_and_hint()) {
         return r;
     }
     std::puts("review_nov18b ok");

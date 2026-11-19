@@ -327,6 +327,11 @@ inline std::string factory_key(int act)
                                        'e', 'u', 'm', 'x', 'y', 's', 'd', 'v', 'l', 0,   'a', 'p', 'q'};
         static_assert(sizeof(letters) == KeyActCount - KeyTool0, "one factory letter per tool");
         if (letters[act - KeyTool0] == 0) {
+            // Every letter is taken, and M is the Micro Nuclear Plant, so
+            // the Mayor's House is Shift+M (review nov18b #11).
+            if (std::string(key_act_id(act)) == "mayor") {
+                return "shift+m";
+            }
             return {};
         }
         return std::string(1, letters[act - KeyTool0]);
