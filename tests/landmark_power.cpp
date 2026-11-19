@@ -92,8 +92,8 @@ bool build_city(Micropolis &sim, const std::string &loose, std::vector<Placed> &
             }
         }
         if (loose == b.name && b.needs_power) {
-            // The prison will not even go down unwired; give it a short
-            // dead wire that reaches nothing.
+            // A short dead wire that reaches nothing: the prison places
+            // either way, but stays unpowered.
             sim.toolDown(TOOL_WIRE, static_cast<short>(at_left - 1), static_cast<short>(top));
         }
         std::string error;

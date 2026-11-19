@@ -223,14 +223,6 @@ bool road_word(int raw)
     return true;
 }
 
-bool power_word(int raw)
-{
-    if (raw < 0) {
-        return false;
-    }
-    return (raw & CONDBIT) != 0;
-}
-
 int search_reach()
 {
     int reach = 1;
@@ -822,18 +814,10 @@ std::string special_requirement_at(int index, int left, int top, SpecialWordFn w
     if (building.needs_south_water && !south_water(left, top, building.width, building.height, word_at, ctx)) {
         return "Needs a shoreline to the south.";
     }
-    const bool road_ok = !building.needs_road || ring_has(left, top, building.width, building.height, word_at, ctx, road_word);
-    const bool power_ok =
-        !building.needs_power || ring_has(left, top, building.width, building.height, word_at, ctx, power_word);
-    if (!power_ok && !road_ok) {
-        return "Needs power and a road.";
-    }
-    if (!power_ok) {
-        return "Needs power.";
-    }
-    if (!road_ok) {
-        return "Needs a road.";
-    }
+    // The Prison used to refuse ground without a road and a wire while the
+    // Casino and Data Center placed there and waited. Every special now
+    // places the same way; crime_service_ready still holds the Prison's
+    // crime cut until it has power and a road.
     return {};
 }
 

@@ -57,13 +57,13 @@ struct SpecialBuilding {
     // stadium use 1. A single park-like tile uses 0.
     int anchor_x = 1;
     int anchor_y = 1;
-    // Placement fails unless a road (the engine's roadTest, so rail counts)
-    // touches the footprint.
+    // The building works only while a road (the engine's roadTest, so rail
+    // counts) touches the footprint. It still places without one, like the
+    // Casino, and its Inspect card asks for the road.
     bool needs_road = false;
-    // Placement fails unless a conductive tile touches the footprint. The
-    // crime reduction waits until the power scan actually powers the center.
-    // (Whether the building conducts and takes power is open_air below;
-    // this is only the stricter placement rule the prison has.)
+    // The building works only once the power scan powers its center. It
+    // still places unwired, like the Casino and the Data Center. (Whether
+    // the building conducts and takes power is open_air below.)
     bool needs_power = false;
     // The south row may cover shoreline. Open water must still sit
     // immediately south of the footprint. Bulldoze puts that shoreline
@@ -184,8 +184,9 @@ bool special_building_intact(const Micropolis *sim, int center_x, int center_y);
 // word_at returns the raw map word. Off-map cells return a negative word.
 using SpecialWordFn = int (*)(int x, int y, const void *ctx);
 
-// Empty when the footprint at (left, top) meets the road, power, and water
-// rules. The site-clear checks stay with the caller.
+// Empty when the footprint at (left, top) meets the placement rules: only
+// the Marina's shoreline. Road and power decide whether a building works,
+// not where it may go. The site-clear checks stay with the caller.
 std::string special_requirement_at(int index, int left, int top, SpecialWordFn word_at, const void *ctx);
 
 // Trees, rubble, and a park with the bulldoze bit. Roads, zones, water,

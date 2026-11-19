@@ -29,7 +29,7 @@ const ToolDef kTools[] = {
     // Services
     {TOOL_FIRESTATION, "Fire Station", 500, "Fire Station: $500"},
     {TOOL_POLICESTATION, "Police Station", 500, "Police Station: $500"},
-    {kSpecialEngineId, "Prison", 3000, "Prison: $3,000. Needs power and a road. Cuts crime, slightly lowers land value", SPECIAL_PRISON},
+    {kSpecialEngineId, "Prison", 3000, "Prison: $3,000. Cuts crime once it has power and a road. Slightly lowers land value", SPECIAL_PRISON},
     // Utilities
     {TOOL_COALPOWER, "Coal Plant", 3000, "Coal Plant: $3,000"},
     {TOOL_NUCLEARPOWER, "Nuclear Plant", 5000, "Nuclear Plant: $5,000"},
