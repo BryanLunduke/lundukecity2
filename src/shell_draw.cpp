@@ -2431,24 +2431,28 @@ void Shell::draw_dialog(cairo_t *cr)
                           int max, const SettingsStack &row, bool enabled, bool leave_switch) {
             const double sy = content + row.caption;
             const double label_right = leave_switch ? switch_x - x - margin - dp(12) : dw - 2 * margin - dp(72);
-            paint_text(cr, bold_font(), caption, x + margin, sy, enabled ? theme::kTextR : theme::kDisabledR,
+            // The same weight as the switch rows below (review nov18b #14).
+            paint_text(cr, ui_font(), caption, x + margin, sy, enabled ? theme::kTextR : theme::kDisabledR,
                        enabled ? theme::kTextG : theme::kDisabledG, enabled ? theme::kTextB : theme::kDisabledB,
                        static_cast<int>(std::max(1.0, label_right)));
             if (enabled && !value_text.empty() && !leave_switch) {
-                const TextMetrics value_metrics = measure_text(cr, bold_font(), value_text, -1);
-                paint_text(cr, bold_font(), value_text, x + dw - margin - value_metrics.width, sy, theme::kTextR,
+                const TextMetrics value_metrics = measure_text(cr, ui_font(), value_text, -1);
+                paint_text(cr, ui_font(), value_text, x + dw - margin - value_metrics.width, sy, theme::kTextR,
                            theme::kTextG, theme::kTextB, -1);
             }
             const double bar_y = content + row.bar;
             const double sx = x + margin;
             const double sw = leave_switch ? std::max(1.0, switch_x - sx - dp(12)) : dw - 2 * margin;
+            const double t = (value - min) / static_cast<double>(std::max(1, max - min));
             if (!enabled) {
+                // Greyed, but still showing where the value sits (Auto's
+                // effective scale), so the row is not an empty box.
                 fill(cr, sx, bar_y, sw, bar_h, 0.86, 0.84, 0.78);
+                fill(cr, sx, bar_y, sw * std::clamp(t, 0.0, 1.0), bar_h, 0.62, 0.64, 0.68);
                 stroke_rect(cr, sx, bar_y, sw, bar_h, 0.72, 0.55, 0.18);
                 return;
             }
             fill(cr, sx, bar_y, sw, bar_h, 1, 0.98, 0.92);
-            const double t = (value - min) / static_cast<double>(std::max(1, max - min));
             fill(cr, sx, bar_y, sw * t, bar_h, 0.20, 0.42, 0.72);
             const double thumb = dp(12);
             const double thumb_y = bar_y - dp(3);
@@ -2489,13 +2493,19 @@ void Shell::draw_dialog(cairo_t *cr)
             button(cr, left_switch, sy, pair_w, bh, state, id, false);
         };
         const bool scale_auto = scale_percent_ <= 0;
+        const int auto_percent = auto_scale_percent();
         const std::string scale_text = scale_auto ? "Auto" : std::to_string(scale_percent_) + "%";
         slider(1, "Volume", std::to_string(volume_) + "%", volume_, 0, 100, volume_row, true, false);
         const std::string scale_caption = scale_auto ? "UI scale" : "UI scale  " + scale_text;
-        slider(2, scale_caption, "", scale_auto ? 100 : scale_percent_, 50, 200, scale_row, !scale_auto, true);
-        const double auto_h = std::min(bh, text_h + static_cast<double>(dp(6)));
-        button(cr, switch_x, content + scale_row.caption, switch_w, auto_h, scale_auto ? "Auto" : "Manual", kScaleAuto,
-               false);
+        slider(2, scale_caption, "", scale_auto ? auto_percent : scale_percent_, 50, 200, scale_row, !scale_auto, true);
+        // Full height like every other switch, centred on the caption and
+        // its bar. Under Auto it names the scale Auto picked.
+        const double scale_top = content + scale_row.caption;
+        const double scale_span = scale_row.bar + bar_h - scale_row.caption;
+        const double auto_y = scale_span > bh ? scale_top + (scale_span - bh) / 2.0 : scale_top;
+        const std::string auto_label =
+            scale_auto ? "Auto (" + std::to_string(auto_percent) + "%)" : std::string("Manual");
+        button(cr, switch_x, auto_y, switch_w, bh, auto_label.c_str(), kScaleAuto, false);
         double sy = content + scale_row.next_caption;
         const double first_row = sy;
         left_row("Pause when unfocused", pause_unfocused_ ? "On" : "Off", kReset, sy);

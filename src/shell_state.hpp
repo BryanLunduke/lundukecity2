@@ -329,6 +329,8 @@ private:
     const char *menu_font() const;
     const char *bold_font() const;
     void refresh_ui_scale();
+    // What Auto resolves to on this display, in percent (Settings label).
+    int auto_scale_percent() const;
     bool allow_saved_settings() const;
     void load_window_settings();
     void save_window_settings();
