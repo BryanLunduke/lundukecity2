@@ -6,6 +6,7 @@
 
 #include "city_session.hpp"
 #include "messages.hpp"
+#include "tools.hpp"
 
 #include "micropolis.h"
 #include "text.h"
@@ -263,6 +264,33 @@ int check_auto_budget_recovers()
     return 0;
 }
 
+// #7: the short tool hints (all the handheld shows) say what an
+// attraction needs before it earns anything.
+int check_attraction_hints()
+{
+    const char *names[] = {"Casino", "Amusement Park", "Marina"};
+    for (const char *name : names) {
+        bool found = false;
+        for (int i = 0; i < kToolCount; ++i) {
+            const ToolDef *tool = tool_by_index(i);
+            if (tool == nullptr || std::string(tool->name) != name) {
+                continue;
+            }
+            found = true;
+            const std::string hint = tool->hint;
+            if (hint.find("power") == std::string::npos || hint.find("road") == std::string::npos ||
+                hint.find("2,000 residents") == std::string::npos) {
+                std::fprintf(stderr, "%s: %s\n", name, hint.c_str());
+                return fail(40, "an attraction hint leaves out power, road or 2,000 residents");
+            }
+        }
+        if (!found) {
+            return fail(41, std::string("no tool named ") + name);
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 int main()
@@ -274,6 +302,9 @@ int main()
         return r;
     }
     if (const int r = check_auto_budget_recovers()) {
+        return r;
+    }
+    if (const int r = check_attraction_hints()) {
         return r;
     }
     std::puts("review_nov19 ok");
