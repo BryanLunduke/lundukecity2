@@ -674,6 +674,9 @@ private:
     int terrain_key_ = 0;
     bool terrain_edit_ = false;
     std::unique_ptr<CitySession> terrain_session_;
+    // UI self-test scratch for the terrain editor steps.
+    std::vector<unsigned short> ui_city_before_;
+    std::vector<unsigned short> ui_terrain_painted_;
     // The map being painted, in rows (y * kWorldW + x).
     std::vector<unsigned short> terrain_work_;
     // Map Complete's result and the seed and knobs it was painted over

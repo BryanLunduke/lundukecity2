@@ -7,6 +7,7 @@
 #include "osk_layout.hpp"
 #include "special_buildings.hpp"
 #include "tool_groups.hpp"
+#include "terrain_paint.hpp"
 #include "tools.hpp"
 
 #include <cstdlib>
@@ -1786,7 +1787,180 @@ void Shell::drive_ui_test()
                 return;
             }
         }
-        // The road was a control check. The quit test still expects a clean city.
+        // On to the terrain editor, from the second New City page.
+        open_dialog(Dialog::NewCity);
+        field_a_ = "Painted";
+        field_b_ = "4242";
+        new_page_ = 1;
+        ui_step_ = 41;
+        return;
+    }
+    case 41: {
+        // Edit Terrain opens the editor on the land the page previews. The
+        // live city stays paused and untouched underneath.
+        const Hotspot *edit = find_hot(hot_, kEditTerrain, 0);
+        if (edit == nullptr || dialog_ != Dialog::NewCity) {
+            fail("the New City land page has no Edit Terrain button");
+            return;
+        }
+        ui_city_before_ = session_.terrain_tiles();
+        click_at(edit->x + edit->w * 0.5, edit->y + edit->h * 0.5);
+        if (!terrain_edit_ || dialog_ != Dialog::None || terrain_session_ == nullptr || !dialog_pauses()) {
+            fail("Edit Terrain did not open the terrain editor");
+            return;
+        }
+        std::vector<unsigned short> generated;
+        if (!session_.preview_terrain(4242, new_island_, new_rivers_, new_lakes_, new_trees_, generated) ||
+            generated != terrain_work_) {
+            fail("the editor did not start from the previewed land");
+            return;
+        }
+        ui_step_ = 42;
+        return;
+    }
+    case 42: {
+        // The toolbar holds only terrain and the brush; the top bar keeps the
+        // city name with Cancel and Map Complete.
+        for (int i = 0; i < terrain_paint::kPieceCount; ++i) {
+            if (find_hot(hot_, kTerrainPiece + i, 0) == nullptr) {
+                fail("a terrain piece is missing from the toolbar");
+                return;
+            }
+        }
+        if (find_hot(hot_, kPaletteId, 0) != nullptr || find_hot(hot_, kMenuTitle, 0) != nullptr ||
+            find_hot(hot_, kTerrainBrush + 1, 0) == nullptr || find_hot(hot_, kTerrainComplete, 0) == nullptr ||
+            find_hot(hot_, kTerrainCancel, 0) == nullptr) {
+            fail("the editor toolbar or top bar is wrong");
+            return;
+        }
+        const Hotspot *water = find_hot(hot_, kTerrainPiece + 1, 0);
+        click_at(water->x + water->w * 0.5, water->y + water->h * 0.5);
+        const Hotspot *big = find_hot(hot_, kTerrainBrush + 1, 0);
+        click_at(big->x + big->w * 0.5, big->y + big->h * 0.5);
+        if (terrain_piece_ != 1 || terrain_brush_ != terrain_paint::kBrushLarge) {
+            fail("the toolbar did not pick Water with the 3x3 brush");
+            return;
+        }
+        // Fill the middle of the view with land first, then paint water on it
+        // with one click so the 3x3 square is certain to change.
+        key_down(SDLK_1);
+        const Hotspot *map_spot = find_hot(hot_, kMapId, 0);
+        if (map_spot == nullptr || terrain_piece_ != 0) {
+            fail("no map to paint, or 1 did not pick Ground");
+            return;
+        }
+        const double px = map_spot->x + map_spot->w * 0.5;
+        const double py = map_spot->y + map_spot->h * 0.5;
+        click_at(px, py);
+        key_down(SDLK_2);
+        const std::vector<unsigned short> before = terrain_work_;
+        click_at(px, py);
+        int wet = 0;
+        for (std::size_t i = 0; i < before.size(); ++i) {
+            if (!terrain_paint::is_water(before[i]) && terrain_paint::is_water(terrain_work_[i])) {
+                ++wet;
+            }
+        }
+        if (wet != 9 || terrain_changed_ == 0 || session_.terrain_tiles() != ui_city_before_) {
+            fail("a 3x3 water click turned " + std::to_string(wet) + " tiles wet (or touched the city)");
+            return;
+        }
+        key_down(SDLK_B);
+        if (terrain_brush_ != terrain_paint::kBrushSmall) {
+            fail("B did not switch the brush back to 1x1");
+            return;
+        }
+        // Gamepad: the shoulders walk the pieces and Y flips the brush; X
+        // (Inspect elsewhere) does nothing here.
+        {
+            auto pad = [&](SDL_GamepadButton button) {
+                SDL_Event e{};
+                e.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                e.gbutton.button = static_cast<Uint8>(button);
+                e.gbutton.down = true;
+                handle_event(e);
+                e.type = SDL_EVENT_GAMEPAD_BUTTON_UP;
+                e.gbutton.down = false;
+                handle_event(e);
+            };
+            const int piece_was = terrain_piece_;
+            pad(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+            const int piece_next = terrain_piece_;
+            pad(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+            pad(SDL_GAMEPAD_BUTTON_NORTH);
+            const int brush_pad = terrain_brush_;
+            pad(SDL_GAMEPAD_BUTTON_NORTH);
+            pad(SDL_GAMEPAD_BUTTON_WEST);
+            if (piece_next != (piece_was + 1) % terrain_paint::kPieceCount || terrain_piece_ != piece_was ||
+                brush_pad != terrain_paint::kBrushLarge || terrain_brush_ != terrain_paint::kBrushSmall ||
+                !terrain_edit_ || dialog_ != Dialog::None) {
+                fail("the gamepad did not cycle terrain and flip the brush");
+                return;
+            }
+            gamepad_nav_ = false;
+        }
+        // Escape after painting asks first; Escape there keeps editing.
+        key_down(SDLK_ESCAPE);
+        if (dialog_ != Dialog::TerrainDiscard || !terrain_edit_) {
+            fail("Escape after painting did not ask before discarding");
+            return;
+        }
+        key_down(SDLK_ESCAPE);
+        if (dialog_ != Dialog::None || !terrain_edit_ || terrain_changed_ == 0) {
+            fail("Escape on the discard question did not keep editing");
+            return;
+        }
+        ui_terrain_painted_ = terrain_work_;
+        ui_step_ = 43;
+        return;
+    }
+    case 43: {
+        // Map Complete keeps the edits and returns to the land page, which
+        // previews them; Generate builds the city on them.
+        const Hotspot *done = find_hot(hot_, kTerrainComplete, 0);
+        if (done == nullptr) {
+            fail("no Map Complete button");
+            return;
+        }
+        click_at(done->x + done->w * 0.5, done->y + done->h * 0.5);
+        if (terrain_edit_ || dialog_ != Dialog::NewCity || new_page_ != 1 || pending_terrain_ != ui_terrain_painted_ ||
+            pending_terrain_for_page() == nullptr || session_.terrain_tiles() != ui_city_before_) {
+            fail("Map Complete did not keep the edits and return to the land page");
+            return;
+        }
+        // Typing another seed sets the edits aside; the old seed brings them back.
+        field_b_ = "77";
+        if (pending_terrain_for_page() != nullptr) {
+            fail("a different seed still used the painted map");
+            return;
+        }
+        field_b_ = "4242";
+        ui_step_ = 44;
+        return;
+    }
+    case 44: {
+        const Hotspot *generate = find_hot(hot_, kGenerate, 0);
+        if (generate == nullptr || find_hot(hot_, kEditTerrain, 0) == nullptr) {
+            fail("the land page lost its buttons after Map Complete");
+            return;
+        }
+        // The land page came back under the pointer; a person waits out the
+        // click-through grace before pressing again.
+        modal_grace_until_ = {};
+        click_at(generate->x + generate->w * 0.5, generate->y + generate->h * 0.5);
+        const std::vector<unsigned short> city = session_.terrain_tiles();
+        int mismatched = 0;
+        for (std::size_t i = 0; i < city.size() && i < ui_terrain_painted_.size(); ++i) {
+            if (terrain_paint::is_water(city[i]) != terrain_paint::is_water(ui_terrain_painted_[i])) {
+                ++mismatched;
+            }
+        }
+        if (dialog_ == Dialog::NewCity || city.size() != ui_terrain_painted_.size() || mismatched != 0 ||
+            session_.city_name() != "Painted") {
+            fail("the new city was not built on the painted map (" + std::to_string(mismatched) + " tiles differ) name=" + session_.city_name() + " dlg=" + std::to_string(static_cast<int>(dialog_)) + " same=" + std::to_string(city == ui_city_before_) + " err=" + dialog_error_);
+            return;
+        }
+        // The quit test still expects a clean city.
         session_.set_dirty(false);
         welcome_gate_ = true;
         open_dialog(Dialog::Welcome);
