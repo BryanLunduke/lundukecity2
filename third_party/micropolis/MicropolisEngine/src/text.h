@@ -160,6 +160,7 @@ enum MessageNumber {
     MESSAGE_NO_POWER_LINE, ///< 64: A power line has nowhere to land.
     MESSAGE_FIRE_SPREADING, ///< 65: Several tiles are burning at once.
     MESSAGE_AUTO_BUDGET_RESTORED, ///< 66: Funds recovered, auto budget is back on.
+    MESSAGE_AUTONOMOUS_ZONE, ///< 67: The tool touched the Autonomous Zone.
 
-    MESSAGE_LAST = 66, ///< Last valid message
+    MESSAGE_LAST = 67, ///< Last valid message
 };

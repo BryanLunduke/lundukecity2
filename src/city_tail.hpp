@@ -1,6 +1,7 @@
 #pragma once
 // Classic Micropolis cities are exactly 27,120 bytes. City 2 appends three
-// trailers: LCN1 (name), LCF1 (cash flow), LCW1 (wide funds). A file that
+// trailers: LCN1 (name), LCF1 (cash flow), LCW1 (wide funds), then the
+// optional LCM1 (marina dock), LCD1 (lasting disasters) and LCV1 (format). A file that
 // stops in the middle of that tail still has a usable classic body, but the
 // player should hear that part of the save is missing. An all-zero body is
 // not a city.
@@ -116,6 +117,15 @@ inline CityFileKind classify_city_bytes(const unsigned char *data, std::size_t s
             return CityFileKind::Incomplete;
         }
         off += 8 + count * 6;
+    }
+    // Optional lasting-disaster state (LCD1): 8-byte header, then the
+    // payload length it names.
+    if (avail() >= 8 && at()[0] == 'L' && at()[1] == 'C' && at()[2] == 'D' && at()[3] == '1') {
+        const std::size_t payload = static_cast<std::size_t>(at()[6]) | (static_cast<std::size_t>(at()[7]) << 8);
+        if (avail() < 8 + payload) {
+            return CityFileKind::Incomplete;
+        }
+        off += 8 + payload;
     }
     // Optional save-format marker (LCV1), always last.
     if (avail() == kCityFormatBytes && at()[0] == 'L' && at()[1] == 'C' && at()[2] == 'V' && at()[3] == '1') {

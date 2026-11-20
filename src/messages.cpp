@@ -74,6 +74,7 @@ const char *kMessages[] = {
     "No place to land a power line.",
     "Fire spreading. Send help.",
     "Funds recovered. Auto budget is back on and services are fully funded.",
+    "Nothing can be built or bulldozed inside the Autonomous Zone.",
 };
 
 const char *kCategories[] = {
@@ -154,6 +155,12 @@ const char *kDisasters[] = {
     "Flooding reported.",
     "A nuclear meltdown has occurred.",
     "Riots reported.",
+    "Riots reported. \"Fiery, but mostly peaceful.\"",
+    "An Autonomous Zone has formed!",
+    "The Autonomous Zone has grown. Police coverage there is too low.",
+    "A lion has escaped from the zoo!",
+    "The lion is eating residents! Send the police.",
+    "Prison break! Escaped inmates are setting fires.",
 };
 
 } // namespace
@@ -234,6 +241,7 @@ bool notice_is_tool_feedback(const std::string &text)
         "Not enough funds to build that.", "Bulldoze that area first.",    "Cannot build here.",
         "That would be off the map.",      "No place to anchor a bridge.", "Bridge: $50",
         "Rail bridge: $100",               "Underwater power line: $25",   "No place to land a power line.",
+        "Nothing can be built or bulldozed inside the Autonomous Zone.",
     };
     for (const char *line : kTool) {
         if (text == line) {

@@ -67,6 +67,7 @@
 
 #include "stdafx.h"
 #include "micropolis.h"
+#include <cstring>
 
 
 ////////////////////////////////////////////////////////////////////////
@@ -759,6 +760,9 @@ void Micropolis::init()
     specialIncomeFn = NULL;
     specialLandFn = NULL;
     specialCrimeFn = NULL;
+    eventFrameFn = NULL;
+    editBlockedFn = NULL;
+    std::memset(&cityEvents, 0, sizeof(cityEvents));
     specialIncome = 0;
 
     // void *callbackData;

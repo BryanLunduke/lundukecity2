@@ -4,8 +4,9 @@
 
 #pragma once
 
-// Menu model for the SDL shell. 52 actionable rows: 8 System, 16 Options,
-// 6 Disasters, 19 Analysis, 3 Help. Fullscreen, the zone and coverage
+// Menu model for the SDL shell. 57 actionable rows: 8 System, 16 Options,
+// 10 Disasters, 19 Analysis, 3 Help. The last four disasters (Riot,
+// Autonomous Zone, Lion Escape, Prison Escape) are City 2's own. Fullscreen, the zone and coverage
 // maps, the single-zone and transportation maps, and Messages are the
 // rows past the original 37. The Classic and SVGA looks sit at the bottom
 // of Options. Spooky is off the menu until it is polished.
@@ -46,6 +47,7 @@ enum class Action {
     SetPause, Slow, Medium, Fast, TogglePause,
     ZoomIn, ZoomOut,
     Fire, Flood, Tornado, Earthquake, Monster, Meltdown,
+    Riot, AutonomousZone, LionEscape, PrisonEscape,
     Budget, Graphs, Evaluation, Ledger,
     Power, Water, Pollution, Crime, LandValue, Traffic,
     About, Settings, Controls, HowToPlay, RemapControls,
@@ -148,7 +150,30 @@ inline constexpr MenuEntry kDisasters[] = {
     {"_Earthquake…", nullptr, ItemKind::Normal, Action::Earthquake, AccelKey::None, 0, 0},
     {"M_onster…", nullptr, ItemKind::Normal, Action::Monster, AccelKey::None, 0, 0},
     {"_Meltdown…", nullptr, ItemKind::Normal, Action::Meltdown, AccelKey::None, 0, 0},
+    {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
+    {"_Riot…", nullptr, ItemKind::Normal, Action::Riot, AccelKey::None, 0, 0},
+    {"Autonomous _Zone…", nullptr, ItemKind::Normal, Action::AutonomousZone, AccelKey::None, 0, 0},
+    {"L_ion Escape…", nullptr, ItemKind::Normal, Action::LionEscape, AccelKey::None, 0, 0},
+    {"_Prison Escape…", nullptr, ItemKind::Normal, Action::PrisonEscape, AccelKey::None, 0, 0},
 };
+
+// City 2's lasting disasters, in city_events::Kind order. -1 for any other
+// action.
+inline int city_event_index(Action action)
+{
+    switch (action) {
+    case Action::Riot:
+        return 0;
+    case Action::AutonomousZone:
+        return 1;
+    case Action::LionEscape:
+        return 2;
+    case Action::PrisonEscape:
+        return 3;
+    default:
+        return -1;
+    }
+}
 
 inline constexpr MenuEntry kAnalysis[] = {
     {"_Budget", "Ctrl+B", ItemKind::Normal, Action::Budget, AccelKey::B, static_cast<int>(AccelMod::Ctrl), 0},

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "city_events.hpp"
 #include "civic.hpp"
 #include "inspect_report.hpp"
 #include "save_view.hpp"
@@ -12,7 +13,10 @@
 #include <cstdarg>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
+
+struct CityEvents;
 
 // Thin bridge over the vendored Micropolis engine. The UI never talks to
 // Tcl, and it does not include the engine header.
@@ -365,6 +369,30 @@ public:
     void disaster_monster();
     void disaster_meltdown();
 
+    // City 2's lasting disasters (city_events.hpp). start_event posts the
+    // notice, or the reason it cannot start, and returns whether it did.
+    // Menus, random rolls and scenarios all come through here.
+    bool start_event(city_events::Kind kind);
+    // A scenario file's name for one ("riot", "autonomous_zone",
+    // "lion_escape", "prison_escape"). False for an unknown name.
+    bool start_event_named(const std::string &key);
+    // The zone on the road block holding tile (x, y) and its least-policed
+    // neighbour, for scenarios.
+    bool start_autonomous_zone_at(int x, int y);
+    // Empty when it can start now.
+    std::string event_unavailable(city_events::Kind kind) const;
+    bool in_autonomous_zone(int x, int y) const;
+    // True when the bulldozer may not touch (x, y): inside the zone, or a
+    // building that reaches into it.
+    bool bulldoze_blocked(int x, int y) const;
+    city_events::LionView lion() const;
+    std::vector<city_events::Barricade> barricades() const;
+    std::vector<std::pair<int, int>> autonomous_zone_blocks() const;
+    // Read-only view of the saved disaster state, for tests and the HUD.
+    const CityEvents &events_state() const;
+    // Riot and prison crime now added (0 when none).
+    int riot_crime() const;
+
     std::string city_name() const;
     std::string funds_text() const;
     std::string date_text() const;
@@ -617,6 +645,10 @@ private:
     void refresh_loaded_meters();
     void clear_scenario_clock();
     void remember_notice(std::string text, int tile_x, int tile_y, bool has_place);
+    void post_event_notes(const std::vector<city_events::Note> &notes, bool jump = false);
+    void on_event_frame();
+    // A refusal from the Autonomous Zone on the click just made.
+    void refuse_in_zone();
     bool write_scenario_sidecar(const std::string &path) const;
     void read_scenario_sidecar(const std::string &path);
 

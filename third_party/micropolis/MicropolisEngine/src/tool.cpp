@@ -1407,6 +1407,11 @@ void announce_tool(Micropolis *sim, EditingTool tool, short tileX, short tileY, 
 ToolResult Micropolis::doTool(EditingTool tool, short tileX, short tileY)
 {
     toolFailureNotice = 0;
+    // City 2: the Autonomous Zone refuses every tool but Inspect.
+    if (editBlockedFn != NULL && tool != TOOL_QUERY && editBlockedFn(this, (int)tool, tileX, tileY)) {
+        toolFailureNotice = MESSAGE_AUTONOMOUS_ZONE;
+        return TOOLRESULT_FAILED;
+    }
     ToolEffects effects(this);
     ToolResult result;
 
