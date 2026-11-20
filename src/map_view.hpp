@@ -103,6 +103,9 @@ public:
     // paused or not. True while one still has frames to show.
     void advance_ui(int elapsed_ms);
     bool ui_animating() const;
+    // Construction rise over a footprint just built (tiles). growth is a
+    // zone that developed by itself: no placement brackets.
+    void start_rise(int left, int top, int width, int height, bool growth);
     // Night mode: darken the map and add the light layer (lit windows,
     // street lamps, fires). The tile art is not touched. hold hides it for
     // a frame, for example under a data map.
@@ -153,6 +156,21 @@ private:
     mutable int ghost_generation_ = -1;
     // Snap pulse when the footprint moves to a new cell; -1 is idle.
     int pulse_ms_ = -1;
+    // One more frame after a feedback animation ends, to clear its last look.
+    mutable bool ui_tail_ = false;
+    struct Rise {
+        int left;
+        int top;
+        int width;
+        int height;
+        int ms;
+        bool growth;
+    };
+    std::vector<Rise> rises_;
+    void draw_rises(cairo_t *cr) const;
+    // The sheet's bare dirt tile, under a rise that has not topped out.
+    mutable cairo_surface_t *dirt_pixels_ = nullptr;
+    mutable int dirt_generation_ = -1;
     int pulse_left_ = -1;
     int pulse_top_ = -1;
     // Tileable cloud cover, 0..1 per texel; built once.

@@ -76,6 +76,10 @@ MapView::~MapView()
         cairo_surface_destroy(ghost_pixels_);
         ghost_pixels_ = nullptr;
     }
+    if (dirt_pixels_ != nullptr) {
+        cairo_surface_destroy(dirt_pixels_);
+        dirt_pixels_ = nullptr;
+    }
 }
 
 bool MapView::tick(int elapsed_ms)
@@ -597,6 +601,7 @@ void MapView::sync()
         std::fill(cached_shown_.begin(), cached_shown_.end(), -1);
     }
     int dirty = 0;
+    std::vector<int> grown;
     const int world_w = CitySession::kWorldW;
     const int world_h = CitySession::kWorldH;
     for (int y = 0; y < world_h; ++y) {
@@ -635,6 +640,11 @@ void MapView::sync()
             if (cached_raw_[index] == raw && cached_shown_[index] == shown) {
                 continue;
             }
+            if (cached_raw_[index] >= 0 && (raw & ZONEBIT) != 0 && (cached_raw_[index] & ZONEBIT) != 0 &&
+                (raw & LOMASK) != (cached_raw_[index] & LOMASK) && (raw & LOMASK) >= RESBASE &&
+                (raw & LOMASK) < PORTBASE) {
+                grown.push_back(static_cast<int>(index));
+            }
             blit_tile(x, y, shown, atlas);
             cached_raw_[index] = raw;
             cached_shown_[index] = shown;
@@ -648,6 +658,13 @@ void MapView::sync()
         }
     }
     last_sync_blits_ = dirty;
+    if (!grown.empty() && dirty < 160) {
+        // A zone centre changed building by itself (growth or decline).
+        // Not on a load or a look change, where every tile is new.
+        for (int index : grown) {
+            start_rise(index % world_w - 1, index / world_w - 1, 3, 3, true);
+        }
+    }
     if (dirty > 0 || class_all_) {
         refresh_pixel_classes();
     }
@@ -1056,9 +1073,12 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double y = cue_.top * tile;
             const double w = cue_.width * tile;
             const double h = cue_.height * tile;
+            // Right after a successful click the pointer still covers the
+            // new building; its receipt speaks for it, not a red ghost.
+            const bool just_built = overlap && cue_.receipt_ok;
             if (cue_.sprite >= 0) {
                 paint_special_ghost(cr, cue_.sprite, x, y, w, h, cue_.mark >= 3);
-            } else {
+            } else if (!just_built) {
                 draw_ghost(cr, x, y, w, h);
             }
             if (cue_.outline) {
@@ -1142,6 +1162,7 @@ void MapView::draw_footprint(cairo_t *cr) const
 
 void MapView::draw(cairo_t *cr)
 {
+    ui_tail_ = false;
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
     if (map_pixels_ == nullptr) {
         sync();
@@ -1210,6 +1231,7 @@ void MapView::draw(cairo_t *cr)
         draw_fire(cr, source, span, dusk);
     }
     cairo_restore(cr);
+    draw_rises(cr);
     draw_dust(cr);
     draw_footprint(cr);
     cairo_restore(cr);
@@ -2088,6 +2110,8 @@ void MapView::draw_clouds(cairo_t *cr, const TileSpan &span)
 namespace {
 
 constexpr int kPulseMs = 160;
+// Brackets 0-90 ms, rise 90-360 ms, settle and glint 360-450 ms.
+constexpr int kRiseMs = 450;
 
 // First tile and footprint of the building a tool lays, for the ghost.
 // Zones and plants are laid row by row from their base tile.
@@ -2143,17 +2167,27 @@ bool ghost_tiles(int tool, int &base, int &size)
 
 void MapView::advance_ui(int elapsed_ms)
 {
+    for (Rise &rise : rises_) {
+        rise.ms += std::max(0, elapsed_ms);
+    }
+    const std::size_t before = rises_.size();
+    rises_.erase(std::remove_if(rises_.begin(), rises_.end(), [](const Rise &rise) { return rise.ms >= kRiseMs; }),
+                 rises_.end());
+    if (rises_.size() != before) {
+        ui_tail_ = true;
+    }
     if (pulse_ms_ >= 0) {
         pulse_ms_ += std::max(0, elapsed_ms);
         if (pulse_ms_ >= kPulseMs) {
             pulse_ms_ = -1;
+            ui_tail_ = true;
         }
     }
 }
 
 bool MapView::ui_animating() const
 {
-    return pulse_ms_ >= 0;
+    return pulse_ms_ >= 0 || !rises_.empty() || ui_tail_;
 }
 
 void MapView::draw_ghost(cairo_t *cr, double x, double y, double w, double h) const
@@ -2294,5 +2328,163 @@ void MapView::draw_ghost(cairo_t *cr, double x, double y, double w, double h) co
         cairo_new_path(cr);
     }
     cairo_new_path(cr);
+    cairo_restore(cr);
+}
+
+void MapView::start_rise(int left, int top, int width, int height, bool growth)
+{
+    if (!look_fx::motion_allowed(effects_) || width < 1 || height < 1) {
+        return;
+    }
+    for (Rise &rise : rises_) {
+        if (rise.left == left && rise.top == top) {
+            rise = Rise{left, top, width, height, 0, growth};
+            return;
+        }
+    }
+    // A handful at once; a burst of growth should not become a light show.
+    const auto grown = std::count_if(rises_.begin(), rises_.end(), [](const Rise &rise) { return rise.growth; });
+    if (rises_.size() >= 6 || (growth && grown >= 2)) {
+        return;
+    }
+    rises_.push_back(Rise{left, top, width, height, 0, growth});
+}
+
+void MapView::draw_rises(cairo_t *cr) const
+{
+    if (rises_.empty() || map_pixels_ == nullptr) {
+        return;
+    }
+    TileAtlas &atlas = tile_atlas();
+    if (atlas.loaded() && (dirt_pixels_ == nullptr || dirt_generation_ != atlas.look_generation())) {
+        if (dirt_pixels_ != nullptr) {
+            cairo_surface_destroy(dirt_pixels_);
+        }
+        dirt_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, TileAtlas::kSize, TileAtlas::kSize);
+        cairo_surface_flush(dirt_pixels_);
+        atlas.blit(DIRT, cairo_image_surface_get_data(dirt_pixels_), cairo_image_surface_get_stride(dirt_pixels_));
+        cairo_surface_mark_dirty(dirt_pixels_);
+        dirt_generation_ = atlas.look_generation();
+    }
+    const bool classic = classic_fx();
+    const double tile = static_cast<double>(std::max(tile_size_, 1));
+    const double art = tile / TileAtlas::kSize;
+    const double unit = std::max(1.0, std::round(art));
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    for (const Rise &rise : rises_) {
+        const double x = rise.left * tile;
+        const double y = rise.top * tile;
+        const double w = rise.width * tile;
+        const double h = rise.height * tile;
+        const int ms = rise.ms;
+        if (ms < 360 && dirt_pixels_ != nullptr) {
+            // Not topped out yet: bare lot over the part still to rise.
+            const double u = ms < 90 ? 0.0 : look_fx::ease_out_cubic((ms - 90) / 270.0);
+            const double cover = std::round(h * (1.0 - u));
+            if (cover > 0) {
+                cairo_save(cr);
+                cairo_rectangle(cr, x, y, w, cover);
+                cairo_clip(cr);
+                cairo_pattern_t *dirt = cairo_pattern_create_for_surface(dirt_pixels_);
+                cairo_pattern_set_extend(dirt, CAIRO_EXTEND_REPEAT);
+                cairo_pattern_set_filter(dirt, CAIRO_FILTER_NEAREST);
+                cairo_matrix_t matrix;
+                cairo_matrix_init_scale(&matrix, 1.0 / art, 1.0 / art);
+                cairo_matrix_translate(&matrix, -x, -y);
+                cairo_pattern_set_matrix(dirt, &matrix);
+                cairo_set_source(cr, dirt);
+                cairo_paint(cr);
+                cairo_pattern_destroy(dirt);
+                if (ms >= 90) {
+                    // Scaffold over the rising edge: posts, planks, braces.
+                    const double top_edge = y + cover;
+                    const double band = std::min(cover, std::max(6.0 * unit, h * 0.35));
+                    const double sy = top_edge - band;
+                    if (classic) {
+                        cairo_set_source_rgb(cr, 170 / 255.0, 85 / 255.0, 0.0);
+                    } else {
+                        cairo_set_source_rgb(cr, 150 / 255.0, 105 / 255.0, 60 / 255.0);
+                    }
+                    cairo_set_line_width(cr, unit);
+                    for (double px = x + 2 * unit; px < x + w; px += 8 * unit) {
+                        cairo_move_to(cr, px + unit / 2, sy);
+                        cairo_line_to(cr, px + unit / 2, top_edge);
+                    }
+                    for (double py = top_edge - unit / 2; py > sy; py -= 10 * unit) {
+                        cairo_move_to(cr, x, py);
+                        cairo_line_to(cr, x + w, py);
+                    }
+                    cairo_stroke(cr);
+                    if (classic) {
+                        cairo_set_source_rgb(cr, 130 / 255.0, 130 / 255.0, 130 / 255.0);
+                    } else {
+                        cairo_set_source_rgb(cr, 120 / 255.0, 85 / 255.0, 45 / 255.0);
+                    }
+                    for (double px = x; px < x + w; px += 10 * unit) {
+                        cairo_move_to(cr, px, top_edge);
+                        cairo_line_to(cr, px + std::min(band, 10 * unit), top_edge - std::min(band, 10 * unit));
+                    }
+                    cairo_stroke(cr);
+                }
+                cairo_restore(cr);
+            }
+        }
+        if (!rise.growth && ms < 120) {
+            // Placement brackets snapping in at the corners.
+            const double len = std::round(std::min(10.0 * unit, tile * 0.6) * look_fx::ease_out_cubic(ms / 90.0));
+            cairo_set_source_rgb(cr, 1.0, classic ? 1.0 : 230 / 255.0, classic ? 85 / 255.0 : 120 / 255.0);
+            cairo_set_line_width(cr, 2.0);
+            const double xs[2] = {x + 1, x + w - 1};
+            const double ys[2] = {y + 1, y + h - 1};
+            for (int i = 0; i < 2; ++i) {
+                for (int j = 0; j < 2; ++j) {
+                    const double sx = i == 0 ? 1.0 : -1.0;
+                    const double sy = j == 0 ? 1.0 : -1.0;
+                    cairo_move_to(cr, xs[i] + sx * len, ys[j]);
+                    cairo_line_to(cr, xs[i], ys[j]);
+                    cairo_line_to(cr, xs[i], ys[j] + sy * len);
+                }
+            }
+            cairo_stroke(cr);
+        }
+        if (ms < 360) {
+            // Dust kicked out from the base.
+            const double radius = (0.45 + 0.5 * ms / 360.0) * std::max(w, h) * 0.5;
+            const double cx = x + w / 2;
+            const double cy = y + h * 0.62;
+            const int specks = rise.growth ? 12 : 26;
+            for (int i = 0; i < specks; ++i) {
+                const double angle = look_fx::hash01(static_cast<std::uint32_t>(i * 977 + rise.left * 31 + rise.top)) * 2 * look_fx::kPi;
+                const double reach = 0.7 + 0.5 * look_fx::hash01(static_cast<std::uint32_t>(i * 131 + 7));
+                const double sx = std::round(cx + std::cos(angle) * radius * reach);
+                const double sy = std::round(cy + std::sin(angle) * radius * reach * 0.6 - ms / 180.0 * unit);
+                const double size = (ms < 240 ? 3.0 : 2.0) * unit * 0.5 + 1.0;
+                if (i % 2 == 0) {
+                    cairo_set_source_rgb(cr, 1.0, classic ? 1.0 : 219 / 255.0, classic ? 85 / 255.0 : 140 / 255.0);
+                } else {
+                    cairo_set_source_rgb(cr, classic ? 170 / 255.0 : 184 / 255.0, classic ? 85 / 255.0 : 140 / 255.0,
+                                         classic ? 0.0 : 71 / 255.0);
+                }
+                cairo_rectangle(cr, sx, sy, std::round(size), std::round(size));
+                cairo_fill(cr);
+            }
+        }
+        if (ms >= 360) {
+            // Three little glints on the finished roof.
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_set_line_width(cr, unit);
+            const double arm = 3.0 * unit;
+            const double gx[3] = {x + 2 * unit, x + w - 4 * unit, x + w - 8 * unit};
+            const double gy[3] = {y + unit, y + 4 * unit, y + h - 6 * unit};
+            for (int i = 0; i < 3; ++i) {
+                cairo_move_to(cr, gx[i] - arm, gy[i] + unit / 2);
+                cairo_line_to(cr, gx[i] + arm, gy[i] + unit / 2);
+                cairo_move_to(cr, gx[i] + unit / 2, gy[i] - arm);
+                cairo_line_to(cr, gx[i] + unit / 2, gy[i] + arm);
+            }
+            cairo_stroke(cr);
+        }
+    }
     cairo_restore(cr);
 }

@@ -4620,12 +4620,23 @@ void Shell::absorb_placement_note()
             puff_tx_ = note.x;
             puff_ty_ = note.y;
         } else {
-            pop_on_ = true;
-            pop_ms_ = 0;
             pop_tx_ = note.width > 0 ? note.x - note.anchor_x : note.x;
             pop_ty_ = note.height > 0 ? note.y - note.anchor_y : note.y;
             pop_tw_ = note.width > 0 ? note.width : 1;
             pop_th_ = note.height > 0 ? note.height : 1;
+            // Zones and plants report their centre; the footprint says how big.
+            const int rise_w = note.width > 0 ? note.width : std::max(1, foot.width);
+            const int rise_h = note.height > 0 ? note.height : std::max(1, foot.height);
+            if (rise_w * rise_h >= 4) {
+                // A building: it rises out of the lot. Roads, rails, wires
+                // and single park tiles keep the quick outline pop.
+                const int rise_x = note.width > 0 ? note.x - note.anchor_x : note.x - foot.cursor_to_left;
+                const int rise_y = note.height > 0 ? note.y - note.anchor_y : note.y - foot.cursor_to_top;
+                map_.start_rise(rise_x, rise_y, rise_w, rise_h, false);
+            } else {
+                pop_on_ = true;
+                pop_ms_ = 0;
+            }
         }
     }
     if (note.width > 0 && note.height > 0) {
