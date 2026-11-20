@@ -8,6 +8,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <vector>
 
 #ifndef _WIN32
@@ -253,4 +254,118 @@ std::string ui_data_file(const std::string &relative)
 #endif
     }
     return {};
+}
+
+std::vector<std::string> license_candidates(const std::string &name)
+{
+    std::vector<std::string> dirs;
+#if defined(CITY_UI_DIR)
+    // The game's own copy: share/lunduke-city-2/licenses.
+    if (CITY_UI_DIR[0] != '\0') {
+        dirs.emplace_back(std::string(CITY_UI_DIR) + "/licenses");
+    }
+#endif
+#if defined(CITY_DOC_DIR)
+    // The packaged documentation copy: share/doc/lunduke-city-2.
+    if (CITY_DOC_DIR[0] != '\0') {
+        dirs.emplace_back(CITY_DOC_DIR);
+    }
+#endif
+    // Install/dist layouts beside bin/ (the Windows folder keeps them in
+    // share/licenses/lunduke-city-2), then the source tree, whose root holds
+    // NOTICE and COPYING beside third_party/micropolis-assets.
+    std::string dir = exe_dir();
+    for (int level = 0; level < 6 && !dir.empty(); ++level) {
+        add_layout(dirs, dir, "share/lunduke-city-2/licenses");
+        add_layout(dirs, dir, "share/doc/lunduke-city-2");
+        add_layout(dirs, dir, "share/licenses/lunduke-city-2");
+        if (is_asset_root(dir + "/third_party/micropolis-assets")) {
+            dirs.push_back(dir);
+        }
+        const std::string up = parent_dir(dir);
+        if (up.empty() || up == dir) {
+            break;
+        }
+        dir = up;
+    }
+    // A build outside the source tree still knows the tree through the asset
+    // lookup (LUNDUKE_CITY_ASSETS): <root>/third_party/micropolis-assets.
+    const std::string assets = asset_root();
+    if (!assets.empty()) {
+        const std::string third = parent_dir(assets);
+        const std::string top = parent_dir(third);
+        if (!top.empty() && is_asset_root(top + "/third_party/micropolis-assets")) {
+            dirs.push_back(top);
+        }
+    }
+    std::vector<std::string> paths;
+    for (const std::string &base : dirs) {
+        const bool trailed = !base.empty() && (base.back() == '/' || base.back() == '\\');
+        const std::string path = trailed ? base + name : base + "/" + name;
+        bool seen = false;
+        for (const std::string &have : paths) {
+            seen = seen || have == path;
+        }
+        if (!seen) {
+            paths.push_back(path);
+        }
+    }
+    return paths;
+}
+
+std::string license_file(const std::string &name)
+{
+    for (const std::string &path : license_candidates(name)) {
+        if (file_readable(path)) {
+            return path;
+        }
+    }
+    return {};
+}
+
+std::string license_viewer_text()
+{
+    struct Doc {
+        const char *name;
+        const char *title;
+        const char *online;
+    };
+    static const Doc docs[] = {
+        {"NOTICE", "NOTICE: copyright, Electronic Arts' additional terms, and credits",
+         "https://github.com/BryanLunduke/lundukecity2/blob/master/NOTICE"},
+        {"COPYING", "COPYING: the GNU General Public License, version 3", "https://www.gnu.org/licenses/gpl-3.0.html"},
+    };
+    std::string text;
+    for (const Doc &doc : docs) {
+        if (!text.empty()) {
+            text += "\n\n";
+        }
+        text += doc.title;
+        text += "\n";
+        const std::string path = license_file(doc.name);
+        std::string body;
+        if (!path.empty()) {
+            std::ifstream in(path, std::ios::binary);
+            body.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        if (body.empty()) {
+            text += "\n" + std::string(doc.name) + " was not found. Looked in:\n";
+            for (const std::string &tried : license_candidates(doc.name)) {
+                text += "  " + tried + "\n";
+            }
+            text += "Read it at " + std::string(doc.online);
+            continue;
+        }
+        text += "(" + path + ")\n\n";
+        // Windows line ends would draw as boxes.
+        for (char ch : body) {
+            if (ch != '\r') {
+                text += ch;
+            }
+        }
+        while (!text.empty() && text.back() == '\n') {
+            text.pop_back();
+        }
+    }
+    return text;
 }

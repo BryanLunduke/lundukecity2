@@ -1165,7 +1165,7 @@ std::string Shell::visual_stamp() const
         << ' ' << dialog_error_ << ' ' << dialog_note_ok_ << ' '
         << info_title_ << ' ' << info_body_ << ' ' << tax_ << ' ' << road_ << ' ' << police_ << ' ' << fire_ << ' '
         << graphs_long_ << ' ' << budget_is_tax_ << ' ' << files_dir_ << ' ' << osk_shift_ << ' ' << quake_strength_ << ' '
-        << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_
+        << static_cast<int>(files_.size()) << ' ' << overlay_on_ << ' ' << controls_page_ << ' ' << controls_scroll_ << ' ' << license_scroll_
         << ' ' << static_cast<int>(menu_scroll_) << ' ' << menu_edge_dir_
         << ' ' << new_level_ << ' ' << new_island_ << ' ' << new_rivers_ << ' ' << new_lakes_ << ' ' << new_trees_
         << ' ' << drawn_look_ << ' ' << anim_epoch_ << ' ' << autosave_seconds_ << ' ' << notice_sticky_ << ' '
@@ -2394,6 +2394,12 @@ void Shell::handle_event(const SDL_Event &event)
             }
             break;
         }
+        if (dialog_ == Dialog::License && !ctrl) {
+            if (notches != 0) {
+                scroll_license(-notches * dp(60));
+            }
+            break;
+        }
         if (dialog_ == Dialog::Controls && !ctrl) {
             if (notches == 0) {
                 break;
@@ -2531,6 +2537,22 @@ void Shell::handle_event(const SDL_Event &event)
                     move_focus((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : 1);
                     break;
                 }
+                break;
+            }
+        }
+        if (dialog_ == Dialog::License && accel != AccelKey::Escape && accel != AccelKey::Return &&
+            accel != AccelKey::Space && key != SDLK_TAB && accel != AccelKey::Left && accel != AccelKey::Right) {
+            const int page = std::max(dp(40), license_view_h_ - dp(40));
+            if (accel == AccelKey::Up || accel == AccelKey::Down) {
+                scroll_license(accel == AccelKey::Up ? -dp(40) : dp(40));
+                break;
+            }
+            if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+                scroll_license(key == SDLK_PAGEUP ? -page : page);
+                break;
+            }
+            if (key == SDLK_HOME || key == SDLK_END) {
+                license_scroll_ = key == SDLK_HOME ? 0 : license_scroll_max_;
                 break;
             }
         }
@@ -2917,6 +2939,11 @@ void Shell::handle_event(const SDL_Event &event)
             center_on_cursor();
             break;
         }
+        if ((pact == PadPrevTool || pact == PadNextTool) && dialog_ == Dialog::License && !menu_.open()) {
+            const int page = std::max(dp(40), license_view_h_ - dp(40));
+            scroll_license(pact == PadPrevTool ? -page : page);
+            break;
+        }
         if (pact == PadPrevTool || pact == PadNextTool) {
             const int dir = pact == PadPrevTool ? -1 : 1;
             if (!menu_.open() && dialog_ != Dialog::None && adjust_focused_slider(dir, 5)) {
@@ -3163,6 +3190,21 @@ void Shell::handle_event(const SDL_Event &event)
                 }
                 if (list_dialog) {
                     list_touch_y_ = y;
+                }
+                // A finger on the License text drags it; buttons still tap.
+                license_touch_y_ = -1.0f;
+                if (dialog_ == Dialog::License && !is_dialog_button(id) && x >= license_view_x_ &&
+                    x < license_view_x_ + license_view_w_ && y >= license_view_y_ &&
+                    y < license_view_y_ + license_view_h_) {
+                    license_touch_y_ = y;
+                }
+            } else if (event.type == SDL_EVENT_FINGER_MOTION && dialog_ == Dialog::License &&
+                       license_touch_y_ >= 0.0f) {
+                // Finger up moves the text up, like a phone.
+                const int moved = static_cast<int>(license_touch_y_ - y);
+                if (moved != 0) {
+                    scroll_license(moved);
+                    license_touch_y_ = y;
                 }
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_slider_id_ != 0) {
                 on_hotspot(touch_slider_id_, pointer_x_, pointer_y_);

@@ -156,6 +156,13 @@ install_data(
   'COPYING',
   install_dir: get_option('datadir') / 'doc' / 'lunduke-city-2',
 )
+# The in-game License viewer reads its own copy, so it still works where
+# the system drops /usr/share/doc (minimal and container installs).
+install_data(
+  'NOTICE',
+  'COPYING',
+  install_dir: get_option('datadir') / 'lunduke-city-2' / 'licenses',
+)
 
 # Every test looks up tiles.png. The default setup points at the source
 # tree so a build directory not named "build" still finds the assets.

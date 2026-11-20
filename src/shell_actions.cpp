@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "assets.hpp"
 #include "layout_mode.hpp"
 
 #include "pad_glyphs.hpp"
@@ -478,7 +479,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     if (motion_on() && (dialog == Dialog::Budget || dialog == Dialog::Evaluation || dialog == Dialog::Graphs ||
                        dialog == Dialog::Messages || dialog == Dialog::Welcome || dialog == Dialog::Scenario ||
                        dialog == Dialog::Query || dialog == Dialog::Disaster || dialog == Dialog::Settings ||
-                       dialog == Dialog::About || dialog == Dialog::HowToPlay || dialog == Dialog::Info ||
+                       dialog == Dialog::About || dialog == Dialog::HowToPlay || dialog == Dialog::Info || dialog == Dialog::License ||
                        dialog == Dialog::Ledger || dialog == Dialog::Outcome)) {
         dialog_anim_ms_ = 0;
     }
@@ -564,6 +565,12 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         list_index_ = 0;
         list_scroll_ = 0;
     } else if (dialog == Dialog::HowToPlay || dialog == Dialog::About) {
+        focus_id_ = kClose;
+    } else if (dialog == Dialog::License) {
+        // Read the files each time the viewer opens; they are small.
+        license_text_ = license_viewer_text();
+        license_scroll_ = 0;
+        license_touch_y_ = -1.0f;
         focus_id_ = kClose;
     } else if (dialog == Dialog::Controls) {
         // Deck already leads with the gamepad page. A desktop pad should too,
@@ -665,6 +672,11 @@ void Shell::cycle_speed()
         return;
     }
     set_speed(speed_ + 1);
+}
+
+void Shell::scroll_license(int delta)
+{
+    license_scroll_ = std::max(0, std::min(license_scroll_max_, license_scroll_ + delta));
 }
 
 void Shell::cancel_dialog()
@@ -955,6 +967,10 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
         if (dialog_ == Dialog::Controls && (dir == AccelKey::Left || dir == AccelKey::Right)) {
             controls_page_ = (controls_page_ + (dir == AccelKey::Right ? 1 : 2)) % 3;
             controls_scroll_ = 0;
+            return;
+        }
+        if (dialog_ == Dialog::License && (dir == AccelKey::Up || dir == AccelKey::Down)) {
+            scroll_license(dir == AccelKey::Up ? -dp(40) : dp(40));
             return;
         }
         if (dialog_ == Dialog::Controls && controls_scroll_max_ > 0 &&
@@ -1508,6 +1524,7 @@ void Shell::reset_touch_state()
     slider_drag_ = 0;
     pinch_dist_ = 0;
     list_touch_y_ = -1.0f;
+    license_touch_y_ = -1.0f;
     list_touch_row_ = false;
     list_touch_dragged_ = false;
     list_dragging_ = false;
@@ -2905,6 +2922,16 @@ void Shell::on_dialog_button(int id)
             session_.stay_paused_after_outcome();
             speed_ = session_.speed();
         }
+        return;
+    }
+    if (dialog_ == Dialog::About && id == kViewLicense) {
+        open_dialog(Dialog::License);
+        return;
+    }
+    if (dialog_ == Dialog::License) {
+        // Close, Escape and B go back to About, where the viewer came from.
+        open_dialog(Dialog::About);
+        focus_id_ = kViewLicense;
         return;
     }
     if (dialog_ == Dialog::Query) {

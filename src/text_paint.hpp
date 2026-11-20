@@ -124,6 +124,13 @@ inline TextMetrics measure_text(cairo_t *cr, const char *font, const std::string
     return metrics;
 }
 
+// False when the font has no glyph for some character in text (Pango would
+// draw a hex box), so a caller can swap in an ASCII spelling.
+inline bool font_covers_text(cairo_t *cr, const char *font, const std::string &text)
+{
+    return pango_layout_get_unknown_glyphs_count(cached_layout(cr, font, text, -1)) == 0;
+}
+
 // Insert a newline so a short last token stays with the word before it.
 inline std::string avoid_short_last_line(cairo_t *cr, const char *font, const std::string &text, int column_px)
 {

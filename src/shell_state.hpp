@@ -74,7 +74,9 @@ enum class Dialog : int {
     Bindings,
     BulldozeConfirm,
     // Leaving the terrain editor with changes: keep editing or discard.
-    TerrainDiscard
+    TerrainDiscard,
+    // NOTICE and COPYING, opened from About. Closing returns to About.
+    License
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
@@ -173,6 +175,8 @@ private:
     void begin_save_as();
     void begin_files(bool save);
     void cancel_dialog();
+    // Moves the License viewer by delta pixels, clamped to its text.
+    void scroll_license(int delta);
     void cycle_speed();
     void center_on_cursor();
     void select_save_name();
@@ -651,6 +655,17 @@ private:
     int controls_page_ = 0;
     int controls_scroll_ = 0;
     int controls_scroll_max_ = 0;
+    // The License viewer: its text (loaded when opened), the scroll offset
+    // in pixels, the largest offset and the visible height from the last
+    // frame (Page Up/Down step), and the finger's last y for a touch drag.
+    std::string license_text_;
+    int license_scroll_ = 0;
+    int license_scroll_max_ = 0;
+    int license_view_h_ = 0;
+    double license_view_x_ = 0;
+    double license_view_y_ = 0;
+    double license_view_w_ = 0;
+    float license_touch_y_ = -1.0f;
     int osk_last_name_ = -1;
     bool goal_dismissed_ = false;
     int goal_scenario_ = -1;

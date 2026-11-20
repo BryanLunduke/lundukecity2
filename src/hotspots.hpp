@@ -92,6 +92,8 @@ enum HotspotId : int {
     kEffectsBox = 161,
     // New City land page: opens the terrain editor.
     kEditTerrain = 162,
+    // About: opens the License viewer.
+    kViewLicense = 163,
 
     // The history chart. Left and right read a value. It is not a button.
     kGraphPlot = 180,
@@ -122,7 +124,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kEditTerrain;
+    return id >= kCancel && id <= kViewLicense;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

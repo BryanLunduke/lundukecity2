@@ -8,6 +8,7 @@
 // the default tool, the menu count, query wording, file glance, the
 // message log, and the sprite cache.
 
+#include "assets.hpp"
 #include "city_glance.hpp"
 #include "city_seed.hpp"
 #include "city_session.hpp"
@@ -516,14 +517,49 @@ int main()
         }
     }
     const std::string about_expected =
-        "Lunduke City version 2.0.0.\n\n"
-        "Original game design by Will Wright, first published by Maxis.\n\n"
-        "Some artwork and engine based on GPL'd release of Micropolis, by Electronic arts.\n\n"
-        "Not affiliated with Electronic Arts.\n\n"
-        "Lunduke City 2 is copyright Bryan Lunduke and is available under the GPL.";
+        "Lunduke City 2, version 2.0.0\n"
+        "Copyright \u00A9 2026 Bryan Lunduke.\n\n"
+        "Simulation engine and classic artwork based on the GPL release of Micropolis, Copyright \u00A9 "
+        "1989\u20132007 Electronic Arts Inc. This is a modified version, not the original program.\n\n"
+        "Original game design by Will Wright, first published by Maxis. Not affiliated with or endorsed by "
+        "Electronic Arts.\n\n"
+        "Free software under the GNU GPL v3 or later, with additional terms (see NOTICE). There is NO WARRANTY, "
+        "to the extent permitted by law.\n\n"
+        "Source code: github.com/BryanLunduke/lundukecity2";
     if (about_text() != about_expected ||
         how_to_play_text().find("budget") == std::string::npos || how_to_play_text().find("power") == std::string::npos) {
+        std::fprintf(stderr, "about '%s'\n", about_text().c_str());
         return fail(38, "about or how to play copy is missing");
+    }
+    {
+        // The ASCII spelling is the same text with (C) and a hyphen.
+        const std::string ascii = about_text(true);
+        bool plain = true;
+        for (unsigned char ch : ascii) {
+            plain = plain && ch < 0x80;
+        }
+        if (!plain || ascii.find("Copyright (C) 2026 Bryan Lunduke.") == std::string::npos ||
+            ascii.find("(C) 1989-2007 Electronic Arts Inc.") == std::string::npos) {
+            return fail(47, "the ASCII About text is missing or still has non-ASCII characters");
+        }
+    }
+    {
+        // The License viewer finds NOTICE and COPYING (here, the source tree
+        // root above the build directory) and shows both.
+        const std::string notice = license_file("NOTICE");
+        const std::string copying = license_file("COPYING");
+        const std::string shown = license_viewer_text();
+        if (notice.empty() || copying.empty() || shown.find("Upstream-Name: Lunduke City 2") == std::string::npos ||
+            shown.find("ADDITIONAL TERMS per GNU GPL Section 7") == std::string::npos ||
+            shown.find("GNU GENERAL PUBLIC LICENSE") == std::string::npos ||
+            shown.find("Version 3, 29 June 2007") == std::string::npos ||
+            shown.find("NOTICE") > shown.find("GNU GENERAL PUBLIC LICENSE") || shown.find('\r') != std::string::npos) {
+            std::fprintf(stderr, "notice '%s' copying '%s'\n", notice.c_str(), copying.c_str());
+            return fail(48, "the License viewer did not find NOTICE and COPYING");
+        }
+        if (license_candidates("NOTICE").empty() || license_file("NO-SUCH-LICENSE-FILE").size() != 0) {
+            return fail(49, "license lookup searched nowhere, or found a file that does not exist");
+        }
     }
     if (kMaxVoices != 8 || kSoundCooldownMs != 80 || kAudioIdleCloseMs < 1000 || kMaxCityBytes < 27120) {
         return fail(39, "audio or city size limits moved");
