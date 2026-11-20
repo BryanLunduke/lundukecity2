@@ -108,7 +108,10 @@ int main()
     }
 
     std::string error;
-    Micropolis bare;
+    // Wine's default thread stack is about 1-2 MiB. This test keeps many
+    // Micropolis fixtures alive at once (~100 KiB each after the riot-fire
+    // and scan-map fields), so they live in static storage, not on the stack.
+    static Micropolis bare;
     arm(bare, 4);
     // Like the Casino and the Data Center, a Prison places with no road
     // and no wire; it cuts crime only once it has both.
@@ -137,7 +140,7 @@ int main()
         return fail(15, "query did not name the prison");
     }
 
-    Micropolis shore;
+    static Micropolis shore;
     arm(shore, 5);
     if (place_special_building(&shore, marina, 30, 30, error) || error.find("shoreline") == std::string::npos) {
         std::fprintf(stderr, "dry '%s'\n", error.c_str());
@@ -168,7 +171,7 @@ int main()
         return fail(20, "query did not name the marina");
     }
 
-    Micropolis ornament;
+    static Micropolis ornament;
     arm(ornament, 6);
     if (!place_special_building(&ornament, fountain, 0, 0, error) || ornament.totalFunds != 49980) {
         std::fprintf(stderr, "corner '%s'\n", error.c_str());
@@ -189,7 +192,7 @@ int main()
     auto at = [](const Micropolis &sim) {
         return [&sim](int x, int y) { return word_at(sim, x, y); };
     };
-    Micropolis hint;
+    static Micropolis hint;
     arm(hint, 7);
     hint.map[40][42] = RIVER;
     const PlaceForecast marina_hint = forecast_tile(kSpecialEngineId, 40, 40, marina, 50000, true, at(hint));
@@ -222,7 +225,7 @@ int main()
         return fail(28, "the prison hover is not a 4x4 at $3,000");
     }
 
-    Micropolis land;
+    static Micropolis land;
     arm(land, 8);
     land.specialLandFn = boost_special_land_value;
     if (!place_special_building(&land, zoo, 10, 10, error)) {
@@ -297,7 +300,7 @@ int main()
         return fail(36, "the prison land drop did not stop at 1, or it touched empty land");
     }
 
-    Micropolis crime;
+    static Micropolis crime;
     arm(crime, 9);
     crime.map[20][18] = ROADBASE | BULLBIT;
     crime.map[18][20] = HPOWER | CONDBIT | BULLBIT;
@@ -364,7 +367,7 @@ int main()
         return fail(43, "bulldozing the prison also removed the road or the wire");
     }
 
-    Micropolis burned;
+    static Micropolis burned;
     arm(burned, 10);
     burned.map[10][8] = ROADBASE | BULLBIT;
     burned.map[8][10] = HPOWER | CONDBIT | BULLBIT;
@@ -383,7 +386,7 @@ int main()
         }
     }
 
-    Micropolis grown;
+    static Micropolis grown;
     arm(grown, 11);
     grown.map[14][12] = ROADBASE | BULLBIT;
     grown.map[12][14] = HPOWER | CONDBIT | BULLBIT;
@@ -403,7 +406,7 @@ int main()
         return fail(48, "the simulator replaced a prison, marina, or fountain");
     }
 
-    Micropolis classic;
+    static Micropolis classic;
     classic.resourceDir = std::string(LUNDUKE_CITY_ASSET_DIR) + "/res";
     if (!classic.loadScenario(SC_DULLSVILLE)) {
         std::fprintf(stderr, "scenario '%s'\n", classic.loadErrorDetail.c_str());
@@ -423,7 +426,7 @@ int main()
     if (!ornament.saveCityAs(saved_path.c_str())) {
         return fail(51, "could not save a city with a fountain");
     }
-    Micropolis loaded;
+    static Micropolis loaded;
     if (!loaded.loadCity(saved_path.c_str())) {
         std::fprintf(stderr, "load '%s'\n", loaded.loadErrorDetail.c_str());
         return fail(52, "could not load the fountain city");
@@ -433,7 +436,7 @@ int main()
         return fail(53, "the fountain did not survive save and load, including the map corner");
     }
 
-    Micropolis crowd;
+    static Micropolis crowd;
     arm(crowd, 12);
     if (!place_special_building(&crowd, zoo, 10, 10, error)) {
         return fail(54, "could not place a zoo in the crowded city");
@@ -456,7 +459,7 @@ int main()
     if (!crowd.saveCityAs(crowd_path.c_str())) {
         return fail(56, "a city of fountains could not be saved");
     }
-    Micropolis crowd_loaded;
+    static Micropolis crowd_loaded;
     if (!crowd_loaded.loadCity(crowd_path.c_str())) {
         std::fprintf(stderr, "crowd '%s'\n", crowd_loaded.loadErrorDetail.c_str());
         return fail(57, "a city with more than one centre per nine tiles of fountains was rejected");
@@ -465,7 +468,7 @@ int main()
         return fail(58, "the zoo in the fountain city did not load");
     }
 
-    Micropolis parks;
+    static Micropolis parks;
     arm(parks, 13);
     bool saw_fountain = false;
     for (int i = 0; i < 80 && !saw_fountain; ++i) {
@@ -498,7 +501,7 @@ int main()
         return fail(62, "the placeable fountain stole the park animation");
     }
 
-    Micropolis powered;
+    static Micropolis powered;
     arm(powered, 14);
     if (powered.toolDown(TOOL_COALPOWER, 8, 8) != TOOLRESULT_OK) {
         return fail(63, "could not place a coal plant");
@@ -536,7 +539,7 @@ int main()
     // Dock row may cover shoreline. Open water has to remain south of the
     // 3x3. Land in that same row stays land, and bulldoze puts each covered
     // shoreline tile back, including after save and load.
-    Micropolis harbor;
+    static Micropolis harbor;
     arm(harbor, 15);
     harbor.map[29][31] = REDGE;
     harbor.map[31][31] = FIRSTRIVEDGE;
@@ -579,7 +582,7 @@ int main()
             return fail(74, "the save did not keep the covered shoreline");
         }
     }
-    Micropolis loaded_harbor;
+    static Micropolis loaded_harbor;
     if (!loaded_harbor.loadCity(harbor_path.c_str())) {
         std::fprintf(stderr, "harbor load '%s'\n", loaded_harbor.loadErrorDetail.c_str());
         return fail(75, "could not load the marina that covers shoreline");
@@ -607,7 +610,7 @@ int main()
         return fail(80, "bulldozing the restored shore changed the tile");
     }
 
-    Micropolis dock_hint;
+    static Micropolis dock_hint;
     arm(dock_hint, 16);
     dock_hint.map[29][31] = REDGE;
     dock_hint.map[30][32] = RIVER;
@@ -633,7 +636,7 @@ int main()
 
     // Tiles 53-55 sit under the first road tile. The hover must not offer
     // to pave them, and it must still offer to clear a tree.
-    Micropolis hover;
+    static Micropolis hover;
     arm(hover, 21);
     hover.map[12][12] = static_cast<unsigned short>(SPECIAL_MAYOR | ZONEBIT | BULLBIT | BURNBIT);
     hover.map[14][14] = static_cast<unsigned short>(SPECIAL_CASINO | ZONEBIT | BULLBIT | BURNBIT);
@@ -660,7 +663,7 @@ int main()
     // A crash turns the dock into an explosion. The shoreline note has to
     // survive that frame and a save taken while it is still playing. If
     // the whole footprint is gone, bulldoze still puts the shore back.
-    Micropolis blown;
+    static Micropolis blown;
     arm(blown, 22);
     if (!place_special_building(&blown, zoo, 27, 30, error)) {
         return fail(86, "could not place a zoo beside the marina");
@@ -697,7 +700,7 @@ int main()
                      blown.map[27][30]);
         return fail(91, "bulldozing the exploded marina did not put the shoreline back");
     }
-    Micropolis loaded_blown;
+    static Micropolis loaded_blown;
     if (!loaded_blown.loadCity(blown_path.c_str())) {
         std::fprintf(stderr, "blown load '%s'\n", loaded_blown.loadErrorDetail.c_str());
         return fail(92, "could not load the marina saved during the explosion");
@@ -717,7 +720,7 @@ int main()
 
     // After the explosion animation the cells are rubble and every body
     // tile is gone. Bulldozing a corner of that lot still restores the shore.
-    Micropolis rubble_dock;
+    static Micropolis rubble_dock;
     arm(rubble_dock, 23);
     rubble_dock.map[29][31] = REDGE;
     rubble_dock.map[31][31] = FIRSTRIVEDGE;
@@ -754,7 +757,7 @@ int main()
         if (special_building(zoo_row).land_radius != 8 || special_building(index_named("Big Park")).land_radius != 6) {
             return fail(102, "the zoo does not reach further than the Big Park");
         }
-        Micropolis civic;
+        static Micropolis civic;
         arm(civic, 21);
         std::string why;
         if (!place_special_building(&civic, library_row, 20, 20, why)) {
@@ -774,7 +777,7 @@ int main()
         }
         // The Mayor's House needs 2,000 people; the check only needs the
         // building, so it is written onto the map directly.
-        Micropolis mayor;
+        static Micropolis mayor;
         arm(mayor, 22);
         const SpecialBuilding &house = special_building(mayor_row);
         for (int dy = 0; dy < house.height; ++dy) {
@@ -800,7 +803,7 @@ int main()
     // Review nov18b #6: stacked fountains add with diminishing returns.
     {
         const int fountain_row = index_named("Fountain");
-        Micropolis plaza;
+        static Micropolis plaza;
         arm(plaza, 23);
         std::string why;
         const int spots[][2] = {{60, 60}, {62, 60}, {60, 62}, {62, 62}, {64, 64}, {58, 58}};
