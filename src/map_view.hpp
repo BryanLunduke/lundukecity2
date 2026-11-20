@@ -99,6 +99,10 @@ public:
     void advance_fx(int elapsed_ms, bool running);
     // A new ambient step is due and the last frame had something moving.
     bool fx_frame_due() const;
+    // Feedback animation (the placement snap pulse) runs on wall time,
+    // paused or not. True while one still has frames to show.
+    void advance_ui(int elapsed_ms);
+    bool ui_animating() const;
     // Night mode: darken the map and add the light layer (lit windows,
     // street lamps, fires). The tile art is not touched. hold hides it for
     // a frame, for example under a data map.
@@ -142,6 +146,15 @@ private:
     void draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk);
     bool draw_water(cairo_t *cr, const TileSpan &span);
     void draw_clouds(cairo_t *cr, const TileSpan &span);
+    void draw_ghost(cairo_t *cr, double x, double y, double w, double h) const;
+    // The tool's own tiles from the drawn sheet, for the placement ghost.
+    mutable cairo_surface_t *ghost_pixels_ = nullptr;
+    mutable int ghost_tool_ = -1;
+    mutable int ghost_generation_ = -1;
+    // Snap pulse when the footprint moves to a new cell; -1 is idle.
+    int pulse_ms_ = -1;
+    int pulse_left_ = -1;
+    int pulse_top_ = -1;
     // Tileable cloud cover, 0..1 per texel; built once.
     std::vector<float> cloud_cover_;
     // One repeat of the cloud shade at art resolution, premultiplied (a

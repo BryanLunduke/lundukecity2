@@ -1241,7 +1241,7 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
     reasons.motion = scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                     puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due();
+                     puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due() || map_.ui_animating();
     return reasons;
 }
 
@@ -1304,7 +1304,7 @@ void Shell::loop()
                 timeout = std::min(timeout, 30);
             }
             if (scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                puff_on_ || pop_on_ || flash_on_) {
+                puff_on_ || pop_on_ || flash_on_ || map_.ui_animating()) {
                 timeout = std::min(timeout, 16);
             }
             if (menu_.open() && menu_edge_dir_ != 0) {
@@ -1350,6 +1350,7 @@ void Shell::loop()
             blink_drew_ = map_.tick(elapsed);
         }
         map_.advance_fx(elapsed, speed_ > 0 && !dialog_pauses());
+        map_.advance_ui(elapsed);
         palette_.advance(elapsed);
         if (hover_id_ != tracked_hover_) {
             tracked_hover_ = hover_id_;

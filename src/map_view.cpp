@@ -72,6 +72,10 @@ MapView::~MapView()
         cairo_surface_destroy(cloud_pixels_);
         cloud_pixels_ = nullptr;
     }
+    if (ghost_pixels_ != nullptr) {
+        cairo_surface_destroy(ghost_pixels_);
+        ghost_pixels_ = nullptr;
+    }
 }
 
 bool MapView::tick(int elapsed_ms)
@@ -190,6 +194,20 @@ void MapView::draw_dust(cairo_t *cr) const
 
 void MapView::set_cue(const MapCue &cue)
 {
+    const bool placing = cue.active && cue.mark >= 1 && cue.mark <= 2 && cue.width > 0 && cue.height > 0;
+    if (placing && (cue.left != pulse_left_ || cue.top != pulse_top_)) {
+        // A short pulse each time the footprint snaps to a new cell. The
+        // first cue of a hover only records where it is.
+        if (pulse_left_ >= 0 && look_fx::motion_allowed(effects_)) {
+            pulse_ms_ = 0;
+        }
+        pulse_left_ = cue.left;
+        pulse_top_ = cue.top;
+    } else if (!cue.active) {
+        pulse_left_ = -1;
+        pulse_top_ = -1;
+        pulse_ms_ = -1;
+    }
     cue_ = cue;
 }
 
@@ -1040,6 +1058,8 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double h = cue_.height * tile;
             if (cue_.sprite >= 0) {
                 paint_special_ghost(cr, cue_.sprite, x, y, w, h, cue_.mark >= 3);
+            } else {
+                draw_ghost(cr, x, y, w, h);
             }
             if (cue_.outline) {
                 cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
@@ -2062,5 +2082,217 @@ void MapView::draw_clouds(cairo_t *cr, const TileSpan &span)
     cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
+    cairo_restore(cr);
+}
+
+namespace {
+
+constexpr int kPulseMs = 160;
+
+// First tile and footprint of the building a tool lays, for the ghost.
+// Zones and plants are laid row by row from their base tile.
+bool ghost_tiles(int tool, int &base, int &size)
+{
+    switch (tool) {
+    case TOOL_RESIDENTIAL:
+        base = RESBASE;
+        size = 3;
+        return true;
+    case TOOL_COMMERCIAL:
+        base = COMBASE;
+        size = 3;
+        return true;
+    case TOOL_INDUSTRIAL:
+        base = INDBASE;
+        size = 3;
+        return true;
+    case TOOL_FIRESTATION:
+        base = FIRESTBASE;
+        size = 3;
+        return true;
+    case TOOL_POLICESTATION:
+        base = POLICESTBASE;
+        size = 3;
+        return true;
+    case TOOL_STADIUM:
+        base = STADIUMBASE;
+        size = 4;
+        return true;
+    case TOOL_SEAPORT:
+        base = PORTBASE;
+        size = 4;
+        return true;
+    case TOOL_COALPOWER:
+        base = COALBASE;
+        size = 4;
+        return true;
+    case TOOL_NUCLEARPOWER:
+        base = NUCLEARBASE;
+        size = 4;
+        return true;
+    case TOOL_AIRPORT:
+        base = AIRPORTBASE;
+        size = 6;
+        return true;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
+void MapView::advance_ui(int elapsed_ms)
+{
+    if (pulse_ms_ >= 0) {
+        pulse_ms_ += std::max(0, elapsed_ms);
+        if (pulse_ms_ >= kPulseMs) {
+            pulse_ms_ = -1;
+        }
+    }
+}
+
+bool MapView::ui_animating() const
+{
+    return pulse_ms_ >= 0;
+}
+
+void MapView::draw_ghost(cairo_t *cr, double x, double y, double w, double h) const
+{
+    const int mark = cue_.mark;
+    const bool blocked = mark >= 3;
+    const bool classic = classic_fx();
+    TileAtlas &atlas = tile_atlas();
+    int base = 0;
+    int size = 0;
+    const bool tiles = atlas.loaded() && ghost_tiles(engine_tool_, base, size) && size == cue_.width &&
+                       size == cue_.height && base + size * size <= atlas.count();
+    cairo_save(cr);
+    if (tiles) {
+        if (ghost_pixels_ == nullptr || ghost_tool_ != engine_tool_ || ghost_generation_ != atlas.look_generation()) {
+            if (ghost_pixels_ != nullptr) {
+                cairo_surface_destroy(ghost_pixels_);
+            }
+            const int k = TileAtlas::kSize;
+            ghost_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size * k, size * k);
+            cairo_surface_flush(ghost_pixels_);
+            unsigned char *data = cairo_image_surface_get_data(ghost_pixels_);
+            const int stride = cairo_image_surface_get_stride(ghost_pixels_);
+            for (int row = 0; row < size; ++row) {
+                for (int col = 0; col < size; ++col) {
+                    atlas.blit(base + row * size + col, data + row * k * stride + col * k * 4, stride);
+                }
+            }
+            cairo_surface_mark_dirty(ghost_pixels_);
+            ghost_tool_ = engine_tool_;
+            ghost_generation_ = atlas.look_generation();
+        }
+        // The building it will lay, see-through: blended in SVGA, a 50%
+        // dither in Classic. A blocked spot shows it washed red.
+        cairo_save(cr);
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_clip(cr);
+        {
+            cairo_matrix_t matrix;
+            cairo_matrix_init_scale(&matrix, cairo_image_surface_get_width(ghost_pixels_) / w,
+                                    cairo_image_surface_get_height(ghost_pixels_) / h);
+            cairo_matrix_translate(&matrix, -x, -y);
+            cairo_pattern_t *art = cairo_pattern_create_for_surface(ghost_pixels_);
+            cairo_pattern_set_filter(art, CAIRO_FILTER_NEAREST);
+            cairo_pattern_set_matrix(art, &matrix);
+            cairo_set_source(cr, art);
+            if (classic) {
+                look_fx::dither_paint(cr, blocked ? 6.0 / 16.0 : 8.0 / 16.0);
+            } else {
+                cairo_paint_with_alpha(cr, blocked ? 0.45 : 0.6);
+            }
+            cairo_pattern_destroy(art);
+        }
+        if (blocked) {
+            cairo_rectangle(cr, x, y, w, h);
+            look_fx::fill_fx(cr, 0.85, 0.12, 0.08, classic ? 4.0 / 16.0 : 0.30, classic);
+        }
+        cairo_restore(cr);
+    }
+    // Glow around the footprint: green ready, amber caution, red blocked.
+    double r = 110 / 255.0;
+    double g = 1.0;
+    double b = 140 / 255.0;
+    if (mark == 2) {
+        r = 1.0;
+        g = 220 / 255.0;
+        b = 90 / 255.0;
+    } else if (blocked) {
+        r = 1.0;
+        g = 70 / 255.0;
+        b = 60 / 255.0;
+    }
+    cairo_set_line_width(cr, 1.0);
+    if (classic) {
+        cairo_rectangle(cr, x - 2.0, y - 2.0, w + 4.0, h + 4.0);
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+        look_fx::fill_fx(cr, r, g, b, 0.5, true);
+        cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
+    } else {
+        const double alphas[3] = {50 / 255.0, 90 / 255.0, 140 / 255.0};
+        for (int i = 3; i >= 1; --i) {
+            cairo_rectangle(cr, x - i + 0.5, y - i + 0.5, w + 2 * i - 1, h + 2 * i - 1);
+            cairo_set_source_rgba(cr, r, g, b, alphas[3 - i]);
+            cairo_stroke(cr);
+        }
+    }
+    cairo_rectangle(cr, x + 0.5, y + 0.5, w - 1, h - 1);
+    cairo_set_source_rgb(cr, r, g, b);
+    cairo_stroke(cr);
+    const double tile = static_cast<double>(std::max(tile_size_, 1));
+    if (!classic && tile >= 16) {
+        // Faint cell lines inside a multi-tile footprint.
+        for (double gx = x + tile; gx < x + w - 1; gx += tile) {
+            cairo_move_to(cr, gx + 0.5, y + 2);
+            cairo_line_to(cr, gx + 0.5, y + h - 2);
+        }
+        for (double gy = y + tile; gy < y + h - 1; gy += tile) {
+            cairo_move_to(cr, x + 2, gy + 0.5);
+            cairo_line_to(cr, x + w - 2, gy + 0.5);
+        }
+        cairo_set_source_rgba(cr, r, g, b, 70 / 255.0);
+        cairo_stroke(cr);
+    }
+    if (blocked) {
+        // Hatch across a blocked footprint.
+        cairo_save(cr);
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_clip(cr);
+        const double gap = classic ? 8.0 : 6.0;
+        for (double k = -h; k < w; k += gap) {
+            cairo_move_to(cr, x + k, y + h);
+            cairo_line_to(cr, x + k + h, y);
+        }
+        if (classic) {
+            cairo_set_source_rgb(cr, 1.0, 85 / 255.0, 85 / 255.0);
+        } else {
+            cairo_set_source_rgba(cr, 1.0, 60 / 255.0, 50 / 255.0, 90 / 255.0);
+        }
+        cairo_stroke(cr);
+        cairo_restore(cr);
+    }
+    if (pulse_ms_ >= 0 && !blocked) {
+        // Snap pulse: a white ring that grows and fades.
+        const double p = std::min(1.0, pulse_ms_ / static_cast<double>(kPulseMs));
+        const double e = std::round(2.0 + 8.0 * look_fx::ease_out_cubic(p));
+        cairo_set_line_width(cr, 2.0);
+        cairo_rectangle(cr, x - e, y - e, w + 2 * e, h + 2 * e);
+        if (classic) {
+            if (p < 0.6) {
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_stroke(cr);
+            }
+        } else {
+            cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.86 * (1.0 - p));
+            cairo_stroke(cr);
+        }
+        cairo_new_path(cr);
+    }
+    cairo_new_path(cr);
     cairo_restore(cr);
 }
