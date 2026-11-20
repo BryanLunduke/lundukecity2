@@ -1067,21 +1067,46 @@ void Shell::draw_dialog(cairo_t *cr)
     if (hold_title) {
         paint_dim_plate(cr, 0, 0, win_w_, win_h_, 0.02, 0.03, 0.08);
     }
-    struct SettleShift {
+    // The dialog eases in: it slides up into place and, off the Classic look,
+    // grows from 94% about the window centre while it fades in. Classic
+    // only slides, so nothing is blended there.
+    struct DialogEase {
         Shell *shell;
         cairo_t *cr;
-        SettleShift(Shell *self, cairo_t *context) : shell(self), cr(context)
+        bool group = false;
+        double alpha = 1.0;
+        DialogEase(Shell *self, cairo_t *context, double rise, bool soft) : shell(self), cr(context)
         {
-            shell->dialog_hot_dy_ = shell->panel_settle_ > 0 ? shell->panel_settle_ * 2.0 : 0.0;
+            double e = 1.0;
+            if (shell->dialog_anim_ms_ >= 0) {
+                e = look_fx::ease_out_cubic(std::min(1.0, static_cast<double>(shell->dialog_anim_ms_) / kDialogEaseMs));
+            }
+            const double s = soft ? 0.94 + 0.06 * e : 1.0;
+            shell->dialog_hot_dy_ = rise * (1.0 - e);
+            shell->dialog_hot_scale_ = s;
+            shell->dialog_hot_cx_ = shell->win_w_ / 2.0;
+            shell->dialog_hot_cy_ = shell->win_h_ / 2.0;
             cairo_save(cr);
-            cairo_translate(cr, 0, shell->dialog_hot_dy_);
+            cairo_translate(cr, shell->dialog_hot_cx_, shell->dialog_hot_cy_ + shell->dialog_hot_dy_);
+            cairo_scale(cr, s, s);
+            cairo_translate(cr, -shell->dialog_hot_cx_, -shell->dialog_hot_cy_);
+            if (soft && e < 1.0) {
+                cairo_push_group(cr);
+                group = true;
+                alpha = std::min(1.0, 0.15 + e * 1.4);
+            }
         }
-        ~SettleShift()
+        ~DialogEase()
         {
+            if (group) {
+                cairo_pop_group_to_source(cr);
+                cairo_paint_with_alpha(cr, alpha);
+            }
             cairo_restore(cr);
             shell->dialog_hot_dy_ = 0;
+            shell->dialog_hot_scale_ = 1.0;
         }
-    } settle_shift(this, cr);
+    } dialog_ease(this, cr, dp(12), tile_atlas().look() != 0);
     const double margin = dp(16);
     text_spans_.clear();
     // Dialogs stay above the status line. Centering them in the full window
@@ -5002,8 +5027,30 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     const double card_w = std::max(1.0, (inner_w - 2.0 * gap) / 3.0);
     const double col_w = std::max(1.0, (inner_w - gap) / 2.0);
 
-    auto card_box = [&](double x, double y, double w, double h, const char *title, const std::string &body, double tr,
-                        double tg, double tb) {
+    // While the review eases in, the cards land one after another (a wipe
+    // down with a small drop) and the Funds and People figures count up.
+    const int reveal_ms = dialog_anim_ms_;
+    auto card_box = [&](double x, double y, double w, double h, const char *title, const std::string &body_text,
+                        double tr, double tg, double tb, int order = -1, bool count = false) {
+        std::string body = body_text;
+        double land = 1.0;
+        if (reveal_ms >= 0 && order >= 0) {
+            land = std::clamp((reveal_ms - 120.0 - order * 80.0) / 240.0, 0.0, 1.0);
+            if (count) {
+                body = look_fx::count_up(body_text,
+                                         look_fx::ease_out_cubic(std::clamp((reveal_ms - 200.0 - order * 80.0) / 600.0, 0.0, 1.0)));
+            }
+        }
+        if (land <= 0.0) {
+            return;
+        }
+        const double e = look_fx::ease_out_cubic(land);
+        cairo_save(cr);
+        if (land < 1.0) {
+            cairo_rectangle(cr, x - 1, y - 1, w + 2, (h + 2) * e);
+            cairo_clip(cr);
+            cairo_translate(cr, 0, dp(8) * (1.0 - e));
+        }
         fill(cr, x, y, w, h, card_r, card_g, card_b);
         stroke_rect(cr, x + 0.5, y + 0.5, w - 1, h - 1, gold_r, gold_g, gold_b);
         cairo_save(cr);
@@ -5016,15 +5063,16 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         paint_text(cr, year_body_font.c_str(), body, x + dp(10), y + box_top + title_h + box_mid, body_r, body_g, body_b,
                    body_w);
         cairo_restore(cr);
+        cairo_restore(cr);
     };
 
-    card_box(inner_x, cursor, card_w, top_h, "Funds", funds_body, funds_r, funds_g, funds_b);
-    card_box(inner_x + card_w + gap, cursor, card_w, top_h, "People", people_body, people_r, people_g, people_b);
+    card_box(inner_x, cursor, card_w, top_h, "Funds", funds_body, funds_r, funds_g, funds_b, 0, true);
+    card_box(inner_x + card_w + gap, cursor, card_w, top_h, "People", people_body, people_r, people_g, people_b, 1, true);
     card_box(inner_x + 2.0 * (card_w + gap), cursor, card_w, top_h, "Standing", standing, standing_r, standing_g,
-             standing_b);
+             standing_b, 2);
     cursor += top_h + gap;
-    card_box(inner_x, cursor, col_w, low_h, "Highlights", highlights, funds_r, funds_g, funds_b);
-    card_box(inner_x + col_w + gap, cursor, col_w, low_h, "Challenges", challenges, title_r, title_g, title_b);
+    card_box(inner_x, cursor, col_w, low_h, "Highlights", highlights, funds_r, funds_g, funds_b, 3);
+    card_box(inner_x + col_w + gap, cursor, col_w, low_h, "Challenges", challenges, title_r, title_g, title_b, 4);
     const double buttons_top = cursor + low_h + button_gap;
 
     auto ornate = [&](double x, double y, double w, double h, const char *label, int id, bool primary) {
@@ -5226,9 +5274,6 @@ void Shell::render()
             }
             fullscreen_hold_frames_ = 0;
         }
-    }
-    if (panel_settle_ > 0) {
-        --panel_settle_;
     }
     cairo_destroy(context);
     visual_stamp_ = visual_stamp();

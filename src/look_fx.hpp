@@ -8,7 +8,9 @@
 // easing curves, the 4x4 ordered dither the Classic look uses in place of
 // alpha, and a stable per-tile hash for flicker and puff phases.
 
+#include <cmath>
 #include <cstdint>
+#include <string>
 
 namespace look_fx {
 
@@ -95,6 +97,65 @@ inline std::uint32_t hash32(std::uint32_t v)
 inline double hash01(std::uint32_t v)
 {
     return static_cast<double>(hash32(v) & 0xffffU) / 65535.0;
+}
+
+// The text with every figure scaled by t (0..1), for a count-up: "$1,240"
+// at t = 0.5 reads "$620". Commas are kept where the figure had them, and a
+// bare four-digit year (1900..2199) is left alone. t >= 1 returns the text.
+inline std::string count_up(const std::string &text, double t)
+{
+    if (t >= 1.0) {
+        return text;
+    }
+    if (t < 0.0) {
+        t = 0.0;
+    }
+    std::string out;
+    out.reserve(text.size());
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const char c = text[i];
+        if (c < '0' || c > '9') {
+            out.push_back(c);
+            ++i;
+            continue;
+        }
+        std::size_t j = i;
+        unsigned long long value = 0;
+        bool commas = false;
+        int digits = 0;
+        while (j < text.size()) {
+            if (text[j] >= '0' && text[j] <= '9') {
+                value = value * 10ULL + static_cast<unsigned long long>(text[j] - '0');
+                ++digits;
+                ++j;
+            } else if (text[j] == ',' && j + 1 < text.size() && text[j + 1] >= '0' && text[j + 1] <= '9') {
+                commas = true;
+                ++j;
+            } else {
+                break;
+            }
+        }
+        if (!commas && digits == 4 && value >= 1900 && value <= 2199) {
+            out.append(text, i, j - i);
+            i = j;
+            continue;
+        }
+        const unsigned long long shown = static_cast<unsigned long long>(std::llround(static_cast<double>(value) * t));
+        const std::string plain = std::to_string(shown);
+        if (commas) {
+            for (std::size_t k = 0; k < plain.size(); ++k) {
+                if (k > 0 && (plain.size() - k) % 3 == 0) {
+                    out.push_back(',');
+                }
+                out.push_back(plain[k]);
+            }
+        } else {
+            out += plain;
+        }
+        i = j;
+    }
+    return out;
 }
 
 } // namespace look_fx

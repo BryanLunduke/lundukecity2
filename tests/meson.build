@@ -444,7 +444,7 @@ hotspots = executable(
 
 test('hotspots', hotspots)
 
-# The rolling Funds readout and its floating change.
+# The rolling Funds readout, its floating change, and the count-up text.
 funds_tick = executable(
   'funds_tick',
   'funds_tick.cpp',

@@ -226,7 +226,7 @@ void Shell::apply_effects()
 void Shell::skip_motion()
 {
     scene_fade_.skip();
-    panel_settle_ = 0;
+    dialog_anim_ms_ = -1;
     event_pan_on_ = false;
     marker_on_ = false;
     puff_on_ = false;
@@ -291,6 +291,16 @@ void Shell::advance_presentation(int elapsed_ms)
     }
     funds_tick_.observe(session_.funds(), city_generation_, motion_on() && city_chosen_ && !welcome_gate_);
     funds_tick_.advance(elapsed_ms);
+    if (dialog_anim_ms_ >= 0) {
+        // The frame drawn at the full length is the settled one; the next
+        // step ends the clock.
+        const int len = dialog_anim_len();
+        if (dialog_ == Dialog::None || dialog_anim_ms_ >= len) {
+            dialog_anim_ms_ = -1;
+        } else {
+            dialog_anim_ms_ = std::min(len, dialog_anim_ms_ + elapsed_ms);
+        }
+    }
     if (event_pan_on_) {
         if (std::fabs(scroll_x_ - event_written_x_) > 0.75 || std::fabs(scroll_y_ - event_written_y_) > 0.75) {
             event_pan_on_ = false;
@@ -440,11 +450,13 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     menu_.close();
     dialog_ = dialog;
     dialog_error_.clear();
-    panel_settle_ = 0;
+    dialog_anim_ms_ = -1;
     if (motion_on() && (dialog == Dialog::Budget || dialog == Dialog::Evaluation || dialog == Dialog::Graphs ||
                        dialog == Dialog::Messages || dialog == Dialog::Welcome || dialog == Dialog::Scenario ||
-                       dialog == Dialog::Query || dialog == Dialog::Disaster)) {
-        panel_settle_ = 2;
+                       dialog == Dialog::Query || dialog == Dialog::Disaster || dialog == Dialog::Settings ||
+                       dialog == Dialog::About || dialog == Dialog::HowToPlay || dialog == Dialog::Info ||
+                       dialog == Dialog::Ledger || dialog == Dialog::Outcome)) {
+        dialog_anim_ms_ = 0;
     }
     if (!prompted) {
         arm_modal_grace();
@@ -3396,8 +3408,21 @@ int Shell::hit(double x, double y) const
     return 0;
 }
 
+int Shell::dialog_anim_len() const
+{
+    return dialog_ == Dialog::Budget && budget_cover_ && budget_is_tax_ ? kYearRevealMs : kDialogEaseMs;
+}
+
 void Shell::push_hot(double x, double y, double w, double h, int id)
 {
+    // Hot rects follow the dialog ease: scaled about its centre, then slid.
+    const double s = dialog_hot_scale_;
+    if (s != 1.0) {
+        x = dialog_hot_cx_ + (x - dialog_hot_cx_) * s;
+        y = dialog_hot_cy_ + (y - dialog_hot_cy_) * s;
+        w *= s;
+        h *= s;
+    }
     next_hot_.push_back(Hotspot{x, y + dialog_hot_dy_, w, h, id});
 }
 

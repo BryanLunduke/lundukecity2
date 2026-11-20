@@ -4,9 +4,11 @@
 
 // The rolling Funds readout: it rolls to a new balance, floats the change,
 // merges a quick run of spending into one figure, glints on income, and
-// snaps for a new city or with motion off.
+// snaps for a new city or with motion off. Also the Year in Review
+// count-up text.
 
 #include "funds_tick.hpp"
+#include "look_fx.hpp"
 
 #include <cstdio>
 
@@ -66,6 +68,13 @@ int main()
     }
     if (tick.floats.size() > FundsTicker::kMaxFloats) {
         return fail(10, "floats should be capped");
+    }
+    if (look_fx::count_up("Start of year $1,240", 0.5) != "Start of year $620" ||
+        look_fx::count_up("End of year $12,000 (est)", 0.25) != "End of year $3,000 (est)" ||
+        look_fx::count_up("Since 2009: 40 homes", 0.5) != "Since 2009: 20 homes" ||
+        look_fx::count_up("Homes 9% \u00b7 Shops 3%", 0.0) != "Homes 0% \u00b7 Shops 0%" ||
+        look_fx::count_up("$1,240", 1.0) != "$1,240") {
+        return fail(11, "count-up text");
     }
     std::puts("funds_tick ok");
     return 0;
