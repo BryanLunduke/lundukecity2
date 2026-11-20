@@ -1050,6 +1050,7 @@ city_events_test = executable(
   cpp_args: [
     '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
     '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+    '-DLUNDUKE_CITY_SOURCE_DIR="' + meson.project_source_root() + '"',
   ],
 )
 

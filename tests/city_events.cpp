@@ -4,7 +4,8 @@
 
 // Riot, Autonomous Zone, Lion Escape and Prison Escape: deterministic sim
 // checks on a hand-built map, the zoo and prison requirements, tools
-// refused inside the zone, and the LCD1 save/load round trip.
+// refused inside the zone, road-block snapping, no random starts, the
+// sprite sizes, and the LCD1 save/load round trip.
 
 #include "city_events.hpp"
 #include "city_session.hpp"
@@ -257,49 +258,118 @@ int lion_tests()
     return 0;
 }
 
+// A grid of road blocks like a classic city: roads every 4 rows (y = 20,
+// 24, ... 44) and every 7 columns (x = 20, 27, ... 62), so each block is
+// 6 x 3 tiles (x0 + 1 .. x0 + 6, y0 + 1 .. y0 + 3) holding two homes.
+// Block (0, 0) keeps its east half empty for the build tests.
+void grid_town(Micropolis &sim)
+{
+    for (int y = 20; y <= 44; y += 4) {
+        road(sim, 20, y, 62, y);
+    }
+    for (int x = 20; x <= 62; x += 7) {
+        road(sim, x, 20, x, 44);
+    }
+    for (int x0 = 20; x0 < 62; x0 += 7) {
+        for (int y0 = 20; y0 < 44; y0 += 4) {
+            plop(sim, x0 + 2, y0 + 2, RZB + 9 * 3);
+            if (x0 != 20 || y0 != 20) {
+                plop(sim, x0 + 5, y0 + 2, RZB + 9 * 3);
+            }
+        }
+    }
+}
+
+void set_police_cell(Micropolis &sim, int cx, int cy, int value)
+{
+    sim.policeStationEffectMap.set(cx, cy, static_cast<short>(value));
+}
+
+bool is_road_tile(const Micropolis &sim, int x, int y)
+{
+    const int tile = sim.map[x][y] & LOMASK;
+    return tile >= ROADBASE && tile <= LASTROAD;
+}
+
 int zone_tests()
 {
     Micropolis sim;
     base_city(sim);
+    grid_town(sim);
     std::vector<Note> notes;
-    if (!city_events::start_zone_at(&sim, 4, 4, notes) || sim.cityEvents.zoneCount != 2 ||
+    // Road blocks: a grid block is its 6 x 3 tiles; a road has none.
+    if (city_events::road_block_at(&sim, 22, 22).size() != 18 || !city_events::road_block_at(&sim, 20, 22).empty() ||
+        city_events::road_block_at(&sim, 50, 34) != city_events::road_block_at(&sim, 54, 35)) {
+        return fail(19, "a grid road block is not its 6 x 3 tiles");
+    }
+    // The block holding (22, 22) and its neighbour with the least police
+    // (all 0 here), the more built one, the first in scan order: the grid
+    // block east of it, across the street at x = 27.
+    if (!city_events::start_zone_at(&sim, 22, 22, notes) || sim.cityEvents.zoneCount != 2 ||
         !said(notes, "An Autonomous Zone has formed!")) {
-        return fail(20, "the zone did not form two blocks wide");
+        return fail(20, "the zone did not form on two road blocks");
     }
-    if (city_events::start_zone_at(&sim, 8, 8, notes) || city_events::start_zone_at(&sim, 14, 2, notes)) {
-        return fail(21, "a second zone, or one off the map edge, was allowed");
+    if (city_events::start_zone_at(&sim, 50, 34, notes)) {
+        return fail(21, "a second zone was allowed");
     }
-    // Blocks (4,4) and (5,4) are tiles 32..47 x 32..39.
-    if (!city_events::in_zone(&sim, 32, 32) || !city_events::in_zone(&sim, 47, 39) ||
-        city_events::in_zone(&sim, 48, 32) || city_events::in_zone(&sim, 32, 40)) {
-        return fail(22, "the zone does not cover its two blocks exactly");
+    Micropolis bare;
+    base_city(bare);
+    grid_town(bare);
+    if (city_events::start_zone_at(&bare, 20, 22, notes) || city_events::start_zone_at(&bare, -1, 0, notes)) {
+        return fail(21, "a zone formed on a road or off the map");
     }
-    if (!city_events::edit_blocked(&sim, TOOL_ROAD, 33, 33) || city_events::edit_blocked(&sim, TOOL_ROAD, 50, 33) ||
-        !city_events::edit_blocked(&sim, TOOL_RESIDENTIAL, 48, 33) ||
-        city_events::edit_blocked(&sim, TOOL_RESIDENTIAL, 49, 33) ||
-        city_events::edit_blocked(&sim, TOOL_QUERY, 33, 33) ||
-        !city_events::edit_blocked(&sim, TOOL_BULLDOZER, 40, 36) ||
-        !city_events::edit_blocked(&sim, TOOL_AIRPORT, 48, 40) ||
-        city_events::edit_blocked(&sim, TOOL_AIRPORT, 49, 40)) {
+    // Blocks x 21..26 and 28..33, y 21..23, and the street between them;
+    // not the roads around.
+    if (!city_events::in_zone(&sim, 21, 21) || !city_events::in_zone(&sim, 33, 23) ||
+        !city_events::in_zone(&sim, 27, 22) || city_events::in_zone(&sim, 34, 22) ||
+        city_events::in_zone(&sim, 21, 24) || city_events::in_zone(&sim, 27, 20) ||
+        city_events::in_zone(&sim, 20, 22)) {
+        return fail(22, "the zone does not cover its two road blocks and the street between exactly");
+    }
+    if (!city_events::edit_blocked(&sim, TOOL_ROAD, 25, 22) || city_events::edit_blocked(&sim, TOOL_ROAD, 25, 24) ||
+        !city_events::edit_blocked(&sim, TOOL_RESIDENTIAL, 22, 24) ||
+        city_events::edit_blocked(&sim, TOOL_RESIDENTIAL, 22, 25) ||
+        city_events::edit_blocked(&sim, TOOL_QUERY, 22, 22) ||
+        !city_events::edit_blocked(&sim, TOOL_BULLDOZER, 27, 22) ||
+        !city_events::edit_blocked(&sim, TOOL_AIRPORT, 34, 22) ||
+        city_events::edit_blocked(&sim, TOOL_AIRPORT, 36, 22)) {
         return fail(23, "a tool footprint is judged wrongly against the zone border");
     }
     // The engine refuses with its own notice.
     sim.editBlockedFn = city_events::edit_blocked;
-    if (sim.doTool(TOOL_ROAD, 33, 33) != TOOLRESULT_FAILED || (sim.map[33][33] & LOMASK) != DIRT ||
-        sim.doTool(TOOL_ROAD, 50, 33) != TOOLRESULT_OK) {
-        return fail(24, "the engine built inside the zone, or refused outside it");
+    if (sim.doTool(TOOL_ROAD, 25, 22) != TOOLRESULT_FAILED || (sim.map[25][22] & LOMASK) != DIRT ||
+        sim.doTool(TOOL_BULLDOZER, 21, 21) != TOOLRESULT_FAILED || (sim.map[21][21] & LOMASK) == DIRT) {
+        return fail(24, "the engine built or bulldozed inside the zone");
     }
     sim.editBlockedFn = nullptr;
-    // Land value: 50 off inside, falling off over 4 tiles outside.
+    // Land value: 50 off inside, falling off over 4 tiles outside (cells
+    // are 2 x 2 tiles; the nearest tile counts).
     set_land(sim, 100);
     city_events::apply_land(&sim);
-    if (sim.landValueMap.worldGet(34, 34) != 50 || sim.landValueMap.worldGet(30, 34) != 60 ||
-        sim.landValueMap.worldGet(28, 34) != 80 || sim.landValueMap.worldGet(26, 34) != 100 ||
-        sim.landValueMap.worldGet(48, 34) != 60 || sim.landValueMap.worldGet(34, 42) != 80) {
-        return fail(25, "land value near the zone: inside " + std::to_string(sim.landValueMap.worldGet(34, 34)) +
-                            ", 1 tile out " + std::to_string(sim.landValueMap.worldGet(30, 34)) + ", 3 out " +
-                            std::to_string(sim.landValueMap.worldGet(28, 34)) + ", 5 out " +
-                            std::to_string(sim.landValueMap.worldGet(26, 34)));
+    if (sim.landValueMap.worldGet(22, 22) != 50 || sim.landValueMap.worldGet(24, 24) != 60 ||
+        sim.landValueMap.worldGet(18, 22) != 70 || sim.landValueMap.worldGet(26, 26) != 80 ||
+        sim.landValueMap.worldGet(22, 28) != 100 || sim.landValueMap.worldGet(34, 22) != 60) {
+        return fail(25, "land value around the zone: inside " + std::to_string(sim.landValueMap.worldGet(22, 22)) +
+                            ", 1 out " + std::to_string(sim.landValueMap.worldGet(24, 24)) + ", 2 out " +
+                            std::to_string(sim.landValueMap.worldGet(18, 22)) + ", 3 out " +
+                            std::to_string(sim.landValueMap.worldGet(26, 26)) + ", 5 out " +
+                            std::to_string(sim.landValueMap.worldGet(22, 28)));
+    }
+    // The barricades sit on the streets round the zone, against the curb,
+    // one per border tile, with a post at each outside corner: 13 along
+    // the top and bottom, 3 down each side, 4 corners.
+    const auto pieces = city_events::barricades(&sim);
+    int posts = 0;
+    for (const auto &piece : pieces) {
+        posts += piece.side >= 4 ? 1 : 0;
+        if (!is_road_tile(sim, piece.x, piece.y) || city_events::in_zone(&sim, piece.x, piece.y)) {
+            return fail(33, "a barricade is off the street at " + std::to_string(piece.x) + "," +
+                                std::to_string(piece.y));
+        }
+    }
+    if (pieces.size() != 2 * 13 + 2 * 3 + 4 || posts != 4) {
+        return fail(33, "the barricade count is " + std::to_string(pieces.size()) + " with " +
+                            std::to_string(posts) + " corner posts");
     }
     // Every two months: grow where police are thin.
     notes.clear();
@@ -308,20 +378,19 @@ int zone_tests()
         return fail(26, "the zone changed before two months");
     }
     advance(sim, 1, notes);
-    if (sim.cityEvents.zoneCount != 3 || !said(notes, "has grown")) {
-        return fail(27, "the zone did not grow with no police");
+    // All at 0 police: the most built neighbour first in scan order, the
+    // block east again (x 35..40), not the empty land round the grid.
+    if (sim.cityEvents.zoneCount != 3 || !said(notes, "has grown") || !city_events::in_zone(&sim, 35, 22) ||
+        !city_events::in_zone(&sim, 34, 22) || city_events::in_zone(&sim, 22, 18)) {
+        return fail(27, "the zone did not grow by the next road block with no police");
     }
-    // It grows toward the least-policed neighbour.
-    set_police(sim, 0);
-    sim.policeStationEffectMap.set(6, 4, 30);
-    sim.policeStationEffectMap.set(3, 4, 30);
-    sim.policeStationEffectMap.set(4, 3, 30);
-    sim.policeStationEffectMap.set(5, 3, 30);
-    sim.policeStationEffectMap.set(4, 5, 30);
+    // It grows toward the least-policed neighbour: police on the next block
+    // east (x 42..47, police cell 5,2) send it south instead.
+    set_police_cell(sim, 5, 2, 30);
     advance(sim, city_events::kZoneReviewSteps, notes);
-    const auto blocks = city_events::zone_blocks(&sim);
-    if (blocks.size() != 4) {
-        return fail(28, "the zone did not grow a second time");
+    if (sim.cityEvents.zoneCount != 4 || !city_events::in_zone(&sim, 22, 26) ||
+        city_events::in_zone(&sim, 43, 22) || !city_events::in_zone(&sim, 22, 24)) {
+        return fail(28, "the zone did not grow to the least-policed block, with its street");
     }
     // Between the thresholds it holds.
     set_police(sim, (city_events::kZoneGrowBelow + city_events::kZoneShrinkAt) / 2);
@@ -329,49 +398,72 @@ int zone_tests()
     if (sim.cityEvents.zoneCount != 4) {
         return fail(29, "the zone moved with middling police coverage");
     }
-    // Strong police shrink it, a block every two months, until it is gone.
+    // Strong police shrink it, the block it took last first.
     set_police(sim, city_events::kZoneShrinkAt);
     notes.clear();
     advance(sim, city_events::kZoneReviewSteps, notes);
-    if (sim.cityEvents.zoneCount != 3 || !said(notes, "shrinking")) {
-        return fail(30, "police coverage did not shrink the zone");
+    if (sim.cityEvents.zoneCount != 3 || !said(notes, "shrinking") || city_events::in_zone(&sim, 22, 26) ||
+        city_events::in_zone(&sim, 22, 24) || !city_events::in_zone(&sim, 35, 22)) {
+        return fail(30, "police coverage did not take back the newest block first");
     }
-    advance(sim, city_events::kZoneReviewSteps * 3, notes);
-    if (sim.cityEvents.zoneCount != 0 || !said(notes, "has ended") || city_events::in_zone(&sim, 33, 33)) {
+    advance(sim, city_events::kZoneReviewSteps, notes);
+    if (sim.cityEvents.zoneCount != 2 || city_events::in_zone(&sim, 35, 22) || city_events::in_zone(&sim, 34, 22) ||
+        !city_events::in_zone(&sim, 28, 22)) {
+        return fail(30, "the second shrink did not give up the third block");
+    }
+    advance(sim, city_events::kZoneReviewSteps * 2, notes);
+    if (sim.cityEvents.zoneCount != 0 || !said(notes, "has ended") || city_events::in_zone(&sim, 22, 22) ||
+        city_events::in_zone(&sim, 27, 22)) {
         return fail(31, "the zone did not end under police pressure");
     }
     // Gone: land value is back to the scan's own figure.
     set_land(sim, 100);
     city_events::apply_land(&sim);
-    if (sim.landValueMap.worldGet(34, 34) != 100) {
+    if (sim.landValueMap.worldGet(22, 22) != 100) {
         return fail(32, "land value stayed low after the zone ended");
     }
-    // The barricades run along the outside edge only.
-    city_events::start_zone_at(&sim, 4, 4, notes);
-    const auto pieces = city_events::barricades(&sim);
-    if (pieces.size() != 2 * (16 + 8)) {
-        return fail(33, "the barricade count is " + std::to_string(pieces.size()));
-    }
     // A cap keeps a neglected zone from eating the whole map.
+    city_events::start_zone_at(&sim, 22, 22, notes);
     set_police(sim, 0);
     advance(sim, city_events::kZoneReviewSteps * 80, notes);
     if (sim.cityEvents.zoneCount != city_events::kZoneMaxBlocks) {
         return fail(34, "the zone grew past its cap or stopped short: " + std::to_string(sim.cityEvents.zoneCount));
     }
-    // The menu's zone picks the least-policed built-up pair.
+    // The menu's zone picks the least-policed built-up pair of neighbours.
     Micropolis built;
     base_city(built);
     if (city_events::unavailable_reason(&built, Kind::AutonomousZone).find("built-up") == std::string::npos) {
         return fail(35, "an empty map offered a zone");
     }
-    commercial_strip(built);
+    grid_town(built);
     set_police(built, 100);
-    built.policeStationEffectMap.set(4, 2, 0);
-    built.policeStationEffectMap.set(5, 2, 0);
+    // Police cell (6, 4) is tiles 48..55 x 32..39: grid blocks (4, 3) and
+    // (4, 4), x 49..54, y 33..35 and 37..39.
+    set_police_cell(built, 6, 4, 0);
     notes.clear();
-    if (!city_events::start(&built, Kind::AutonomousZone, notes) || !city_events::in_zone(&built, 32, 20) ||
-        !city_events::in_zone(&built, 47, 20)) {
-        return fail(36, "the zone did not form on the least-policed built-up blocks");
+    if (!city_events::start(&built, Kind::AutonomousZone, notes) || !city_events::in_zone(&built, 50, 34) ||
+        !city_events::in_zone(&built, 50, 38) || !city_events::in_zone(&built, 50, 36) ||
+        city_events::in_zone(&built, 43, 34)) {
+        return fail(36, "the zone did not form on the least-policed built-up road blocks");
+    }
+    // An open area too big for one block is cut along the 12 x 12 grid,
+    // each building going whole with the square its centre is in.
+    Micropolis open;
+    base_city(open);
+    plop(open, 12, 6, RZB);
+    const auto corner = city_events::road_block_at(&open, 5, 5);
+    const auto beside = city_events::road_block_at(&open, 12, 6);
+    auto has = [](const std::vector<std::pair<int, int>> &tiles, int x, int y) {
+        return std::find(tiles.begin(), tiles.end(), std::make_pair(x, y)) != tiles.end();
+    };
+    if (corner.size() != 144 - 3 || has(corner, 11, 6) || !has(beside, 11, 6) || !has(beside, 13, 6) ||
+        static_cast<int>(beside.size()) > city_events::kZoneBlockMaxTiles + 3) {
+        return fail(37, "an open area was not cut into capped blocks around its buildings: " +
+                            std::to_string(corner.size()) + " and " + std::to_string(beside.size()) + " tiles");
+    }
+    // Open land is never where a zone forms, however quiet.
+    if (city_events::unavailable_reason(&open, Kind::AutonomousZone).find("built-up") == std::string::npos) {
+        return fail(38, "a zone could form on open land");
     }
     return 0;
 }
@@ -546,52 +638,48 @@ int prison_tests()
     return 0;
 }
 
-int random_tests()
+// None of the four is ever picked at random: a city with a zoo, a prison
+// and built-up blocks, disasters on at the hardest level, runs twenty
+// years and only the classic disasters come.
+int random_tests(const std::string &dir)
 {
-    Micropolis copy;
+    Micropolis sim;
+    base_city(sim);
+    grid_town(sim);
     std::string error;
-    int counts[city_events::kKindCount] = {0, 0, 0, 0};
-    int nothing = 0;
-    for (int t = 0; t < 400; ++t) {
-        base_city(copy);
-        commercial_strip(copy);
-        place_special_building(&copy, 0, 60, 50, error);
-        road(copy, 58, 52, 70, 52);
-        place_special_building(&copy, prison_index(), 50, 70, error);
-        copy.cityTime = 1000 + t;
-        std::vector<Note> notes;
-        city_events::random_event(&copy, notes);
-        if (copy.cityEvents.riotSteps > 0) {
-            ++counts[0];
-        } else if (copy.cityEvents.zoneCount > 0) {
-            ++counts[1];
-        } else if (copy.cityEvents.lionActive != 0) {
-            ++counts[2];
-        } else if (copy.cityEvents.prisonSteps > 0) {
-            ++counts[3];
-        } else {
-            ++nothing;
-        }
+    place_special_building(&sim, 0, 80, 50, error);
+    road(sim, 78, 52, 90, 52);
+    place_special_building(&sim, prison_index(), 80, 70, error);
+    sim.cityName = "Quiet";
+    sim.setGameLevel(LEVEL_HARD);
+    sim.cityTime = 48 * 10;
+    const std::string path = dir + "/events-random.cty";
+    if (!sim.saveFile(path.c_str())) {
+        return fail(80, "could not save the random-roll city");
+    }
+    CitySession session;
+    if (!session.load_city(path)) {
+        return fail(80, "could not load the random-roll city");
     }
     for (int k = 0; k < city_events::kKindCount; ++k) {
-        if (counts[k] < 20) {
-            return fail(80, "random roll " + std::to_string(k) + " came up " + std::to_string(counts[k]) + " times");
+        if (!session.event_unavailable(static_cast<Kind>(k)).empty()) {
+            return fail(80, "the random-roll city cannot start disaster " + std::to_string(k));
         }
     }
-    if (nothing < 120 || nothing > 280) {
-        return fail(81, "the quiet half of the roll came up " + std::to_string(nothing) + " times in 400");
-    }
-    // No zoo, no lion: that roll stays quiet.
-    Micropolis plain;
-    base_city(plain);
-    for (int t = 0; t < 200; ++t) {
-        plain.cityTime = 1000 + t;
-        std::vector<Note> notes;
-        city_events::random_event(&plain, notes);
-        if (plain.cityEvents.lionActive != 0 || plain.cityEvents.prisonSteps > 0) {
-            return fail(82, "a random lion or prison break without the building");
+    session.set_disasters(true);
+    session.set_speed(3);
+    const long long start = session.city_time();
+    long ticks = 0;
+    while (session.city_time() < start + 20 * 48 && ticks < 4000000) {
+        session.tick();
+        ++ticks;
+        const CityEvents &e = session.events_state();
+        if (e.riotSteps > 0 || e.zoneCount > 0 || e.lionActive != 0 || e.prisonSteps > 0) {
+            return fail(81, "a City 2 disaster started at random");
         }
-        city_events::clear(&plain);
+    }
+    if (session.city_time() < start + 20 * 48) {
+        return fail(82, "the random-roll city did not run twenty years");
     }
     return 0;
 }
@@ -661,6 +749,7 @@ int save_tests(const std::string &dir)
         after.lionRng != before.lionRng || after.prisonCrime != before.prisonCrime ||
         after.prisonX != before.prisonX || after.prisonSteps != before.prisonSteps ||
         std::memcmp(after.zoneBlock, before.zoneBlock, sizeof(before.zoneBlock[0]) * before.zoneCount) != 0 ||
+        std::memcmp(after.zoneTile, before.zoneTile, sizeof(before.zoneTile)) != 0 ||
         after.lastStepTime != back.cityTime) {
         return fail(96, "the disaster state changed across save and load");
     }
@@ -689,56 +778,35 @@ int save_tests(const std::string &dir)
 
 int session_tests(const std::string &dir)
 {
+    // The grid town, through a save, so the session's own hooks run.
+    Micropolis grid;
+    base_city(grid);
+    grid_town(grid);
+    grid.cityName = "Zone Town";
+    const std::string town = dir + "/events-grid.cty";
+    if (!grid.saveFile(town.c_str())) {
+        return fail(110, "could not save the grid town");
+    }
     CitySession session;
-    session.new_city("Zone Town", 7);
-    // A home built across the coming border (centre one tile outside).
-    int home_y = -1;
-    for (int y = 49; y <= 54 && home_y < 0; ++y) {
-        session.use_tool(TOOL_BULLDOZER, 46, y);
-        session.use_tool(TOOL_BULLDOZER, 47, y);
-        session.use_tool(TOOL_BULLDOZER, 48, y);
-    }
-    for (int y = 49; y <= 54 && home_y < 0; ++y) {
-        session.use_tool(TOOL_RESIDENTIAL, 47, y);
-        if ((session.map_value(47, y) & ZONEBIT) != 0) {
-            home_y = y;
-        }
-    }
-    if (session.events_state().zoneCount != 0 || !session.start_autonomous_zone_at(6, 6)) {
+    if (!session.load_city(town) || session.events_state().zoneCount != 0 ||
+        !session.start_autonomous_zone_at(22, 22)) {
         return fail(110, "the session would not form a zone");
     }
-    if (home_y >= 0) {
-        session.use_tool(TOOL_BULLDOZER, 46, home_y);
-        if ((session.map_value(47, home_y) & ZONEBIT) == 0 || !session.bulldoze_blocked(46, home_y) ||
-            session.bulldoze_blocked(44, home_y)) {
-            return fail(121, "a home reaching into the zone was bulldozed from outside");
-        }
-    } else {
-        return fail(122, "could not build the test home by the zone border");
-    }
-    // Blocks (6,6),(7,6): tiles 48..63 x 48..55. Find a dirt tile inside.
-    int ix = -1;
-    int iy = -1;
-    for (int y = 48; y < 56 && ix < 0; ++y) {
-        for (int x = 48; x < 64; ++x) {
-            if ((session.map_value(x, y) & LOMASK) == DIRT) {
-                ix = x;
-                iy = y;
-                break;
-            }
-        }
-    }
-    if (ix < 0) {
-        return fail(111, "no clear land inside the test zone");
-    }
+    // Block (0, 0) has its east half clear: x 24..26, y 21..23.
+    const int ix = 25;
+    const int iy = 22;
     session.use_tool(TOOL_ROAD, ix, iy);
     if ((session.map_value(ix, iy) & LOMASK) != DIRT ||
         session.message() != "Nothing can be built or bulldozed inside the Autonomous Zone.") {
         return fail(112, "a road went down inside the zone, or the refusal said \"" + session.message() + "\"");
     }
-    session.use_tool(TOOL_BULLDOZER, 50, 50);
-    if (session.message() != "Nothing can be built or bulldozed inside the Autonomous Zone.") {
+    session.use_tool(TOOL_BULLDOZER, 22, 22);
+    if (session.message() != "Nothing can be built or bulldozed inside the Autonomous Zone." ||
+        (session.map_value(22, 22) & ZONEBIT) == 0) {
         return fail(113, "the bulldozer was not refused inside the zone");
+    }
+    if (!session.bulldoze_blocked(22, 22) || !session.bulldoze_blocked(27, 22) || session.bulldoze_blocked(36, 22)) {
+        return fail(121, "bulldoze_blocked does not follow the zone");
     }
     if (session.place_special(0, ix, iy) || !session.in_autonomous_zone(ix, iy)) {
         return fail(114, "a landmark was placed inside the zone");
@@ -759,6 +827,8 @@ int session_tests(const std::string &dir)
     }
     CitySession again;
     if (!again.load_city(path) || again.autonomous_zone_blocks() != session.autonomous_zone_blocks() ||
+        std::memcmp(again.events_state().zoneTile, session.events_state().zoneTile,
+                    sizeof(session.events_state().zoneTile)) != 0 ||
         again.events_state().riotSteps != session.events_state().riotSteps) {
         return fail(117, "the zone or riot did not survive save and load");
     }
@@ -773,6 +843,40 @@ int session_tests(const std::string &dir)
         again.start_event(Kind::LionEscape) || again.message().find("Zoo") == std::string::npos) {
         return fail(119, "a city with no zoo or prison offered the lion or the prison break");
     }
+    return 0;
+}
+
+// The disaster sheets: the lion in 24px cells (a road tile and a half,
+// 4 directions x 2 frames), the barricades in 16px cells (three kinds
+// along each edge direction plus the corner block), both looks.
+int art_tests()
+{
+#ifdef LUNDUKE_CITY_SOURCE_DIR
+    struct Sheet {
+        const char *name;
+        unsigned width;
+        unsigned height;
+    };
+    const Sheet sheets[] = {{"lion.png", 8 * 24, 24},
+                            {"lion-svga.png", 8 * 24, 24},
+                            {"barricade.png", 7 * 16, 16},
+                            {"barricade-svga.png", 7 * 16, 16}};
+    for (const Sheet &sheet : sheets) {
+        const std::vector<unsigned char> bytes =
+            read_all(std::string(LUNDUKE_CITY_SOURCE_DIR) + "/data/disaster-art/" + sheet.name);
+        if (bytes.size() < 24 || std::memcmp(bytes.data() + 12, "IHDR", 4) != 0) {
+            return fail(130, std::string("could not read data/disaster-art/") + sheet.name);
+        }
+        auto be32 = [&](std::size_t at) {
+            return (unsigned(bytes[at]) << 24) | (unsigned(bytes[at + 1]) << 16) | (unsigned(bytes[at + 2]) << 8) |
+                   unsigned(bytes[at + 3]);
+        };
+        if (be32(16) != sheet.width || be32(20) != sheet.height) {
+            return fail(131, std::string(sheet.name) + " is " + std::to_string(be32(16)) + "x" +
+                                 std::to_string(be32(20)));
+        }
+    }
+#endif
     return 0;
 }
 
@@ -805,13 +909,16 @@ int main(int argc, char **argv)
     if (int code = prison_tests()) {
         return code;
     }
-    if (int code = random_tests()) {
+    if (int code = random_tests(dir)) {
         return code;
     }
     if (int code = save_tests(dir)) {
         return code;
     }
     if (int code = session_tests(dir)) {
+        return code;
+    }
+    if (int code = art_tests()) {
         return code;
     }
     return 0;

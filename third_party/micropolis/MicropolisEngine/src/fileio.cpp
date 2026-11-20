@@ -736,15 +736,20 @@ static bool read_marina_dock(Micropolis *sim, const unsigned char *bytes, std::s
 // City 2 lasting disasters, magic "LCD1", appended after LCM1 (or LCW1
 // when there is no dock trailer). Little-endian:
 //   char magic[4] = { 'L','C','D','1' }
-//   uint16 version = 1
-//   uint16 payload bytes (76 + 2 * zone block count for version 1)
+//   uint16 version = 2
+//   uint16 payload bytes (76 + 2 * zoneCount, plus WORLD_W * WORLD_H
+//                         when zoneCount > 0)
 //   int32 x 19: riotPeak, riotSteps, riotTotal, zoneCount, zoneClock,
 //               lionActive, lionX, lionY, lionDir, lionSteps, lionMealClock,
 //               lionEaten, lionHomeX, lionHomeY, lionRng, prisonCrime,
 //               prisonX, prisonY, prisonSteps
-//   zoneCount times: uint8 block x, uint8 block y
-// A city with nothing active omits the trailer, so its file is the same
-// as before. Older builds skip it: they only look for LCM1 at that spot.
+//   zoneCount times: uint8 x, uint8 y of the block's first tile
+//   when zoneCount > 0: zoneTile, one byte per tile, column by column
+//                       (x outer, y inner)
+// Version 1 (never released) kept 8x8 police-map blocks; it loads as a
+// city with nothing active. A city with nothing active omits the trailer,
+// so its file is the same as before. Older builds skip it: they only look
+// for LCM1 at that spot.
 static const char kEventsMagic[4] = {'L', 'C', 'D', '1'};
 static const unsigned int kEventsFields = 19;
 
@@ -781,12 +786,13 @@ static bool write_city_events(FILE *f, const Micropolis *sim)
                                        e.lionActive, e.lionX,      e.lionY,         e.lionDir,     e.lionSteps,
                                        e.lionMealClock, e.lionEaten, e.lionHomeX,   e.lionHomeY,   (int)e.lionRng,
                                        e.prisonCrime, e.prisonX,   e.prisonY,       e.prisonSteps};
-    const unsigned int payload = kEventsFields * 4 + (unsigned int)zones * 2;
+    const unsigned int tiles = zones > 0 ? (unsigned int)(WORLD_W * WORLD_H) : 0u;
+    const unsigned int payload = kEventsFields * 4 + (unsigned int)zones * 2 + tiles;
     std::vector<unsigned char> bytes(8 + payload);
     for (int i = 0; i < 4; ++i) {
         bytes[i] = (unsigned char)kEventsMagic[i];
     }
-    write_le_u16(bytes.data() + 4, 1);
+    write_le_u16(bytes.data() + 4, 2);
     write_le_u16(bytes.data() + 6, payload);
     for (unsigned int i = 0; i < kEventsFields; ++i) {
         write_le_i32(bytes.data() + 8 + i * 4, fields[i]);
@@ -794,6 +800,14 @@ static bool write_city_events(FILE *f, const Micropolis *sim)
     for (int i = 0; i < zones; ++i) {
         bytes[8 + kEventsFields * 4 + i * 2] = e.zoneBlock[i][0];
         bytes[8 + kEventsFields * 4 + i * 2 + 1] = e.zoneBlock[i][1];
+    }
+    if (tiles > 0) {
+        unsigned char *out = bytes.data() + 8 + kEventsFields * 4 + zones * 2;
+        for (int x = 0; x < WORLD_W; ++x) {
+            for (int y = 0; y < WORLD_H; ++y) {
+                *out++ = e.zoneTile[x][y];
+            }
+        }
     }
     return fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
 }
@@ -813,7 +827,9 @@ static bool read_city_events(Micropolis *sim, const unsigned char *bytes, std::s
     if (bytes == NULL || avail < 8 || std::memcmp(bytes, kEventsMagic, 4) != 0) {
         return false;
     }
-    if (read_le_u16(bytes + 4) != 1) {
+    // Version 1 (8x8 police-map blocks) was never released; a file with it
+    // loads as a city with no disasters running.
+    if (read_le_u16(bytes + 4) != 2) {
         return false;
     }
     const unsigned int payload = read_le_u16(bytes + 6);
@@ -825,7 +841,9 @@ static bool read_city_events(Micropolis *sim, const unsigned char *bytes, std::s
         f[i] = read_le_i32(bytes + 8 + i * 4);
     }
     const int zones = f[3];
-    if (zones < 0 || zones > CityEvents::kMaxZoneBlocks || payload < kEventsFields * 4 + (unsigned int)zones * 2) {
+    const unsigned int tiles = zones > 0 ? (unsigned int)(WORLD_W * WORLD_H) : 0u;
+    if (zones < 0 || zones > CityEvents::kMaxZoneBlocks ||
+        payload < kEventsFields * 4 + (unsigned int)zones * 2 + tiles) {
         return false;
     }
     CityEvents e;
@@ -849,18 +867,31 @@ static bool read_city_events(Micropolis *sim, const unsigned char *bytes, std::s
     e.prisonX = f[16];
     e.prisonY = f[17];
     e.prisonSteps = f[18];
-    int kept = 0;
-    for (int i = 0; i < zones; ++i) {
-        const unsigned char bx = bytes[8 + kEventsFields * 4 + i * 2];
-        const unsigned char by = bytes[8 + kEventsFields * 4 + i * 2 + 1];
-        if (bx >= (WORLD_W + 7) / 8 || by >= (WORLD_H + 7) / 8) {
-            continue;
+    if (zones > 0) {
+        const unsigned char *in = bytes + 8 + kEventsFields * 4 + zones * 2;
+        int top = 0;
+        for (int x = 0; x < WORLD_W; ++x) {
+            for (int y = 0; y < WORLD_H; ++y) {
+                const unsigned char v = *in++;
+                if (v != CityEvents::kZoneStreet && v > zones) {
+                    return false;
+                }
+                e.zoneTile[x][y] = v;
+                if (v != CityEvents::kZoneStreet && v > top) {
+                    top = v;
+                }
+            }
         }
-        e.zoneBlock[kept][0] = bx;
-        e.zoneBlock[kept][1] = by;
-        ++kept;
+        for (int i = 0; i < zones; ++i) {
+            e.zoneBlock[i][0] = bytes[8 + kEventsFields * 4 + i * 2];
+            e.zoneBlock[i][1] = bytes[8 + kEventsFields * 4 + i * 2 + 1];
+        }
+        // A block with no tiles left would never shrink away; trust the map.
+        e.zoneCount = top;
+        if (top == 0) {
+            std::memset(e.zoneTile, 0, sizeof(e.zoneTile));
+        }
     }
-    e.zoneCount = kept;
     if (e.lionX < 0 || e.lionX >= WORLD_W * 16 || e.lionY < 0 || e.lionY >= WORLD_H * 16) {
         e.lionActive = 0;
     }

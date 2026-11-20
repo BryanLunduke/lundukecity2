@@ -322,8 +322,9 @@ cairo_surface_t *load_png(const std::string &path)
 }
 
 // City 2's own disaster art: data/disaster-art/<name>.png for the Classic
-// look and <name>-svga.png for SVGA (Spooky uses SVGA). Sheets are rows of
-// 16x16 cells. Null when the file is missing; the map just goes without.
+// look and <name>-svga.png for SVGA (Spooky uses SVGA). Sheets are one row
+// of square cells as tall as the sheet (barricades 16, the lion 24). Null
+// when the file is missing; the map just goes without.
 cairo_surface_t *disaster_sheet(const char *name)
 {
     struct Cache {
@@ -351,26 +352,27 @@ cairo_surface_t *disaster_sheet(const char *name)
     return cache.image[which][look];
 }
 
-// One 16x16 cell of a disaster sheet with its top-left at (x, y) in 16px
-// map pixels. At dusk it takes the same tint as the engine's sprites.
+// One cell of a disaster sheet with its top-left at (x, y) in 16px map
+// pixels. At dusk it takes the same tint as the engine's sprites.
 void paint_disaster_cell(cairo_t *cr, cairo_surface_t *sheet, int cell, double x, double y, double sprite_to_source,
                          bool dusk, double dusk_r, double dusk_g, double dusk_b)
 {
     if (sheet == nullptr) {
         return;
     }
+    const double size = cairo_image_surface_get_height(sheet);
     cairo_save(cr);
     cairo_translate(cr, x * sprite_to_source, y * sprite_to_source);
     cairo_scale(cr, sprite_to_source, sprite_to_source);
-    cairo_rectangle(cr, 0, 0, 16, 16);
+    cairo_rectangle(cr, 0, 0, size, size);
     cairo_clip(cr);
-    cairo_set_source_surface(cr, sheet, -16.0 * cell, 0);
+    cairo_set_source_surface(cr, sheet, -size * cell, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
     if (dusk) {
         cairo_set_operator(cr, CAIRO_OPERATOR_MULTIPLY);
         cairo_set_source_rgb(cr, dusk_r, dusk_g, dusk_b);
-        cairo_mask_surface(cr, sheet, -16.0 * cell, 0);
+        cairo_mask_surface(cr, sheet, -size * cell, 0);
     }
     cairo_restore(cr);
 }
@@ -1385,32 +1387,101 @@ void MapView::draw_city_events(cairo_t *cr, double sprite_to_source, bool dusk)
     if (session_ == nullptr) {
         return;
     }
+    const CityEvents &events = session_->events_state();
+    if (events.zoneCount > 0) {
+        // The zone itself: a faint red wash, and a hatched band just inside
+        // its border, under the barricades.
+        cairo_save(cr);
+        cairo_scale(cr, sprite_to_source, sprite_to_source);
+        cairo_set_source_rgba(cr, 0.86, 0.22, 0.10, 0.13);
+        for (int x = 0; x < CitySession::kWorldW; ++x) {
+            for (int y = 0; y < CitySession::kWorldH; ++y) {
+                if (events.zoneTile[x][y] != 0) {
+                    cairo_rectangle(cr, x * 16.0, y * 16.0, 16.0, 16.0);
+                }
+            }
+        }
+        cairo_fill(cr);
+        static const int kStep[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+        for (int x = 0; x < CitySession::kWorldW; ++x) {
+            for (int y = 0; y < CitySession::kWorldH; ++y) {
+                if (events.zoneTile[x][y] == 0) {
+                    continue;
+                }
+                for (int side = 0; side < 4; ++side) {
+                    const int nx = x + kStep[side][0];
+                    const int ny = y + kStep[side][1];
+                    if (nx < 0 || ny < 0 || nx >= CitySession::kWorldW || ny >= CitySession::kWorldH ||
+                        events.zoneTile[nx][ny] != 0) {
+                        continue;
+                    }
+                    // A 4px band along this edge, inside the tile.
+                    const double bx = x * 16.0 + (side == 1 ? 12.0 : 0.0);
+                    const double by = y * 16.0 + (side == 2 ? 12.0 : 0.0);
+                    const double bw = (side == 0 || side == 2) ? 16.0 : 4.0;
+                    const double bh = (side == 0 || side == 2) ? 4.0 : 16.0;
+                    cairo_save(cr);
+                    cairo_rectangle(cr, bx, by, bw, bh);
+                    cairo_clip(cr);
+                    cairo_set_source_rgba(cr, 0.80, 0.12, 0.06, 0.45);
+                    cairo_set_line_width(cr, 1.5);
+                    for (double d = -16.0; d < 20.0; d += 4.0) {
+                        cairo_move_to(cr, bx + d, by + bh);
+                        cairo_line_to(cr, bx + d + bh, by);
+                        cairo_move_to(cr, bx + d, by + 16.0);
+                        cairo_line_to(cr, bx + d + 16.0, by);
+                    }
+                    cairo_stroke(cr);
+                    cairo_restore(cr);
+                }
+            }
+        }
+        cairo_restore(cr);
+    }
     cairo_surface_t *fence = disaster_sheet("barricade");
     for (const city_events::Barricade &piece : session_->barricades()) {
         const double left = piece.x * 16.0;
         const double top = piece.y * 16.0;
         // Three kinds of barricade (sawhorse, concrete, cones), picked by
         // place so the line does not repeat but stays put frame to frame.
-        // Cells 0-2 run along a horizontal edge, 3-5 along a vertical one.
-        // The piece's middle (row 7, or column 7.5) sits on the tile edge.
+        // Cells 0-2 run along a horizontal edge (rows 3-12 of the cell),
+        // 3-5 along a vertical one (columns 3-12), 6 is the corner block.
+        // Each piece sits inside its tile, flush against the named edge.
         const int kind = ((piece.x * 7 + piece.y * 13 + piece.side * 5) & 0x7fff) % 3;
-        if (piece.side == 0) {
-            paint_disaster_cell(cr, fence, kind, left, top - 7.0, sprite_to_source, dusk, kDuskR, kDuskG, kDuskB);
-        } else if (piece.side == 2) {
-            paint_disaster_cell(cr, fence, kind, left, top + 16.0 - 7.0, sprite_to_source, dusk, kDuskR, kDuskG,
-                                kDuskB);
-        } else if (piece.side == 1) {
-            paint_disaster_cell(cr, fence, 3 + kind, left + 16.0 - 8.0, top, sprite_to_source, dusk, kDuskR, kDuskG,
-                                kDuskB);
-        } else {
-            paint_disaster_cell(cr, fence, 3 + kind, left - 8.0, top, sprite_to_source, dusk, kDuskR, kDuskG, kDuskB);
+        double cell_x = left;
+        double cell_y = top;
+        int cell = kind;
+        switch (piece.side) {
+        case 0:
+            cell_y = top - 3.0;
+            break;
+        case 2:
+            cell_y = top + 16.0 - 13.0;
+            break;
+        case 1:
+            cell = 3 + kind;
+            cell_x = left + 16.0 - 13.0;
+            break;
+        case 3:
+            cell = 3 + kind;
+            cell_x = left - 3.0;
+            break;
+        default:
+            // Corner posts: 4 NW, 5 NE, 6 SE, 7 SW.
+            cell = 6;
+            cell_x = (piece.side == 5 || piece.side == 6) ? left + 16.0 - 13.0 : left - 3.0;
+            cell_y = (piece.side == 6 || piece.side == 7) ? top + 16.0 - 13.0 : top - 3.0;
+            break;
         }
+        paint_disaster_cell(cr, fence, cell, cell_x, cell_y, sprite_to_source, dusk, kDuskR, kDuskG, kDuskB);
     }
     const city_events::LionView cat = session_->lion();
     if (cat.active) {
+        // 24px cells centred on the lion, lifted a little so its paws are
+        // on the tile it walks through.
         const int cell = (cat.dir & 3) * 2 + (cat.frame & 1);
-        paint_disaster_cell(cr, disaster_sheet("lion"), cell, cat.x - 8.0, cat.y - 8.0, sprite_to_source, dusk, kDuskR,
-                            kDuskG, kDuskB);
+        paint_disaster_cell(cr, disaster_sheet("lion"), cell, cat.x - 12.0, cat.y - 14.0, sprite_to_source, dusk,
+                            kDuskR, kDuskG, kDuskB);
     }
 }
 

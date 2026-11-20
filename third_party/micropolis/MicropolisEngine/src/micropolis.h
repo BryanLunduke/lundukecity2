@@ -1063,10 +1063,9 @@ typedef int (*SpecialIncomeFunction)(const Micropolis *micropolis);
 typedef void (*SpecialLandFunction)(Micropolis *micropolis);
 typedef void (*SpecialCrimeFunction)(Micropolis *micropolis);
 // City 2 lasting disasters (src/city_events.cpp). The frame hook runs after
-// the sprites move on every stepped frame; the random hook gets the classic
-// "nothing happens" roll; the edit hook may refuse a tool on a tile.
+// the sprites move on every stepped frame; the edit hook may refuse a tool
+// on a tile. (They never join the random disaster roll.)
 typedef void (*EventFrameFunction)(Micropolis *micropolis);
-typedef void (*EventRandomFunction)(Micropolis *micropolis);
 typedef bool (*EditBlockedFunction)(const Micropolis *micropolis, int tool, int x, int y);
 
 /**
@@ -1082,11 +1081,16 @@ struct CityEvents {
     int riotPeak;
     int riotSteps;
     int riotTotal;
-    // Autonomous Zone: police-map blocks (8x8 tiles). zoneClock counts the
+    // Autonomous Zone: road blocks, in the order the zone took them.
+    // zoneBlock[i] is the first tile (scan order) of block i + 1; zoneTile
+    // holds 1..zoneCount for each tile of that block, kZoneStreet for a
+    // street between the zone's blocks, 0 outside. zoneClock counts the
     // steps to the next two-monthly review.
+    static const unsigned char kZoneStreet = 255;
     int zoneCount;
     int zoneClock;
     unsigned char zoneBlock[kMaxZoneBlocks][2];
+    unsigned char zoneTile[WORLD_W][WORLD_H];
     // Lion Escape. Position in 16px map pixels (the tile centre the lion
     // walks through). lionDir 0 north, 1 east, 2 south, 3 west.
     int lionActive;
@@ -3060,7 +3064,6 @@ public:
     SpecialLandFunction specialLandFn;
     SpecialCrimeFunction specialCrimeFn;
     EventFrameFunction eventFrameFn;
-    EventRandomFunction eventRandomFn;
     EditBlockedFunction editBlockedFn;
 
     /**

@@ -376,8 +376,9 @@ public:
     // A scenario file's name for one ("riot", "autonomous_zone",
     // "lion_escape", "prison_escape"). False for an unknown name.
     bool start_event_named(const std::string &key);
-    // The zone at a chosen pair of police-map blocks, for scenarios.
-    bool start_autonomous_zone_at(int block_x, int block_y);
+    // The zone on the road block holding tile (x, y) and its least-policed
+    // neighbour, for scenarios.
+    bool start_autonomous_zone_at(int x, int y);
     // Empty when it can start now.
     std::string event_unavailable(city_events::Kind kind) const;
     bool in_autonomous_zone(int x, int y) const;
@@ -646,7 +647,6 @@ private:
     void remember_notice(std::string text, int tile_x, int tile_y, bool has_place);
     void post_event_notes(const std::vector<city_events::Note> &notes, bool jump = false);
     void on_event_frame();
-    void on_random_event();
     // A refusal from the Autonomous Zone on the click just made.
     void refuse_in_zone();
     bool write_scenario_sidecar(const std::string &path) const;

@@ -5,6 +5,7 @@
 #include "city_events.hpp"
 
 #include "micropolis.h"
+#include "special_buildings.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -31,9 +32,6 @@ const KindInfo kKinds[kKindCount] = {
      "cannot be undone.",
      "Prison break! Escaped inmates are setting fires."},
 };
-
-constexpr int kBlocksW = (WORLD_W + kZoneBlockTiles - 1) / kZoneBlockTiles;
-constexpr int kBlocksH = (WORLD_H + kZoneBlockTiles - 1) / kZoneBlockTiles;
 
 // A small deterministic generator. Each use is seeded from the city time
 // and a salt, so nothing here touches the engine's random sequence.
@@ -98,46 +96,8 @@ int police_at_block(const Micropolis *sim, int bx, int by)
 
 int police_at_tile(const Micropolis *sim, int x, int y)
 {
-    return police_at_block(sim, x / kZoneBlockTiles, y / kZoneBlockTiles);
-}
-
-bool zone_has(const CityEvents &e, int bx, int by)
-{
-    for (int i = 0; i < e.zoneCount; ++i) {
-        if (e.zoneBlock[i][0] == bx && e.zoneBlock[i][1] == by) {
-            return true;
-        }
-    }
-    return false;
-}
-
-int developed_in_block(const Micropolis *sim, int bx, int by)
-{
-    int count = 0;
-    for (int x = bx * kZoneBlockTiles; x < std::min(WORLD_W, (bx + 1) * kZoneBlockTiles); ++x) {
-        for (int y = by * kZoneBlockTiles; y < std::min(WORLD_H, (by + 1) * kZoneBlockTiles); ++y) {
-            const int tile = tile_at(sim, x, y);
-            // Buildings only (zones, service buildings, landmarks), not
-            // roads or power lines: a zone forms in a neighbourhood.
-            if ((tile >= RESBASE && tile < LASTZONE) || tile == SPECIAL_BODY) {
-                ++count;
-            }
-        }
-    }
-    return count;
-}
-
-int zone_police_average(const Micropolis *sim)
-{
-    const CityEvents &e = sim->cityEvents;
-    if (e.zoneCount <= 0) {
-        return 0;
-    }
-    int total = 0;
-    for (int i = 0; i < e.zoneCount; ++i) {
-        total += police_at_block(sim, e.zoneBlock[i][0], e.zoneBlock[i][1]);
-    }
-    return total / e.zoneCount;
+    const int block = sim->policeStationEffectMap.MAP_BLOCKSIZE;
+    return police_at_block(sim, x / block, y / block);
 }
 
 Note place_note(const std::string &text, int x, int y)
@@ -208,50 +168,505 @@ bool start_riot(Micropolis *sim, std::vector<Note> &notes)
     return true;
 }
 
-// ---- Autonomous Zone ----------------------------------------------------
+// ---- Autonomous Zone: road blocks ---------------------------------------
 
-bool place_zone(Micropolis *sim, int bx, int by, std::vector<Note> &notes)
+bool is_street(int tile)
 {
-    CityEvents &e = sim->cityEvents;
-    e.zoneCount = 0;
-    for (int i = 0; i < kZoneStartBlocks; ++i) {
-        e.zoneBlock[i][0] = static_cast<unsigned char>(bx + i);
-        e.zoneBlock[i][1] = static_cast<unsigned char>(by);
-        ++e.zoneCount;
+    return (tile >= ROADBASE && tile <= LASTROAD) || (tile >= RAILBASE && tile <= LASTRAIL) || tile == RAILHPOWERV ||
+           tile == RAILVPOWERH;
+}
+
+bool is_water(int tile)
+{
+    return tile >= WATER_LOW && tile <= WATER_HIGH;
+}
+
+bool street_at(const Micropolis *sim, int x, int y)
+{
+    return Micropolis::testBounds(x, y) && is_street(tile_at(sim, x, y));
+}
+
+// Land that belongs to a road block: not road, rail or water.
+bool block_land(const Micropolis *sim, int x, int y)
+{
+    if (!Micropolis::testBounds(x, y)) {
+        return false;
     }
-    e.zoneClock = kZoneReviewSteps;
-    sim->invalidateMaps();
-    notes.push_back(place_note(info(Kind::AutonomousZone).notice, bx * kZoneBlockTiles + kZoneBlockTiles,
-                               by * kZoneBlockTiles + kZoneBlockTiles / 2));
+    const int tile = tile_at(sim, x, y);
+    return !is_street(tile) && !is_water(tile);
+}
+
+bool built_tile(int tile)
+{
+    // Buildings only (zones, service buildings, landmarks), not roads,
+    // power lines, parks or trees: a zone forms in a neighbourhood.
+    return (tile >= RESBASE && tile < LASTZONE) || tile == SPECIAL_BODY;
+}
+
+int tile_index(int x, int y)
+{
+    return x * WORLD_H + y;
+}
+
+// The footprint of the building whose centre (ZONEBIT) tile is (x, y).
+bool center_footprint(const Micropolis *sim, int x, int y, int &left, int &top, int &width, int &height)
+{
+    const MapValue raw = sim->map[x][y];
+    if ((raw & ZONEBIT) == 0) {
+        return false;
+    }
+    const int center = raw & LOMASK;
+    const int special = special_index_for_tile(center);
+    if (special >= 0) {
+        const SpecialBuilding &building = special_building(special);
+        left = x - building.anchor_x;
+        top = y - building.anchor_y;
+        width = building.width;
+        height = building.height;
+        return width > 0 && height > 0;
+    }
+    int span = 3;
+    if (center >= AIRPORTBASE && center < COALBASE) {
+        span = 6;
+    } else if ((center >= PORTBASE && center < AIRPORTBASE) || (center >= COALBASE && center < FIRESTBASE) ||
+               (center >= STADIUMBASE && center < INDBASE2)) {
+        span = 4;
+    }
+    left = x - 1;
+    top = y - 1;
+    width = span;
+    height = span;
     return true;
 }
 
-bool pick_zone_spot(const Micropolis *sim, int &best_x, int &best_y)
+// Every road block on the map, labelled. label[tile_index] is the block
+// number or -1 on streets and water.
+struct RoadBlocks {
+    struct Block {
+        int seed_x = 0;
+        int seed_y = 0;
+        int tiles = 0;
+        int built = 0;
+        int police = 0; // sum over tiles
+        bool edge = false;
+        bool capped = false; // a piece of an open area cut to the cap
+        long sum_x = 0;
+        long sum_y = 0;
+    };
+    std::vector<int> label;
+    std::vector<Block> blocks;
+};
+
+RoadBlocks label_road_blocks(const Micropolis *sim)
 {
-    // The developed pair of side-by-side blocks with the least police; a
-    // tie goes to the more built-up pair, then to the first in the scan.
-    // Not against the map edge, so the barricades show on every side (the
-    // map's last row of blocks is also only half a block).
-    int best_police = 1 << 30;
-    int best_built = -1;
-    best_x = -1;
-    best_y = -1;
-    for (int by = 1; (by + 2) * kZoneBlockTiles <= WORLD_H; ++by) {
-        for (int bx = 1; (bx + 3) * kZoneBlockTiles <= WORLD_W; ++bx) {
-            const int built = developed_in_block(sim, bx, by) + developed_in_block(sim, bx + 1, by);
-            if (built < 36) {
+    RoadBlocks out;
+    out.label.assign(WORLD_W * WORLD_H, -1);
+    std::vector<int> component(WORLD_W * WORLD_H, -1);
+    std::vector<int> owner(WORLD_W * WORLD_H, -1);
+    std::vector<std::pair<int, int>> tiles;
+    std::vector<std::pair<int, int>> queue;
+    int components = 0;
+    static const int kSide[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+    // Scan row by row so a block's first tile is its top-left-most.
+    for (int sy = 0; sy < WORLD_H; ++sy) {
+        for (int sx = 0; sx < WORLD_W; ++sx) {
+            if (component[tile_index(sx, sy)] >= 0 || !block_land(sim, sx, sy)) {
                 continue;
             }
-            const int police = police_at_block(sim, bx, by) + police_at_block(sim, bx + 1, by);
-            if (police < best_police || (police == best_police && built > best_built)) {
-                best_police = police;
-                best_built = built;
-                best_x = bx;
-                best_y = by;
+            const int id = components++;
+            tiles.clear();
+            queue.clear();
+            queue.emplace_back(sx, sy);
+            component[tile_index(sx, sy)] = id;
+            for (std::size_t head = 0; head < queue.size(); ++head) {
+                const auto at = queue[head];
+                tiles.push_back(at);
+                for (const auto &side : kSide) {
+                    const int nx = at.first + side[0];
+                    const int ny = at.second + side[1];
+                    if (block_land(sim, nx, ny) && component[tile_index(nx, ny)] < 0) {
+                        component[tile_index(nx, ny)] = id;
+                        queue.emplace_back(nx, ny);
+                    }
+                }
+            }
+            // Scan order inside the block too.
+            std::sort(tiles.begin(), tiles.end(), [](const std::pair<int, int> &a, const std::pair<int, int> &b) {
+                return a.second != b.second ? a.second < b.second : a.first < b.first;
+            });
+            if (static_cast<int>(tiles.size()) <= kZoneBlockMaxTiles) {
+                const int number = static_cast<int>(out.blocks.size());
+                out.blocks.emplace_back();
+                for (const auto &t : tiles) {
+                    out.label[tile_index(t.first, t.second)] = number;
+                }
+                continue;
+            }
+            // Too big: cut along the kZoneCapCell grid, buildings whole
+            // with the square their centre sits in.
+            const int cells_w = (WORLD_W + kZoneCapCell - 1) / kZoneCapCell;
+            for (const auto &t : tiles) {
+                owner[tile_index(t.first, t.second)] = (t.second / kZoneCapCell) * cells_w + t.first / kZoneCapCell;
+            }
+            for (const auto &t : tiles) {
+                int left = 0;
+                int top = 0;
+                int width = 0;
+                int height = 0;
+                if (!center_footprint(sim, t.first, t.second, left, top, width, height)) {
+                    continue;
+                }
+                const int cell = (t.second / kZoneCapCell) * cells_w + t.first / kZoneCapCell;
+                for (int x = left; x < left + width; ++x) {
+                    for (int y = top; y < top + height; ++y) {
+                        if (Micropolis::testBounds(x, y) && component[tile_index(x, y)] == id) {
+                            owner[tile_index(x, y)] = cell;
+                        }
+                    }
+                }
+            }
+            // Each connected piece of one square is a block.
+            for (const auto &t : tiles) {
+                if (out.label[tile_index(t.first, t.second)] >= 0) {
+                    continue;
+                }
+                const int number = static_cast<int>(out.blocks.size());
+                out.blocks.emplace_back();
+                out.blocks.back().capped = true;
+                const int cell = owner[tile_index(t.first, t.second)];
+                queue.clear();
+                queue.push_back(t);
+                out.label[tile_index(t.first, t.second)] = number;
+                for (std::size_t head = 0; head < queue.size(); ++head) {
+                    const auto at = queue[head];
+                    for (const auto &side : kSide) {
+                        const int nx = at.first + side[0];
+                        const int ny = at.second + side[1];
+                        if (Micropolis::testBounds(nx, ny) && component[tile_index(nx, ny)] == id &&
+                            owner[tile_index(nx, ny)] == cell && out.label[tile_index(nx, ny)] < 0) {
+                            out.label[tile_index(nx, ny)] = number;
+                            queue.emplace_back(nx, ny);
+                        }
+                    }
+                }
             }
         }
     }
-    return best_x >= 0;
+    // Totals, and each block's first tile in scan order.
+    std::vector<bool> seeded(out.blocks.size(), false);
+    for (int y = 0; y < WORLD_H; ++y) {
+        for (int x = 0; x < WORLD_W; ++x) {
+            const int number = out.label[tile_index(x, y)];
+            if (number < 0) {
+                continue;
+            }
+            RoadBlocks::Block &block = out.blocks[static_cast<std::size_t>(number)];
+            if (!seeded[static_cast<std::size_t>(number)]) {
+                seeded[static_cast<std::size_t>(number)] = true;
+                block.seed_x = x;
+                block.seed_y = y;
+            }
+            ++block.tiles;
+            block.built += built_tile(tile_at(sim, x, y)) ? 1 : 0;
+            block.police += police_at_tile(sim, x, y);
+            block.edge = block.edge || x == 0 || y == 0 || x == WORLD_W - 1 || y == WORLD_H - 1;
+            block.sum_x += x;
+            block.sum_y += y;
+        }
+    }
+    return out;
+}
+
+// The block across from land tile (x, y) in direction side: the next
+// tile if it is land, or the land past up to kZoneStreetWidth street
+// tiles. -1 when there is none (water, map edge, a wider road).
+int block_across(const Micropolis *sim, const RoadBlocks &map, int x, int y, int dx, int dy)
+{
+    for (int k = 1; k <= kZoneStreetWidth + 1; ++k) {
+        const int nx = x + dx * k;
+        const int ny = y + dy * k;
+        if (!Micropolis::testBounds(nx, ny)) {
+            return -1;
+        }
+        const int number = map.label[tile_index(nx, ny)];
+        if (number >= 0) {
+            return number;
+        }
+        if (!is_street(tile_at(sim, nx, ny))) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+bool zone_block_tile(const CityEvents &e, int x, int y)
+{
+    if (!Micropolis::testBounds(x, y)) {
+        return false;
+    }
+    const unsigned char v = e.zoneTile[x][y];
+    return v != 0 && v != CityEvents::kZoneStreet;
+}
+
+bool zone_tile(const CityEvents &e, int x, int y)
+{
+    return Micropolis::testBounds(x, y) && e.zoneTile[x][y] != 0;
+}
+
+// The streets between the zone's blocks join it: a run of up to
+// kZoneStreetWidth street tiles with zone land at both ends, then any
+// crossing those runs meet from both sides.
+void mark_zone_streets(Micropolis *sim)
+{
+    CityEvents &e = sim->cityEvents;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            if (e.zoneTile[x][y] == CityEvents::kZoneStreet) {
+                e.zoneTile[x][y] = 0;
+            }
+        }
+    }
+    if (e.zoneCount <= 0) {
+        return;
+    }
+    auto run_ends_in_zone = [&](int x, int y, int dx, int dy) {
+        // From street tile (x, y): the first non-street tile each way.
+        int length = 1;
+        for (int way = -1; way <= 1; way += 2) {
+            int k = 1;
+            for (;; ++k) {
+                const int nx = x + dx * way * k;
+                const int ny = y + dy * way * k;
+                if (!Micropolis::testBounds(nx, ny)) {
+                    return false;
+                }
+                if (!is_street(tile_at(sim, nx, ny))) {
+                    if (!zone_block_tile(e, nx, ny)) {
+                        return false;
+                    }
+                    break;
+                }
+                if (k >= kZoneStreetWidth) {
+                    return false;
+                }
+            }
+            length += k - 1;
+        }
+        return length <= kZoneStreetWidth;
+    };
+    std::vector<std::pair<int, int>> marks;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            if (e.zoneTile[x][y] == 0 && is_street(tile_at(sim, x, y)) &&
+                (run_ends_in_zone(x, y, 1, 0) || run_ends_in_zone(x, y, 0, 1))) {
+                marks.emplace_back(x, y);
+            }
+        }
+    }
+    for (const auto &m : marks) {
+        e.zoneTile[m.first][m.second] = CityEvents::kZoneStreet;
+    }
+    marks.clear();
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            if (e.zoneTile[x][y] != 0 || !is_street(tile_at(sim, x, y))) {
+                continue;
+            }
+            const bool across = zone_tile(e, x - 1, y) && zone_tile(e, x + 1, y);
+            const bool down = zone_tile(e, x, y - 1) && zone_tile(e, x, y + 1);
+            if (across || down) {
+                marks.emplace_back(x, y);
+            }
+        }
+    }
+    for (const auto &m : marks) {
+        e.zoneTile[m.first][m.second] = CityEvents::kZoneStreet;
+    }
+}
+
+int block_police_average(const RoadBlocks::Block &block)
+{
+    return block.tiles > 0 ? block.police / block.tiles : 0;
+}
+
+int zone_police_average(const Micropolis *sim)
+{
+    const CityEvents &e = sim->cityEvents;
+    long total = 0;
+    long tiles = 0;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            if (zone_block_tile(e, x, y)) {
+                total += police_at_tile(sim, x, y);
+                ++tiles;
+            }
+        }
+    }
+    return tiles > 0 ? static_cast<int>(total / tiles) : 0;
+}
+
+// The middle tile of zone block number (1-based), for notices.
+void zone_block_middle(const Micropolis *sim, int number, int &mx, int &my)
+{
+    const CityEvents &e = sim->cityEvents;
+    long sx = 0;
+    long sy = 0;
+    long count = 0;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            if (e.zoneTile[x][y] == number) {
+                sx += x;
+                sy += y;
+                ++count;
+            }
+        }
+    }
+    mx = count > 0 ? static_cast<int>(sx / count) : WORLD_W / 2;
+    my = count > 0 ? static_cast<int>(sy / count) : WORLD_H / 2;
+}
+
+// Adds road block `number` of `map` to the zone as its next block. Tiles
+// already in the zone stay with their block. False when nothing was added.
+bool add_zone_block(Micropolis *sim, const RoadBlocks &map, int number)
+{
+    CityEvents &e = sim->cityEvents;
+    if (e.zoneCount >= kZoneMaxBlocks || number < 0 || number >= static_cast<int>(map.blocks.size())) {
+        return false;
+    }
+    const unsigned char mark = static_cast<unsigned char>(e.zoneCount + 1);
+    int added = 0;
+    int first_x = -1;
+    int first_y = -1;
+    for (int y = 0; y < WORLD_H; ++y) {
+        for (int x = 0; x < WORLD_W; ++x) {
+            if (map.label[tile_index(x, y)] != number || zone_block_tile(e, x, y)) {
+                continue;
+            }
+            e.zoneTile[x][y] = mark;
+            if (added++ == 0) {
+                first_x = x;
+                first_y = y;
+            }
+        }
+    }
+    if (added == 0) {
+        return false;
+    }
+    e.zoneBlock[e.zoneCount][0] = static_cast<unsigned char>(first_x);
+    e.zoneBlock[e.zoneCount][1] = static_cast<unsigned char>(first_y);
+    ++e.zoneCount;
+    return true;
+}
+
+// The blocks next to the given ones (touching, or across a street).
+std::vector<int> neighbour_blocks(const Micropolis *sim, const RoadBlocks &map, const std::vector<bool> &member)
+{
+    std::vector<bool> seen(map.blocks.size(), false);
+    std::vector<int> out;
+    static const int kSide[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const int number = map.label[tile_index(x, y)];
+            if (number < 0 || !member[static_cast<std::size_t>(number)]) {
+                continue;
+            }
+            for (const auto &side : kSide) {
+                const int other = block_across(sim, map, x, y, side[0], side[1]);
+                if (other >= 0 && !member[static_cast<std::size_t>(other)] && !seen[static_cast<std::size_t>(other)]) {
+                    seen[static_cast<std::size_t>(other)] = true;
+                    out.push_back(other);
+                }
+            }
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+// Of these blocks, the least policed; a tie goes to the more built, then
+// to the first in scan order. -1 when there are none.
+int least_policed(const RoadBlocks &map, const std::vector<int> &choices)
+{
+    int pick = -1;
+    for (const int number : choices) {
+        if (pick < 0) {
+            pick = number;
+            continue;
+        }
+        const RoadBlocks::Block &a = map.blocks[static_cast<std::size_t>(number)];
+        const RoadBlocks::Block &b = map.blocks[static_cast<std::size_t>(pick)];
+        const int pa = block_police_average(a);
+        const int pb = block_police_average(b);
+        if (pa < pb || (pa == pb && a.built > b.built)) {
+            pick = number;
+        }
+    }
+    return pick;
+}
+
+bool built_up(const RoadBlocks::Block &block)
+{
+    return !block.edge && !block.capped && block.built >= kZoneMinBuilt && block.built * 100 >= block.tiles * kZoneBuiltPercent;
+}
+
+bool pick_zone_pair(const Micropolis *sim, const RoadBlocks &map, int &first, int &second)
+{
+    // The built-up pair of neighbouring blocks with the least police (tile
+    // average over both); a tie goes to the more built pair, then to the
+    // first in scan order.
+    first = -1;
+    second = -1;
+    long best_police = 0;
+    int best_built = -1;
+    const int count = static_cast<int>(map.blocks.size());
+    std::vector<bool> member(map.blocks.size(), false);
+    for (int a = 0; a < count; ++a) {
+        const RoadBlocks::Block &block_a = map.blocks[static_cast<std::size_t>(a)];
+        if (!built_up(block_a)) {
+            continue;
+        }
+        member[static_cast<std::size_t>(a)] = true;
+        const std::vector<int> around = neighbour_blocks(sim, map, member);
+        member[static_cast<std::size_t>(a)] = false;
+        for (const int b : around) {
+            const RoadBlocks::Block &block_b = map.blocks[static_cast<std::size_t>(b)];
+            if (b < a || !built_up(block_b)) {
+                continue;
+            }
+            const long police = (static_cast<long>(block_a.police) + block_b.police) / (block_a.tiles + block_b.tiles);
+            const int built = block_a.built + block_b.built;
+            if (first < 0 || police < best_police || (police == best_police && built > best_built)) {
+                best_police = police;
+                best_built = built;
+                // The less policed block of the two goes first.
+                const bool swap = block_police_average(block_b) < block_police_average(block_a);
+                first = swap ? b : a;
+                second = swap ? a : b;
+            }
+        }
+    }
+    return first >= 0;
+}
+
+bool place_zone(Micropolis *sim, const RoadBlocks &map, int first, int second, std::vector<Note> &notes)
+{
+    CityEvents &e = sim->cityEvents;
+    std::memset(e.zoneTile, 0, sizeof(e.zoneTile));
+    e.zoneCount = 0;
+    if (!add_zone_block(sim, map, first) || !add_zone_block(sim, map, second)) {
+        std::memset(e.zoneTile, 0, sizeof(e.zoneTile));
+        e.zoneCount = 0;
+        return false;
+    }
+    mark_zone_streets(sim);
+    e.zoneClock = kZoneReviewSteps;
+    sim->invalidateMaps();
+    const RoadBlocks::Block &a = map.blocks[static_cast<std::size_t>(first)];
+    const RoadBlocks::Block &b = map.blocks[static_cast<std::size_t>(second)];
+    const long tiles = a.tiles + b.tiles;
+    notes.push_back(place_note(info(Kind::AutonomousZone).notice, static_cast<int>((a.sum_x + b.sum_x) / tiles),
+                               static_cast<int>((a.sum_y + b.sum_y) / tiles)));
+    return true;
 }
 
 void review_zone(Micropolis *sim, std::vector<Note> &notes)
@@ -262,57 +677,43 @@ void review_zone(Micropolis *sim, std::vector<Note> &notes)
         if (e.zoneCount >= kZoneMaxBlocks) {
             return;
         }
-        int pick_x = -1;
-        int pick_y = -1;
-        int pick_police = 1 << 30;
-        int pick_built = -1;
-        for (int i = 0; i < e.zoneCount; ++i) {
-            static const int kSide[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-            for (const auto &side : kSide) {
-                const int nx = e.zoneBlock[i][0] + side[0];
-                const int ny = e.zoneBlock[i][1] + side[1];
-                if (nx < 0 || ny < 0 || nx >= kBlocksW || ny >= kBlocksH || zone_has(e, nx, ny)) {
-                    continue;
-                }
-                const int p = police_at_block(sim, nx, ny);
-                const int built = developed_in_block(sim, nx, ny);
-                if (p < pick_police || (p == pick_police && built > pick_built)) {
-                    pick_police = p;
-                    pick_built = built;
-                    pick_x = nx;
-                    pick_y = ny;
+        const RoadBlocks map = label_road_blocks(sim);
+        // Blocks the zone already holds (any of their tiles).
+        std::vector<bool> member(map.blocks.size(), false);
+        for (int x = 0; x < WORLD_W; ++x) {
+            for (int y = 0; y < WORLD_H; ++y) {
+                const int number = map.label[tile_index(x, y)];
+                if (number >= 0 && zone_block_tile(e, x, y)) {
+                    member[static_cast<std::size_t>(number)] = true;
                 }
             }
         }
-        if (pick_x >= 0) {
-            e.zoneBlock[e.zoneCount][0] = static_cast<unsigned char>(pick_x);
-            e.zoneBlock[e.zoneCount][1] = static_cast<unsigned char>(pick_y);
-            ++e.zoneCount;
+        const int pick = least_policed(map, neighbour_blocks(sim, map, member));
+        if (pick >= 0 && add_zone_block(sim, map, pick)) {
+            mark_zone_streets(sim);
             sim->invalidateMaps();
+            const RoadBlocks::Block &block = map.blocks[static_cast<std::size_t>(pick)];
             notes.push_back(place_note("The Autonomous Zone has grown. Police coverage there is too low.",
-                                       pick_x * kZoneBlockTiles + kZoneBlockTiles / 2,
-                                       pick_y * kZoneBlockTiles + kZoneBlockTiles / 2));
+                                       static_cast<int>(block.sum_x / block.tiles),
+                                       static_cast<int>(block.sum_y / block.tiles)));
         }
         return;
     }
     if (police >= kZoneShrinkAt) {
-        // Give up the best-policed block; a tie gives up the newest.
-        int drop = 0;
-        int drop_police = -1;
-        for (int i = 0; i < e.zoneCount; ++i) {
-            const int p = police_at_block(sim, e.zoneBlock[i][0], e.zoneBlock[i][1]);
-            if (p >= drop_police) {
-                drop_police = p;
-                drop = i;
+        // Give up the block it took last.
+        const int gone = e.zoneCount;
+        int gone_x = 0;
+        int gone_y = 0;
+        zone_block_middle(sim, gone, gone_x, gone_y);
+        for (int x = 0; x < WORLD_W; ++x) {
+            for (int y = 0; y < WORLD_H; ++y) {
+                if (e.zoneTile[x][y] == gone) {
+                    e.zoneTile[x][y] = 0;
+                }
             }
         }
-        const int gone_x = e.zoneBlock[drop][0] * kZoneBlockTiles + kZoneBlockTiles / 2;
-        const int gone_y = e.zoneBlock[drop][1] * kZoneBlockTiles + kZoneBlockTiles / 2;
-        for (int i = drop; i + 1 < e.zoneCount; ++i) {
-            e.zoneBlock[i][0] = e.zoneBlock[i + 1][0];
-            e.zoneBlock[i][1] = e.zoneBlock[i + 1][1];
-        }
         --e.zoneCount;
+        mark_zone_streets(sim);
         sim->invalidateMaps();
         if (e.zoneCount == 0) {
             e.zoneClock = 0;
@@ -548,8 +949,13 @@ std::string unavailable_reason(const Micropolis *sim, Kind kind)
         if (e.zoneCount > 0) {
             return "An Autonomous Zone already stands.";
         }
-        if (!pick_zone_spot(sim, x, y)) {
-            return "An Autonomous Zone needs a built-up neighborhood.";
+        {
+            const RoadBlocks map = label_road_blocks(sim);
+            int first = -1;
+            int second = -1;
+            if (!pick_zone_pair(sim, map, first, second)) {
+                return "An Autonomous Zone needs a built-up neighborhood.";
+            }
         }
         return {};
     case Kind::LionEscape:
@@ -596,10 +1002,10 @@ bool start(Micropolis *sim, Kind kind, std::vector<Note> &notes)
         apply_crime(sim);
         return true;
     case Kind::AutonomousZone: {
-        int bx = 0;
-        int by = 0;
-        pick_zone_spot(sim, bx, by);
-        if (!place_zone(sim, bx, by, notes)) {
+        const RoadBlocks map = label_road_blocks(sim);
+        int first = -1;
+        int second = -1;
+        if (!pick_zone_pair(sim, map, first, second) || !place_zone(sim, map, first, second, notes)) {
             return false;
         }
         apply_land(sim);
@@ -637,33 +1043,29 @@ bool start(Micropolis *sim, Kind kind, std::vector<Note> &notes)
     return false;
 }
 
-bool start_zone_at(Micropolis *sim, int block_x, int block_y, std::vector<Note> &notes)
+bool start_zone_at(Micropolis *sim, int x, int y, std::vector<Note> &notes)
 {
-    if (sim->cityEvents.zoneCount > 0 || block_x < 0 || block_y < 0 || block_x + kZoneStartBlocks > kBlocksW ||
-        block_y >= kBlocksH) {
+    if (sim->cityEvents.zoneCount > 0 || !Micropolis::testBounds(x, y)) {
+        return false;
+    }
+    const RoadBlocks map = label_road_blocks(sim);
+    const int first = map.label[tile_index(x, y)];
+    if (first < 0) {
+        return false;
+    }
+    std::vector<bool> member(map.blocks.size(), false);
+    member[static_cast<std::size_t>(first)] = true;
+    const int second = least_policed(map, neighbour_blocks(sim, map, member));
+    if (second < 0) {
         return false;
     }
     sim->cityEvents.lastStepTime = sim->cityTime;
-    if (!place_zone(sim, block_x, block_y, notes)) {
+    if (!place_zone(sim, map, first, second, notes)) {
         return false;
     }
     // Show on the land value map now; the engine's next scan keeps it.
     apply_land(sim);
     return true;
-}
-
-void random_event(Micropolis *sim, std::vector<Note> &notes)
-{
-    Rng rng(seed_for(sim, 101));
-    const int roll = rng.below(8);
-    if (roll >= kKindCount) {
-        return; // Still nothing happens, half the time.
-    }
-    const Kind kind = static_cast<Kind>(roll);
-    if (!unavailable_reason(sim, kind).empty()) {
-        return; // No zoo, no prison, or one already going: nothing.
-    }
-    start(sim, kind, notes);
 }
 
 void frame(Micropolis *sim, std::vector<Note> &notes)
@@ -734,6 +1136,35 @@ void apply_land(Micropolis *sim)
     if (e.zoneCount <= 0) {
         return;
     }
+    // Chebyshev distance from every tile to the zone, out to the band.
+    const int unreached = 1 << 30;
+    std::vector<int> distance(WORLD_W * WORLD_H, unreached);
+    std::vector<std::pair<int, int>> ring;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            if (e.zoneTile[x][y] != 0) {
+                distance[static_cast<std::size_t>(tile_index(x, y))] = 0;
+                ring.emplace_back(x, y);
+            }
+        }
+    }
+    for (int d = 1; d <= kZoneLandBand && !ring.empty(); ++d) {
+        std::vector<std::pair<int, int>> next;
+        for (const auto &at : ring) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                for (int dy = -1; dy <= 1; ++dy) {
+                    const int nx = at.first + dx;
+                    const int ny = at.second + dy;
+                    if (Micropolis::testBounds(nx, ny) &&
+                        distance[static_cast<std::size_t>(tile_index(nx, ny))] == unreached) {
+                        distance[static_cast<std::size_t>(tile_index(nx, ny))] = d;
+                        next.emplace_back(nx, ny);
+                    }
+                }
+            }
+        }
+        ring.swap(next);
+    }
     const int block = sim->landValueMap.MAP_BLOCKSIZE;
     for (int x = 0; x < WORLD_W; x += block) {
         for (int y = 0; y < WORLD_H; y += block) {
@@ -741,22 +1172,12 @@ void apply_land(Micropolis *sim)
             if (value <= 0) {
                 continue;
             }
-            // Distance in tiles from this 2x2 cell to the nearest zone tile.
+            // Distance in tiles from this cell to the nearest zone tile.
             int best = 1 << 30;
-            for (int i = 0; i < e.zoneCount; ++i) {
-                const int left = e.zoneBlock[i][0] * kZoneBlockTiles;
-                const int top = e.zoneBlock[i][1] * kZoneBlockTiles;
-                const int right = left + kZoneBlockTiles - 1;
-                const int bottom = top + kZoneBlockTiles - 1;
-                int d = 1 << 30;
-                for (int cx = x; cx < x + block; ++cx) {
-                    for (int cy = y; cy < y + block; ++cy) {
-                        const int ex = cx < left ? left - cx : (cx > right ? cx - right : 0);
-                        const int ey = cy < top ? top - cy : (cy > bottom ? cy - bottom : 0);
-                        d = std::min(d, std::max(ex, ey));
-                    }
+            for (int cx = x; cx < x + block && cx < WORLD_W; ++cx) {
+                for (int cy = y; cy < y + block && cy < WORLD_H; ++cy) {
+                    best = std::min(best, distance[static_cast<std::size_t>(tile_index(cx, cy))]);
                 }
-                best = std::min(best, d);
             }
             if (best > kZoneLandBand) {
                 continue;
@@ -784,7 +1205,7 @@ bool in_zone(const Micropolis *sim, int x, int y)
     if (!Micropolis::testBounds(x, y)) {
         return false;
     }
-    return zone_has(sim->cityEvents, x / kZoneBlockTiles, y / kZoneBlockTiles);
+    return sim->cityEvents.zoneCount > 0 && sim->cityEvents.zoneTile[x][y] != 0;
 }
 
 bool footprint_in_zone(const Micropolis *sim, int left, int top, int w, int h)
@@ -862,30 +1283,67 @@ LionView lion(const Micropolis *sim)
     return view;
 }
 
+std::vector<std::pair<int, int>> road_block_at(const Micropolis *sim, int x, int y)
+{
+    std::vector<std::pair<int, int>> out;
+    if (!Micropolis::testBounds(x, y)) {
+        return out;
+    }
+    const RoadBlocks map = label_road_blocks(sim);
+    const int number = map.label[tile_index(x, y)];
+    if (number < 0) {
+        return out;
+    }
+    for (int ty = 0; ty < WORLD_H; ++ty) {
+        for (int tx = 0; tx < WORLD_W; ++tx) {
+            if (map.label[tile_index(tx, ty)] == number) {
+                out.emplace_back(tx, ty);
+            }
+        }
+    }
+    return out;
+}
+
 std::vector<Barricade> barricades(const Micropolis *sim)
 {
     std::vector<Barricade> out;
     const CityEvents &e = sim->cityEvents;
+    if (e.zoneCount <= 0) {
+        return out;
+    }
     static const int kSide[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-    for (int i = 0; i < e.zoneCount; ++i) {
-        const int bx = e.zoneBlock[i][0];
-        const int by = e.zoneBlock[i][1];
-        for (int side = 0; side < 4; ++side) {
-            if (zone_has(e, bx + kSide[side][0], by + kSide[side][1])) {
+    auto outside = [&](int x, int y) { return Micropolis::testBounds(x, y) && e.zoneTile[x][y] == 0; };
+    for (int y = 0; y < WORLD_H; ++y) {
+        for (int x = 0; x < WORLD_W; ++x) {
+            if (e.zoneTile[x][y] == 0) {
                 continue;
             }
-            for (int k = 0; k < kZoneBlockTiles; ++k) {
-                int x = bx * kZoneBlockTiles;
-                int y = by * kZoneBlockTiles;
-                if (side == 0 || side == 2) {
-                    x += k;
-                    y += side == 0 ? 0 : kZoneBlockTiles - 1;
-                } else {
-                    y += k;
-                    x += side == 3 ? 0 : kZoneBlockTiles - 1;
+            for (int side = 0; side < 4; ++side) {
+                const int nx = x + kSide[side][0];
+                const int ny = y + kSide[side][1];
+                if (!outside(nx, ny)) {
+                    continue; // In the zone, or the map edge.
                 }
-                if (Micropolis::testBounds(x, y)) {
+                if (street_at(sim, nx, ny)) {
+                    // On the street, against the curb.
+                    out.push_back(Barricade{nx, ny, (side + 2) & 3});
+                } else {
                     out.push_back(Barricade{x, y, side});
+                }
+            }
+            // Corner posts where two street-side lines meet at an outside
+            // corner: north and west of this tile are both streets outside
+            // the zone, and so is the tile between them.
+            static const int kCorner[4][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+            for (int c = 0; c < 4; ++c) {
+                const int cx = x + kCorner[c][0];
+                const int cy = y + kCorner[c][1];
+                if (outside(x + kCorner[c][0], y) && outside(x, y + kCorner[c][1]) && outside(cx, cy) &&
+                    street_at(sim, x + kCorner[c][0], y) && street_at(sim, x, y + kCorner[c][1]) &&
+                    street_at(sim, cx, cy)) {
+                    // The post goes in the diagonal tile's corner facing
+                    // this one (NW diagonal -> its SE corner, and so on).
+                    out.push_back(Barricade{cx, cy, 4 + ((c + 2) & 3)});
                 }
             }
         }

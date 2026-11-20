@@ -761,7 +761,6 @@ void Micropolis::init()
     specialLandFn = NULL;
     specialCrimeFn = NULL;
     eventFrameFn = NULL;
-    eventRandomFn = NULL;
     editBlockedFn = NULL;
     std::memset(&cityEvents, 0, sizeof(cityEvents));
     specialIncome = 0;

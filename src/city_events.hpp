@@ -53,20 +53,33 @@ inline constexpr int kRiotFires = 6;
 inline constexpr int kRiotCrimePeak = 40;
 inline constexpr int kRiotSteps = 24;
 
-// Autonomous Zone: a block is one 8x8-tile cell of the police map. It forms
-// two blocks wide. Every kZoneReviewSteps (2 months) the zone's average
-// police coverage decides: below kZoneGrowBelow it takes the neighbouring
-// block with the least police; at kZoneShrinkAt or more it gives up its
-// best-policed block; in between it holds. kZoneMaxBlocks caps it.
-inline constexpr int kZoneBlockTiles = 8;
+// Autonomous Zone: a block is a road block, the connected land (4-way)
+// that roads, rail, water and the map edge close in. An open area larger
+// than kZoneBlockMaxTiles is cut into kZoneCapCell x kZoneCapCell squares
+// of the map grid; each building goes whole with the square its centre
+// tile sits in, so no cut runs through a building. Two blocks are
+// neighbours when they touch or face each other across up to
+// kZoneStreetWidth tiles of road or rail.
+//
+// It forms on two neighbouring blocks, both closed in by streets (not cut
+// pieces of an open area) and neither on the map edge, each with
+// at least kZoneMinBuilt building tiles and kZoneBuiltPercent of their
+// land built on: the pair with the least police (tile average), then the
+// more built. Every kZoneReviewSteps (2 months) the zone's police coverage
+// (tile average) decides: below kZoneGrowBelow it takes the neighbouring
+// block with the least police; at kZoneShrinkAt or more it gives up the
+// block it took last; in between it holds. kZoneMaxBlocks caps it. The
+// streets between its blocks belong to it too.
+inline constexpr int kZoneBlockMaxTiles = 144;
+inline constexpr int kZoneCapCell = 12;
+inline constexpr int kZoneStreetWidth = 2;
+inline constexpr int kZoneMinBuilt = 9;
+inline constexpr int kZoneBuiltPercent = 40;
 inline constexpr int kZoneStartBlocks = 2;
 inline constexpr int kZoneReviewSteps = 8;
 inline constexpr int kZoneGrowBelow = 40;
 inline constexpr int kZoneShrinkAt = 80;
 inline constexpr int kZoneMaxBlocks = 48;
-// Land value (the engine's 1..250 scale) inside the zone drops by
-// kZoneLandInside; tiles outside lose less with distance, down to nothing
-// past kZoneLandBand tiles: inside - inside * d / (band + 1).
 inline constexpr int kZoneLandInside = 50;
 inline constexpr int kZoneLandBand = 4;
 
@@ -99,14 +112,11 @@ inline constexpr int kPrisonMaxSteps = 48;
 std::string unavailable_reason(const Micropolis *sim, Kind kind);
 // Starts it. False (with the reason in notes) when it cannot.
 bool start(Micropolis *sim, Kind kind, std::vector<Note> &notes);
-// The Autonomous Zone at a chosen pair of blocks (block_x, block_y) and
-// (block_x + 1, block_y), for scenarios. False off the map or when a zone
-// already stands.
-bool start_zone_at(Micropolis *sim, int block_x, int block_y, std::vector<Note> &notes);
-// The classic "nothing happens" disaster roll: about one time in two it
-// picks one of these four instead (one in 72 random disasters each). It
-// uses no engine random numbers.
-void random_event(Micropolis *sim, std::vector<Note> &notes);
+// The Autonomous Zone on the road block holding tile (x, y) and its
+// least-policed neighbour, for scenarios. False when (x, y) is not on a
+// block, the block has no neighbour, or a zone already stands. None of
+// these four is ever picked by the random disaster roll.
+bool start_zone_at(Micropolis *sim, int x, int y, std::vector<Note> &notes);
 
 // ---- Running -----------------------------------------------------------
 
@@ -128,7 +138,11 @@ bool in_zone(const Micropolis *sim, int x, int y);
 bool edit_blocked(const Micropolis *sim, int tool, int x, int y);
 // True when a w x h footprint with its top-left at (left, top) touches it.
 bool footprint_in_zone(const Micropolis *sim, int left, int top, int w, int h);
+// The first tile of each of the zone's blocks, in the order it took them.
 std::vector<std::pair<int, int>> zone_blocks(const Micropolis *sim);
+// The road block holding (x, y): its tiles, scan order. Empty on a road,
+// rail or water tile.
+std::vector<std::pair<int, int>> road_block_at(const Micropolis *sim, int x, int y);
 
 struct LionView {
     bool active = false;
@@ -141,8 +155,12 @@ struct LionView {
 LionView lion(const Micropolis *sim);
 int riot_crime_now(const Micropolis *sim);
 
-// Barricade pieces along the zone border, one per edge of a border tile.
-// side: 0 north, 1 east, 2 south, 3 west edge of tile (x, y).
+// Barricade pieces along the zone border, each drawn inside tile (x, y)
+// against one edge: side 0 north, 1 east, 2 south, 3 west. Where the zone
+// meets a street the piece sits on the street tile, against the curb, so
+// it never covers a building. side 4..7 is a corner post in the north-west,
+// north-east, south-east or south-west corner of the tile, closing the gap
+// where two street-side lines meet.
 struct Barricade {
     int x;
     int y;

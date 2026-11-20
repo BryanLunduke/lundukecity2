@@ -132,12 +132,7 @@ void Micropolis::doDisasters()
             case 4:
                 // 1/9 chance nothing happens (was airplane crash,
                 // which EA removed after 9/11, and requested it be
-                // removed from this code). City 2 may start one of its
-                // own rarer disasters here; it uses no engine random
-                // numbers, so the classic sequence after it is unchanged.
-                if (eventRandomFn != NULL) {
-                    eventRandomFn(this);
-                }
+                // removed from this code)
                 break;
 
             case 5:
@@ -329,9 +324,8 @@ void Micropolis::makeFire()
 
 
 /**
- * Is tile vulnerable for an earthquake?
- * @param tem Tile data
- * @return Function returns \c true if tile is vulnerable, and \c false if not
+ * City 2 events: set one building tile on fire. False when (x, y) is not a
+ * burnable building tile.
  */
 bool Micropolis::eventFireAt(int x, int y)
 {
@@ -405,6 +399,11 @@ int Micropolis::eventEatResidents(int x, int y, int radius)
 }
 
 
+/**
+ * Is tile vulnerable for an earthquake?
+ * @param tem Tile data
+ * @return Function returns \c true if tile is vulnerable, and \c false if not
+ */
 bool Micropolis::vulnerable(int tem)
 {
     int tem2 = tem & LOMASK;

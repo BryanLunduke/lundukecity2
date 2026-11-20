@@ -449,11 +449,6 @@ CitySession::CitySession()
             self->on_event_frame();
         }
     };
-    engine_->sim.eventRandomFn = [](Micropolis *sim) {
-        if (auto *self = static_cast<CitySession *>(sim->callbackData)) {
-            self->on_random_event();
-        }
-    };
     engine_->sim.editBlockedFn = city_events::edit_blocked;
     engine_->sim.setEnableSound(sound_enabled_);
 }
@@ -466,7 +461,6 @@ CitySession::~CitySession()
     engine_->sim.specialCrimeFn = nullptr;
     engine_->sim.specialIncomeFn = nullptr;
     engine_->sim.eventFrameFn = nullptr;
-    engine_->sim.eventRandomFn = nullptr;
     engine_->sim.editBlockedFn = nullptr;
     delete engine_;
 }
@@ -2161,13 +2155,13 @@ bool CitySession::start_event_named(const std::string &key)
     return start_event(kind);
 }
 
-bool CitySession::start_autonomous_zone_at(int block_x, int block_y)
+bool CitySession::start_autonomous_zone_at(int x, int y)
 {
     if (!ready_) {
         return false;
     }
     std::vector<city_events::Note> notes;
-    const bool started = city_events::start_zone_at(&engine_->sim, block_x, block_y, notes);
+    const bool started = city_events::start_zone_at(&engine_->sim, x, y, notes);
     if (started) {
         dirty_ = true;
         engine_->sim.invalidateMaps();
@@ -2248,16 +2242,6 @@ void CitySession::on_event_frame()
     }
     if (!notes.empty()) {
         post_event_notes(notes);
-    }
-}
-
-void CitySession::on_random_event()
-{
-    std::vector<city_events::Note> notes;
-    city_events::random_event(&engine_->sim, notes);
-    if (!notes.empty()) {
-        dirty_ = true;
-        post_event_notes(notes, true);
     }
 }
 
