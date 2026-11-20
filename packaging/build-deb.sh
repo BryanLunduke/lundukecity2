@@ -33,6 +33,9 @@ meson install -C "$BUILD" --destdir "$DEST"
 mkdir -p "$DEST/usr/share/doc/lunduke-city-2"
 cp -a "$ROOT/NOTICE" "$DEST/usr/share/doc/lunduke-city-2/NOTICE"
 cp -a "$ROOT/COPYING" "$DEST/usr/share/doc/lunduke-city-2/COPYING"
+# Debian looks for the machine-readable copyright file under this name.
+# NOTICE is already in that format (DEP-5).
+cp -a "$ROOT/NOTICE" "$DEST/usr/share/doc/lunduke-city-2/copyright"
 
 mkdir -p "$DEST/debian"
 cp "$ROOT/debian/control" "$DEST/debian/control"

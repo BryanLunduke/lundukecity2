@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 The Lunduke City authors
+// Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
 #pragma once
@@ -122,6 +122,13 @@ inline TextMetrics measure_text(cairo_t *cr, const char *font, const std::string
     PangoLayout *layout = cached_layout(cr, font, text, wrap_width);
     pango_layout_get_pixel_size(layout, &metrics.width, &metrics.height);
     return metrics;
+}
+
+// False when the font has no glyph for some character in text (Pango would
+// draw a hex box), so a caller can swap in an ASCII spelling.
+inline bool font_covers_text(cairo_t *cr, const char *font, const std::string &text)
+{
+    return pango_layout_get_unknown_glyphs_count(cached_layout(cr, font, text, -1)) == 0;
 }
 
 // Insert a newline so a short last token stays with the word before it.

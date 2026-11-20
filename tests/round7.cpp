@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 The Lunduke City authors
+// Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
 // Round 7 checks that do not need a window: graph colors, the save name,
@@ -333,6 +333,24 @@ int main()
     if (changelog.find("lunduke-city-2 (2.0.0)") == std::string::npos ||
         changelog.find("Phil <phil@brushpad.local>") == std::string::npos) {
         return fail(21, "the changelog is not 2.0.0");
+    }
+    {
+        // Licenses ship with both packages: NOTICE and COPYING (and the
+        // DejaVu notice) in the deb's doc folder plus the game's own copy
+        // the License viewer reads, and in the Windows folder beside every
+        // MSYS2 package's license folder.
+        const std::string meson = read_file(root + "/meson.build");
+        const std::string win = read_file(root + "/packaging/windows/package.sh");
+        if (deb.find("usr/share/doc/lunduke-city-2/NOTICE") == std::string::npos ||
+            deb.find("usr/share/doc/lunduke-city-2/COPYING") == std::string::npos ||
+            deb.find("usr/share/doc/lunduke-city-2/copyright") == std::string::npos ||
+            meson.find("'lunduke-city-2' / 'licenses'") == std::string::npos ||
+            meson.find("'data/fonts/LICENSE-DejaVu',\n  install_dir: get_option('datadir') / 'doc'") == std::string::npos ||
+            win.find("cp \"$src/COPYING\" \"$src/NOTICE\"") == std::string::npos ||
+            win.find("LICENSE-DejaVu\" \"$root/share/licenses/$name/\"") == std::string::npos ||
+            win.find("$sysroot/share/licenses\"/*") == std::string::npos) {
+            return fail(22, "a package no longer ships NOTICE, COPYING, or the bundled licenses");
+        }
     }
 #endif
     return 0;

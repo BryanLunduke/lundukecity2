@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 The Lunduke City authors
+# Copyright (C) 2026 Bryan Lunduke
 # See COPYING and NOTICE.
 
 """Data Center = option B reworked (one wide glass-and-steel block, true

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 The Lunduke City authors
+// Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
 // Headless regressions for the round-4 review (findings 1-3 and 5-7).

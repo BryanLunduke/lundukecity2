@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 The Lunduke City authors
+// Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
 // Hotspot ids are one enum. Dialog buttons must not reuse the map, toolbar,
@@ -42,7 +42,7 @@ int main()
         kOk,          kDiscard,   kSave,         kBack,      kNext,         kGenerate,     kPlay,        kRename,
         kClose,       kReset,     kCollect,      kKeep,      kStay,         kScenarioList, kRecover,     kNotNow,
         kDelete,      kUp,        kSystemFiles,  kShortScale, kLongScale,   kWelcomeNew,   kWelcomeLoad, kWelcomeScenario,
-        kWelcomeQuit,
+        kWelcomeQuit, kViewLicense,
         kMenuItem,    kRecentItem,
         kFieldName,   kFieldSeed, kOsk,          kListItem,  kSlider,       kChoice,
     };
@@ -60,7 +60,8 @@ int main()
     }
     if (!is_modal_control(kCancel) || !is_modal_control(kSave) || !is_modal_control(kClose) || !is_modal_control(kOsk) ||
         !is_modal_control(kSlider + 1) || !is_modal_control(kFieldName) || !is_dialog_button(kLongScale) ||
-        !is_dialog_button(kWelcomeNew) || !is_dialog_button(kWelcomeQuit)) {
+        !is_dialog_button(kWelcomeNew) || !is_dialog_button(kWelcomeQuit) || !is_dialog_button(kViewLicense) ||
+        !is_dialog_button(kEditTerrain)) {
         return fail("dialog controls are not recognised");
     }
 

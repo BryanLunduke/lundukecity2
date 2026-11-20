@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 The Lunduke City authors
+# Copyright (C) 2026 Bryan Lunduke
 # See COPYING and NOTICE.
 
 """Meson entry for svga_atlas and spooky_atlas.

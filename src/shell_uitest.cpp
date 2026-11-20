@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 The Lunduke City authors
+// Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
@@ -1962,6 +1962,88 @@ void Shell::drive_ui_test()
         }
         // The quit test still expects a clean city.
         session_.set_dirty(false);
+        open_dialog(Dialog::About);
+        ui_step_ = 45;
+        return;
+    }
+    case 45: {
+        // About offers View License, which opens NOTICE and COPYING.
+        const Hotspot *view = find_hot(hot_, kViewLicense, 0);
+        if (view == nullptr || dialog_ != Dialog::About || find_hot(hot_, kClose, 0) == nullptr) {
+            fail("About has no View License button");
+            return;
+        }
+        modal_grace_until_ = {};
+        click_at(view->x + view->w * 0.5, view->y + view->h * 0.5);
+        if (dialog_ != Dialog::License || license_text_.find("ADDITIONAL TERMS") == std::string::npos ||
+            license_text_.find("GNU GENERAL PUBLIC LICENSE") == std::string::npos) {
+            fail("View License did not open NOTICE and COPYING");
+            return;
+        }
+        ui_step_ = 46;
+        return;
+    }
+    case 46: {
+        // Drawn once, so the viewer knows how much it can scroll.
+        if (license_scroll_max_ <= 0 || license_scroll_ != 0 || license_view_h_ <= 0) {
+            fail("the License viewer has nothing to scroll");
+            return;
+        }
+        key_down(SDLK_DOWN);
+        const int by_key = license_scroll_;
+        key_down(SDLK_PAGEDOWN);
+        const int by_page = license_scroll_;
+        key_down(SDLK_END);
+        const int at_end = license_scroll_;
+        key_down(SDLK_HOME);
+        if (by_key <= 0 || by_page <= by_key || at_end != license_scroll_max_ || license_scroll_ != 0) {
+            fail("the keyboard does not scroll the License viewer");
+            return;
+        }
+        SDL_Event wheel{};
+        wheel.type = SDL_EVENT_MOUSE_WHEEL;
+        wheel.wheel.y = -1;
+        handle_event(wheel);
+        if (license_scroll_ <= 0) {
+            fail("the wheel does not scroll the License viewer");
+            return;
+        }
+        license_scroll_ = 0;
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return license_scroll_ == 0; });
+        if (license_scroll_ <= 0 || dialog_ != Dialog::License) {
+            fail("the D-pad does not scroll the License viewer");
+            return;
+        }
+        nav_repeat_button_ = SDL_GAMEPAD_BUTTON_INVALID;
+        pad_feel::repeat_clear(nav_repeat_);
+        license_scroll_ = 0;
+        {
+            // A finger dragged up the text moves it up.
+            const float fx = static_cast<float>((license_view_x_ + license_view_w_ * 0.5) / std::max(1, win_w_));
+            const float top = static_cast<float>((license_view_y_ + license_view_h_ * 0.75) / std::max(1, win_h_));
+            const float lift = static_cast<float>((license_view_y_ + license_view_h_ * 0.25) / std::max(1, win_h_));
+            SDL_Event finger{};
+            finger.tfinger.fingerID = 7;
+            finger.tfinger.x = fx;
+            finger.tfinger.y = top;
+            finger.type = SDL_EVENT_FINGER_DOWN;
+            handle_event(finger);
+            finger.type = SDL_EVENT_FINGER_MOTION;
+            finger.tfinger.y = lift;
+            handle_event(finger);
+            finger.type = SDL_EVENT_FINGER_UP;
+            handle_event(finger);
+        }
+        if (license_scroll_ < license_view_h_ / 4 || dialog_ != Dialog::License) {
+            fail("a finger drag does not scroll the License viewer");
+            return;
+        }
+        key_down(SDLK_ESCAPE);
+        if (dialog_ != Dialog::About || focus_id_ != kViewLicense) {
+            fail("Escape in the License viewer did not go back to About");
+            return;
+        }
+        close_dialog();
         welcome_gate_ = true;
         open_dialog(Dialog::Welcome);
         ui_step_ = 25;

@@ -18,7 +18,7 @@ BEGIN
       VALUE "FileDescription", "Lunduke City 2"
       VALUE "FileVersion", "2.0.0"
       VALUE "InternalName", "lunduke-city-2"
-      VALUE "LegalCopyright", "GPL-3.0-or-later. See COPYING and NOTICE."
+      VALUE "LegalCopyright", "Copyright (C) 2026 Bryan Lunduke. GPL-3.0-or-later. See COPYING and NOTICE."
       VALUE "OriginalFilename", "lunduke-city-2.exe"
       VALUE "ProductName", "Lunduke City 2"
       VALUE "ProductVersion", "2.0.0"

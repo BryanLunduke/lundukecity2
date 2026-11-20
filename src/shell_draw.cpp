@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 The Lunduke City authors
+// Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
@@ -2165,7 +2165,9 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::About) {
         const double width = message_width(win_w_, margin, dp(480), dp(640));
         const double icon = dp(72);
-        const std::string body = about_text();
+        // The copyright sign and en dash fall back to (C) and - if the body
+        // font has no glyph for them.
+        const std::string body = font_covers_text(cr, body_font(), about_text()) ? about_text() : about_text(true);
         const double text_w = std::max(1.0, width - 2 * margin - icon - dp(16));
         const double body_h = line_height(body_font(), body, text_w);
         const double content_h = std::max(static_cast<double>(icon), body_h);
@@ -2226,7 +2228,51 @@ void Shell::draw_dialog(cairo_t *cr)
         const double body_w = std::max(1.0, panel.w - 2 * margin - icon - dp(16));
         place_line(body_font(), body, icon_x + icon + dp(12), panel.y + dp(48), body_w, theme::kTextR, theme::kTextG,
                    theme::kTextB);
-        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kClose}});
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
+                   {{"View _License", kViewLicense}, {"_Close", kClose}});
+        return;
+    }
+    if (dialog_ == Dialog::License) {
+        // NOTICE and COPYING in a fixed-width face, as the files are laid
+        // out. The text scrolls inside the page; Close goes back to About.
+        const double width = message_width(win_w_, margin, dp(520), dp(760));
+        const double buttons_h = dp(36);
+        const double chrome = dp(40) + margin + dp(8) + buttons_h + margin;
+        const double height = std::max(chrome + dp(120), band_h - 2.0 * margin);
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "License");
+        const std::string mono = ui_scale::scaled_font("Monospace", 10, ui_scale_);
+        const double body_top = panel.y + dp(48);
+        const double view_h = std::max(static_cast<double>(dp(48)), panel.h - (body_top - panel.y) - dp(8) - buttons_h - margin);
+        const double track_w = std::max(4.0, static_cast<double>(dp(6)));
+        const double text_x = panel.x + margin;
+        const int wrap = static_cast<int>(std::max(1.0, panel.w - 2 * margin - track_w - dp(8)));
+        const std::string &text = license_text_.empty() ? std::string("NOTICE and COPYING were not loaded.") : license_text_;
+        const TextMetrics tm = measure_text(cr, mono.c_str(), text, wrap);
+        license_view_x_ = text_x;
+        license_view_y_ = body_top;
+        license_view_w_ = panel.w - 2 * margin;
+        license_view_h_ = static_cast<int>(view_h);
+        license_scroll_max_ = std::max(0, static_cast<int>(std::ceil(tm.height - view_h)));
+        license_scroll_ = std::max(0, std::min(license_scroll_, license_scroll_max_));
+        cairo_save(cr);
+        cairo_rectangle(cr, text_x, body_top, panel.w - 2 * margin, view_h);
+        cairo_clip(cr);
+        paint_text(cr, mono.c_str(), text, text_x, body_top - license_scroll_, theme::kTextR, theme::kTextG,
+                   theme::kTextB, wrap);
+        cairo_restore(cr);
+        if (license_scroll_max_ > 0) {
+            const double track_x = panel.x + panel.w - margin - track_w;
+            fill(cr, track_x, body_top, track_w, view_h, 0.82, 0.82, 0.82);
+            const double thumb_h =
+                std::max(static_cast<double>(dp(18)), view_h * view_h / (view_h + static_cast<double>(license_scroll_max_)));
+            const double travel = std::max(0.0, view_h - thumb_h);
+            const double thumb_y =
+                body_top + travel * (static_cast<double>(license_scroll_) / static_cast<double>(license_scroll_max_));
+            fill(cr, track_x, thumb_y, track_w, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(),
+                 theme::chrome_select_b());
+        }
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - buttons_h, {{"_Close", kClose}});
         return;
     }
     if (dialog_ == Dialog::HowToPlay) {
@@ -4404,6 +4450,12 @@ std::string Shell::dialog_title_hint() const
     }
     if (dialog_ == Dialog::Messages && session_.notices().empty()) {
         return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
+    }
+    if (dialog_ == Dialog::License) {
+        const std::string left = glyph_for(PadPrevTool);
+        const std::string right = glyph_for(PadNextTool);
+        return pad ? hint_join({"D-pad scrolls", hint_pair(left, right, "page"), hint_button(b, "back to About")})
+                   : "Arrows and Page Up/Down scroll. Esc goes back to About";
     }
     if (dialog_ == Dialog::Messages) {
         return pad ? hint_join({hint_button(a, "jumps"), hint_button(b, "closes"), "D-pad moves"})

@@ -52,10 +52,12 @@ lunduke_city_deps = [sdl3_dep, cairo_dep, pangocairo_dep, micropolis_dep, thread
 # source tree (a source path must not land in the release binary).
 city_data_dir = get_option('prefix') / get_option('datadir') / 'lunduke-city-2' / 'micropolis-assets'
 city_ui_dir = get_option('prefix') / get_option('datadir') / 'lunduke-city-2'
+city_doc_dir = get_option('prefix') / get_option('datadir') / 'doc' / 'lunduke-city-2'
 lunduke_city_cpp_args = [
   '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
   '-DCITY_DATA_DIR="' + city_data_dir + '"',
   '-DCITY_UI_DIR="' + city_ui_dir + '"',
+  '-DCITY_DOC_DIR="' + city_doc_dir + '"',
 ]
 if fontconfig_dep.found()
   lunduke_city_deps += fontconfig_dep
