@@ -214,6 +214,11 @@ private:
     // Drop a pending tap, end a drag, and forget every finger. A drag that
     // already placed tiles keeps them. Nothing here restores the map.
     void reset_touch_state();
+    // Ends a left-button minimap drag and its mouse capture.
+    void end_mini_drag();
+    // Escape's last step, and gamepad Back's: end any map stroke in progress
+    // and go back to Inspect, the same as a right-click.
+    void escape_to_inspect();
     std::string context_hint() const;
     std::string dialog_title_hint() const;
     std::string idle_message() const;
@@ -625,6 +630,9 @@ private:
     bool touch_pending_ = false;
     bool touch_armed_ = false;
     bool touch_minimap_ = false;
+    // Left button went down on the minimap and is still held: motion keeps
+    // recentring the view, even past the minimap's edge.
+    bool mini_drag_ = false;
     float touch_down_x_ = 0;
     float touch_down_y_ = 0;
     bool pan_pointer_ = false;

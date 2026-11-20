@@ -1350,7 +1350,11 @@ void Shell::loop()
         if (speed_ > 0 && !dialog_pauses()) {
             blink_drew_ = map_.tick(elapsed);
         }
-        map_.advance_fx(elapsed, speed_ > 0 && !dialog_pauses());
+        map_.advance_fx(elapsed, speed_ > 0 && !dialog_pauses(), speed_);
+        // A dialog or menu that opened mid-drag (a key, a notice) ends it.
+        if (mini_drag_ && (dialog_ != Dialog::None || menu_.open())) {
+            end_mini_drag();
+        }
         map_.advance_ui(elapsed);
         palette_.advance(elapsed);
         if (hover_id_ != tracked_hover_) {
@@ -2184,6 +2188,16 @@ void Shell::handle_event(const SDL_Event &event)
         if (event.motion.state == 0) {
             list_dragging_ = false;
         }
+        if (mini_drag_) {
+            if (dialog_ != Dialog::None || menu_.open() || (event.motion.state & SDL_BUTTON_LMASK) == 0) {
+                end_mini_drag();
+            } else {
+                // Recentre on the clamped point, ahead of the map hover below,
+                // so a drag across the map edge does not paint a footprint.
+                minimap_.drag(pointer_x_ - mini_x_, pointer_y_ - mini_y_, mini_w_, mini_h_);
+                break;
+            }
+        }
         if (menu_.open() && dialog_ == Dialog::None) {
             // Moving onto another title switches the menu. Leaving the
             // highlight on System after the pointer has moved is the stale
@@ -2289,6 +2303,8 @@ void Shell::handle_event(const SDL_Event &event)
         } else if (id == kPaletteId && dialog_ == Dialog::None) {
             press_palette(pointer_x_ - side_x_, pointer_y_ - pal_y_);
         } else if (id == kMinimapId && dialog_ == Dialog::None) {
+            mini_drag_ = true;
+            SDL_CaptureMouse(true);
             minimap_.press(pointer_x_ - mini_x_, pointer_y_ - mini_y_, mini_w_, mini_h_);
         } else {
             on_hotspot(id, pointer_x_, pointer_y_);
@@ -2310,6 +2326,7 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (event.button.button == SDL_BUTTON_LEFT) {
+            end_mini_drag();
             pointer_down_ = false;
             modal_swallow_mouse_ = false;
             slider_drag_ = 0;
@@ -2633,6 +2650,11 @@ void Shell::handle_event(const SDL_Event &event)
             key_cursor_ = false;
             break;
         }
+        // Last in the chain: nothing else wanted Escape, so drop the tool.
+        if (accel == AccelKey::Escape && dialog_ == Dialog::None && !menu_.open()) {
+            escape_to_inspect();
+            break;
+        }
         if (accel == AccelKey::Space) {
             toggle_pause();
             break;
@@ -2741,6 +2763,9 @@ void Shell::handle_event(const SDL_Event &event)
                 menu_.handle_key(AccelKey::Escape, 0, 0);
             } else if (dialog_ != Dialog::None) {
                 cancel_dialog();
+            } else if (pact == PadBack) {
+                // Back's last step matches Escape: end the stroke, Inspect.
+                escape_to_inspect();
             } else if (pad_dragging_ || pointer_on_map_) {
                 release_pad_drag();
             }
@@ -3049,7 +3074,7 @@ void Shell::handle_event(const SDL_Event &event)
                 touch_pan_y_ = pointer_y_;
                 clamp_scroll();
             } else if (event.type == SDL_EVENT_FINGER_MOTION && touch_minimap_) {
-                minimap_.press(pointer_x_ - mini_x_, pointer_y_ - mini_y_, mini_w_, mini_h_);
+                minimap_.drag(pointer_x_ - mini_x_, pointer_y_ - mini_y_, mini_w_, mini_h_);
             } else if (event.type == SDL_EVENT_FINGER_MOTION &&
                        (dialog_ == Dialog::Files || dialog_ == Dialog::Scenario || dialog_ == Dialog::Messages) &&
                        list_touch_y_ >= 0.0f) {

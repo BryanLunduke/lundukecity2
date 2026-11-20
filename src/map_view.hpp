@@ -94,9 +94,12 @@ public:
     // Look-and-feel effects, a look_fx::Effects value. Off draws them still.
     void set_effects(int effects);
     int effects() const { return effects_; }
-    // The ambient clock (fire smoke, and later water and clouds) runs only
-    // while the city runs, so a paused city keeps a still frame.
-    void advance_fx(int elapsed_ms, bool running);
+    // The ambient clock (fire smoke, water) runs only while the city runs,
+    // so a paused city keeps a still frame. speed (the shell's 1..3) scales
+    // the cloud shadow offset only (look_fx::cloud_speed_factor).
+    void advance_fx(int elapsed_ms, bool running, int speed = 2);
+    // Milliseconds of cloud drift: elapsed city time times the speed factor.
+    double cloud_ms() const { return cloud_ms_; }
     // A new ambient step is due and the last frame had something moving.
     bool fx_frame_due() const;
     // Feedback animation (the placement snap pulse) runs on wall time,
@@ -206,6 +209,9 @@ private:
     bool classic_fx() const;
     int effects_ = 0;
     int fx_ms_ = 0;
+    // Cloud shadow clock: elapsed time times the speed factor, so Fast clouds
+    // cross the map twice as quickly without speeding up the water.
+    double cloud_ms_ = 0.0;
     mutable int fx_drawn_step_ = -1;
     bool fx_animated_ = false;
     bool tile_at(double x, double y, int &tx, int &ty) const;

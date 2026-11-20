@@ -1456,13 +1456,15 @@ void MapView::set_effects(int effects)
     effects_ = look_fx::clamp_effects(effects);
 }
 
-void MapView::advance_fx(int elapsed_ms, bool running)
+void MapView::advance_fx(int elapsed_ms, bool running, int speed)
 {
     if (!running || !look_fx::motion_allowed(effects_) || elapsed_ms <= 0) {
         return;
     }
+    const int step = std::min(elapsed_ms, 500);
     // Wraps well before int overflow; every phase below is periodic in it.
-    fx_ms_ = (fx_ms_ + std::min(elapsed_ms, 500)) % (kFxStepMs * 360000);
+    fx_ms_ = (fx_ms_ + step) % (kFxStepMs * 360000);
+    cloud_ms_ = std::fmod(cloud_ms_ + step * look_fx::cloud_speed_factor(speed), kFxStepMs * 360000.0);
 }
 
 bool MapView::fx_frame_due() const
@@ -2091,9 +2093,11 @@ void MapView::draw_clouds(cairo_t *cr, const TileSpan &span)
         }
         cairo_surface_mark_dirty(cloud_pixels_);
     }
-    // Drift east-south-east at about 9 art pixels a second of city time,
-    // in whole pixels (whole dither cells on Classic, so it never crawls).
-    const double drift = (fx_ms_ / kFxStepMs) * static_cast<double>(kFxStepMs) * 0.009 * source / TileAtlas::kSize;
+    // Drift east-south-east at about 9 art pixels a second at Medium (scaled
+    // by the city speed on the cloud clock), in whole pixels (whole dither
+    // cells on Classic, so it never crawls). The offset still moves only on
+    // ambient steps, so the frame budget is unchanged.
+    const double drift = std::floor(cloud_ms_ / kFxStepMs) * kFxStepMs * 0.009 * source / TileAtlas::kSize;
     const int snap = classic ? 4 : 1;
     const int ox = (static_cast<int>(drift) / snap * snap) % period;
     const int oy = (static_cast<int>(drift * 0.35) / snap * snap) % period;

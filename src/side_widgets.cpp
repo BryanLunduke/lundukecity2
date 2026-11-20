@@ -311,6 +311,21 @@ bool MinimapView::press(double x, double y, int width, int height)
     return true;
 }
 
+bool MinimapView::drag(double x, double y, int width, int height)
+{
+    const AspectBox box = land_box(width, height);
+    if (box.width <= 1.0 || box.height <= 1.0) {
+        return false;
+    }
+    double fx = 0;
+    double fy = 0;
+    aspect_box_fraction_clamped(box, x, y, fx, fy);
+    if (on_jump) {
+        on_jump(fx, fy);
+    }
+    return true;
+}
+
 MinimapView::~MinimapView()
 {
     if (pixels_ != nullptr) {

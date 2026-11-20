@@ -30,6 +30,10 @@ public:
 
     void sync();
     bool press(double x, double y, int width, int height);
+    // A held drag: like press, but a point outside the land box clamps to
+    // its nearest edge, so dragging off the minimap keeps the view at the
+    // map edge instead of ignoring the motion.
+    bool drag(double x, double y, int width, int height);
     void draw(cairo_t *cr, int width, int height);
     // Pin the city to the top of a tall slot so the space under it can
     // carry the tool name. Clicks use the same box.

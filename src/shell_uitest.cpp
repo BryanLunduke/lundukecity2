@@ -1587,6 +1587,205 @@ void Shell::drive_ui_test()
             return;
         }
         set_speed(0);
+        ui_step_ = 40;
+        return;
+    }
+    case 40: {
+        // Minimap: a held left drag keeps recentring, clamps past the edge,
+        // and lets go on release or when a dialog opens.
+        {
+            const Hotspot *mini = find_hot(hot_, kMinimapId, 0);
+            if (mini == nullptr || dialog_ != Dialog::None || menu_.open()) {
+                fail("no minimap to drag");
+                return;
+            }
+            int ww = 1;
+            int wh = 1;
+            int pw = 1;
+            int ph = 1;
+            SDL_GetWindowSize(window_, &ww, &wh);
+            SDL_GetWindowSizeInPixels(window_, &pw, &ph);
+            auto mouse = [&](Uint32 type, double x, double y, bool held) {
+                SDL_Event event{};
+                event.type = type;
+                const float wx = static_cast<float>(x * ww / std::max(pw, 1));
+                const float wy = static_cast<float>(y * wh / std::max(ph, 1));
+                if (type == SDL_EVENT_MOUSE_MOTION) {
+                    event.motion.x = wx;
+                    event.motion.y = wy;
+                    event.motion.state = held ? SDL_BUTTON_LMASK : 0;
+                } else {
+                    event.button.button = SDL_BUTTON_LEFT;
+                    event.button.down = type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+                    event.button.clicks = 1;
+                    event.button.x = wx;
+                    event.button.y = wy;
+                }
+                handle_event(event);
+            };
+            const double cx = mini->x + mini->w * 0.5;
+            const double cy = mini->y + mini->h * 0.5;
+            const int tool_before = tool_index_;
+            mouse(SDL_EVENT_MOUSE_BUTTON_DOWN, cx, cy, true);
+            const double centre_x = scroll_x_;
+            const double centre_y = scroll_y_;
+            if (!mini_drag_) {
+                fail("pressing the minimap did not start a drag");
+                return;
+            }
+            // Right of centre, then past the right edge (clamps to the map's
+            // east edge, further than any inside point), then further still.
+            mouse(SDL_EVENT_MOUSE_MOTION, mini->x + mini->w * 0.6, cy, true);
+            const double inside_x = scroll_x_;
+            mouse(SDL_EVENT_MOUSE_MOTION, mini->x + mini->w + 300, cy, true);
+            const double edge_x = scroll_x_;
+            mouse(SDL_EVENT_MOUSE_MOTION, mini->x + mini->w + 900, cy, true);
+            if (!(inside_x > centre_x) || !(edge_x > inside_x) || scroll_x_ != edge_x || scroll_y_ != centre_y) {
+                fail("minimap drag scroll " + std::to_string(centre_x) + " -> " + std::to_string(inside_x) + " -> " +
+                     std::to_string(edge_x) + " -> " + std::to_string(scroll_x_));
+                return;
+            }
+            mouse(SDL_EVENT_MOUSE_MOTION, cx, mini->y + mini->h + 400, true);
+            const double below_y = scroll_y_;
+            if (!(below_y >= centre_y) || pointer_on_map_ || tool_index_ != tool_before) {
+                fail("dragging off the bottom of the minimap moved the map or drew");
+                return;
+            }
+            mouse(SDL_EVENT_MOUSE_BUTTON_UP, cx, mini->y + mini->h + 400, false);
+            if (mini_drag_) {
+                fail("releasing the button did not end the minimap drag");
+                return;
+            }
+            const double after_x = scroll_x_;
+            mouse(SDL_EVENT_MOUSE_MOTION, cx, cy, false);
+            if (scroll_x_ != after_x) {
+                fail("the minimap kept following after the button came up");
+                return;
+            }
+            mouse(SDL_EVENT_MOUSE_BUTTON_DOWN, cx, cy, true);
+            open_dialog(Dialog::About);
+            mouse(SDL_EVENT_MOUSE_MOTION, mini->x + 2, cy, true);
+            if (mini_drag_ || scroll_x_ != centre_x) {
+                fail("a dialog opening did not end the minimap drag");
+                return;
+            }
+            cancel_dialog();
+            mouse(SDL_EVENT_MOUSE_BUTTON_UP, cx, cy, false);
+        }
+        // Escape's last step (after rebind, dialog, menu, overlay, sticky
+        // notice, keyboard cursor) drops the tool to Inspect, like a
+        // right-click; gamepad Back does the same. B alone does not.
+        {
+            const int inspect = kToolCount - 1;
+            const int build_tool = 1;
+            if (dialog_ != Dialog::None || menu_.open()) {
+                fail("Escape check started under a dialog or menu");
+                return;
+            }
+            if (notice_sticky_) {
+                dismiss_background_notice();
+            }
+            const bool overlay_was = overlay_on_;
+            overlay_on_ = false;
+            select_tool(build_tool);
+            key_cursor_ = true;
+            key_down(SDLK_ESCAPE);
+            if (key_cursor_ || tool_index_ != build_tool) {
+                fail("Escape should hide the keyboard cursor first and keep the tool");
+                return;
+            }
+            key_down(SDLK_ESCAPE);
+            if (tool_index_ != inspect) {
+                fail("Escape did not go back to Inspect (tool " + std::to_string(tool_index_) + ")");
+                return;
+            }
+            select_tool(build_tool);
+            menu_.open_first();
+            key_down(SDLK_ESCAPE);
+            if (menu_.open() || tool_index_ != build_tool) {
+                fail("Escape with a menu open should close the menu and keep the tool");
+                return;
+            }
+            // A mouse stroke in progress ends with the tool.
+            const Hotspot *map_spot = find_hot(hot_, kMapId, 0);
+            if (map_spot == nullptr) {
+                fail("no map hotspot for the Escape stroke check");
+                return;
+            }
+            {
+                int ww = 1;
+                int wh = 1;
+                int pw = 1;
+                int ph = 1;
+                SDL_GetWindowSize(window_, &ww, &wh);
+                SDL_GetWindowSizeInPixels(window_, &pw, &ph);
+                SDL_Event press{};
+                press.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+                press.button.button = SDL_BUTTON_LEFT;
+                press.button.down = true;
+                press.button.clicks = 1;
+                press.button.x = static_cast<float>((map_spot->x + map_spot->w * 0.3) * ww / std::max(pw, 1));
+                press.button.y = static_cast<float>((map_spot->y + map_spot->h * 0.6) * wh / std::max(ph, 1));
+                handle_event(press);
+                if (!pointer_on_map_) {
+                    fail("the map press for the Escape check did not start a stroke");
+                    return;
+                }
+                key_down(SDLK_ESCAPE);
+                if (pointer_on_map_ || map_.dragging() || tool_index_ != inspect) {
+                    fail("Escape did not end the map stroke and go to Inspect");
+                    return;
+                }
+                press.type = SDL_EVENT_MOUSE_BUTTON_UP;
+                press.button.down = false;
+                handle_event(press);
+            }
+            select_tool(build_tool);
+            {
+                SDL_Event b{};
+                b.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                b.gbutton.button = SDL_GAMEPAD_BUTTON_EAST;
+                b.gbutton.down = true;
+                handle_event(b);
+                if (tool_index_ != build_tool) {
+                    fail("B on the map changed the tool");
+                    return;
+                }
+                SDL_Event back{};
+                back.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                back.gbutton.button = SDL_GAMEPAD_BUTTON_BACK;
+                back.gbutton.down = true;
+                handle_event(back);
+                if (tool_index_ != inspect) {
+                    fail("gamepad Back did not go back to Inspect");
+                    return;
+                }
+            }
+            gamepad_nav_ = false;
+            overlay_on_ = overlay_was;
+        }
+        // Cloud shadows: their own clock, scaled by the speed (Slow 0.75,
+        // Medium 1, Fast 2); the shared ambient clock is not.
+        {
+            const int effects_were = map_.effects();
+            map_.set_effects(look_fx::EffectsFull);
+            double moved[4] = {0, 0, 0, 0};
+            for (int speed = 1; speed <= 3; ++speed) {
+                const double before = map_.cloud_ms();
+                map_.advance_fx(400, true, speed);
+                moved[speed] = map_.cloud_ms() - before;
+            }
+            const double before_paused = map_.cloud_ms();
+            map_.advance_fx(400, false, 3);
+            moved[0] = map_.cloud_ms() - before_paused;
+            map_.set_effects(effects_were);
+            if (std::abs(moved[1] - 300.0) > 0.01 || std::abs(moved[2] - 400.0) > 0.01 ||
+                std::abs(moved[3] - 800.0) > 0.01 || moved[0] != 0.0) {
+                fail("cloud clock moved " + std::to_string(moved[1]) + "/" + std::to_string(moved[2]) + "/" +
+                     std::to_string(moved[3]) + " (paused " + std::to_string(moved[0]) + ") for 400 ms");
+                return;
+            }
+        }
         // The road was a control check. The quit test still expects a clean city.
         session_.set_dirty(false);
         welcome_gate_ = true;
