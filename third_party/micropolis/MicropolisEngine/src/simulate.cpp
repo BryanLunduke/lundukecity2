@@ -1473,6 +1473,8 @@ void Micropolis::doFire(const Position &pos)
     static const short DX[4] = { -1,  0,  1,  0 };
     static const short DY[4] = {  0, -1,  0,  1 };
 
+    const bool fromRiot = cityEvents.riotFire[pos.posX][pos.posY] != 0;
+
     // Try to set neighbouring tiles on fire as well
     for (short z = 0; z < 4; z++) {
 
@@ -1498,6 +1500,9 @@ void Micropolis::doFire(const Position &pos)
                 }
 
                 map[xTem][yTem] = randomFire();
+                if (fromRiot) {
+                    cityEvents.riotFire[xTem][yTem] = 1;
+                }
             }
         }
     }
@@ -1519,6 +1524,7 @@ void Micropolis::doFire(const Position &pos)
     // Decide whether to put out the fire.
     if (getRandom(rate) == 0) {
         map[pos.posX][pos.posY] = randomRubble();
+        cityEvents.riotFire[pos.posX][pos.posY] = 0;
     }
 }
 

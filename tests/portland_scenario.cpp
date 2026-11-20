@@ -4,8 +4,8 @@
 
 // The Portland scenario: its catalog entry and map, the riot that breaks
 // out downtown in August 2020 (fires on downtown shops, crime up city-wide),
-// and the goal: the riot over, no fire burning anywhere and average crime
-// below PORTLAND_CRIME_GOAL at the deadline.
+// and the goal: the riot over, no riot fire still burning and average crime
+// below PORTLAND_CRIME_GOAL at the deadline. Ordinary random fires do not count.
 
 #include "city_events.hpp"
 #include "city_session.hpp"
@@ -16,6 +16,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -86,7 +87,7 @@ int main()
         return fail(1, "Portland is not the eleventh scenario in the catalog");
     }
     if (std::string(def.goal).find("below " + std::to_string(PORTLAND_CRIME_GOAL) + " ") == std::string::npos ||
-        std::string(def.goal).find("fire") == std::string::npos) {
+        std::string(def.goal).find("riot fire") == std::string::npos) {
         return fail(2, std::string("the goal text does not match PORTLAND_CRIME_GOAL: ") + def.goal);
     }
     if (accepted_sidecar_score_type(SC_PORTLAND, SC_PORTLAND) != SC_PORTLAND ||
@@ -179,9 +180,9 @@ int main()
         return fail(12, "the riot set no fires downtown");
     }
     if (session.scenario_meter_short().find("Riot") == std::string::npos ||
-        session.scenario_meter_short().find("fire") == std::string::npos ||
+        session.scenario_meter_short().find("riot fire") == std::string::npos ||
         session.scenario_meter().find("riot under way") == std::string::npos ||
-        session.scenario_meter().find(" burning") == std::string::npos) {
+        session.scenario_meter().find("riot fire") == std::string::npos) {
         return fail(13, "the goal meter does not show the riot and its fires: " + session.scenario_meter_short());
     }
     // The engine asks once, and only in Portland.
@@ -227,7 +228,7 @@ int main()
             return fail(18, "a second riot started while one was under way");
         }
 
-        // The goal: the riot over, no fire anywhere, crime below the goal.
+        // The goal: the riot over, no riot fire still burning, crime below the goal.
         sim.crimeAverage = 0;
         sim.doScenarioScore(SC_PORTLAND);
         if (heard.lost != 1 || heard.won != 0) {
@@ -235,29 +236,67 @@ int main()
         }
         sim.cityEvents.riotSteps = 0;
         clear_fires(sim);
-        sim.map[100][60] = FIRE | ANIMBIT;
+        std::memset(sim.cityEvents.riotFire, 0, sizeof(sim.cityEvents.riotFire));
+        // A riot fire still burning blocks the win.
+        sim.map[50][60] = FIRE | ANIMBIT;
+        sim.markRiotFire(50, 60);
         sim.doScenarioScore(SC_PORTLAND);
         if (heard.lost != 2 || heard.won != 0) {
-            return fail(20, "Portland was won with a fire still burning");
+            return fail(20, "Portland was won with a riot fire still burning");
         }
+        // An ordinary random fire does not.
+        sim.map[50][60] = DIRT;
+        sim.cityEvents.riotFire[50][60] = 0;
+        sim.map[100][60] = FIRE | ANIMBIT;
+        sim.crimeAverage = PORTLAND_CRIME_GOAL - 1;
+        sim.doScenarioScore(SC_PORTLAND);
+        if (heard.lost != 2 || heard.won != 1) {
+            return fail(21, "Portland was lost because of a random fire that was not from the riot");
+        }
+        // Crime at the goal, not below it, still loses (clear the random fire).
         sim.map[100][60] = DIRT;
         sim.crimeAverage = PORTLAND_CRIME_GOAL;
         sim.doScenarioScore(SC_PORTLAND);
-        if (heard.lost != 3 || heard.won != 0) {
-            return fail(21, "Portland was won with crime at the goal, not below it");
+        if (heard.lost != 3 || heard.won != 1) {
+            return fail(22, "Portland was won with crime at the goal, not below it");
         }
         sim.crimeAverage = PORTLAND_CRIME_GOAL - 1;
         sim.doScenarioScore(SC_PORTLAND);
-        if (heard.won != 1) {
-            return fail(22, "Portland was lost with the riot over, the fires out and crime below the goal");
+        if (heard.won != 2) {
+            return fail(23, "Portland was lost with the riot over, the riot fires out and crime below the goal");
         }
+
+        // A save keeps the riot-fire record after the riot itself has ended.
+        const std::string path = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") +
+                                 "/portland_riot_fire.cty";
+        sim.map[50][60] = FIRE | ANIMBIT;
+        sim.markRiotFire(50, 60);
+        if (!sim.saveFile(path.c_str())) {
+            return fail(24, "the Portland city did not save");
+        }
+        Micropolis back;
+        back.resourceDir = LUNDUKE_CITY_ASSET_DIR "/../../data/scenarios";
+        if (!back.loadFile(path.c_str()) || back.cityEvents.riotSteps != 0 ||
+            back.cityEvents.riotFire[50][60] == 0 || back.riotFiresBurning() == 0) {
+            return fail(25, "a Portland save lost a riot fire still burning");
+        }
+        Heard after;
+        listen(back, after);
+        back.crimeAverage = 0;
+        back.cityEvents.riotSteps = 0;
+        back.doScenarioScore(SC_PORTLAND);
+        if (after.lost != 1 || after.won != 0) {
+            return fail(26, "a reloaded riot fire did not block the win");
+        }
+        std::remove(path.c_str());
     }
 
-    // A city with no fires reads as fires out on the meter.
+    // A city with no riot fires reads as riot fires out on the meter.
     CitySession calm;
-    if (!calm.load_scenario(SC_PORTLAND) || calm.scenario_meter_short().find("Fires out") == std::string::npos ||
-        calm.scenario_meter().find("all fires out") == std::string::npos) {
-        return fail(23, "the meter does not say the fires are out");
+    if (!calm.load_scenario(SC_PORTLAND) ||
+        calm.scenario_meter_short().find("Riot fires out") == std::string::npos ||
+        calm.scenario_meter().find("all riot fires out") == std::string::npos) {
+        return fail(27, "the meter does not say the riot fires are out");
     }
     std::printf("portland ok: riot after %lld weeks, %d fires downtown\n", broke, fires);
     return 0;

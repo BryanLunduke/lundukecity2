@@ -736,9 +736,10 @@ static bool read_marina_dock(Micropolis *sim, const unsigned char *bytes, std::s
 // City 2 lasting disasters, magic "LCD1", appended after LCM1 (or LCW1
 // when there is no dock trailer). Little-endian:
 //   char magic[4] = { 'L','C','D','1' }
-//   uint16 version = 2
+//   uint16 version = 3
 //   uint16 payload bytes (76 + 2 * zoneCount, plus WORLD_W * WORLD_H
-//                         when zoneCount > 0)
+//                         when zoneCount > 0, plus kRiotFireBytes on
+//                         version 3)
 //   int32 x 19: riotPeak, riotSteps, riotTotal, zoneCount, zoneClock,
 //               lionActive, lionX, lionY, lionDir, lionSteps, lionMealClock,
 //               lionEaten, lionHomeX, lionHomeY, lionRng, prisonCrime,
@@ -746,12 +747,57 @@ static bool read_marina_dock(Micropolis *sim, const unsigned char *bytes, std::s
 //   zoneCount times: uint8 x, uint8 y of the block's first tile
 //   when zoneCount > 0: zoneTile, one byte per tile, column by column
 //                       (x outer, y inner)
+//   version 3: packed riotFire bits, bit (x * WORLD_H + y),
+//              kRiotFireBytes long
 // Version 1 (never released) kept 8x8 police-map blocks; it loads as a
-// city with nothing active. A city with nothing active omits the trailer,
-// so its file is the same as before. Older builds skip it: they only look
-// for LCM1 at that spot.
+// city with nothing active. Version 2 is the same fields without the
+// riot-fire bits. A city with nothing active (and no riot fires, and no
+// San Diego lion record) omits the trailer, so its file is the same as
+// before. Older builds skip it: they only look for LCM1 at that spot.
 static const char kEventsMagic[4] = {'L', 'C', 'D', '1'};
 static const unsigned int kEventsFields = 19;
+static const unsigned int kEventsVersion = 3;
+static const unsigned int kRiotFireBytes = (WORLD_W * WORLD_H + 7u) / 8u;
+
+static unsigned riot_fire_bit(int x, int y)
+{
+    return (unsigned)x * (unsigned)WORLD_H + (unsigned)y;
+}
+
+static bool tile_is_fire(const Micropolis *sim, int x, int y)
+{
+    const MapTile tile = sim->map[x][y] & LOMASK;
+    return tile >= FIREBASE && tile <= LASTFIRE;
+}
+
+static void pack_riot_fires(const Micropolis *sim, unsigned char *bits)
+{
+    std::memset(bits, 0, kRiotFireBytes);
+    const CityEvents &e = sim->cityEvents;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            if (e.riotFire[x][y] == 0 || !tile_is_fire(sim, x, y)) {
+                continue;
+            }
+            const unsigned i = riot_fire_bit(x, y);
+            bits[i / 8] = (unsigned char)(bits[i / 8] | (unsigned char)(1u << (i % 8)));
+        }
+    }
+}
+
+static void unpack_riot_fires(CityEvents &e, const unsigned char *bits)
+{
+    std::memset(e.riotFire, 0, sizeof(e.riotFire));
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const unsigned i = riot_fire_bit(x, y);
+            if ((bits[i / 8] & (unsigned char)(1u << (i % 8))) != 0) {
+                e.riotFire[x][y] = 1;
+            }
+        }
+    }
+}
+
 
 static void write_le_i32(unsigned char *out, int value)
 {
@@ -779,8 +825,10 @@ static bool write_city_events(FILE *f, const Micropolis *sim)
     const CityEvents &e = sim->cityEvents;
     // The San Diego scenario's goal asks whether the police caught the lion
     // (lionSteps), so a San Diego city keeps the trailer once it got out.
+    // Portland's goal asks whether riot fires are still burning, so a city
+    // with those flags set also keeps the trailer after the riot itself ends.
     const bool san_diego_lion = sim->scenario == SC_SAN_DIEGO && e.lionSteps > 0;
-    if (!events_active(e) && !san_diego_lion) {
+    if (!events_active(e) && !san_diego_lion && sim->riotFiresBurning() == 0) {
         return true;
     }
     const int zones = e.zoneCount < 0 ? 0 : (e.zoneCount > CityEvents::kMaxZoneBlocks ? CityEvents::kMaxZoneBlocks
@@ -790,12 +838,12 @@ static bool write_city_events(FILE *f, const Micropolis *sim)
                                        e.lionMealClock, e.lionEaten, e.lionHomeX,   e.lionHomeY,   (int)e.lionRng,
                                        e.prisonCrime, e.prisonX,   e.prisonY,       e.prisonSteps};
     const unsigned int tiles = zones > 0 ? (unsigned int)(WORLD_W * WORLD_H) : 0u;
-    const unsigned int payload = kEventsFields * 4 + (unsigned int)zones * 2 + tiles;
+    const unsigned int payload = kEventsFields * 4 + (unsigned int)zones * 2 + tiles + kRiotFireBytes;
     std::vector<unsigned char> bytes(8 + payload);
     for (int i = 0; i < 4; ++i) {
         bytes[i] = (unsigned char)kEventsMagic[i];
     }
-    write_le_u16(bytes.data() + 4, 2);
+    write_le_u16(bytes.data() + 4, kEventsVersion);
     write_le_u16(bytes.data() + 6, payload);
     for (unsigned int i = 0; i < kEventsFields; ++i) {
         write_le_i32(bytes.data() + 8 + i * 4, fields[i]);
@@ -812,6 +860,7 @@ static bool write_city_events(FILE *f, const Micropolis *sim)
             }
         }
     }
+    pack_riot_fires(sim, bytes.data() + 8 + kEventsFields * 4 + zones * 2 + tiles);
     return fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
 }
 
@@ -831,8 +880,10 @@ static bool read_city_events(Micropolis *sim, const unsigned char *bytes, std::s
         return false;
     }
     // Version 1 (8x8 police-map blocks) was never released; a file with it
-    // loads as a city with no disasters running.
-    if (read_le_u16(bytes + 4) != 2) {
+    // loads as a city with no disasters running. Version 2 is the events
+    // without the riot-fire bits; version 3 adds them.
+    const unsigned int version = read_le_u16(bytes + 4);
+    if (version != 2 && version != 3) {
         return false;
     }
     const unsigned int payload = read_le_u16(bytes + 6);
@@ -845,8 +896,9 @@ static bool read_city_events(Micropolis *sim, const unsigned char *bytes, std::s
     }
     const int zones = f[3];
     const unsigned int tiles = zones > 0 ? (unsigned int)(WORLD_W * WORLD_H) : 0u;
+    const unsigned int fire_bytes = version >= 3 ? kRiotFireBytes : 0u;
     if (zones < 0 || zones > CityEvents::kMaxZoneBlocks ||
-        payload < kEventsFields * 4 + (unsigned int)zones * 2 + tiles) {
+        payload < kEventsFields * 4 + (unsigned int)zones * 2 + tiles + fire_bytes) {
         return false;
     }
     CityEvents e;
@@ -897,6 +949,9 @@ static bool read_city_events(Micropolis *sim, const unsigned char *bytes, std::s
     }
     if (e.lionX < 0 || e.lionX >= WORLD_W * 16 || e.lionY < 0 || e.lionY >= WORLD_H * 16) {
         e.lionActive = 0;
+    }
+    if (fire_bytes > 0) {
+        unpack_riot_fires(e, bytes + 8 + kEventsFields * 4 + zones * 2 + tiles);
     }
     sim->cityEvents = e;
     return true;

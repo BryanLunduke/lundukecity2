@@ -1157,6 +1157,10 @@ struct CityEvents {
     int prisonX;
     int prisonY;
     int prisonSteps;
+    // Fires the riot started, or that spread from one. A 1 means this tile's
+    // fire counts for the Portland "riot fires out" goal. Cleared when the
+    // fire goes out. Saved in the LCD1 trailer (version 3).
+    unsigned char riotFire[WORLD_W][WORLD_H];
     // Not saved: the city time the step logic last ran.
     long lastStepTime;
 };
@@ -1998,6 +2002,10 @@ public:
      * at (x, y) on fire. Returns true when a fire started.
      */
     bool eventFireAt(int x, int y);
+    // Lunduke City 2: mark, count and forget fires that started in a riot.
+    void markRiotFire(int x, int y);
+    void pruneRiotFires();
+    int riotFiresBurning() const;
 
     /**
      * City 2 Lion Escape: the residential zone or house nearest (x, y),

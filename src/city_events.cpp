@@ -160,6 +160,7 @@ bool riot_on(Micropolis *sim, std::vector<std::pair<int, int>> pool, std::vector
             const int fx = zone.first + kRing[(start + k) % 8][0];
             const int fy = zone.second + kRing[(start + k) % 8][1];
             if (sim->eventFireAt(fx, fy)) {
+                sim->markRiotFire(fx, fy);
                 if (lit == 0) {
                     first_x = fx;
                     first_y = fy;

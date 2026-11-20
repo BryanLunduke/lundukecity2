@@ -192,40 +192,27 @@ std::string sf1962_escape_long(const Micropolis &sim)
     return sim.cityEvents.prisonSteps > 0 ? "Alcatraz escapees at large → round them up" : "no escapees at large";
 }
 
-// Tiles on fire anywhere on the map.
-int burning_tiles(const Micropolis &sim)
-{
-    int count = 0;
-    for (int x = 0; x < WORLD_W; ++x) {
-        for (int y = 0; y < WORLD_H; ++y) {
-            const int tile = sim.map[x][y] & LOMASK;
-            if (tile >= FIREBASE && tile <= LASTFIRE) {
-                ++count;
-            }
-        }
-    }
-    return count;
-}
-
-// The Portland meter's riot and fire part.
+// The Portland meter's riot and fire part. Only fires the riot started
+// (or that spread from one) count.
 std::string portland_fires_short(const Micropolis &sim)
 {
-    const int fires = burning_tiles(sim);
+    const int fires = sim.riotFiresBurning();
     std::string text = sim.cityEvents.riotSteps > 0 ? "Riot · " : "";
     if (fires > 0) {
-        return text + std::to_string(fires) + (fires == 1 ? " fire" : " fires");
+        return text + std::to_string(fires) + (fires == 1 ? " riot fire" : " riot fires");
     }
-    return text + "Fires out";
+    return text + "Riot fires out";
 }
 
 std::string portland_fires_long(const Micropolis &sim)
 {
-    const int fires = burning_tiles(sim);
+    const int fires = sim.riotFiresBurning();
     std::string text = sim.cityEvents.riotSteps > 0 ? "riot under way, " : "";
     if (fires > 0) {
-        return text + std::to_string(fires) + (fires == 1 ? " fire burning" : " fires burning") + " → put them out";
+        return text + std::to_string(fires) + (fires == 1 ? " riot fire burning" : " riot fires burning") +
+               " → put them out";
     }
-    return text + "all fires out";
+    return text + "all riot fires out";
 }
 
 // The San Diego meter's lion part.
@@ -324,7 +311,7 @@ const ScenarioEntry kScenarios[] = {
     // Portland (data/scenarios/portland.cty, built by tools/portland_map.cpp).
     // It opens in mid-July 2020; in August a riot breaks out downtown.
     {{SC_PORTLAND, "Portland", 2020, "A riot sets downtown Portland on fire.",
-      "Put out every fire and bring average crime below " PORTLAND_CRIME_GOAL_TEXT " by summer 2021.",
+      "Put out the riot fires and bring average crime below " PORTLAND_CRIME_GOAL_TEXT " by summer 2021.",
       PORTLAND_YEARS},
      "portland.cty", true},
     // San Diego (data/scenarios/sandiego.cty, built by tools/sandiego_map.cpp).

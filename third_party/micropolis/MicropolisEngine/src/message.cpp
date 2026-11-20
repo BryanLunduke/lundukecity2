@@ -321,24 +321,6 @@ void Micropolis::checkGrowth()
 }
 
 
-/**
- * Lunduke City 2: is any tile of the map on fire right now? Counted from
- * the map itself (firePop is a census that may be part-way through a scan
- * when the scenario is judged).
- */
-static bool fireBurning(const Micropolis *sim)
-{
-    for (int x = 0; x < WORLD_W; x++) {
-        for (int y = 0; y < WORLD_H; y++) {
-            const MapTile tile = sim->map[x][y] & LOMASK;
-            if (tile >= FIREBASE && tile <= LASTFIRE) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 
 /**
  * Compute score for each scenario
@@ -430,8 +412,9 @@ void Micropolis::doScenarioScore(Scenario type)
     }
 
     case SC_PORTLAND:
-        // Lunduke City 2: the riot over, every fire out, crime down.
-        if (cityEvents.riotSteps <= 0 && !fireBurning(this) && crimeAverage < PORTLAND_CRIME_GOAL) {
+        // Lunduke City 2: the riot over, every riot fire out, crime down.
+        // Ordinary random fires do not count.
+        if (cityEvents.riotSteps <= 0 && riotFiresBurning() == 0 && crimeAverage < PORTLAND_CRIME_GOAL) {
             z = MESSAGE_SCENARIO_WON;
         }
         break;
