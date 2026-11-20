@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 The Lunduke City authors
+# Copyright (C) 2026 Bryan Lunduke
 # See COPYING and NOTICE.
 
 """Spooky look. The SVGA atlas, then a night ground, deep blue water, bare woods, and the graveyard.

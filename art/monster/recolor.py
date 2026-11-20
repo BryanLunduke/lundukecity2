@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 The Lunduke City authors
+# Copyright (C) 2026 Bryan Lunduke
 # See COPYING and NOTICE.
 
 """Godzilla colours for the monster sprite (obj5-0 to obj5-15).
