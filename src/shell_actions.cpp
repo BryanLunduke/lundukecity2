@@ -18,6 +18,7 @@
 #include "messages.hpp"
 #include "present.hpp"
 #include "special_buildings.hpp"
+#include "terrain_paint.hpp"
 #include "tile_atlas.hpp"
 #include "placement_hint.hpp"
 #include "tools.hpp"
@@ -88,7 +89,9 @@ bool ends_with_ci(const std::string &text, const char *suffix)
 
 bool Shell::dialog_pauses() const
 {
-    if (tax_pause_hold_) {
+    // The terrain editor stands in for the New City page: the city behind it
+    // stays paused.
+    if (tax_pause_hold_ || terrain_edit_) {
         return true;
     }
     switch (dialog_) {
@@ -496,6 +499,9 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         // Generate both use it.
         auto_seed_ = roll_city_seed(static_cast<unsigned>(std::time(nullptr)), static_cast<unsigned>(SDL_GetTicks()));
         terrain_key_ = 0;
+        // A painted map belongs to this visit to the page only.
+        pending_terrain_.clear();
+        terrain_confirm_id_ = 0;
         new_page_ = 0;
         new_level_ = CitySession::kLevelEasy;
         new_island_ = CitySession::kTerrainDefault;
@@ -542,7 +548,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         select_save_name();
     } else if (dialog == Dialog::FileDelete) {
         focus_id_ = kCancel;
-    } else if (dialog == Dialog::QuitConfirm || dialog == Dialog::BulldozeConfirm) {
+    } else if (dialog == Dialog::QuitConfirm || dialog == Dialog::BulldozeConfirm || dialog == Dialog::TerrainDiscard) {
         // Cancel is the focused button, so a stray A does not leave the game
         // or knock down the building.
         focus_id_ = kCancel;
@@ -745,6 +751,12 @@ void Shell::select_tool(int index)
 
 void Shell::cycle_tool(int delta)
 {
+    if (terrain_edit_) {
+        // The shoulders step through the terrain pieces instead.
+        const int count = terrain_paint::kPieceCount;
+        select_terrain_piece(((terrain_piece_ + delta) % count + count) % count);
+        return;
+    }
     select_tool(tool_index_ + delta);
 }
 
@@ -2456,6 +2468,14 @@ void Shell::on_dialog_button(int id)
         open_dialog(Dialog::QuitConfirm);
         return;
     }
+    if (dialog_ == Dialog::TerrainDiscard) {
+        // Close the question first: the editor is under it either way.
+        close_dialog();
+        if (id == kDiscard) {
+            close_terrain_editor(false);
+        }
+        return;
+    }
     if (dialog_ == Dialog::BulldozeConfirm) {
         const int x = bulldoze_x_;
         const int y = bulldoze_y_;
@@ -2570,6 +2590,10 @@ void Shell::on_dialog_button(int id)
             dialog_error_.clear();
             return;
         }
+        if (id == kEditTerrain && new_page_ >= 1) {
+            open_terrain_editor();
+            return;
+        }
         if (id == kNext && new_page_ == 0) {
             if (!CitySession::name_is_usable(field_a_)) {
                 dialog_error_ = "Enter a name that is not only spaces.";
@@ -2600,6 +2624,9 @@ void Shell::on_dialog_button(int id)
             spec.rivers = new_rivers_;
             spec.lakes = new_lakes_;
             spec.trees = new_trees_;
+            if (const std::vector<unsigned short> *painted = pending_terrain_for_page()) {
+                spec.terrain = *painted;
+            }
     const bool from_welcome = welcome_gate_;
     welcome_gate_ = false;
     city_chosen_ = true;
@@ -2900,6 +2927,14 @@ void Shell::on_dialog_button(int id)
 
 void Shell::on_hotspot(int id, double x, double y)
 {
+    if (on_terrain_hotspot(id)) {
+        return;
+    }
+    if (dialog_ == Dialog::NewCity && id != terrain_confirm_id_) {
+        // A warning that a control would drop the painted map holds only
+        // until something else is pressed.
+        terrain_confirm_id_ = 0;
+    }
     if (dialog_ == Dialog::None && !menu_.open()) {
         if (id >= kSpeedPill && id < kSpeedPill + 4) {
             static const Action speeds[4] = {Action::SetPause, Action::Slow, Action::Medium, Action::Fast};
@@ -3101,8 +3136,10 @@ void Shell::on_hotspot(int id, double x, double y)
         return;
     }
     if (id == kNewTerrain && dialog_ == Dialog::NewCity) {
-        reroll_terrain();
         focus_id_ = id;
+        if (confirm_drop_terrain(id)) {
+            reroll_terrain();
+        }
         return;
     }
     if (id >= kSlider && id < kSlider + 8) {
@@ -3148,6 +3185,21 @@ void Shell::on_hotspot(int id, double x, double y)
         const int packed = id - kChoice;
         const int group = packed / 10;
         const int option = packed % 10;
+        if (group >= 1 && group <= 4 && dialog_ == Dialog::NewCity) {
+            // A land knob that changes makes new terrain; a painted map
+            // would be dropped, so that asks first.
+            static const int values[4][3] = {
+                {CitySession::kTerrainDefault, CitySession::kTerrainOff, CitySession::kIslandAlways},
+                {CitySession::kTerrainDefault, CitySession::kTerrainOff, CitySession::kRiversCurvy},
+                {CitySession::kTerrainDefault, CitySession::kTerrainOff, CitySession::kLakesMany},
+                {CitySession::kTerrainDefault, CitySession::kTerrainOff, CitySession::kTreesWooded},
+            };
+            const int now[4] = {new_island_, new_rivers_, new_lakes_, new_trees_};
+            focus_id_ = id;
+            if (option >= 0 && option <= 2 && values[group - 1][option] != now[group - 1] && !confirm_drop_terrain(id)) {
+                return;
+            }
+        }
         if (group == 0) {
             new_level_ = option;
         } else if (group == 1) {
@@ -3543,7 +3595,7 @@ bool Shell::nudge_new_city_column(int direction)
     const int option = choice ? packed % 10 : -1;
     const bool choice_cell = choice && group >= 0 && group <= 4 && option >= 0 && option <= 2;
     const bool land = choice_cell || focus_id_ == kFieldSeed || focus_id_ == kNewTerrain || focus_id_ == kBack ||
-                      focus_id_ == kGenerate;
+                      focus_id_ == kGenerate || focus_id_ == kEditTerrain;
     if (!land) {
         return false;
     }
@@ -4816,6 +4868,25 @@ int shell_map_word(int x, int y, const void *ctx)
 void Shell::refresh_place_cue()
 {
     MapCue cue;
+    if (terrain_edit_) {
+        // The brush square under the pointer, named for the piece it lays.
+        int hx = 0;
+        int hy = 0;
+        if (dialog_ == Dialog::None && map_.hover_tile(hx, hy)) {
+            cue.active = true;
+            cue.mark = 1;
+            cue.left = hx - terrain_brush_ / 2;
+            cue.top = hy - terrain_brush_ / 2;
+            cue.width = terrain_brush_;
+            cue.height = terrain_brush_;
+            if (slate_ || handheld_) {
+                cue.tag = std::string(terrain_paint::piece_name(static_cast<terrain_paint::Piece>(terrain_piece_))) +
+                          (terrain_brush_ >= terrain_paint::kBrushLarge ? " \u00b7 3x3" : " \u00b7 1x1");
+            }
+        }
+        map_.set_cue(cue);
+        return;
+    }
     if (receipt_on_) {
         cue.receipt = true;
         cue.receipt_ok = receipt_ok_;

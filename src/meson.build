@@ -14,6 +14,7 @@ lunduke_city_src = files(
   'special_buildings.cpp',
   'shell_actions.cpp',
   'shell_draw.cpp',
+  'shell_terrain.cpp',
   'shell_uitest.cpp',
   'scenario_preview.cpp',
   'side_widgets.cpp',

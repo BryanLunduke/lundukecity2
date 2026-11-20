@@ -33,7 +33,9 @@ using ui_scale::look_to_setting;
 
 #include <cairo.h>
 
+#include <array>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -70,7 +72,9 @@ enum class Dialog : int {
     FileRename,
     FileDelete,
     Bindings,
-    BulldozeConfirm
+    BulldozeConfirm,
+    // Leaving the terrain editor with changes: keep editing or discard.
+    TerrainDiscard
 };
 
 enum class AfterSave : int { Nothing = 0, NewCity, Load, Scenario, Quit, OpenPath, FilesLoad, Recover };
@@ -209,6 +213,31 @@ private:
     void finish_year_and_close(bool jump);
     void toggle_overlay(CitySession::MapLayer layer);
     void reroll_terrain();
+    // Terrain editor (New City > Edit Terrain). The editor paints a copy of
+    // the pending map on a session of its own that never runs; the city in
+    // session_ is untouched and stays paused until a city is generated.
+    // The seed and land knobs on the settings page, and whether they parse.
+    bool new_city_land(std::array<int, 5> &land) const;
+    // The painted map, when it belongs to the land the page shows now.
+    const std::vector<unsigned short> *pending_terrain_for_page() const;
+    void open_terrain_editor();
+    // apply: Map Complete keeps the painted map for the settings page.
+    void close_terrain_editor(bool apply);
+    // Cancel, Escape, gamepad B: leave at once, or ask first when the map
+    // was changed since the editor opened.
+    void cancel_terrain_editor();
+    // New terrain or another land knob would replace a painted map. The
+    // first press warns and returns false; pressing the same control again
+    // drops the painted map and returns true.
+    bool confirm_drop_terrain(int id);
+    void paint_terrain_line(int x0, int y0, int x1, int y1);
+    void select_terrain_piece(int index);
+    void set_terrain_brush(int size);
+    bool on_terrain_hotspot(int id);
+    void draw_terrain_palette(cairo_t *cr);
+    void draw_terrain_band(cairo_t *cr);
+    void draw_terrain_status(cairo_t *cr, const std::string &hint);
+    std::string terrain_hint() const;
     void jump_notice(int index);
     void arm_touch_tool();
     // Drop a pending tap, end a drag, and forget every finger. A drag that
@@ -643,6 +672,26 @@ private:
     double pan_scroll_x_ = 0;
     double pan_scroll_y_ = 0;
     int terrain_key_ = 0;
+    bool terrain_edit_ = false;
+    std::unique_ptr<CitySession> terrain_session_;
+    // The map being painted, in rows (y * kWorldW + x).
+    std::vector<unsigned short> terrain_work_;
+    // Map Complete's result and the seed and knobs it was painted over
+    // (seed, island, rivers, lakes, trees). Used only while those match.
+    std::vector<unsigned short> pending_terrain_;
+    std::array<int, 5> pending_land_{};
+    std::array<int, 5> terrain_land_{};
+    int terrain_piece_ = 0;
+    int terrain_brush_ = 1;
+    // Map words changed since the editor opened; Cancel asks first when > 0.
+    int terrain_changed_ = 0;
+    // A settings control that warned it would drop the painted map.
+    int terrain_confirm_id_ = 0;
+    // The game's view, put back when the editor closes.
+    int terrain_saved_tile_ = 16;
+    double terrain_saved_scroll_x_ = 0;
+    double terrain_saved_scroll_y_ = 0;
+    bool terrain_saved_overlay_ = false;
     // The seed an "auto" field stands for while the New City dialog is up.
     // The land preview draws it and Generate builds it, so they match.
     int auto_seed_ = 1;
