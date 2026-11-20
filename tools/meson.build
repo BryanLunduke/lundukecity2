@@ -34,3 +34,14 @@ portland_map = executable(
   build_by_default: false,
   install: false,
 )
+
+sandiego_map = executable(
+  'sandiego_map',
+  'sandiego_map.cpp',
+  '../src/terrain_paint.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  build_by_default: false,
+  install: false,
+)

@@ -777,7 +777,10 @@ static bool events_active(const CityEvents &e)
 static bool write_city_events(FILE *f, const Micropolis *sim)
 {
     const CityEvents &e = sim->cityEvents;
-    if (!events_active(e)) {
+    // The San Diego scenario's goal asks whether the police caught the lion
+    // (lionSteps), so a San Diego city keeps the trailer once it got out.
+    const bool san_diego_lion = sim->scenario == SC_SAN_DIEGO && e.lionSteps > 0;
+    if (!events_active(e) && !san_diego_lion) {
         return true;
     }
     const int zones = e.zoneCount < 0 ? 0 : (e.zoneCount > CityEvents::kMaxZoneBlocks ? CityEvents::kMaxZoneBlocks
@@ -1894,6 +1897,15 @@ bool Micropolis::loadScenario(Scenario s)
             fname = "portland.cty";
             which = SC_PORTLAND;
             time = ((2020 - 1900) * 48) + 6 * 4 + 2;
+            funds = 20000;
+            break;
+        case SC_SAN_DIEGO:
+            // Lunduke City 2's own map (data/scenarios/sandiego.cty). It
+            // opens at the start of March 2025; the lion gets out in April.
+            name = "San Diego";
+            fname = "sandiego.cty";
+            which = SC_SAN_DIEGO;
+            time = ((2025 - 1900) * 48) + 2 * 4;
             funds = 20000;
             break;
         default:

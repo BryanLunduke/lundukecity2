@@ -874,6 +874,7 @@ enum Scenario {
     SC_SEATTLE,        ///< Seattle (Autonomous Zone; Lunduke City 2)
     SC_SAN_FRANCISCO_1962, ///< San Francisco 1962 (Prison Escape; Lunduke City 2)
     SC_PORTLAND,           ///< Portland (Riot; Lunduke City 2)
+    SC_SAN_DIEGO,          ///< San Diego (Zoo Escape; Lunduke City 2)
 
     SC_COUNT,          ///< Number of scenarios
 };
@@ -911,6 +912,20 @@ static const int SF1962_YEARS = 2;
 static const int PORTLAND_CRIME_GOAL = 60;
 static const int PORTLAND_RIOT_WAIT = 3;
 static const int PORTLAND_YEARS = 1;
+
+/**
+ * San Diego scenario (Lunduke City 2): a lion gets out of the San Diego Zoo
+ * SANDIEGO_LION_WAIT city-time steps (weeks) after the March 2025 start, in
+ * April. Win with the lion caught by the police within
+ * SANDIEGO_LION_CATCH_STEPS steps (four months), that is back in the zoo
+ * (cityEvents.lionActive == 0) after it got out (lionSteps > 0), long
+ * before its keepers would fetch it (City 2's kLionMaxSteps, six months),
+ * and at least SANDIEGO_POPULATION_GOAL people at the deadline.
+ */
+static const int SANDIEGO_LION_WAIT = 5;
+static const int SANDIEGO_LION_CATCH_STEPS = 16;
+static const int SANDIEGO_POPULATION_GOAL = 120000;
+static const int SANDIEGO_YEARS = 2;
 
 
 ///////////////////////////////////////////////////

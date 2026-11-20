@@ -740,6 +740,10 @@ void review_zone(Micropolis *sim, std::vector<Note> &notes)
 
 // ---- Lion Escape --------------------------------------------------------
 
+// The San Diego scenario's goal (a police catch within
+// SANDIEGO_LION_CATCH_STEPS) must end before the keepers come.
+static_assert(SANDIEGO_LION_CATCH_STEPS < kLionMaxSteps, "the keepers' deadline");
+
 bool lion_start_tile(const Micropolis *sim, int zx, int zy, int &sx, int &sy)
 {
     // The ring just outside the zoo's 3x3 footprint, roads first.

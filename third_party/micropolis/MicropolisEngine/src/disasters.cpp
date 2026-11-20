@@ -220,6 +220,13 @@ void Micropolis::scenarioDisaster()
             }
             break;
 
+        case SC_SAN_DIEGO:
+            // Lunduke City 2: the front end lets the lion out of the zoo.
+            if (disasterWait == 1) {
+                callback("scenarioLionEscape", "");
+            }
+            break;
+
         default:
             NOT_REACHED();
             break; // Never used

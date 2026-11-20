@@ -415,6 +415,20 @@ void Micropolis::doScenarioScore(Scenario type)
         }
         break;
 
+    case SC_SAN_DIEGO: {
+        // Lunduke City 2: the police caught the lion within four months,
+        // and the city kept its people.
+        const Quad people = censusSnapshotValid
+            ? static_cast<Quad>(cityPopulationOf(snapResPop, snapComPop, snapIndPop, snapDataCenterPop))
+            : getPopulation();
+        const bool police_caught = cityEvents.lionActive == 0 && cityEvents.lionSteps > 0 &&
+                                   cityEvents.lionSteps <= SANDIEGO_LION_CATCH_STEPS;
+        if (police_caught && people >= SANDIEGO_POPULATION_GOAL) {
+            z = MESSAGE_SCENARIO_WON;
+        }
+        break;
+    }
+
     case SC_PORTLAND:
         // Lunduke City 2: the riot over, every fire out, crime down.
         if (cityEvents.riotSteps <= 0 && !fireBurning(this) && crimeAverage < PORTLAND_CRIME_GOAL) {

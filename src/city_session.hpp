@@ -116,7 +116,7 @@ public:
         int years = 0;
     };
 
-    static constexpr int kScenarioCount = 11;
+    static constexpr int kScenarioCount = 12;
     // Seattle: the Autonomous Zone forms on the road block holding this tile
     // (Cal Anderson Park on Capitol Hill) and its least-policed neighbour.
     static constexpr int kSeattleZoneX = 75;
@@ -129,6 +129,10 @@ public:
     // Justice Center and Lownsdale Square.
     static constexpr int kPortlandRiotX = 50;
     static constexpr int kPortlandRiotY = 63;
+    // San Diego: the San Diego Zoo in Balboa Park (top-left corner of the
+    // 3x3 landmark) that the lion gets out of.
+    static constexpr int kSanDiegoZooLeft = 65;
+    static constexpr int kSanDiegoZooTop = 46;
     static const ScenarioDef &scenario_def(int index);
 
     // Difficulty is the engine GameLevel: easy $20,000, medium $12,500,
@@ -402,6 +406,9 @@ public:
     // The Portland riot, downtown. False outside that scenario or when it
     // cannot start.
     bool start_portland_riot();
+    // The San Diego lion, out of the Balboa Park zoo. False outside that
+    // scenario or when it cannot start.
+    bool start_san_diego_lion();
     // The disaster the running scenario raises when the engine asks for it
     // (the Seattle zone, the Alcatraz escape, ...). False when none starts.
     bool start_scenario_disaster();

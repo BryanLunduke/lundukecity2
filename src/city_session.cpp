@@ -133,11 +133,13 @@ const char *city_class_name(CityClass city_class)
     }
 }
 
-// The Seattle, San Francisco and Portland goal numbers as text for the
-// catalog's goal sentences (tests check they match the engine constants).
+// The Seattle, San Francisco, Portland and San Diego goal numbers as text
+// for the catalog's goal sentences (tests check they match the engine
+// constants).
 #define SEATTLE_CRIME_GOAL_TEXT "60"
 #define SF1962_CRIME_GOAL_TEXT "45"
 #define PORTLAND_CRIME_GOAL_TEXT "60"
+#define SANDIEGO_POPULATION_GOAL_TEXT "120,000"
 
 // The folder holding one of City 2's own scenario maps: the installed
 // share/lunduke-city-2/scenarios (or data/scenarios beside a build), else
@@ -226,6 +228,38 @@ std::string portland_fires_long(const Micropolis &sim)
     return text + "all fires out";
 }
 
+// The San Diego meter's lion part.
+std::string san_diego_lion_short(const Micropolis &sim)
+{
+    const CityEvents &e = sim.cityEvents;
+    if (e.lionActive != 0) {
+        return "Lion loose";
+    }
+    if (e.lionSteps <= 0) {
+        return "Lion in zoo";
+    }
+    if (e.lionSteps <= SANDIEGO_LION_CATCH_STEPS) {
+        return "Police caught lion";
+    }
+    return e.lionSteps < city_events::kLionMaxSteps ? "Lion caught too late" : "Keepers caught lion";
+}
+
+std::string san_diego_lion_long(const Micropolis &sim)
+{
+    const CityEvents &e = sim.cityEvents;
+    if (e.lionActive != 0) {
+        return "the lion is loose → police must catch it within four months";
+    }
+    if (e.lionSteps <= 0) {
+        return "the lion is in the zoo";
+    }
+    if (e.lionSteps <= SANDIEGO_LION_CATCH_STEPS) {
+        return "the police caught the lion";
+    }
+    return e.lionSteps < city_events::kLionMaxSteps ? "the lion was caught too late"
+                                                    : "the keepers caught the lion, not the police";
+}
+
 std::string seattle_zone_long(const Micropolis &sim)
 {
     const int blocks = sim.cityEvents.zoneCount;
@@ -293,12 +327,19 @@ const ScenarioEntry kScenarios[] = {
       "Put out every fire and bring average crime below " PORTLAND_CRIME_GOAL_TEXT " by summer 2021.",
       PORTLAND_YEARS},
      "portland.cty", true},
+    // San Diego (data/scenarios/sandiego.cty, built by tools/sandiego_map.cpp).
+    // It opens in March 2025; in April a lion gets out of the San Diego Zoo.
+    {{SC_SAN_DIEGO, "San Diego", 2025, "A lion escapes from the San Diego Zoo.",
+      "Have the police catch the lion within four months and keep at least " SANDIEGO_POPULATION_GOAL_TEXT
+      " people by spring 2027.",
+      SANDIEGO_YEARS},
+     "sandiego.cty", true},
 };
 
 static_assert(sizeof(kScenarios) / sizeof(kScenarios[0]) == CitySession::kScenarioCount,
               "scenario catalog size");
 static_assert(SC_DULLSVILLE == 1 && SC_RIO == 8 && SC_SEATTLE == 9 && SC_SAN_FRANCISCO_1962 == 10 &&
-                  SC_PORTLAND == 11,
+                  SC_PORTLAND == 11 && SC_SAN_DIEGO == 12,
               "scenario ids");
 static_assert(static_cast<int>(LEVEL_EASY) == CitySession::kLevelEasy, "easy level");
 static_assert(static_cast<int>(LEVEL_MEDIUM) == CitySession::kLevelMedium, "medium level");
@@ -714,7 +755,8 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
     };
     auto take_int = [&]() { return va_arg(args, int); };
 
-    if (which == "scenarioAutonomousZone" || which == "scenarioPrisonEscape" || which == "scenarioRiot") {
+    if (which == "scenarioAutonomousZone" || which == "scenarioPrisonEscape" || which == "scenarioRiot" ||
+        which == "scenarioLionEscape") {
         // Raised on the next event frame, outside the simulation step.
         scenario_disaster_pending_ = true;
         return;
@@ -2336,6 +2378,14 @@ bool CitySession::start_portland_riot()
     return started;
 }
 
+bool CitySession::start_san_diego_lion()
+{
+    if (!ready_ || scenario_id() != SC_SAN_DIEGO) {
+        return false;
+    }
+    return start_event(city_events::Kind::LionEscape);
+}
+
 bool CitySession::start_scenario_disaster()
 {
     switch (scenario_id()) {
@@ -2345,6 +2395,8 @@ bool CitySession::start_scenario_disaster()
         return start_sf1962_escape();
     case SC_PORTLAND:
         return start_portland_riot();
+    case SC_SAN_DIEGO:
+        return start_san_diego_lion();
     default:
         return false;
     }
@@ -2631,6 +2683,10 @@ std::string CitySession::scenario_meter_short() const
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <" +
                std::to_string(PORTLAND_CRIME_GOAL) + " · " + portland_fires_short(sim);
     }
+    if (id == SC_SAN_DIEGO) {
+        return grouped_count(people > 0 ? people : 0) + " → ≥" + grouped_count(SANDIEGO_POPULATION_GOAL) + " · " +
+               san_diego_lion_short(sim);
+    }
     if (id == SC_BERN) {
         const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
         return "Traffic " + traffic + " → <" +
@@ -2679,6 +2735,10 @@ std::string CitySession::scenario_meter() const
     if (id == SC_PORTLAND) {
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < " +
                std::to_string(PORTLAND_CRIME_GOAL) + ", " + portland_fires_long(sim);
+    }
+    if (id == SC_SAN_DIEGO) {
+        return "Population " + grouped_count(people > 0 ? people : 0) + " → goal ≥ " +
+               grouped_count(SANDIEGO_POPULATION_GOAL) + ", " + san_diego_lion_long(sim);
     }
     if (id == SC_BERN) {
         const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
