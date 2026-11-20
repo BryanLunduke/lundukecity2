@@ -68,6 +68,10 @@ MapView::~MapView()
         cairo_surface_destroy(shade_pixels_);
         shade_pixels_ = nullptr;
     }
+    if (cloud_pixels_ != nullptr) {
+        cairo_surface_destroy(cloud_pixels_);
+        cloud_pixels_ = nullptr;
+    }
 }
 
 bool MapView::tick(int elapsed_ms)
@@ -1176,6 +1180,9 @@ void MapView::draw(cairo_t *cr)
     }
     fx_animated_ = false;
     fx_drawn_step_ = fx_ms_ / kFxStepMs;
+    if (!night_hold_ && !dusk && tile_size_ > kMapTileOverview && look_fx::ambient_allowed(effects_)) {
+        draw_clouds(cr, visible_tiles(cr, source, 0));
+    }
     if (!night_hold_ && tile_size_ > kMapTileOverview) {
         // Effects sit on the city, not on a data map, and not at the
         // overview zoom where a tile is a few pixels.
@@ -1929,6 +1936,130 @@ void MapView::draw_shadows(cairo_t *cr)
     }
     cairo_save(cr);
     cairo_set_source_surface(cr, shade_pixels_, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
+}
+
+namespace {
+
+constexpr int kCloudTex = 256;
+// One cloud texel covers this many 16px-art pixels: the pattern repeats
+// every 96 tiles, wider than the map is tall.
+constexpr double kCloudTexel = 6.0;
+
+// Tileable value noise: a few octaves on lattices that divide the texture.
+void build_cloud_cover(std::vector<float> &cover)
+{
+    cover.assign(static_cast<std::size_t>(kCloudTex * kCloudTex), 0.0f);
+    auto lattice = [](int cells, int ix, int iy, int salt) {
+        ix = ((ix % cells) + cells) % cells;
+        iy = ((iy % cells) + cells) % cells;
+        return static_cast<float>(look_fx::hash01(static_cast<std::uint32_t>(ix * 92821 + iy * 68917 + salt * 7919)));
+    };
+    const int octaves[] = {4, 8, 16};
+    const float weights[] = {0.6f, 0.28f, 0.12f};
+    for (int o = 0; o < 3; ++o) {
+        const int cells = octaves[o];
+        const float size = static_cast<float>(kCloudTex) / static_cast<float>(cells);
+        for (int y = 0; y < kCloudTex; ++y) {
+            for (int x = 0; x < kCloudTex; ++x) {
+                const float fx = x / size;
+                const float fy = y / size;
+                const int ix = static_cast<int>(fx);
+                const int iy = static_cast<int>(fy);
+                float tx = fx - ix;
+                float ty = fy - iy;
+                tx = tx * tx * (3.0f - 2.0f * tx);
+                ty = ty * ty * (3.0f - 2.0f * ty);
+                const float a = lattice(cells, ix, iy, o);
+                const float b = lattice(cells, ix + 1, iy, o);
+                const float c = lattice(cells, ix, iy + 1, o);
+                const float d = lattice(cells, ix + 1, iy + 1, o);
+                const float v = (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * ty;
+                cover[static_cast<std::size_t>(y * kCloudTex + x)] += v * weights[o];
+            }
+        }
+    }
+    // Keep roughly a third of the sky cloudy, with soft edges.
+    for (float &v : cover) {
+        const float t = std::max(0.0f, std::min(1.0f, (v - 0.50f) / 0.10f));
+        v = t * t * (3.0f - 2.0f * t);
+    }
+}
+
+} // namespace
+
+void MapView::draw_clouds(cairo_t *cr, const TileSpan &span)
+{
+    if (span.x1 <= span.x0 || span.y1 <= span.y0) {
+        return;
+    }
+    fx_animated_ = true;
+    const int source = source_px();
+    const bool classic = classic_fx();
+    const int key = source * 2 + (classic ? 1 : 0);
+    // The cover repeats every kCloudTex texels; one repeat at art resolution
+    // is built once (per zoom source and look) and then only slid, so a
+    // frame pays for one plain repeating paint.
+    const int period = static_cast<int>(kCloudTex * kCloudTexel) * source / TileAtlas::kSize;
+    if (cloud_pixels_ == nullptr || cloud_cache_key_ != key) {
+        if (cloud_cover_.empty()) {
+            build_cloud_cover(cloud_cover_);
+        }
+        if (cloud_pixels_ != nullptr) {
+            cairo_surface_destroy(cloud_pixels_);
+        }
+        cloud_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, period, period);
+        cloud_cache_key_ = key;
+        unsigned char *data = cairo_image_surface_get_data(cloud_pixels_);
+        const int stride = cairo_image_surface_get_stride(cloud_pixels_);
+        const double texel = static_cast<double>(period) / kCloudTex;
+        auto cover_at = [&](double u, double v) {
+            const double fu = std::floor(u);
+            const double fv = std::floor(v);
+            const int iu = static_cast<int>(fu) & (kCloudTex - 1);
+            const int iv = static_cast<int>(fv) & (kCloudTex - 1);
+            const int ju = (iu + 1) & (kCloudTex - 1);
+            const int jv = (iv + 1) & (kCloudTex - 1);
+            const float tu = static_cast<float>(u - fu);
+            const float tv = static_cast<float>(v - fv);
+            const float *row0 = cloud_cover_.data() + iv * kCloudTex;
+            const float *row1 = cloud_cover_.data() + jv * kCloudTex;
+            const float top = row0[iu] + (row0[ju] - row0[iu]) * tu;
+            const float bot = row1[iu] + (row1[ju] - row1[iu]) * tu;
+            return top + (bot - top) * tv;
+        };
+        for (int y = 0; y < period; ++y) {
+            auto *row = reinterpret_cast<std::uint32_t *>(data + y * stride);
+            const double v = (y + 0.5) / texel - 0.5;
+            for (int x = 0; x < period; ++x) {
+                const float c = cover_at((x + 0.5) / texel - 0.5, v);
+                if (classic) {
+                    // A sparse black dither inside the cloud outline. The
+                    // repeat is a multiple of 4, so the dither tiles too.
+                    row[x] = c > 0.5f && look_fx::dither_on(x, y, 0.25) ? 0xff000000u : 0u;
+                } else {
+                    // A cool shade, deepest in the middle of a cloud.
+                    const std::uint32_t a = static_cast<std::uint32_t>(c * 0.32f * 255.0f + 0.5f);
+                    row[x] = a == 0 ? 0u
+                                    : (a << 24) | ((15u * a / 255u) << 16) | ((20u * a / 255u) << 8) | (51u * a / 255u);
+                }
+            }
+        }
+        cairo_surface_mark_dirty(cloud_pixels_);
+    }
+    // Drift east-south-east at about 9 art pixels a second of city time,
+    // in whole pixels (whole dither cells on Classic, so it never crawls).
+    const double drift = (fx_ms_ / kFxStepMs) * static_cast<double>(kFxStepMs) * 0.009 * source / TileAtlas::kSize;
+    const int snap = classic ? 4 : 1;
+    const int ox = (static_cast<int>(drift) / snap * snap) % period;
+    const int oy = (static_cast<int>(drift * 0.35) / snap * snap) % period;
+    cairo_save(cr);
+    cairo_rectangle(cr, span.x0 * source, span.y0 * source, (span.x1 - span.x0) * source, (span.y1 - span.y0) * source);
+    cairo_clip(cr);
+    cairo_set_source_surface(cr, cloud_pixels_, ox, oy);
+    cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
     cairo_restore(cr);

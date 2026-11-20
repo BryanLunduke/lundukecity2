@@ -141,6 +141,13 @@ private:
     TileSpan visible_tiles(cairo_t *cr, int source, int pad) const;
     void draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk);
     bool draw_water(cairo_t *cr, const TileSpan &span);
+    void draw_clouds(cairo_t *cr, const TileSpan &span);
+    // Tileable cloud cover, 0..1 per texel; built once.
+    std::vector<float> cloud_cover_;
+    // One repeat of the cloud shade at art resolution, premultiplied (a
+    // black dither on Classic); slid by the drift each frame.
+    cairo_surface_t *cloud_pixels_ = nullptr;
+    int cloud_cache_key_ = -1;
     // Per art pixel at 16px: bits 0-4 a water colour index + 1 (0 is not
     // water), bit 6 shore (water beside land), bit 7 solid (a pixel of a
     // building cell, which casts a shadow). Rebuilt for changed tiles.
