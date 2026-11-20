@@ -1,11 +1,14 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: Lunduke City
-Source: https://github.com/BryanLunduke/LundukeCity
+Upstream-Name: Lunduke City 2
+Upstream-Contact: Bryan Lunduke
+Source: https://github.com/BryanLunduke/lundukecity2
 
-Lunduke City is a city-building game. Its simulation engine is the
-Micropolis engine (GPL-3.0-or-later) with the additional terms below.
-The gtkmm user interface is original to Lunduke City and is also
-GPL-3.0-or-later. The complete GNU GPL version 3 is in the file COPYING.
+Lunduke City 2 is a city-building game. Its simulation engine is the
+Micropolis engine (GPL-3.0-or-later) with the additional terms below,
+modified by Lunduke City 2. The user interface (SDL3 for windows, input
+and audio; Cairo and Pango for drawing and text) is original to Lunduke
+City 2 and is also GPL-3.0-or-later. The complete GNU GPL version 3 is in
+the file COPYING.
 
 This tree does not include the upstream Tcl/Tk interface, Python/SWIG
 bindings, or scenario files. DejaVu Serif (Year in Review titles) is
@@ -19,7 +22,7 @@ In this copyright file the last matching Files paragraph wins, so the
 specific vendored paths are listed after the general paragraph.
 
 Files: *
-Copyright: 2026, The Lunduke City authors
+Copyright: 2026, Bryan Lunduke
 License: GPL-3+
 
 Files: third_party/micropolis/MicropolisEngine/*
@@ -30,7 +33,7 @@ Comment:
  Vendored from https://github.com/SimHacker/micropolis
  commit c98f6b08519887b450d9be198bfca5237aab6d0c
  path MicropolisCore/src/MicropolisEngine/src
- (upstream commit date 2026-02-10), then modified by Lunduke City.
+ (upstream commit date 2026-02-10), then modified by Lunduke City and Lunduke City 2.
  This is a modified version of that engine and is not the original
  program (GNU GPL version 3, section 7, and the additional terms
  below). The Lunduke City changes are:
@@ -42,6 +45,13 @@ Comment:
  ratio computed above it is left alone);
  sendMessage() calls doMakeSound() before the front-end callback so
  disaster messages play their sounds.
+ Lunduke City 2 (2026, Bryan Lunduke) further changes the engine:
+ the Zoo, Big Park, Library, Mayor's House, Casino, Amusement Park,
+ Prison, Marina, Fountain, Data Center and Micro Nuclear Plant;
+ budget, tax and difficulty balance; scenario goals and messages;
+ the terrain editor; the Riot, Autonomous Zone, Lion Escape and Prison
+ Escape disasters and their hooks; and a marked save format with
+ trailers that older builds refuse.
  Tcl/Tk is not part of this import.
  See third_party/micropolis/README.md.
 
@@ -61,7 +71,56 @@ Comment:
  sprite frames for trains, ships, aircraft, tornadoes, the monster,
  and the other mobile entities. The hexa files are the original tile
  resources. The wav files are the sound effects.
- These bytes are not modified. See third_party/micropolis-assets/README.md.
+ These bytes are not modified, except the files listed in the next two
+ paragraphs. See third_party/micropolis-assets/README.md.
+
+Files: third_party/micropolis-assets/images/micropolisEngine/obj5-*.png
+Copyright: 1989-2007, Electronic Arts Inc.
+           2007, Don Hopkins <dhopkins@DonHopkins.com>
+           2026, Bryan Lunduke
+License: GPL-3+
+Comment:
+ The monster sprite frames, modified by Lunduke City 2: only the colours
+ are changed (art/monster/recolor.py). This is a modified version, not
+ the original artwork.
+
+Files: third_party/micropolis-assets/images/micropolisEngine/tiles-svga.png
+       third_party/micropolis-assets/images/micropolisEngine/tiles-spooky.png
+Copyright: 1989-2007, Electronic Arts Inc.
+           2007, Don Hopkins <dhopkins@DonHopkins.com>
+           2026, Bryan Lunduke
+License: GPL-3+
+Comment:
+ The SVGA and Spooky map atlases. They are derived from tiles.png:
+ each tile keeps the classic tile's layout and is repainted, with some
+ tiles redrawn (art/svga, art/spooky). This is a modified version, not
+ the original artwork.
+
+Files: data/disaster-art/*
+       data/tool-icons/*
+       data/special-tiles/*
+       data/welcome/*
+       data/icons/*
+       data/lunduke-city.svg
+       data/windows/lunduke-city-2.ico
+       art/*
+Copyright: 2026, Bryan Lunduke
+License: GPL-3+
+Comment:
+ Original Lunduke City 2 artwork: the disaster sprites (lion,
+ barricades), toolbar and landmark icons, the special-building map
+ sheets, the Welcome art, the application icons, and the scripts that
+ draw them.
+
+Files: data/special-tiles/datacenter*.png
+       data/special-tiles/micro-nuclear*.png
+Copyright: 2026, Bryan Lunduke
+           1989-2007, Electronic Arts Inc.
+           2007, Don Hopkins <dhopkins@DonHopkins.com>
+License: GPL-3+
+Comment:
+ Drawn for Lunduke City 2 over the atlas ground tile; the vacant Data
+ Center lot reuses the classic vacant-lot tiles 612-620 (art/dcmicro).
 
 Files: data/fonts/*
 Copyright: 2003, Bitstream, Inc.

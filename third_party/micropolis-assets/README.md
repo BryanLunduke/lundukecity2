@@ -25,8 +25,12 @@ Unmodified, from `MicropolisCore/src/` at that commit:
 | `res/sounds/*.wav` | `res/sounds/*.wav` |
 | `res/snro.111` … `res/snro.888` | `res/snro.111` … `res/snro.888` |
 
-Nothing in this directory was edited. The additional terms require modified
-versions to be marked; these bytes are the upstream files.
+The files above are the upstream bytes, with one exception: the monster
+frames `obj5-*.png` were recoloured by Lunduke City 2
+(`art/monster/recolor.py`); shape, frames and transparency are unchanged.
+`tiles-svga.png` and `tiles-spooky.png` are Lunduke City 2 atlases derived
+from `tiles.png` (`art/svga`, `art/spooky`). Both are modified versions,
+marked as such in the top-level `NOTICE` as the additional terms require.
 
 `tiles.png` is 256×960, 8-bit RGB: 960 tiles of 16×16 pixels, 16 tiles per
 row, tile index `0..959` in row-major order. That is the classic map atlas
