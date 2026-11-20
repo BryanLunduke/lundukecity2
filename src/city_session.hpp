@@ -103,8 +103,9 @@ public:
     void set_listener(Listener listener);
 
     // Pre-made scenarios the engine loads from res/snro.* (Dullsville
-    // through Rio de Janeiro), and Lunduke City 2's own Seattle map
-    // (data/scenarios/seattle.cty). id matches the engine Scenario ordinal.
+    // through Rio de Janeiro), and Lunduke City 2's own maps in
+    // data/scenarios (Seattle onwards). id matches the engine Scenario
+    // ordinal.
     struct ScenarioDef {
         int id = 0;
         const char *name = "";
@@ -115,11 +116,23 @@ public:
         int years = 0;
     };
 
-    static constexpr int kScenarioCount = 9;
+    static constexpr int kScenarioCount = 12;
     // Seattle: the Autonomous Zone forms on the road block holding this tile
     // (Cal Anderson Park on Capitol Hill) and its least-policed neighbour.
     static constexpr int kSeattleZoneX = 75;
     static constexpr int kSeattleZoneY = 59;
+    // San Francisco (1962): the Alcatraz escapees come ashore here, at
+    // Fisherman's Wharf, the nearest shore to the island.
+    static constexpr int kSf1962LandingX = 72;
+    static constexpr int kSf1962LandingY = 22;
+    // Portland: the riot breaks out around this tile, downtown by the
+    // Justice Center and Lownsdale Square.
+    static constexpr int kPortlandRiotX = 50;
+    static constexpr int kPortlandRiotY = 63;
+    // San Diego: the San Diego Zoo in Balboa Park (top-left corner of the
+    // 3x3 landmark) that the lion gets out of.
+    static constexpr int kSanDiegoZooLeft = 65;
+    static constexpr int kSanDiegoZooTop = 46;
     static const ScenarioDef &scenario_def(int index);
 
     // Difficulty is the engine GameLevel: easy $20,000, medium $12,500,
@@ -387,6 +400,18 @@ public:
     // The Seattle scenario's zone on Capitol Hill (the engine asks for it
     // a few weeks in). False outside Seattle or when no zone can form.
     bool start_seattle_zone();
+    // The San Francisco (1962) escape from Alcatraz, coming ashore at the
+    // Wharf. False outside that scenario or when it cannot start.
+    bool start_sf1962_escape();
+    // The Portland riot, downtown. False outside that scenario or when it
+    // cannot start.
+    bool start_portland_riot();
+    // The San Diego lion, out of the Balboa Park zoo. False outside that
+    // scenario or when it cannot start.
+    bool start_san_diego_lion();
+    // The disaster the running scenario raises when the engine asks for it
+    // (the Seattle zone, the Alcatraz escape, ...). False when none starts.
+    bool start_scenario_disaster();
     // Empty when it can start now.
     std::string event_unavailable(city_events::Kind kind) const;
     bool in_autonomous_zone(int x, int y) const;
@@ -467,7 +492,7 @@ public:
     // Body of the win/loss dialog. Keep playing is what starts the clock.
     // Closing the window, or cancelling the scenario list, leaves it paused.
     std::string scenario_outcome_text(bool won) const;
-    // 0 when this city is not one of the nine scenarios.
+    // 0 when this city is not one of the scenarios.
     int scenario_id() const;
     // Whole years until the scenario is scored, rounded down. -1 when no
     // scenario is running. 0 when the deadline has already passed.
@@ -620,9 +645,10 @@ private:
     long long saved_city_time_ = 0;
     void mark_clean_time();
     bool in_callback_ = false;
-    // The engine asked for the Seattle scenario's Autonomous Zone; it is
-    // raised on the next event frame, outside the simulation step.
-    bool scenario_zone_pending_ = false;
+    // The engine asked for the scenario's own disaster (Seattle's zone,
+    // the Alcatraz escape, ...); it is raised on the next event frame,
+    // outside the simulation step.
+    bool scenario_disaster_pending_ = false;
     bool eval_month_pending_ = false;
     int eval_month_ = -1;
     int speed_before_outcome_ = 2;

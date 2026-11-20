@@ -52,6 +52,9 @@ struct Note {
 inline constexpr int kRiotFires = 6;
 inline constexpr int kRiotCrimePeak = 40;
 inline constexpr int kRiotSteps = 24;
+// A riot started downtown by a scenario (start_riot_at) only sets fires
+// within this many tiles of the spot it is given.
+inline constexpr int kRiotDowntownRadius = 10;
 
 // Autonomous Zone: a block is a road block, the connected land (4-way)
 // that roads, rail, water and the map edge close in. An open area larger
@@ -117,6 +120,18 @@ bool start(Micropolis *sim, Kind kind, std::vector<Note> &notes);
 // block, the block has no neighbour, or a zone already stands. None of
 // these four is ever picked by the random disaster roll.
 bool start_zone_at(Micropolis *sim, int x, int y, std::vector<Note> &notes);
+// Prison Escape from a prison on an island, for scenarios: the escapees
+// come ashore at (x, y), so the fires (kPrisonFires within
+// kPrisonFireRadius) and the crime (within kPrisonCrimeRadius, fading with
+// the police coverage there) are around that landing instead of around
+// the prison. The notice points at the prison. False (with the reason in
+// notes) when there is no prison or an escape is already going on.
+bool start_prison_landing(Micropolis *sim, int x, int y, std::vector<Note> &notes);
+// Riot started downtown, for scenarios: the fires are on commercial zones
+// within kRiotDowntownRadius of (x, y) (anywhere when there are none), and
+// the crime surge is city-wide as usual. False (with the reason in notes)
+// when a riot is already going on.
+bool start_riot_at(Micropolis *sim, int x, int y, std::vector<Note> &notes);
 
 // ---- Running -----------------------------------------------------------
 

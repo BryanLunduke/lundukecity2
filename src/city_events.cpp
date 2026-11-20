@@ -119,10 +119,11 @@ Note plain_note(const std::string &text)
 
 // ---- Riot ---------------------------------------------------------------
 
-bool start_riot(Micropolis *sim, std::vector<Note> &notes)
+// The commercial zones a riot can set alight: developed ones first, empty
+// lots only when there is nothing else. With radius >= 0 only zones whose
+// centre is within radius tiles of (cx, cy).
+std::vector<std::pair<int, int>> riot_targets(const Micropolis *sim, int cx, int cy, int radius)
 {
-    // Developed commercial zones first; empty commercial lots only when
-    // there is nothing else.
     std::vector<std::pair<int, int>> developed;
     std::vector<std::pair<int, int>> empty;
     for (int x = 0; x < WORLD_W; ++x) {
@@ -132,10 +133,18 @@ bool start_riot(Micropolis *sim, std::vector<Note> &notes)
             if ((z & ZONEBIT) == 0 || tile < COMBASE || tile > COMLAST) {
                 continue;
             }
+            if (radius >= 0 && (x - cx) * (x - cx) + (y - cy) * (y - cy) > radius * radius) {
+                continue;
+            }
             (tile == COMCLR ? empty : developed).emplace_back(x, y);
         }
     }
-    std::vector<std::pair<int, int>> &pool = developed.empty() ? empty : developed;
+    return developed.empty() ? empty : developed;
+}
+
+// Lights the fires on up to kRiotFires of pool and starts the crime surge.
+bool riot_on(Micropolis *sim, std::vector<std::pair<int, int>> pool, std::vector<Note> &notes)
+{
     Rng rng(seed_for(sim, 11));
     int lit = 0;
     int first_x = WORLD_W / 2;
@@ -151,6 +160,7 @@ bool start_riot(Micropolis *sim, std::vector<Note> &notes)
             const int fx = zone.first + kRing[(start + k) % 8][0];
             const int fy = zone.second + kRing[(start + k) % 8][1];
             if (sim->eventFireAt(fx, fy)) {
+                sim->markRiotFire(fx, fy);
                 if (lit == 0) {
                     first_x = fx;
                     first_y = fy;
@@ -166,6 +176,11 @@ bool start_riot(Micropolis *sim, std::vector<Note> &notes)
     e.riotTotal = kRiotSteps;
     notes.push_back(place_note(info(Kind::Riot).notice, first_x, first_y));
     return true;
+}
+
+bool start_riot(Micropolis *sim, std::vector<Note> &notes)
+{
+    return riot_on(sim, riot_targets(sim, 0, 0, -1), notes);
 }
 
 // ---- Autonomous Zone: road blocks ---------------------------------------
@@ -726,6 +741,10 @@ void review_zone(Micropolis *sim, std::vector<Note> &notes)
 
 // ---- Lion Escape --------------------------------------------------------
 
+// The San Diego scenario's goal (a police catch within
+// SANDIEGO_LION_CATCH_STEPS) must end before the keepers come.
+static_assert(SANDIEGO_LION_CATCH_STEPS < kLionMaxSteps, "the keepers' deadline");
+
 bool lion_start_tile(const Micropolis *sim, int zx, int zy, int &sx, int &sy)
 {
     // The ring just outside the zoo's 3x3 footprint, roads first.
@@ -834,18 +853,18 @@ void lion_step(Micropolis *sim, std::vector<Note> &notes)
 
 // ---- Prison Escape ------------------------------------------------------
 
-bool start_prison(Micropolis *sim, std::vector<Note> &notes)
+// Fires on up to kPrisonFires buildings within kPrisonFireRadius of
+// (px, py), never on the prison at (prison_x, prison_y), and the crime
+// boost centred on (px, py).
+void loose_inmates(Micropolis *sim, int px, int py, int prison_x, int prison_y)
 {
-    int px = 0;
-    int py = 0;
-    if (!find_center(sim, SPECIAL_PRISON, px, py)) {
-        return false;
-    }
     std::vector<std::pair<int, int>> spots;
     for (int dy = -kPrisonFireRadius; dy <= kPrisonFireRadius; ++dy) {
         for (int dx = -kPrisonFireRadius; dx <= kPrisonFireRadius; ++dx) {
             // Not the prison itself (4x4, anchor 1,1: -1..2).
-            if (dx >= -1 && dx <= 2 && dy >= -1 && dy <= 2) {
+            const int ox = px + dx - prison_x;
+            const int oy = py + dy - prison_y;
+            if (ox >= -1 && ox <= 2 && oy >= -1 && oy <= 2) {
                 continue;
             }
             if (dx * dx + dy * dy > kPrisonFireRadius * kPrisonFireRadius) {
@@ -877,6 +896,16 @@ bool start_prison(Micropolis *sim, std::vector<Note> &notes)
     e.prisonY = py;
     e.prisonCrime = kPrisonCrimePeak;
     e.prisonSteps = kPrisonMaxSteps;
+}
+
+bool start_prison(Micropolis *sim, std::vector<Note> &notes)
+{
+    int px = 0;
+    int py = 0;
+    if (!find_center(sim, SPECIAL_PRISON, px, py)) {
+        return false;
+    }
+    loose_inmates(sim, px, py, px, py);
     notes.push_back(place_note(info(Kind::PrisonEscape).notice, px, py));
     return true;
 }
@@ -1065,6 +1094,47 @@ bool start_zone_at(Micropolis *sim, int x, int y, std::vector<Note> &notes)
     }
     // Show on the land value map now; the engine's next scan keeps it.
     apply_land(sim);
+    return true;
+}
+
+bool start_prison_landing(Micropolis *sim, int x, int y, std::vector<Note> &notes)
+{
+    const std::string why = unavailable_reason(sim, Kind::PrisonEscape);
+    if (!why.empty()) {
+        notes.push_back(plain_note(why));
+        return false;
+    }
+    int px = 0;
+    int py = 0;
+    if (!Micropolis::testBounds(x, y) || !find_center(sim, SPECIAL_PRISON, px, py)) {
+        return false;
+    }
+    sim->cityEvents.lastStepTime = sim->cityTime;
+    loose_inmates(sim, x, y, px, py);
+    notes.push_back(place_note(info(Kind::PrisonEscape).notice, px, py));
+    apply_crime(sim);
+    return true;
+}
+
+bool start_riot_at(Micropolis *sim, int x, int y, std::vector<Note> &notes)
+{
+    const std::string why = unavailable_reason(sim, Kind::Riot);
+    if (!why.empty()) {
+        notes.push_back(plain_note(why));
+        return false;
+    }
+    if (!Micropolis::testBounds(x, y)) {
+        return false;
+    }
+    std::vector<std::pair<int, int>> pool = riot_targets(sim, x, y, kRiotDowntownRadius);
+    if (pool.empty()) {
+        pool = riot_targets(sim, 0, 0, -1);
+    }
+    sim->cityEvents.lastStepTime = sim->cityTime;
+    if (!riot_on(sim, std::move(pool), notes)) {
+        return false;
+    }
+    apply_crime(sim);
     return true;
 }
 

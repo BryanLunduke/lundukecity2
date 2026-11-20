@@ -453,6 +453,9 @@ void Micropolis::simLoadInit()
         5,          // Boston (nuclear meltdown)
         2 * 48,     // Rio (flooding)
         SEATTLE_ZONE_WAIT + 1, // Seattle (Autonomous Zone)
+        SF1962_ESCAPE_WAIT + 1, // San Francisco 1962 (Prison Escape)
+        PORTLAND_RIOT_WAIT + 1, // Portland (Riot)
+        SANDIEGO_LION_WAIT + 1, // San Diego (Zoo Escape)
     };
 
     // Time to wait before score calculation for each scenario
@@ -467,6 +470,9 @@ void Micropolis::simLoadInit()
         5 * 48,     // Boston (nuclear meltdown)
         10 * 48,    // Rio (flooding)
         SEATTLE_YEARS * 48, // Seattle (Autonomous Zone)
+        SF1962_YEARS * 48, // San Francisco 1962 (Prison Escape)
+        PORTLAND_YEARS * 48, // Portland (Riot)
+        SANDIEGO_YEARS * 48, // San Diego (Zoo Escape)
     };
 
     externalMarket = (float)miscHist[1];
@@ -1467,6 +1473,8 @@ void Micropolis::doFire(const Position &pos)
     static const short DX[4] = { -1,  0,  1,  0 };
     static const short DY[4] = {  0, -1,  0,  1 };
 
+    const bool fromRiot = cityEvents.riotFire[pos.posX][pos.posY] != 0;
+
     // Try to set neighbouring tiles on fire as well
     for (short z = 0; z < 4; z++) {
 
@@ -1492,6 +1500,9 @@ void Micropolis::doFire(const Position &pos)
                 }
 
                 map[xTem][yTem] = randomFire();
+                if (fromRiot) {
+                    cityEvents.riotFire[xTem][yTem] = 1;
+                }
             }
         }
     }
@@ -1513,6 +1524,7 @@ void Micropolis::doFire(const Position &pos)
     // Decide whether to put out the fire.
     if (getRandom(rate) == 0) {
         map[pos.posX][pos.posY] = randomRubble();
+        cityEvents.riotFire[pos.posX][pos.posY] = 0;
     }
 }
 

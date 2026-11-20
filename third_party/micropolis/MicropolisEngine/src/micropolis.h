@@ -872,6 +872,9 @@ enum Scenario {
     SC_BOSTON,         ///< Boston (nuclear meltdown)
     SC_RIO,            ///< Rio (flooding)
     SC_SEATTLE,        ///< Seattle (Autonomous Zone; Lunduke City 2)
+    SC_SAN_FRANCISCO_1962, ///< San Francisco 1962 (Prison Escape; Lunduke City 2)
+    SC_PORTLAND,           ///< Portland (Riot; Lunduke City 2)
+    SC_SAN_DIEGO,          ///< San Diego (Zoo Escape; Lunduke City 2)
 
     SC_COUNT,          ///< Number of scenarios
 };
@@ -888,6 +891,41 @@ static const int BERN_POPULATION_GOAL = 90000;
 static const int SEATTLE_CRIME_GOAL = 60;
 static const int SEATTLE_ZONE_WAIT = 4;
 static const int SEATTLE_YEARS = 5;
+
+/**
+ * San Francisco 1962 scenario (Lunduke City 2): the inmates break out of
+ * Alcatraz SF1962_ESCAPE_WAIT city-time steps (weeks) after the May 1962
+ * start, in June. Win with the escape over (cityEvents.prisonSteps == 0)
+ * and average crime below SF1962_CRIME_GOAL at the deadline.
+ */
+static const int SF1962_CRIME_GOAL = 45;
+static const int SF1962_ESCAPE_WAIT = 5;
+static const int SF1962_YEARS = 2;
+
+/**
+ * Portland scenario (Lunduke City 2): a riot breaks out downtown
+ * PORTLAND_RIOT_WAIT city-time steps (weeks) after the mid-July 2020
+ * start, in August. Win with the riot over (cityEvents.riotSteps == 0), no
+ * fire burning anywhere on the map and average crime below
+ * PORTLAND_CRIME_GOAL at the deadline.
+ */
+static const int PORTLAND_CRIME_GOAL = 60;
+static const int PORTLAND_RIOT_WAIT = 3;
+static const int PORTLAND_YEARS = 1;
+
+/**
+ * San Diego scenario (Lunduke City 2): a lion gets out of the San Diego Zoo
+ * SANDIEGO_LION_WAIT city-time steps (weeks) after the March 2025 start, in
+ * April. Win with the lion caught by the police within
+ * SANDIEGO_LION_CATCH_STEPS steps (four months), that is back in the zoo
+ * (cityEvents.lionActive == 0) after it got out (lionSteps > 0), long
+ * before its keepers would fetch it (City 2's kLionMaxSteps, six months),
+ * and at least SANDIEGO_POPULATION_GOAL people at the deadline.
+ */
+static const int SANDIEGO_LION_WAIT = 5;
+static const int SANDIEGO_LION_CATCH_STEPS = 16;
+static const int SANDIEGO_POPULATION_GOAL = 120000;
+static const int SANDIEGO_YEARS = 2;
 
 
 ///////////////////////////////////////////////////
@@ -1119,6 +1157,10 @@ struct CityEvents {
     int prisonX;
     int prisonY;
     int prisonSteps;
+    // Fires the riot started, or that spread from one. A 1 means this tile's
+    // fire counts for the Portland "riot fires out" goal. Cleared when the
+    // fire goes out. Saved in the LCD1 trailer (version 3).
+    unsigned char riotFire[WORLD_W][WORLD_H];
     // Not saved: the city time the step logic last ran.
     long lastStepTime;
 };
@@ -1960,6 +2002,15 @@ public:
      * at (x, y) on fire. Returns true when a fire started.
      */
     bool eventFireAt(int x, int y);
+    // Lunduke City 2: mark, count and forget fires that started in a riot.
+    void markRiotFire(int x, int y);
+    void pruneRiotFires();
+    int riotFiresBurning() const;
+    // After loading a saved city, put land value, pollution, crime and
+    // terrain density back to the values that were saved, or recompute them
+    // when the file is from before those maps were saved.
+    void applyOrSettleScanMapsAfterLoad();
+    void paintServiceCoverage();
 
     /**
      * City 2 Lion Escape: the residential zone or house nearest (x, y),
@@ -2450,6 +2501,17 @@ public:
 
     /** City 2 lasting disasters. Saved in the LCD1 trailer after LCM1. */
     CityEvents cityEvents;
+    // Scan maps from a save's LCS1 trailer, applied after doSimInit so a
+    // loaded city shows the same crime and land value it was saved with.
+    bool pendingScanMapsValid;
+    short pendingCrimeAverage;
+    short pendingLandValueAverage;
+    short pendingPollutionAverage;
+    Byte pendingLandValueMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
+    Byte pendingPollutionMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
+    Byte pendingCrimeMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
+    Byte pendingTerrainMap[((WORLD_W + 3) / 4) * ((WORLD_H + 3) / 4)];
+
 
     /**
      * LCW1 trailer decoded by loadFileDir and applied by loadFile after

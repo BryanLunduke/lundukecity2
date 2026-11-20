@@ -10,3 +10,38 @@ seattle_map = executable(
   build_by_default: false,
   install: false,
 )
+
+# The same for the San Francisco (1962), Portland and San Diego maps; they
+# share tools/map_builder.hpp.
+sf1962_map = executable(
+  'sf1962_map',
+  'sf1962_map.cpp',
+  '../src/terrain_paint.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  build_by_default: false,
+  install: false,
+)
+
+portland_map = executable(
+  'portland_map',
+  'portland_map.cpp',
+  '../src/terrain_paint.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  build_by_default: false,
+  install: false,
+)
+
+sandiego_map = executable(
+  'sandiego_map',
+  'sandiego_map.cpp',
+  '../src/terrain_paint.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  build_by_default: false,
+  install: false,
+)

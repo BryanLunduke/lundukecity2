@@ -206,6 +206,27 @@ void Micropolis::scenarioDisaster()
             }
             break;
 
+        case SC_SAN_FRANCISCO_1962:
+            // Lunduke City 2: the front end raises the escape from Alcatraz.
+            if (disasterWait == 1) {
+                callback("scenarioPrisonEscape", "");
+            }
+            break;
+
+        case SC_PORTLAND:
+            // Lunduke City 2: the front end raises the riot downtown.
+            if (disasterWait == 1) {
+                callback("scenarioRiot", "");
+            }
+            break;
+
+        case SC_SAN_DIEGO:
+            // Lunduke City 2: the front end lets the lion out of the zoo.
+            if (disasterWait == 1) {
+                callback("scenarioLionEscape", "");
+            }
+            break;
+
         default:
             NOT_REACHED();
             break; // Never used
@@ -335,6 +356,46 @@ void Micropolis::makeFire()
  * City 2 events: set one building tile on fire. False when (x, y) is not a
  * burnable building tile.
  */
+void Micropolis::markRiotFire(int x, int y)
+{
+    if (!testBounds(x, y)) {
+        return;
+    }
+    cityEvents.riotFire[x][y] = 1;
+}
+
+void Micropolis::pruneRiotFires()
+{
+    for (int x = 0; x < WORLD_W; x++) {
+        for (int y = 0; y < WORLD_H; y++) {
+            if (cityEvents.riotFire[x][y] == 0) {
+                continue;
+            }
+            const MapTile tile = map[x][y] & LOMASK;
+            if (tile < FIREBASE || tile > LASTFIRE) {
+                cityEvents.riotFire[x][y] = 0;
+            }
+        }
+    }
+}
+
+int Micropolis::riotFiresBurning() const
+{
+    int n = 0;
+    for (int x = 0; x < WORLD_W; x++) {
+        for (int y = 0; y < WORLD_H; y++) {
+            if (cityEvents.riotFire[x][y] == 0) {
+                continue;
+            }
+            const MapTile tile = map[x][y] & LOMASK;
+            if (tile >= FIREBASE && tile <= LASTFIRE) {
+                n++;
+            }
+        }
+    }
+    return n;
+}
+
 bool Micropolis::eventFireAt(int x, int y)
 {
     if (!testBounds(x, y)) {

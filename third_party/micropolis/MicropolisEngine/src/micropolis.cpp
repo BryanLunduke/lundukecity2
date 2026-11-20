@@ -763,6 +763,7 @@ void Micropolis::init()
     eventFrameFn = NULL;
     editBlockedFn = NULL;
     std::memset(&cityEvents, 0, sizeof(cityEvents));
+    pendingScanMapsValid = false;
     specialIncome = 0;
 
     // void *callbackData;

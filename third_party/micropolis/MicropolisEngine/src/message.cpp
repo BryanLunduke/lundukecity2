@@ -321,6 +321,7 @@ void Micropolis::checkGrowth()
 }
 
 
+
 /**
  * Compute score for each scenario
  * @param type Scenario used
@@ -392,6 +393,35 @@ void Micropolis::doScenarioScore(Scenario type)
     case SC_SEATTLE:
         // Lunduke City 2: the Autonomous Zone must be gone and crime down.
         if (cityEvents.zoneCount <= 0 && crimeAverage < SEATTLE_CRIME_GOAL) {
+            z = MESSAGE_SCENARIO_WON;
+        }
+        break;
+
+    case SC_SAN_DIEGO: {
+        // Lunduke City 2: the police caught the lion within four months,
+        // and the city kept its people.
+        const Quad people = censusSnapshotValid
+            ? static_cast<Quad>(cityPopulationOf(snapResPop, snapComPop, snapIndPop, snapDataCenterPop))
+            : getPopulation();
+        const bool police_caught = cityEvents.lionActive == 0 && cityEvents.lionSteps > 0 &&
+                                   cityEvents.lionSteps <= SANDIEGO_LION_CATCH_STEPS;
+        if (police_caught && people >= SANDIEGO_POPULATION_GOAL) {
+            z = MESSAGE_SCENARIO_WON;
+        }
+        break;
+    }
+
+    case SC_PORTLAND:
+        // Lunduke City 2: the riot over, every riot fire out, crime down.
+        // Ordinary random fires do not count.
+        if (cityEvents.riotSteps <= 0 && riotFiresBurning() == 0 && crimeAverage < PORTLAND_CRIME_GOAL) {
+            z = MESSAGE_SCENARIO_WON;
+        }
+        break;
+
+    case SC_SAN_FRANCISCO_1962:
+        // Lunduke City 2: the escapees rounded up and crime down.
+        if (cityEvents.prisonSteps <= 0 && crimeAverage < SF1962_CRIME_GOAL) {
             z = MESSAGE_SCENARIO_WON;
         }
         break;
