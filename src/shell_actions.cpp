@@ -216,6 +216,8 @@ void Shell::begin_scene_fade()
 void Shell::apply_effects()
 {
     effects_ = look_fx::clamp_effects(effects_);
+    // Tests, smoke runs and demos (no motion_fx_) get the still frame.
+    map_.set_effects(motion_fx_ ? effects_ : look_fx::EffectsOff);
     if (!motion_on()) {
         skip_motion();
     }

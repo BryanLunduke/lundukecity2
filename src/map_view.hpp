@@ -91,6 +91,14 @@ public:
     int blink_remaining_ms() const;
 
     void draw(cairo_t *cr);
+    // Look-and-feel effects, a look_fx::Effects value. Off draws them still.
+    void set_effects(int effects);
+    int effects() const { return effects_; }
+    // The ambient clock (fire smoke, and later water and clouds) runs only
+    // while the city runs, so a paused city keeps a still frame.
+    void advance_fx(int elapsed_ms, bool running);
+    // A new ambient step is due and the last frame had something moving.
+    bool fx_frame_due() const;
     // Night mode: darken the map and add the light layer (lit windows,
     // street lamps, fires). The tile art is not touched. hold hides it for
     // a frame, for example under a data map.
@@ -123,6 +131,20 @@ public:
     std::function<void(int, int, int, int)> on_tool_drag;
 
 private:
+    // Tiles inside the current clip, padded by `pad` and kept on the map.
+    struct TileSpan {
+        int x0 = 0;
+        int y0 = 0;
+        int x1 = 0;
+        int y1 = 0;
+    };
+    TileSpan visible_tiles(cairo_t *cr, int source, int pad) const;
+    void draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk);
+    bool classic_fx() const;
+    int effects_ = 0;
+    int fx_ms_ = 0;
+    mutable int fx_drawn_step_ = -1;
+    bool fx_animated_ = false;
     bool tile_at(double x, double y, int &tx, int &ty) const;
     void draw_footprint(cairo_t *cr) const;
     void draw_dust(cairo_t *cr) const;

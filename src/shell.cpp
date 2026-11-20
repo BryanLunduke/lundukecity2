@@ -298,6 +298,7 @@ int Shell::run(int argc, char **argv)
     // on the command line, and not for the scripted demo / review runs.
     const bool scripted = smoke_ || ui_test_ || review_ || !demo_.empty();
     motion_fx_ = !ui_test_ && !review_ && !smoke_ && demo_.empty();
+    map_.set_effects(motion_fx_ ? effects_ : look_fx::EffectsOff);
     if (!scripted && !launched_with_file) {
         welcome_gate_ = true;
         // Offer recovery before Welcome. The gate used to keep a dialog
@@ -1240,7 +1241,7 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
     reasons.motion = scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                     puff_on_ || pop_on_ || flash_on_;
+                     puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due();
     return reasons;
 }
 
@@ -1348,6 +1349,7 @@ void Shell::loop()
         if (speed_ > 0 && !dialog_pauses()) {
             blink_drew_ = map_.tick(elapsed);
         }
+        map_.advance_fx(elapsed, speed_ > 0 && !dialog_pauses());
         palette_.advance(elapsed);
         if (hover_id_ != tracked_hover_) {
             tracked_hover_ = hover_id_;

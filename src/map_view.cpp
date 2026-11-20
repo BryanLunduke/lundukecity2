@@ -5,6 +5,9 @@
 #include "map_view.hpp"
 #include "night_light.hpp"
 
+#include "dither_mask.hpp"
+#include "look_fx.hpp"
+
 #include "assets.hpp"
 #include "map_fit.hpp"
 #include "present.hpp"
@@ -19,9 +22,16 @@
 #include "micropolis.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <string>
+
+namespace {
+// Ambient effects step at 10 frames a second; enough for smoke and water,
+// and a running city already wakes about that often for the simulation.
+constexpr int kFxStepMs = 100;
+} // namespace
 
 MapView::MapView()
 {
@@ -1125,6 +1135,14 @@ void MapView::draw(cairo_t *cr)
         tint_sprites(cr, sprite_to_source);
         draw_night(cr, source);
     }
+    fx_animated_ = false;
+    fx_drawn_step_ = fx_ms_ / kFxStepMs;
+    if (!night_hold_ && tile_size_ > kMapTileOverview) {
+        // Effects sit on the city, not on a data map, and not at the
+        // overview zoom where a tile is a few pixels.
+        const TileSpan span = visible_tiles(cr, source, 2);
+        draw_fire(cr, source, span, dusk);
+    }
     cairo_restore(cr);
     draw_dust(cr);
     draw_footprint(cr);
@@ -1338,5 +1356,171 @@ void MapView::draw_night(cairo_t *cr, int source)
     cairo_pattern_set_filter(cairo_get_source(cr), source >= night_light::kTile ? CAIRO_FILTER_NEAREST
                                                                                 : CAIRO_FILTER_GOOD);
     cairo_paint(cr);
+    cairo_restore(cr);
+}
+
+// ---------------------------------------------------------------------------
+// Look-and-feel effects drawn over the tiles. Nothing here touches the tile
+// sheets; it is all drawn in code each frame from the map words.
+
+void MapView::set_effects(int effects)
+{
+    effects_ = look_fx::clamp_effects(effects);
+}
+
+void MapView::advance_fx(int elapsed_ms, bool running)
+{
+    if (!running || !look_fx::motion_allowed(effects_) || elapsed_ms <= 0) {
+        return;
+    }
+    // Wraps well before int overflow; every phase below is periodic in it.
+    fx_ms_ = (fx_ms_ + std::min(elapsed_ms, 500)) % (kFxStepMs * 360000);
+}
+
+bool MapView::fx_frame_due() const
+{
+    return fx_animated_ && look_fx::motion_allowed(effects_) && fx_ms_ / kFxStepMs != fx_drawn_step_;
+}
+
+bool MapView::classic_fx() const
+{
+    return tile_atlas().look() == 0;
+}
+
+MapView::TileSpan MapView::visible_tiles(cairo_t *cr, int source, int pad) const
+{
+    double x1 = 0;
+    double y1 = 0;
+    double x2 = 0;
+    double y2 = 0;
+    cairo_clip_extents(cr, &x1, &y1, &x2, &y2);
+    TileSpan span;
+    const int px = std::max(1, source);
+    span.x0 = std::max(0, static_cast<int>(std::floor(x1 / px)) - pad);
+    span.y0 = std::max(0, static_cast<int>(std::floor(y1 / px)) - pad);
+    span.x1 = std::min(CitySession::kWorldW, static_cast<int>(std::ceil(x2 / px)) + pad);
+    span.y1 = std::min(CitySession::kWorldH, static_cast<int>(std::ceil(y2 / px)) + pad);
+    return span;
+}
+
+void MapView::draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk)
+{
+    if (cached_raw_.empty()) {
+        return;
+    }
+    struct Fire {
+        int x;
+        int y;
+    };
+    std::vector<Fire> fires;
+    for (int y = span.y0; y < span.y1; ++y) {
+        for (int x = span.x0; x < span.x1; ++x) {
+            const int raw = cached_raw_[static_cast<std::size_t>(y * CitySession::kWorldW + x)];
+            const int tile = raw < 0 ? -1 : (raw & LOMASK);
+            if (tile >= FIREBASE && tile <= LASTFIRE) {
+                fires.push_back(Fire{x, y});
+            }
+        }
+    }
+    if (fires.empty()) {
+        return;
+    }
+    const bool moving = look_fx::motion_allowed(effects_);
+    const bool classic = classic_fx();
+    const double px = static_cast<double>(source);
+    const int step = fx_ms_ / kFxStepMs;
+    fx_animated_ = fx_animated_ || moving;
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    if (!dusk) {
+        // Heat glow on the ground around a fire. Night lighting already
+        // lights fires, so the day glow steps aside at dusk. The fire
+        // tiles themselves are left out so the flames keep their art.
+        cairo_save(cr);
+        double cx1 = 0;
+        double cy1 = 0;
+        double cx2 = 0;
+        double cy2 = 0;
+        cairo_clip_extents(cr, &cx1, &cy1, &cx2, &cy2);
+        cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+        cairo_rectangle(cr, cx1, cy1, cx2 - cx1, cy2 - cy1);
+        for (const Fire &fire : fires) {
+            cairo_rectangle(cr, fire.x * px, fire.y * px, px, px);
+        }
+        cairo_clip(cr);
+        cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
+        if (classic) {
+            // Opaque orange specks thinning with distance: two dithered rings.
+            for (const Fire &fire : fires) {
+                const double cx = (fire.x + 0.5) * px;
+                const double cy = (fire.y + 0.5) * px;
+                const double flick = moving ? look_fx::hash01(static_cast<std::uint32_t>(fire.x * 977 + fire.y * 131 + step)) : 0.5;
+                cairo_new_path(cr);
+                cairo_arc(cr, cx, cy, px * (1.25 + 0.15 * flick), 0, 2 * look_fx::kPi);
+                look_fx::fill_fx(cr, 1.0, 125.0 / 255.0, 0.0, 2.0 / 16.0, true);
+                cairo_new_path(cr);
+                cairo_arc(cr, cx, cy, px * 0.95, 0, 2 * look_fx::kPi);
+                look_fx::fill_fx(cr, 1.0, 190.0 / 255.0, 0.0, 2.0 / 16.0, true);
+            }
+        } else {
+            cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
+            for (const Fire &fire : fires) {
+                const double cx = (fire.x + 0.5) * px;
+                const double cy = (fire.y + 0.5) * px;
+                const double flick =
+                    moving ? 0.78 + 0.22 * look_fx::hash01(static_cast<std::uint32_t>(fire.x * 977 + fire.y * 131 + step))
+                           : 0.9;
+                const double radius = px * 2.4;
+                cairo_pattern_t *glow = cairo_pattern_create_radial(cx, cy, px * 0.2, cx, cy, radius);
+                cairo_pattern_add_color_stop_rgba(glow, 0.0, 1.0, 0.45, 0.08, 0.55 * flick);
+                cairo_pattern_add_color_stop_rgba(glow, 0.4, 1.0, 0.36, 0.05, 0.26 * flick);
+                cairo_pattern_add_color_stop_rgba(glow, 1.0, 1.0, 0.30, 0.0, 0.0);
+                cairo_set_source(cr, glow);
+                cairo_rectangle(cr, cx - radius, cy - radius, radius * 2, radius * 2);
+                cairo_fill(cr);
+                cairo_pattern_destroy(glow);
+            }
+        }
+        cairo_restore(cr);
+    }
+    if (moving) {
+        // Smoke plumes drifting up and to the right, and a few embers.
+        // Each puff's phase is a hash of its tile, so nothing is stored.
+        const int per_fire = fires.size() > 80 ? 2 : (fires.size() > 30 ? 3 : 5);
+        for (const Fire &fire : fires) {
+            const double cx = (fire.x + 0.5) * px;
+            const double cy = (fire.y + 0.3) * px;
+            for (int k = 0; k < per_fire; ++k) {
+                const std::uint32_t seed = static_cast<std::uint32_t>(fire.x * 7919 + fire.y * 131 + k * 31337);
+                const double sd = look_fx::hash01(seed);
+                const double period = 1500.0 + 700.0 * look_fx::hash01(seed ^ 0x55u);
+                const double age = std::fmod(fx_ms_ / period + look_fx::hash01(seed ^ 0xa7u), 1.0);
+                const double drift = std::sin(age * 6.0 + sd * 9.0) * px * 0.18;
+                const double x = cx + age * px * 1.2 * (0.6 + sd) + drift;
+                const double y = cy - age * px * 3.6 * (0.7 + sd * 0.6);
+                const double r = std::max(1.0, px * (0.15 + age * 0.45));
+                const double alpha = 0.95 * std::pow(1.0 - age, 0.8) * std::min(1.0, age / 0.1);
+                const double grey = (34.0 + 64.0 * age) / 255.0;
+                // A hard-edged disc on whole pixels, like the tile art.
+                cairo_new_path(cr);
+                cairo_arc(cr, std::round(x), std::round(y), std::round(r), 0, 2 * look_fx::kPi);
+                if (classic) {
+                    const double vga = age < 0.45 ? 81.0 / 255.0 : 130.0 / 255.0;
+                    look_fx::fill_fx(cr, vga, vga, vga, alpha, true);
+                } else {
+                    look_fx::fill_fx(cr, grey, grey, grey + 0.015, alpha, false);
+                }
+                if (age < 0.35 && sd > 0.55) {
+                    const double ex = std::round(x + sd * px * 0.25);
+                    const double ey = std::round(y + px * 0.15);
+                    const double es = std::max(1.0, std::round(px / 16.0));
+                    cairo_new_path(cr);
+                    cairo_rectangle(cr, ex, ey, es, es);
+                    cairo_set_source_rgb(cr, 1.0, classic ? 190.0 / 255.0 : 0.80, classic ? 0.0 : 0.24);
+                    cairo_fill(cr);
+                }
+            }
+        }
+    }
     cairo_restore(cr);
 }
