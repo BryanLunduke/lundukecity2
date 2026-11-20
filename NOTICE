@@ -139,6 +139,11 @@ Comment:
  Lunduke City 2: tools/seattle_map.cpp builds it from a hand-drawn
  outline of Seattle's real geography and lays the city out with the
  engine's own tools. It contains no data from any other game's map.
+ .
+ sanfrancisco1962.cty is the map of the San Francisco 1962 scenario,
+ built the same way by tools/sf1962_map.cpp (with tools/map_builder.hpp)
+ from a hand-drawn outline of San Francisco's real geography. It contains
+ no data from any other game's map.
 
 License: GPL-3+
  This package is free software; you can redistribute it and/or modify

@@ -396,6 +396,13 @@ void Micropolis::doScenarioScore(Scenario type)
         }
         break;
 
+    case SC_SAN_FRANCISCO_1962:
+        // Lunduke City 2: the escapees rounded up and crime down.
+        if (cityEvents.prisonSteps <= 0 && crimeAverage < SF1962_CRIME_GOAL) {
+            z = MESSAGE_SCENARIO_WON;
+        }
+        break;
+
     default:
         NOT_REACHED();
         scoreType = SC_NONE;

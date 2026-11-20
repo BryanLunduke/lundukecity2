@@ -206,6 +206,13 @@ void Micropolis::scenarioDisaster()
             }
             break;
 
+        case SC_SAN_FRANCISCO_1962:
+            // Lunduke City 2: the front end raises the escape from Alcatraz.
+            if (disasterWait == 1) {
+                callback("scenarioPrisonEscape", "");
+            }
+            break;
+
         default:
             NOT_REACHED();
             break; // Never used

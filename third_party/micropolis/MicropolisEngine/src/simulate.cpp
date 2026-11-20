@@ -453,6 +453,7 @@ void Micropolis::simLoadInit()
         5,          // Boston (nuclear meltdown)
         2 * 48,     // Rio (flooding)
         SEATTLE_ZONE_WAIT + 1, // Seattle (Autonomous Zone)
+        SF1962_ESCAPE_WAIT + 1, // San Francisco 1962 (Prison Escape)
     };
 
     // Time to wait before score calculation for each scenario
@@ -467,6 +468,7 @@ void Micropolis::simLoadInit()
         5 * 48,     // Boston (nuclear meltdown)
         10 * 48,    // Rio (flooding)
         SEATTLE_YEARS * 48, // Seattle (Autonomous Zone)
+        SF1962_YEARS * 48, // San Francisco 1962 (Prison Escape)
     };
 
     externalMarket = (float)miscHist[1];

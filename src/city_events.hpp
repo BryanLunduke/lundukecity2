@@ -117,6 +117,13 @@ bool start(Micropolis *sim, Kind kind, std::vector<Note> &notes);
 // block, the block has no neighbour, or a zone already stands. None of
 // these four is ever picked by the random disaster roll.
 bool start_zone_at(Micropolis *sim, int x, int y, std::vector<Note> &notes);
+// Prison Escape from a prison on an island, for scenarios: the escapees
+// come ashore at (x, y), so the fires (kPrisonFires within
+// kPrisonFireRadius) and the crime (within kPrisonCrimeRadius, fading with
+// the police coverage there) are around that landing instead of around
+// the prison. The notice points at the prison. False (with the reason in
+// notes) when there is no prison or an escape is already going on.
+bool start_prison_landing(Micropolis *sim, int x, int y, std::vector<Note> &notes);
 
 // ---- Running -----------------------------------------------------------
 

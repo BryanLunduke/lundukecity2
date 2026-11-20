@@ -1808,7 +1808,7 @@ bool Micropolis::loadScenario(Scenario s)
     Quad time = 0;
     int funds = 5000;
 
-    if (s < SC_DULLSVILLE || s > SC_SEATTLE) {
+    if (s < SC_DULLSVILLE || s >= SC_COUNT) {
         s = SC_DULLSVILLE;
     }
 
@@ -1876,6 +1876,15 @@ bool Micropolis::loadScenario(Scenario s)
             fname = "seattle.cty";
             which = SC_SEATTLE;
             time = ((2020 - 1900) * 48) + 4 * 4 + 3;
+            funds = 20000;
+            break;
+        case SC_SAN_FRANCISCO_1962:
+            // Lunduke City 2's own map (data/scenarios/sanfrancisco1962.cty).
+            // It opens at the start of May 1962; the escape is in June.
+            name = "San Francisco";
+            fname = "sanfrancisco1962.cty";
+            which = SC_SAN_FRANCISCO_1962;
+            time = ((1962 - 1900) * 48) + 4 * 4;
             funds = 20000;
             break;
         default:

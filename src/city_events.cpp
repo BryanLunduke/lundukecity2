@@ -834,18 +834,18 @@ void lion_step(Micropolis *sim, std::vector<Note> &notes)
 
 // ---- Prison Escape ------------------------------------------------------
 
-bool start_prison(Micropolis *sim, std::vector<Note> &notes)
+// Fires on up to kPrisonFires buildings within kPrisonFireRadius of
+// (px, py), never on the prison at (prison_x, prison_y), and the crime
+// boost centred on (px, py).
+void loose_inmates(Micropolis *sim, int px, int py, int prison_x, int prison_y)
 {
-    int px = 0;
-    int py = 0;
-    if (!find_center(sim, SPECIAL_PRISON, px, py)) {
-        return false;
-    }
     std::vector<std::pair<int, int>> spots;
     for (int dy = -kPrisonFireRadius; dy <= kPrisonFireRadius; ++dy) {
         for (int dx = -kPrisonFireRadius; dx <= kPrisonFireRadius; ++dx) {
             // Not the prison itself (4x4, anchor 1,1: -1..2).
-            if (dx >= -1 && dx <= 2 && dy >= -1 && dy <= 2) {
+            const int ox = px + dx - prison_x;
+            const int oy = py + dy - prison_y;
+            if (ox >= -1 && ox <= 2 && oy >= -1 && oy <= 2) {
                 continue;
             }
             if (dx * dx + dy * dy > kPrisonFireRadius * kPrisonFireRadius) {
@@ -877,6 +877,16 @@ bool start_prison(Micropolis *sim, std::vector<Note> &notes)
     e.prisonY = py;
     e.prisonCrime = kPrisonCrimePeak;
     e.prisonSteps = kPrisonMaxSteps;
+}
+
+bool start_prison(Micropolis *sim, std::vector<Note> &notes)
+{
+    int px = 0;
+    int py = 0;
+    if (!find_center(sim, SPECIAL_PRISON, px, py)) {
+        return false;
+    }
+    loose_inmates(sim, px, py, px, py);
     notes.push_back(place_note(info(Kind::PrisonEscape).notice, px, py));
     return true;
 }
@@ -1065,6 +1075,25 @@ bool start_zone_at(Micropolis *sim, int x, int y, std::vector<Note> &notes)
     }
     // Show on the land value map now; the engine's next scan keeps it.
     apply_land(sim);
+    return true;
+}
+
+bool start_prison_landing(Micropolis *sim, int x, int y, std::vector<Note> &notes)
+{
+    const std::string why = unavailable_reason(sim, Kind::PrisonEscape);
+    if (!why.empty()) {
+        notes.push_back(plain_note(why));
+        return false;
+    }
+    int px = 0;
+    int py = 0;
+    if (!Micropolis::testBounds(x, y) || !find_center(sim, SPECIAL_PRISON, px, py)) {
+        return false;
+    }
+    sim->cityEvents.lastStepTime = sim->cityTime;
+    loose_inmates(sim, x, y, px, py);
+    notes.push_back(place_note(info(Kind::PrisonEscape).notice, px, py));
+    apply_crime(sim);
     return true;
 }
 

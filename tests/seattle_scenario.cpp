@@ -61,16 +61,16 @@ bool is_water(int raw)
 int main()
 {
     // Catalog.
-    const CitySession::ScenarioDef &def = CitySession::scenario_def(CitySession::kScenarioCount - 1);
+    const CitySession::ScenarioDef &def = CitySession::scenario_def(SC_SEATTLE - 1);
     if (def.id != SC_SEATTLE || std::string(def.name) != "Seattle" || def.year != 2020 || def.years != SEATTLE_YEARS) {
-        return fail(1, "Seattle is not the last scenario in the catalog");
+        return fail(1, "Seattle is not the ninth scenario in the catalog");
     }
     if (std::string(def.goal).find("below " + std::to_string(SEATTLE_CRIME_GOAL) + " ") == std::string::npos ||
         std::string(def.goal).find("Autonomous Zone") == std::string::npos) {
         return fail(2, std::string("the goal text does not match SEATTLE_CRIME_GOAL: ") + def.goal);
     }
     if (accepted_sidecar_score_type(SC_SEATTLE, SC_SEATTLE) != SC_SEATTLE ||
-        accepted_sidecar_score_type(0, SC_SEATTLE) != SC_SEATTLE || accepted_sidecar_score_type(10, 10) != 0) {
+        accepted_sidecar_score_type(0, SC_SEATTLE) != SC_SEATTLE || accepted_sidecar_score_type(SC_COUNT, SC_COUNT) != 0) {
         return fail(3, "a Seattle save's scenario clock is not accepted");
     }
 

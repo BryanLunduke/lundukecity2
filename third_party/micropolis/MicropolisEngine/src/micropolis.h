@@ -872,6 +872,7 @@ enum Scenario {
     SC_BOSTON,         ///< Boston (nuclear meltdown)
     SC_RIO,            ///< Rio (flooding)
     SC_SEATTLE,        ///< Seattle (Autonomous Zone; Lunduke City 2)
+    SC_SAN_FRANCISCO_1962, ///< San Francisco 1962 (Prison Escape; Lunduke City 2)
 
     SC_COUNT,          ///< Number of scenarios
 };
@@ -888,6 +889,16 @@ static const int BERN_POPULATION_GOAL = 90000;
 static const int SEATTLE_CRIME_GOAL = 60;
 static const int SEATTLE_ZONE_WAIT = 4;
 static const int SEATTLE_YEARS = 5;
+
+/**
+ * San Francisco 1962 scenario (Lunduke City 2): the inmates break out of
+ * Alcatraz SF1962_ESCAPE_WAIT city-time steps (weeks) after the May 1962
+ * start, in June. Win with the escape over (cityEvents.prisonSteps == 0)
+ * and average crime below SF1962_CRIME_GOAL at the deadline.
+ */
+static const int SF1962_CRIME_GOAL = 45;
+static const int SF1962_ESCAPE_WAIT = 5;
+static const int SF1962_YEARS = 2;
 
 
 ///////////////////////////////////////////////////

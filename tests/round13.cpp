@@ -192,8 +192,9 @@ int main()
     // Every shipped scenario still loads.
     Micropolis scen;
     for (int s = SC_DULLSVILLE; s < SC_COUNT; ++s) {
-        // Seattle is City 2's own map in data/scenarios.
-        scen.resourceDir = s == SC_SEATTLE ? LUNDUKE_CITY_ASSET_DIR "/../../data/scenarios" : LUNDUKE_CITY_ASSET_DIR "/res";
+        // Seattle and the scenarios after it are City 2's own maps in
+        // data/scenarios.
+        scen.resourceDir = s >= SC_SEATTLE ? LUNDUKE_CITY_ASSET_DIR "/../../data/scenarios" : LUNDUKE_CITY_ASSET_DIR "/res";
         if (!scen.loadScenario(static_cast<Scenario>(s))) {
             return fail(20, "scenario " + std::to_string(s) + " rejected: " + scen.loadErrorDetail);
         }
