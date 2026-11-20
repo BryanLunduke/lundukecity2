@@ -2159,6 +2159,14 @@ public:
      */
     int terrainCreateIsland;
 
+    /**
+     * Lunduke City terrain editor: a whole painted map, WORLD_W * WORLD_H
+     * values in rows (index y * WORLD_W + x). When set, generateMap() puts
+     * it in place of the land it generated, before the new-city setup runs.
+     * nullptr (the default) keeps the generated land.
+     */
+    const unsigned short *terrainOverride;
+
 
     /**
      * The seed of the most recently generated city.

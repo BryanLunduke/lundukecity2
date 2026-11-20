@@ -223,7 +223,9 @@ void Shell::layout()
     }
     menu_h_ = dp(36);
     status_h_ = dp(36);
-    handheld_ = layout_mode::use_handheld(layout_pref_, deck_, handheld_device());
+    // The terrain editor keeps the desktop layout on every device: its
+    // toolbar is the left tray, and the handheld quick bar holds city tools.
+    handheld_ = !terrain_edit_ && layout_mode::use_handheld(layout_pref_, deck_, handheld_device());
     band_y_ = menu_h_;
     band_h_ = 0;
     hud_top_ = 0;
@@ -263,7 +265,8 @@ void Shell::layout()
         view_w_ = std::max(dp(32), win_w_);
         view_h_ = std::max(dp(32), win_h_);
     } else {
-        if (slate_) {
+        // The editor's top bar (city name, Map Complete) is a band in both skins.
+        if (slate_ || terrain_edit_) {
             band_h_ = dp(46);
         }
         // No message bar under the status line. Alerts are drawn over the map.
@@ -299,7 +302,7 @@ void Shell::layout()
         palette_.set_style(slate_, header);
         side_w_ = ToolPalette::width_for(cell_, columns);
         demand_y_ = pal_y_ + pal_height(columns) + gap;
-        demand_h_ = slate_ ? 0 : std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y_));
+        demand_h_ = (slate_ || terrain_edit_) ? 0 : std::max(0, std::min(dp(kMaxDemandPx), status_top - demand_y_));
         view_x_ = side_x_ + side_w_ + dp(8);
         view_y_ = menu_h_ + band_h_;
         view_w_ = std::max(dp(32), win_w_ - view_x_ - dp(8));
@@ -650,7 +653,13 @@ void Shell::draw_menubar(cairo_t *cr)
     const double ink_g = dark ? 0xE8 / 255.0 : theme::kTextG;
     const double ink_b = dark ? 0xDA / 255.0 : theme::kTextB;
     double x = 4;
-    for (int c = 0; c < menu_table::kColumnCount; ++c) {
+    if (terrain_edit_) {
+        // No menus while painting: the bar names the editor instead.
+        const char *title = "Terrain Editor";
+        paint_text(cr, bold_font(), title, x + 10, 9, ink_r, ink_g, ink_b, -1);
+        x += measure_text(cr, bold_font(), title, -1).width + 22;
+    }
+    for (int c = 0; c < menu_table::kColumnCount && !terrain_edit_; ++c) {
         const char *title = menu_table::column_title(c);
         const std::string plain = strip_mnemonic(title);
         const TextMetrics metrics = measure_text(cr, menu_font(), plain, -1);
@@ -1420,6 +1429,21 @@ void Shell::draw_dialog(cairo_t *cr)
                    {{"_Keep it", kCancel}, {"_Bulldoze", kOk}}, 0, focus_id_);
         return;
     }
+    if (dialog_ == Dialog::TerrainDiscard) {
+        const std::string question = "Leave the terrain editor without keeping your changes? The map goes back to how "
+                                     "it was when the editor opened.";
+        const double width = message_width(win_w_, margin, dp(420), dp(520));
+        const double column = std::max(1.0, width - 2.0 * margin);
+        const double body_h = text_block_height(question, column);
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Discard terrain changes?");
+        place_line(body_font(), question, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
+                   theme::kTextG, theme::kTextB);
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
+                   {{"_Keep editing", kCancel}, {"_Discard", kDiscard}}, 0, focus_id_);
+        return;
+    }
     if (dialog_ == Dialog::QuitConfirm) {
         const std::string question = "Quit Lunduke City 2?";
         const double width = message_width(win_w_, margin, dp(420), dp(520));
@@ -1688,10 +1712,18 @@ void Shell::draw_dialog(cairo_t *cr)
             const int preview_seed = preview_seed_for_field(field_b_, auto_seed_);
             const int preview_key = static_cast<int>(terrain_preview_key(preview_seed, new_island_, new_rivers_, new_lakes_,
                                                                          new_trees_));
-            if (terrain_key_ != preview_key) {
-                terrain_key_ = preview_key;
+            // A map painted in the terrain editor shows instead of the
+            // generated one while the seed and land knobs still match it.
+            const std::vector<unsigned short> *painted = pending_terrain_for_page();
+            const int shown_key = painted != nullptr ? preview_key ^ 0x40000000 : preview_key;
+            if (terrain_key_ != shown_key) {
+                terrain_key_ = shown_key;
                 std::vector<unsigned short> tiles;
-                if (session_.preview_terrain(preview_seed, new_island_, new_rivers_, new_lakes_, new_trees_, tiles) &&
+                if (painted != nullptr) {
+                    tiles = *painted;
+                }
+                if ((painted != nullptr ||
+                     session_.preview_terrain(preview_seed, new_island_, new_rivers_, new_lakes_, new_trees_, tiles)) &&
                     tiles.size() == static_cast<std::size_t>(CitySession::kWorldW * CitySession::kWorldH)) {
                     if (terrain_preview_ != nullptr) {
                         cairo_surface_destroy(terrain_preview_);
@@ -1737,7 +1769,7 @@ void Shell::draw_dialog(cairo_t *cr)
                 const double map_w = std::floor(120.0 * preview_scale);
                 const double map_h = std::floor(100.0 * preview_scale);
                 const double map_x = std::round(cols_x + (cols_w - map_w) / 2.0);
-                row_label("Map", preview_y);
+                row_label(painted != nullptr ? "Map (edited)" : "Map", preview_y);
                 cairo_save(cr);
                 cairo_translate(cr, map_x, preview_y);
                 cairo_scale(cr, map_w / 120.0, map_h / 100.0);
@@ -1748,13 +1780,18 @@ void Shell::draw_dialog(cairo_t *cr)
                 stroke_rect(cr, map_x - 1, preview_y - 1, map_w + 2, map_h + 2, theme::kMenuFrameR, theme::kMenuFrameG,
                             theme::kMenuFrameB);
             }
-            std::string summary = "Generate \"" + field_a_ + "\".";
+            std::string summary = "Generate \"" + field_a_ + "\"" + (painted != nullptr ? " on your edited map." : ".");
             if (city_chosen_) {
                 summary += " This replaces the city on the map.";
             }
+            if (painted == nullptr && !pending_terrain_.empty()) {
+                // Seed typed over: the painted map waits for its own land.
+                summary += " Your edited map is set aside for its own seed and land.";
+            }
             paint_text(cr, ui_font(), summary, x + margin, summary_y, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 2 * margin));
-            buttons_at(x, dw, y + dh - margin - dp(36), {{"_Back", kBack}, {"_Generate", kGenerate}}, 0, kGenerate);
+            buttons_at(x, dw, y + dh - margin - dp(36),
+                       {{"_Edit Terrain", kEditTerrain}, {"_Back", kBack}, {"_Generate", kGenerate}}, 1, kGenerate);
         } else {
             // A saved page index from an older session. Generate is on page 2 now.
             std::string summary = "Generate \"" + field_a_ + "\".";
@@ -3748,16 +3785,22 @@ void Shell::draw(cairo_t *cr)
     }
     if (!handheld_) {
         draw_menubar(cr);
-        if (band_h_ > 0) {
+        if (band_h_ > 0 && terrain_edit_) {
+            draw_terrain_band(cr);
+        } else if (band_h_ > 0) {
             draw_info_band(cr);
         }
-        {
-            TargetCr live(cr);
-            cairo_translate(live.cr, side_x_, pal_y_);
-            palette_.set_dimmed(locked_tool_mask());
-            palette_.draw(live.cr);
+        if (terrain_edit_) {
+            draw_terrain_palette(cr);
+        } else {
+            {
+                TargetCr live(cr);
+                cairo_translate(live.cr, side_x_, pal_y_);
+                palette_.set_dimmed(locked_tool_mask());
+                palette_.draw(live.cr);
+            }
+            push_hot(side_x_, pal_y_, side_w_, palette_.height(), kPaletteId);
         }
-        push_hot(side_x_, pal_y_, side_w_, palette_.height(), kPaletteId);
         if (demand_h_ > 0) {
             TargetCr live(cr);
             cairo_translate(live.cr, side_x_, demand_y_);
@@ -3812,7 +3855,7 @@ void Shell::draw(cairo_t *cr)
         {
             const int ts = std::max(1, map_.tile_size());
             cairo_set_antialias(live.cr, CAIRO_ANTIALIAS_NONE);
-            if (marker_on_ && marker_lit(marker_ms_)) {
+            if (marker_on_ && marker_lit(marker_ms_) && !terrain_edit_) {
                 const double mx = marker_tx_ * ts;
                 const double my = marker_ty_ * ts;
                 cairo_set_source_rgb(live.cr, 0, 0, 0);
@@ -3824,7 +3867,7 @@ void Shell::draw(cairo_t *cr)
                 cairo_rectangle(live.cr, mx - 1, my - 1, ts + 2, ts + 2);
                 cairo_stroke(live.cr);
             }
-            if (pop_on_) {
+            if (pop_on_ && !terrain_edit_) {
                 const double grow = pop_ms_ < 90 ? pop_ms_ / 90.0 : std::max(0.0, (180.0 - pop_ms_) / 90.0);
                 const double pad = 1.0 + grow * 3.0;
                 cairo_set_source_rgb(live.cr, 1, 1, 0.4);
@@ -3893,9 +3936,12 @@ void Shell::draw(cairo_t *cr)
     } else {
         draw_minimap_overlay(cr);
     }
-    draw_funds_floats(cr);
+    if (!terrain_edit_) {
+        // The editor's map is not the city: no city cards or notices on it.
+        draw_funds_floats(cr);
+        draw_hover_card(cr);
+    }
     funds_float_x_ = -1.0;
-    draw_hover_card(cr);
     if (overlay_on_ && overlay_return_eval_ && dialog_ == Dialog::None) {
         const double chip_w = dp(180);
         const double chip_h = dp(28);
@@ -3903,7 +3949,7 @@ void Shell::draw(cairo_t *cr)
         const double chip_y = view_y_ + view_h_ - hud_bottom_ - chip_h - dp(16);
         button(cr, chip_x, chip_y, chip_w, chip_h, "Back to Evaluation", kEvalShow, false);
     }
-    if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging()) {
+    if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging() && !terrain_edit_) {
         const double card_w = std::min(static_cast<double>(dp(280)), std::max(120.0, view_w_ * 0.4));
         const double card_h = dp(78);
         const double card_x = view_x_ + view_w_ - hud_right_ - card_w - dp(12);
@@ -3986,7 +4032,9 @@ void Shell::draw(cairo_t *cr)
         }
     }
     const int status_y = win_h_ - status_h_;
-    if (handheld_) {
+    if (terrain_edit_) {
+        draw_terrain_status(cr, hint);
+    } else if (handheld_) {
         // The hint strip and the quick bar in the handheld HUD carry these.
     } else if (slate_) {
         draw_news_line(cr, tool_text, hint);
@@ -4054,7 +4102,9 @@ void Shell::draw(cairo_t *cr)
     if (notice_sticky_ && !notice_text_.empty() && now >= notice_until_) {
         dismiss_background_notice();
     }
-    draw_toasts(cr, now);
+    if (!terrain_edit_) {
+        draw_toasts(cr, now);
+    }
     double look_r = 0;
     double look_g = 0;
     double look_b = 0;
@@ -4076,7 +4126,7 @@ void Shell::draw(cairo_t *cr)
     double goal_right = 0;
     // The Slate info band shows the goal all the time, so the desktop
     // Slate layout has no banner to repeat it.
-    if (goal_visible && dialog_ == Dialog::None && view_w_ > dp(32) && (handheld_ || !slate_)) {
+    if (goal_visible && dialog_ == Dialog::None && view_w_ > dp(32) && (handheld_ || !slate_) && !terrain_edit_) {
         const int pad = dp(8);
         double room = 0;
         const bool beside = goal_banner_room(view_w_, pad, inspect_card_w_, inspect_card_shown_, room);
@@ -4115,7 +4165,7 @@ void Shell::draw(cairo_t *cr)
         goal_left = gx;
         goal_right = gx + gw;
     }
-    if (year_stamp_.visible() && dialog_ == Dialog::None) {
+    if (year_stamp_.visible() && dialog_ == Dialog::None && !terrain_edit_) {
         const std::string stamp = year_stamp_.text();
         const TextMetrics stamp_m = measure_text(cr, bold_font(), stamp, -1);
         const double sw = stamp_m.width + dp(16);
@@ -4318,6 +4368,11 @@ std::string Shell::dialog_title_hint() const
                                 hint_button(b, "closes")})
                    : "Left and right adjust. Enter confirms. Esc closes";
     }
+    if (dialog_ == Dialog::TerrainDiscard) {
+        const char *verb = focus_id_ == kDiscard ? "discards" : "keeps editing";
+        return pad ? hint_join({hint_button(a, verb), hint_button(b, "keeps editing")})
+                   : std::string("Enter ") + verb + ". Esc keeps editing";
+    }
     if (dialog_ == Dialog::Messages && session_.notices().empty()) {
         return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
     }
@@ -4462,7 +4517,7 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
         // quick-bar slot.
         bottom -= dp(44);
     }
-    if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging()) {
+    if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging() && !terrain_edit_) {
         bottom -= dp(78) + gap;
     }
     // Desktop alerts stop under the minimap overlay in the top-right corner.
@@ -4573,6 +4628,9 @@ std::string Shell::context_hint() const
         }
         return dialog_title_hint();
     }
+    if (terrain_edit_) {
+        return terrain_hint();
+    }
     const ToolDef *tool = tool_by_index(tool_index_);
     const int engine = tool != nullptr ? tool->engine_id : TOOL_QUERY;
     // With Query (no tool picked) the map hint is left out entirely; the
@@ -4633,6 +4691,22 @@ std::string Shell::context_hint() const
         line += ". " + pause_key + (speed_ <= 0 ? " resumes" : " pauses");
     }
     return line;
+}
+
+std::string Shell::terrain_hint() const
+{
+    const bool pad = gamepad_nav_ || deck_;
+    const bool finger = touch_used_ && !pad;
+    if (pad) {
+        return hint_join({hint_button(glyph_for(PadConfirm), "paints"),
+                          hint_pair(glyph_for(PadPrevTool), glyph_for(PadNextTool), "terrain"),
+                          hint_button(glyph_for(PadPause), "brush size"), hint_button(glyph_for(PadMenu), "map complete"),
+                          hint_button(glyph_for(PadCancel), "cancels")});
+    }
+    if (finger) {
+        return "Tap to paint, or hold and drag. A plain drag pans";
+    }
+    return "Click or drag to paint. 1-4 terrain. B brush size. Enter: Map Complete. Esc: Cancel";
 }
 
 std::string Shell::idle_message() const

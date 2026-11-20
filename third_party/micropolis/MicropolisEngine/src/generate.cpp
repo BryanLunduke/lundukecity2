@@ -161,6 +161,16 @@ void Micropolis::generateMap(int seed)
         doTrees();
     }
 
+    // A map painted in the terrain editor replaces the land made above.
+    // The random draws still happen, so the seed means the same thing.
+    if (terrainOverride != NULL) {
+        for (int x = 0; x < WORLD_W; x++) {
+            for (int y = 0; y < WORLD_H; y++) {
+                map[x][y] = terrainOverride[y * WORLD_W + x];
+            }
+        }
+    }
+
 }
 
 

@@ -149,6 +149,11 @@ public:
         int rivers = kTerrainDefault;
         int lakes = kTerrainDefault;
         int trees = kTerrainDefault;
+        // Land painted in the terrain editor: kWorldW * kWorldH map words in
+        // rows (y * kWorldW + x). Empty keeps the land the seed generates;
+        // any other size is ignored. The seed and knobs still run the
+        // generator first, so the city is set up exactly as a generated one.
+        std::vector<unsigned short> terrain;
     };
 
     // seed 0 asks the engine path to draw a seed from the clock.
@@ -514,6 +519,11 @@ public:
     const save_view::View &loaded_view() const { return loaded_view_; }
     // Terrain only, on a throwaway simulator. Does not touch this city.
     bool preview_terrain(int seed, int island, int rivers, int lakes, int trees, std::vector<unsigned short> &tiles) const;
+    // Terrain editor: the whole map in rows (y * kWorldW + x), and writing
+    // one back. The editor's own session shows the painted land this way;
+    // it never runs the simulation. A vector of another size is ignored.
+    std::vector<unsigned short> terrain_tiles() const;
+    void set_terrain_tiles(const std::vector<unsigned short> &tiles);
     std::vector<SpriteDot> sprites() const;
 
     const std::string &save_path() const { return save_path_; }

@@ -781,7 +781,12 @@ void CitySession::new_city(const NewCitySpec &spec)
     const int used_seed = (spec.seed == 0 && !spec.seed_was_set)
                               ? static_cast<int>(std::time(nullptr))
                               : spec.seed;
+    // Painted land goes in at the end of generateMap(), before the rest of
+    // the new-city setup reads the map.
+    const bool painted = spec.terrain.size() == static_cast<std::size_t>(kWorldW * kWorldH);
+    sim.terrainOverride = painted ? spec.terrain.data() : nullptr;
     sim.generateSomeCity(used_seed);
+    sim.terrainOverride = nullptr;
     int level = spec.difficulty;
     if (level < kLevelEasy || level > kLevelHard) {
         level = kLevelEasy;
@@ -3595,6 +3600,33 @@ bool CitySession::preview_terrain(int seed, int island, int rivers, int lakes, i
         }
     }
     return true;
+}
+
+std::vector<unsigned short> CitySession::terrain_tiles() const
+{
+    std::vector<unsigned short> tiles(static_cast<std::size_t>(kWorldW * kWorldH));
+    const Micropolis &sim = engine_->sim;
+    for (int y = 0; y < kWorldH; ++y) {
+        for (int x = 0; x < kWorldW; ++x) {
+            tiles[static_cast<std::size_t>(y * kWorldW + x)] = sim.map[x][y];
+        }
+    }
+    return tiles;
+}
+
+void CitySession::set_terrain_tiles(const std::vector<unsigned short> &tiles)
+{
+    if (tiles.size() != static_cast<std::size_t>(kWorldW * kWorldH)) {
+        return;
+    }
+    Micropolis &sim = engine_->sim;
+    for (int y = 0; y < kWorldH; ++y) {
+        for (int x = 0; x < kWorldW; ++x) {
+            sim.map[x][y] = tiles[static_cast<std::size_t>(y * kWorldW + x)];
+        }
+    }
+    // The minimap redraws on a new map serial.
+    ++sim.mapSerial;
 }
 
 std::int64_t CitySession::plot_cash_flow(HistoryScale scale, int index) const

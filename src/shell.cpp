@@ -16,6 +16,7 @@
 #include "sim_pace.hpp"
 #include "special_buildings.hpp"
 #include "sprite_art.hpp"
+#include "terrain_paint.hpp"
 #include "text_edit.hpp"
 #include "text_paint.hpp"
 #include "theme.hpp"
@@ -1029,6 +1030,10 @@ void Shell::bind_session()
     overlay_.set_session(&session_);
     select_tool(kDefaultToolIndex);
     map_.on_tool_down = [this](int x, int y) {
+        if (terrain_edit_) {
+            paint_terrain_line(x, y, x, y);
+            return;
+        }
         goal_dismissed_ = true;
         const ToolDef *tool = tool_by_index(tool_index_);
         const int fixed = tool_fixed_special(tool);
@@ -1060,6 +1065,10 @@ void Shell::bind_session()
         session_.use_tool(tool->engine_id, x, y);
     };
     map_.on_tool_drag = [this](int x0, int y0, int x1, int y1) {
+        if (terrain_edit_) {
+            paint_terrain_line(x0, y0, x1, y1);
+            return;
+        }
         const ToolDef *tool = tool_by_index(tool_index_);
         if (tool->engine_id == kSpecialEngineId) {
             return;
@@ -2319,7 +2328,9 @@ void Shell::handle_event(const SDL_Event &event)
                     pointer_on_map_ = false;
                     pointer_down_ = false;
                 }
-                select_tool(kToolCount - 1);
+                if (!terrain_edit_) {
+                    select_tool(kToolCount - 1);
+                }
             }
             pan_pointer_ = false;
             SDL_CaptureMouse(false);
@@ -2334,7 +2345,9 @@ void Shell::handle_event(const SDL_Event &event)
             menu_thumb_drag_ = false;
             if (pointer_on_map_) {
                 map_.release();
-                session_.end_tool_stroke();
+                if (!terrain_edit_) {
+                    session_.end_tool_stroke();
+                }
                 pointer_on_map_ = false;
                 SDL_CaptureMouse(false);
             }
@@ -2581,6 +2594,70 @@ void Shell::handle_event(const SDL_Event &event)
             }
             break;
         }
+        if (terrain_edit_ && dialog_ == Dialog::None && !menu_.open()) {
+            // The terrain editor has no menu, city tools or speeds. Its own
+            // keys, then panning and zoom; nothing else does anything.
+            const bool ctrl = (mods & static_cast<int>(AccelMod::Ctrl)) != 0;
+            const bool alt = (mods & static_cast<int>(AccelMod::Alt)) != 0;
+            if (accel == AccelKey::Escape) {
+                if (key_cursor_) {
+                    key_cursor_ = false;
+                } else {
+                    cancel_terrain_editor();
+                }
+                break;
+            }
+            if (accel == AccelKey::Return && !alt) {
+                if (key_cursor_) {
+                    gamepad_use_cursor(true);
+                    release_pad_drag();
+                } else {
+                    close_terrain_editor(true);
+                }
+                break;
+            }
+            if (!ctrl && !alt && key >= SDLK_1 && key < SDLK_1 + terrain_paint::kPieceCount) {
+                select_terrain_piece(static_cast<int>(key - SDLK_1));
+                break;
+            }
+            if (!ctrl && !alt && letter == 'b') {
+                set_terrain_brush(terrain_brush_ >= terrain_paint::kBrushLarge ? terrain_paint::kBrushSmall
+                                                                                : terrain_paint::kBrushLarge);
+                break;
+            }
+            if (!alt) {
+                const ZoomAction zoom = zoom_action(gdk_key(key), gdk_mods(event.key.mod));
+                if (zoom == ZoomAction::In || zoom == ZoomAction::Out) {
+                    zoom_by(zoom == ZoomAction::In ? 2 : -2);
+                    break;
+                }
+            }
+            const bool arrow =
+                accel == AccelKey::Left || accel == AccelKey::Right || accel == AccelKey::Up || accel == AccelKey::Down;
+            if (arrow && ctrl && !alt) {
+                if (!key_cursor_) {
+                    key_cursor_ = true;
+                    cursor_x_ = static_cast<float>(view_x_ + view_w_ / 2.0);
+                    cursor_y_ = static_cast<float>(view_y_ + view_h_ / 2.0);
+                }
+                step_cursor_on_map(accel == AccelKey::Left ? -1 : accel == AccelKey::Right ? 1 : 0,
+                                   accel == AccelKey::Up ? -1 : accel == AccelKey::Down ? 1 : 0);
+                break;
+            }
+            if (arrow && !alt) {
+                if (accel == AccelKey::Left) {
+                    scroll_x_ -= map_.tile_size() * 2;
+                } else if (accel == AccelKey::Right) {
+                    scroll_x_ += map_.tile_size() * 2;
+                } else if (accel == AccelKey::Up) {
+                    scroll_y_ -= map_.tile_size() * 2;
+                } else {
+                    scroll_y_ += map_.tile_size() * 2;
+                }
+                clamp_scroll();
+            }
+            break;
+        }
         if (accel == AccelKey::F10 && !menu_.open()) {
             menu_.open_first();
             break;
@@ -2723,6 +2800,9 @@ void Shell::handle_event(const SDL_Event &event)
             }
             if (dialog_ != Dialog::None) {
                 activate_dialog_start();
+            } else if (terrain_edit_) {
+                // Start is Map Complete; the editor has no menu.
+                close_terrain_editor(true);
             } else if (!menu_.open()) {
                 menu_.open_first();
             } else {
@@ -2763,6 +2843,13 @@ void Shell::handle_event(const SDL_Event &event)
                 menu_.handle_key(AccelKey::Escape, 0, 0);
             } else if (dialog_ != Dialog::None) {
                 cancel_dialog();
+            } else if (terrain_edit_) {
+                // B ends a held stroke first, then leaves like Cancel.
+                if (pad_dragging_ || pointer_on_map_) {
+                    release_pad_drag();
+                } else {
+                    cancel_terrain_editor();
+                }
             } else if (pact == PadBack) {
                 // Back's last step matches Escape: end the stroke, Inspect.
                 escape_to_inspect();
@@ -2793,6 +2880,8 @@ void Shell::handle_event(const SDL_Event &event)
                 backspace_field();
             } else if (dialog_ == Dialog::Bindings && focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
                 clear_bind_row(true);
+            } else if (terrain_edit_) {
+                // There is no Inspect in the editor.
             } else if (dialog_ == Dialog::None && !menu_.open()) {
                 select_tool(kToolCount - 1);
             }
@@ -2803,7 +2892,13 @@ void Shell::handle_event(const SDL_Event &event)
                 (focus_id_ == kFieldName || focus_id_ == kFieldSeed || (focus_id_ >= kOsk && focus_id_ < kOsk + 64))) {
                 type_text(" ");
             } else if (dialog_ == Dialog::NewCity && new_page_ == 1) {
-                reroll_terrain();
+                if (confirm_drop_terrain(kNewTerrain)) {
+                    reroll_terrain();
+                }
+            } else if (terrain_edit_ && dialog_ == Dialog::None && !menu_.open()) {
+                // Y switches the brush between 1x1 and 3x3.
+                set_terrain_brush(terrain_brush_ >= terrain_paint::kBrushLarge ? terrain_paint::kBrushSmall
+                                                                                : terrain_paint::kBrushLarge);
             } else if (dialog_ == Dialog::None && !menu_.open()) {
                 y_hold_ = true;
                 y_hold_fresh_ = true;
@@ -2812,7 +2907,7 @@ void Shell::handle_event(const SDL_Event &event)
             }
             break;
         }
-        if (pact == PadOverlay && dialog_ == Dialog::None && !menu_.open()) {
+        if (pact == PadOverlay && dialog_ == Dialog::None && !menu_.open() && !terrain_edit_) {
             overlay_on_ = !overlay_on_;
             break;
         }
@@ -3020,7 +3115,9 @@ void Shell::handle_event(const SDL_Event &event)
             pointer_down_ = false;
             if (pointer_on_map_) {
                 map_.release();
-                session_.end_tool_stroke();
+                if (!terrain_edit_) {
+                    session_.end_tool_stroke();
+                }
                 pointer_on_map_ = false;
             }
         } else if (fingers_.size() == 1) {
@@ -3105,7 +3202,8 @@ void Shell::handle_event(const SDL_Event &event)
                 const float dy = pointer_y_ - touch_down_y_;
                 if (dx * dx + dy * dy > kTouchArm2) {
                     const ToolDef *tool = tool_by_index(tool_index_);
-                    const bool query = tool == nullptr || tool->engine_id == TOOL_QUERY;
+                    // The terrain brush paints like any tool; Inspect pans.
+                    const bool query = !terrain_edit_ && (tool == nullptr || tool->engine_id == TOOL_QUERY);
                     const Uint32 held = SDL_GetTicks() - touch_down_ticks_;
                     // A plain drag pans. Holding still, then dragging, lays tiles.
                     if (!query && held >= 350) {
