@@ -873,6 +873,7 @@ enum Scenario {
     SC_RIO,            ///< Rio (flooding)
     SC_SEATTLE,        ///< Seattle (Autonomous Zone; Lunduke City 2)
     SC_SAN_FRANCISCO_1962, ///< San Francisco 1962 (Prison Escape; Lunduke City 2)
+    SC_PORTLAND,           ///< Portland (Riot; Lunduke City 2)
 
     SC_COUNT,          ///< Number of scenarios
 };
@@ -899,6 +900,17 @@ static const int SEATTLE_YEARS = 5;
 static const int SF1962_CRIME_GOAL = 45;
 static const int SF1962_ESCAPE_WAIT = 5;
 static const int SF1962_YEARS = 2;
+
+/**
+ * Portland scenario (Lunduke City 2): a riot breaks out downtown
+ * PORTLAND_RIOT_WAIT city-time steps (weeks) after the mid-July 2020
+ * start, in August. Win with the riot over (cityEvents.riotSteps == 0), no
+ * fire burning anywhere on the map and average crime below
+ * PORTLAND_CRIME_GOAL at the deadline.
+ */
+static const int PORTLAND_CRIME_GOAL = 60;
+static const int PORTLAND_RIOT_WAIT = 3;
+static const int PORTLAND_YEARS = 1;
 
 
 ///////////////////////////////////////////////////

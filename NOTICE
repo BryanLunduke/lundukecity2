@@ -144,6 +144,10 @@ Comment:
  built the same way by tools/sf1962_map.cpp (with tools/map_builder.hpp)
  from a hand-drawn outline of San Francisco's real geography. It contains
  no data from any other game's map.
+ .
+ portland.cty is the map of the Portland scenario, built the same way by
+ tools/portland_map.cpp from a hand-drawn outline of Portland's real
+ geography. It contains no data from any other game's map.
 
 License: GPL-3+
  This package is free software; you can redistribute it and/or modify

@@ -23,3 +23,14 @@ sf1962_map = executable(
   build_by_default: false,
   install: false,
 )
+
+portland_map = executable(
+  'portland_map',
+  'portland_map.cpp',
+  '../src/terrain_paint.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  build_by_default: false,
+  install: false,
+)

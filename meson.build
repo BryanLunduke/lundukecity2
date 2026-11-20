@@ -141,10 +141,12 @@ install_data(
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'disaster-art',
 )
 # City 2's own scenario maps (tools/seattle_map.cpp builds seattle.cty,
-# tools/sf1962_map.cpp sanfrancisco1962.cty).
+# tools/sf1962_map.cpp sanfrancisco1962.cty, tools/portland_map.cpp
+# portland.cty).
 install_data(
   'data/scenarios/seattle.cty',
   'data/scenarios/sanfrancisco1962.cty',
+  'data/scenarios/portland.cty',
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'scenarios',
 )
 install_data(

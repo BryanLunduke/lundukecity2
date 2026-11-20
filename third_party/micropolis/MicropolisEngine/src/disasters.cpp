@@ -213,6 +213,13 @@ void Micropolis::scenarioDisaster()
             }
             break;
 
+        case SC_PORTLAND:
+            // Lunduke City 2: the front end raises the riot downtown.
+            if (disasterWait == 1) {
+                callback("scenarioRiot", "");
+            }
+            break;
+
         default:
             NOT_REACHED();
             break; // Never used

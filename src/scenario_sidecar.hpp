@@ -95,10 +95,10 @@ inline bool sidecar_parse_int(const char *text, int &out)
 // score_type is a scenario id. Anything else is ignored.
 inline int accepted_sidecar_score_type(int type, int scenario)
 {
-    // 1..10: Dullsville through Rio de Janeiro, then Seattle and San
-    // Francisco (1962).
-    const bool type_ok = type >= 1 && type <= 10;
-    const bool scenario_ok = scenario >= 1 && scenario <= 10;
+    // 1..11: Dullsville through Rio de Janeiro, then Seattle, San
+    // Francisco (1962) and Portland.
+    const bool type_ok = type >= 1 && type <= 11;
+    const bool scenario_ok = scenario >= 1 && scenario <= 11;
     if (type_ok) {
         return type;
     }

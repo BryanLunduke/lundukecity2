@@ -1887,6 +1887,15 @@ bool Micropolis::loadScenario(Scenario s)
             time = ((1962 - 1900) * 48) + 4 * 4;
             funds = 20000;
             break;
+        case SC_PORTLAND:
+            // Lunduke City 2's own map (data/scenarios/portland.cty). It
+            // opens in mid-July 2020; the riot is in August.
+            name = "Portland";
+            fname = "portland.cty";
+            which = SC_PORTLAND;
+            time = ((2020 - 1900) * 48) + 6 * 4 + 2;
+            funds = 20000;
+            break;
         default:
             NOT_REACHED();
             break;

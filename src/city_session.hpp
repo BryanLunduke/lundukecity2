@@ -116,7 +116,7 @@ public:
         int years = 0;
     };
 
-    static constexpr int kScenarioCount = 10;
+    static constexpr int kScenarioCount = 11;
     // Seattle: the Autonomous Zone forms on the road block holding this tile
     // (Cal Anderson Park on Capitol Hill) and its least-policed neighbour.
     static constexpr int kSeattleZoneX = 75;
@@ -125,6 +125,10 @@ public:
     // Fisherman's Wharf, the nearest shore to the island.
     static constexpr int kSf1962LandingX = 72;
     static constexpr int kSf1962LandingY = 22;
+    // Portland: the riot breaks out around this tile, downtown by the
+    // Justice Center and Lownsdale Square.
+    static constexpr int kPortlandRiotX = 50;
+    static constexpr int kPortlandRiotY = 63;
     static const ScenarioDef &scenario_def(int index);
 
     // Difficulty is the engine GameLevel: easy $20,000, medium $12,500,
@@ -395,6 +399,9 @@ public:
     // The San Francisco (1962) escape from Alcatraz, coming ashore at the
     // Wharf. False outside that scenario or when it cannot start.
     bool start_sf1962_escape();
+    // The Portland riot, downtown. False outside that scenario or when it
+    // cannot start.
+    bool start_portland_riot();
     // The disaster the running scenario raises when the engine asks for it
     // (the Seattle zone, the Alcatraz escape, ...). False when none starts.
     bool start_scenario_disaster();

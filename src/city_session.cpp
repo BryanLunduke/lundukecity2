@@ -133,10 +133,11 @@ const char *city_class_name(CityClass city_class)
     }
 }
 
-// The Seattle and San Francisco goal numbers as text for the catalog's goal
-// sentences (tests check they match SEATTLE_CRIME_GOAL and SF1962_CRIME_GOAL).
+// The Seattle, San Francisco and Portland goal numbers as text for the
+// catalog's goal sentences (tests check they match the engine constants).
 #define SEATTLE_CRIME_GOAL_TEXT "60"
 #define SF1962_CRIME_GOAL_TEXT "45"
+#define PORTLAND_CRIME_GOAL_TEXT "60"
 
 // The folder holding one of City 2's own scenario maps: the installed
 // share/lunduke-city-2/scenarios (or data/scenarios beside a build), else
@@ -187,6 +188,42 @@ std::string sf1962_escape_short(const Micropolis &sim)
 std::string sf1962_escape_long(const Micropolis &sim)
 {
     return sim.cityEvents.prisonSteps > 0 ? "Alcatraz escapees at large → round them up" : "no escapees at large";
+}
+
+// Tiles on fire anywhere on the map.
+int burning_tiles(const Micropolis &sim)
+{
+    int count = 0;
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const int tile = sim.map[x][y] & LOMASK;
+            if (tile >= FIREBASE && tile <= LASTFIRE) {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
+// The Portland meter's riot and fire part.
+std::string portland_fires_short(const Micropolis &sim)
+{
+    const int fires = burning_tiles(sim);
+    std::string text = sim.cityEvents.riotSteps > 0 ? "Riot · " : "";
+    if (fires > 0) {
+        return text + std::to_string(fires) + (fires == 1 ? " fire" : " fires");
+    }
+    return text + "Fires out";
+}
+
+std::string portland_fires_long(const Micropolis &sim)
+{
+    const int fires = burning_tiles(sim);
+    std::string text = sim.cityEvents.riotSteps > 0 ? "riot under way, " : "";
+    if (fires > 0) {
+        return text + std::to_string(fires) + (fires == 1 ? " fire burning" : " fires burning") + " → put them out";
+    }
+    return text + "all fires out";
 }
 
 std::string seattle_zone_long(const Micropolis &sim)
@@ -250,11 +287,19 @@ const ScenarioEntry kScenarios[] = {
       "Round up the Alcatraz escapees and bring average crime below " SF1962_CRIME_GOAL_TEXT " by mid-1964.",
       SF1962_YEARS},
      "sanfrancisco1962.cty", true},
+    // Portland (data/scenarios/portland.cty, built by tools/portland_map.cpp).
+    // It opens in mid-July 2020; in August a riot breaks out downtown.
+    {{SC_PORTLAND, "Portland", 2020, "A riot sets downtown Portland on fire.",
+      "Put out every fire and bring average crime below " PORTLAND_CRIME_GOAL_TEXT " by summer 2021.",
+      PORTLAND_YEARS},
+     "portland.cty", true},
 };
 
 static_assert(sizeof(kScenarios) / sizeof(kScenarios[0]) == CitySession::kScenarioCount,
               "scenario catalog size");
-static_assert(SC_DULLSVILLE == 1 && SC_RIO == 8 && SC_SEATTLE == 9 && SC_SAN_FRANCISCO_1962 == 10, "scenario ids");
+static_assert(SC_DULLSVILLE == 1 && SC_RIO == 8 && SC_SEATTLE == 9 && SC_SAN_FRANCISCO_1962 == 10 &&
+                  SC_PORTLAND == 11,
+              "scenario ids");
 static_assert(static_cast<int>(LEVEL_EASY) == CitySession::kLevelEasy, "easy level");
 static_assert(static_cast<int>(LEVEL_MEDIUM) == CitySession::kLevelMedium, "medium level");
 static_assert(static_cast<int>(LEVEL_HARD) == CitySession::kLevelHard, "hard level");
@@ -669,7 +714,7 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
     };
     auto take_int = [&]() { return va_arg(args, int); };
 
-    if (which == "scenarioAutonomousZone" || which == "scenarioPrisonEscape") {
+    if (which == "scenarioAutonomousZone" || which == "scenarioPrisonEscape" || which == "scenarioRiot") {
         // Raised on the next event frame, outside the simulation step.
         scenario_disaster_pending_ = true;
         return;
@@ -2275,6 +2320,22 @@ bool CitySession::start_sf1962_escape()
     return started;
 }
 
+bool CitySession::start_portland_riot()
+{
+    if (!ready_ || scenario_id() != SC_PORTLAND) {
+        return false;
+    }
+    std::vector<city_events::Note> notes;
+    const bool started = city_events::start_riot_at(&engine_->sim, kPortlandRiotX, kPortlandRiotY, notes);
+    if (started) {
+        dirty_ = true;
+        engine_->sim.invalidateMaps();
+    }
+    post_event_notes(notes, started);
+    notify();
+    return started;
+}
+
 bool CitySession::start_scenario_disaster()
 {
     switch (scenario_id()) {
@@ -2282,6 +2343,8 @@ bool CitySession::start_scenario_disaster()
         return start_seattle_zone();
     case SC_SAN_FRANCISCO_1962:
         return start_sf1962_escape();
+    case SC_PORTLAND:
+        return start_portland_riot();
     default:
         return false;
     }
@@ -2564,6 +2627,10 @@ std::string CitySession::scenario_meter_short() const
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <" +
                std::to_string(SF1962_CRIME_GOAL) + " · " + sf1962_escape_short(sim);
     }
+    if (id == SC_PORTLAND) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <" +
+               std::to_string(PORTLAND_CRIME_GOAL) + " · " + portland_fires_short(sim);
+    }
     if (id == SC_BERN) {
         const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
         return "Traffic " + traffic + " → <" +
@@ -2608,6 +2675,10 @@ std::string CitySession::scenario_meter() const
     if (id == SC_SAN_FRANCISCO_1962) {
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < " +
                std::to_string(SF1962_CRIME_GOAL) + ", " + sf1962_escape_long(sim);
+    }
+    if (id == SC_PORTLAND) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < " +
+               std::to_string(PORTLAND_CRIME_GOAL) + ", " + portland_fires_long(sim);
     }
     if (id == SC_BERN) {
         const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
