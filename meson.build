@@ -154,6 +154,7 @@ install_data(
 install_data(
   'NOTICE',
   'COPYING',
+  'data/fonts/LICENSE-DejaVu',
   install_dir: get_option('datadir') / 'doc' / 'lunduke-city-2',
 )
 # The in-game License viewer reads its own copy, so it still works where

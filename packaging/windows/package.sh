@@ -59,7 +59,7 @@ for f in DejaVuSans.ttf DejaVuSans-Bold.ttf DejaVuSans-Oblique.ttf DejaVuSans-Bo
 done
 cp "$src/data/fonts/DejaVuSerif.ttf" "$src/data/fonts/DejaVuSerif-Bold.ttf" "$root/share/fonts/"
 
-cp "$src/COPYING" "$src/NOTICE" "$src/README.md" "$root/share/licenses/$name/"
+cp "$src/COPYING" "$src/NOTICE" "$src/README.md" "$src/data/fonts/LICENSE-DejaVu" "$root/share/licenses/$name/"
 # One license directory per MSYS2 package that contributed a shipped file.
 for pkgdir in "$sysroot/share/licenses"/*; do
   pkg=$(basename "$pkgdir")
