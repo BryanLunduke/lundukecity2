@@ -131,6 +131,15 @@ Comment:
  The permission text is data/fonts/LICENSE-DejaVu.
  These files are not covered by the GPL additional terms.
 
+Files: data/scenarios/*
+Copyright: 2026, Bryan Lunduke
+License: GPL-3+
+Comment:
+ seattle.cty is the map of the Seattle scenario. It is original to
+ Lunduke City 2: tools/seattle_map.cpp builds it from a hand-drawn
+ outline of Seattle's real geography and lays the city out with the
+ engine's own tools. It contains no data from any other game's map.
+
 License: GPL-3+
  This package is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by

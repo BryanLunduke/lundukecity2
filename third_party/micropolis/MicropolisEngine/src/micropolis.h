@@ -871,6 +871,7 @@ enum Scenario {
     SC_DETROIT,        ///< Detroit (crime)
     SC_BOSTON,         ///< Boston (nuclear meltdown)
     SC_RIO,            ///< Rio (flooding)
+    SC_SEATTLE,        ///< Seattle (Autonomous Zone; Lunduke City 2)
 
     SC_COUNT,          ///< Number of scenarios
 };
@@ -878,6 +879,15 @@ enum Scenario {
 /** Bern scenario: win with traffic below this and at least this many people. */
 static const int BERN_TRAFFIC_GOAL = 40;
 static const int BERN_POPULATION_GOAL = 90000;
+
+/**
+ * Seattle scenario (Lunduke City 2): win with no Autonomous Zone left and
+ * average crime below this at the deadline. The zone forms on Capitol Hill
+ * SEATTLE_ZONE_WAIT city-time steps (weeks) after the scenario starts.
+ */
+static const int SEATTLE_CRIME_GOAL = 60;
+static const int SEATTLE_ZONE_WAIT = 4;
+static const int SEATTLE_YEARS = 5;
 
 
 ///////////////////////////////////////////////////

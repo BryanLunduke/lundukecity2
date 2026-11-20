@@ -1808,7 +1808,7 @@ bool Micropolis::loadScenario(Scenario s)
     Quad time = 0;
     int funds = 5000;
 
-    if (s < SC_DULLSVILLE || s > SC_RIO) {
+    if (s < SC_DULLSVILLE || s > SC_SEATTLE) {
         s = SC_DULLSVILLE;
     }
 
@@ -1867,6 +1867,15 @@ bool Micropolis::loadScenario(Scenario s)
             fname = "snro.888";
             which = SC_RIO;
             time = ((2047 - 1900) * 48) + 2;
+            funds = 20000;
+            break;
+        case SC_SEATTLE:
+            // Lunduke City 2's own map (data/scenarios/seattle.cty). It
+            // opens in late May 2020; the Autonomous Zone forms in June.
+            name = "Seattle";
+            fname = "seattle.cty";
+            which = SC_SEATTLE;
+            time = ((2020 - 1900) * 48) + 4 * 4 + 3;
             funds = 20000;
             break;
         default:

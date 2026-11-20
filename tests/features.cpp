@@ -187,8 +187,8 @@ int main()
         return fail(17, "zoom should ignore the bare equal key and ctrl-alt");
     }
 
-    if (CitySession::kScenarioCount != 8) {
-        return fail(18, "expected the eight engine scenarios");
+    if (CitySession::kScenarioCount != 9) {
+        return fail(18, "expected the eight engine scenarios and Seattle");
     }
     for (int i = 0; i < CitySession::kScenarioCount; ++i) {
         const CitySession::ScenarioDef &def = CitySession::scenario_def(i);

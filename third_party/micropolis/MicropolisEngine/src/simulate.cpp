@@ -452,6 +452,7 @@ void Micropolis::simLoadInit()
         5,          // Detroit (crime)
         5,          // Boston (nuclear meltdown)
         2 * 48,     // Rio (flooding)
+        SEATTLE_ZONE_WAIT + 1, // Seattle (Autonomous Zone)
     };
 
     // Time to wait before score calculation for each scenario
@@ -465,6 +466,7 @@ void Micropolis::simLoadInit()
         10 * 48,    // Detroit (crime)
         5 * 48,     // Boston (nuclear meltdown)
         10 * 48,    // Rio (flooding)
+        SEATTLE_YEARS * 48, // Seattle (Autonomous Zone)
     };
 
     externalMarket = (float)miscHist[1];

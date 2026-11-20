@@ -21,6 +21,7 @@ lunduke_asset_dir = meson.project_source_root() / 'third_party' / 'micropolis-as
 subdir('third_party/micropolis')
 subdir('src')
 subdir('tests')
+subdir('tools')
 
 install_data(
   'data/lunduke-city-2.desktop',
@@ -138,6 +139,11 @@ install_data(
     'data/disaster-art/barricade-svga.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'disaster-art',
+)
+# City 2's own scenario maps (tools/seattle_map.cpp builds seattle.cty).
+install_data(
+  'data/scenarios/seattle.cty',
+  install_dir: get_option('datadir') / 'lunduke-city-2' / 'scenarios',
 )
 install_data(
   'data/welcome/welcome-bg.png',
