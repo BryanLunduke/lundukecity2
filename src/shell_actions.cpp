@@ -207,10 +207,18 @@ void Shell::clear_pause_notice()
 
 void Shell::begin_scene_fade()
 {
-    if (!motion_fx_ || map_.dragging()) {
+    if (!motion_on() || map_.dragging()) {
         return;
     }
     scene_fade_.start();
+}
+
+void Shell::apply_effects()
+{
+    effects_ = look_fx::clamp_effects(effects_);
+    if (!motion_on()) {
+        skip_motion();
+    }
 }
 
 void Shell::skip_motion()
@@ -231,7 +239,7 @@ void Shell::begin_event_pan(int tile_x, int tile_y)
     marker_ty_ = tile_y;
     const double fx = (static_cast<double>(tile_x) + 0.5) / CitySession::kWorldW;
     const double fy = (static_cast<double>(tile_y) + 0.5) / CitySession::kWorldH;
-    if (!motion_fx_) {
+    if (!motion_on()) {
         center_on_fraction(fx, fy);
         event_pan_on_ = false;
         marker_on_ = false;
@@ -269,7 +277,7 @@ void Shell::note_year_stamp()
 {
     const std::string date = session_.date_text();
     const int month = date.compare(0, 3, "Jan") == 0 ? 0 : 1;
-    if (motion_fx_ || !year_stamp_.armed) {
+    if (motion_on() || !year_stamp_.armed) {
         year_stamp_.observe(session_.city_year(), month);
     }
 }
@@ -303,7 +311,7 @@ void Shell::advance_presentation(int elapsed_ms)
     }
     const std::string date = session_.date_text();
     const int month = date.compare(0, 3, "Jan") == 0 ? 0 : 1;
-    if (motion_fx_ || !year_stamp_.armed) {
+    if (motion_on() || !year_stamp_.armed) {
         year_stamp_.observe(session_.city_year(), month);
     }
     year_stamp_.advance(elapsed_ms);
@@ -334,7 +342,7 @@ void Shell::note_disaster_fx()
         return;
     }
     disaster_seen_ = text;
-    if (!motion_fx_ || !notice_is_disaster(text)) {
+    if (!motion_on() || !notice_is_disaster(text)) {
         return;
     }
     flash_on_ = true;
@@ -429,7 +437,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     dialog_ = dialog;
     dialog_error_.clear();
     panel_settle_ = 0;
-    if (motion_fx_ && (dialog == Dialog::Budget || dialog == Dialog::Evaluation || dialog == Dialog::Graphs ||
+    if (motion_on() && (dialog == Dialog::Budget || dialog == Dialog::Evaluation || dialog == Dialog::Graphs ||
                        dialog == Dialog::Messages || dialog == Dialog::Welcome || dialog == Dialog::Scenario ||
                        dialog == Dialog::Query || dialog == Dialog::Disaster)) {
         panel_settle_ = 2;
@@ -532,6 +540,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         open_autosave_ = autosave_seconds_;
         open_slate_ = slate_;
         open_night_ = night_;
+        open_effects_ = effects_;
         open_minimap_engraved_ = minimap_engraved_;
         open_layout_pref_ = layout_pref_;
         focus_id_ = kSlider + 1;
@@ -2200,6 +2209,11 @@ void Shell::on_dialog_button(int id)
             map_.set_night(night_);
             return;
         }
+        if (id == kEffectsBox) {
+            effects_ = (look_fx::clamp_effects(effects_) + 1) % look_fx::EffectsCount;
+            apply_effects();
+            return;
+        }
         if (id == kMinimapBox) {
             minimap_engraved_ = !minimap_engraved_;
             return;
@@ -2226,6 +2240,8 @@ void Shell::on_dialog_button(int id)
             }
             night_ = open_night_;
             map_.set_night(night_);
+            effects_ = open_effects_;
+            apply_effects();
             minimap_engraved_ = open_minimap_engraved_;
             schedule_autosave();
             user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
@@ -4595,7 +4611,7 @@ void Shell::absorb_placement_note()
     const ToolFootprint foot = tool_footprint(note.tool);
     receipt_on_ = true;
     receipt_ok_ = note.ok;
-    if (motion_fx_ && note.ok) {
+    if (motion_on() && note.ok) {
         if (note.tool == TOOL_BULLDOZER) {
             puff_on_ = true;
             puff_ms_ = 0;

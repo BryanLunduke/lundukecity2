@@ -89,6 +89,7 @@ enum HotspotId : int {
     kNightBox = 158,
     kLayoutBox = 159,
     kMinimapBox = 160,
+    kEffectsBox = 161,
 
     // The history chart. Left and right read a value. It is not a button.
     kGraphPlot = 180,
@@ -114,7 +115,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kMinimapBox;
+    return id >= kCancel && id <= kEffectsBox;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

@@ -2413,11 +2413,11 @@ void Shell::draw_dialog(cairo_t *cr)
         const double stack_gap = static_cast<double>(dp(12));
         const SettingsStack volume_row = settings_stack(0, text_h, bar_h, stack_gap);
         const SettingsStack scale_row = settings_stack(volume_row.next_caption, text_h, bar_h, stack_gap);
-        // Eight switches in one column when the window is tall enough, else
-        // two columns of four so the dialog still fits a 960x600 window.
-        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 8.0 + dp(8) + bh + margin;
+        // Nine switches in one column when the window is tall enough, else
+        // two columns (four and five) so the dialog still fits a 960x600 window.
+        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 9.0 + dp(8) + bh + margin;
         const bool paired = one_column > win_h_ - 2.0 * margin;
-        const double toggles = (bh + stack_gap) * (paired ? 4.0 : 8.0);
+        const double toggles = (bh + stack_gap) * (paired ? 5.0 : 9.0);
         const double rows = scale_row.next_caption + toggles;
         const double height = dp(48) + margin + rows + dp(8) + bh + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, paired ? dp(760) : dp(640), height, margin);
@@ -2542,6 +2542,8 @@ void Shell::draw_dialog(cairo_t *cr)
             py += bh + stack_gap;
             pair_row("Night lighting", night_ ? "On" : "Off", kNightBox, py);
             py += bh + stack_gap;
+            pair_row("Effects", look_fx::effects_label(effects_), kEffectsBox, py);
+            py += bh + stack_gap;
             pair_row("Layout", layout_state.c_str(), kLayoutBox, py);
             py += bh + stack_gap;
             pair_row(minimap_label, minimap_state, kMinimapBox, py);
@@ -2549,6 +2551,8 @@ void Shell::draw_dialog(cairo_t *cr)
             switch_row("Interface", slate_ ? "Slate" : "Light", kSkinBox, sy);
             sy += bh + stack_gap;
             switch_row("Night lighting", night_ ? "On" : "Off", kNightBox, sy);
+            sy += bh + stack_gap;
+            switch_row("Effects", look_fx::effects_label(effects_), kEffectsBox, sy);
             sy += bh + stack_gap;
             switch_row("Layout", layout_state.c_str(), kLayoutBox, sy);
             sy += bh + stack_gap;

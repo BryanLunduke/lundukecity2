@@ -483,6 +483,7 @@ void Shell::save_window_settings()
     stored.night = night_ ? 1 : 0;
     stored.layout = layout_mode::clamp_choice(layout_pref_);
     stored.minimap = minimap_engraved_ ? 1 : 0;
+    stored.effects = look_fx::clamp_effects(effects_);
     keep_required_pad(binds_);
     stored.binds = binds_override_text(binds_);
     {
@@ -558,6 +559,10 @@ void Shell::apply_loaded_settings()
     if (stored.minimap >= 0) {
         minimap_engraved_ = stored.minimap != 0;
     }
+    if (stored.effects >= 0) {
+        effects_ = look_fx::clamp_effects(stored.effects);
+    }
+    apply_effects();
     map_.set_night(night_);
     if (!stored.binds.empty()) {
         binds_ = binds_from_text(stored.binds);
@@ -1139,7 +1144,7 @@ std::string Shell::visual_stamp() const
         << menu_.open_menu << ' ' << menu_.cursor << ' ' << menu_.recent_open << ' ' << menu_.recent_cursor << ' '
         << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
         << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << slate_ << night_
-        << layout_pref_ << handheld_ << ' ' << session_.map_serial()
+        << layout_pref_ << handheld_ << effects_ << ' ' << session_.map_serial()
         << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
         << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
         << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_gate_ << ' ' << shown_message_ << ' '
@@ -1484,7 +1489,7 @@ void Shell::loop()
         note_year_stamp();
         if (session_.take_budget_request()) {
             // Let "Jan 19xx" stay on the map before the year-in-review card.
-            if (motion_fx_ && year_stamp_.visible() && year_stamp_.elapsed_ms < kYearStampHold) {
+            if (motion_on() && year_stamp_.visible() && year_stamp_.elapsed_ms < kYearStampHold) {
                 session_.keep_budget_request();
             } else if (dialog_pauses() && dialog_ != Dialog::Budget) {
                 session_.keep_budget_request();

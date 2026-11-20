@@ -295,6 +295,8 @@ struct StoredSettings {
     int layout = -1;
     // -1 absent (Engraved map), 0 Classic tile colours, 1 Engraved map.
     int minimap = -1;
+    // -1 absent (Full), 0 Full, 1 Calm (no ambient motion), 2 Off (reduced motion).
+    int effects = -1;
     // bind_key_* and bind_pad_* lines, kept so a rewrite does not drop them.
     std::string binds;
 };
@@ -331,6 +333,7 @@ inline std::string settings_text(const StoredSettings &settings)
     put("night", settings.night);
     put("layout", settings.layout);
     put("minimap", settings.minimap);
+    put("effects", settings.effects);
     if (!settings.binds.empty()) {
         out << settings.binds;
         if (settings.binds.back() != '\n') {
@@ -494,6 +497,9 @@ inline StoredSettings settings_parse(const std::string &text)
         } else if (key == "minimap") {
             bool saw = false;
             as_int(settings.minimap, saw);
+        } else if (key == "effects") {
+            bool saw = false;
+            as_int(settings.effects, saw);
         } else if (key.compare(0, 5, "bind_") == 0) {
             settings.binds += line;
             settings.binds.push_back('\n');

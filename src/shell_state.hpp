@@ -6,6 +6,7 @@
 
 #include "chart.hpp"
 #include "hotspots.hpp"
+#include "look_fx.hpp"
 #include "pad_feel.hpp"
 #include "city_recovery.hpp"
 #include "city_session.hpp"
@@ -654,6 +655,11 @@ private:
     // Short dither and panel settle. Off for tests, smoke, and demos so a
     // screenshot is the settled screen. Click or a key skips either one.
     bool motion_fx_ = false;
+    // Settings > Effects (look_fx::Effects). Off also stops motion_fx_.
+    int effects_ = 0;
+    int open_effects_ = 0;
+    bool motion_on() const { return motion_fx_ && look_fx::motion_allowed(effects_); }
+    void apply_effects();
     bool look_live_ = false;
     SceneFade scene_fade_{};
     int panel_settle_ = 0;
