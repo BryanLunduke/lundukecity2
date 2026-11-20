@@ -64,6 +64,10 @@ MapView::~MapView()
         cairo_surface_destroy(fx_pixels_);
         fx_pixels_ = nullptr;
     }
+    if (shade_pixels_ != nullptr) {
+        cairo_surface_destroy(shade_pixels_);
+        shade_pixels_ = nullptr;
+    }
 }
 
 bool MapView::tick(int elapsed_ms)
@@ -235,6 +239,9 @@ void MapView::ensure_surface()
     if (cached_raw_.size() != cells) {
         cached_raw_.assign(cells, -1);
         cached_shown_.assign(cells, -1);
+    }
+    if (special_cell_.size() != cells) {
+        special_cell_.assign(cells, 0);
     }
 }
 
@@ -577,6 +584,9 @@ void MapView::sync()
             int special_index = -1;
             int special_cell = 0;
             const int special_key = special_display_key(session_, x, y, special_index, special_cell);
+            if (special_cell_.size() == cached_raw_.size()) {
+                special_cell_[index] = special_key != 0 ? 1 : 0;
+            }
             if (special_key != 0) {
                 const bool bolt = special_center_needs_bolt(raw, special_index, special_cell, blink_on_);
                 const int shown_key = bolt ? special_key + 50000 : special_key;
@@ -1132,9 +1142,17 @@ void MapView::draw(cairo_t *cr)
     cairo_set_source_surface(cr, dusk && night_pixels_ != nullptr ? night_pixels_ : map_pixels_, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
-    if (!night_hold_ && !dusk && source == TileAtlas::kSize && look_fx::ambient_allowed(effects_)) {
+    const bool sunlit = !night_hold_ && !dusk && source == TileAtlas::kSize;
+    bool shaded = false;
+    if (sunlit && look_fx::ambient_allowed(effects_)) {
         // Shimmer and shore foam, under the boats and the other sprites.
-        draw_water(cr, visible_tiles(cr, source, 0));
+        // The layer carries the sun shadows too, so a frame pays for one
+        // paint instead of two.
+        shaded = draw_water(cr, visible_tiles(cr, source, 0));
+    }
+    if (sunlit && !shaded) {
+        // Sun shadows: still, so Calm and Off keep them; none at night.
+        draw_shadows(cr);
     }
 
     if (session_ != nullptr) {
@@ -1553,6 +1571,16 @@ int luma(std::uint32_t rgb)
     return static_cast<int>(((rgb >> 16) & 255u) * 3 + ((rgb >> 8) & 255u) * 6 + (rgb & 255u));
 }
 
+// Buildings cast a shadow; open ground, empty zone lots and explosions do not.
+bool casts_shadow(int tile)
+{
+    if (tile >= RESBASE && tile <= LASTZONE) {
+        return !(tile <= RESBASE + 8 || (tile >= COMBASE && tile <= COMBASE + 8) ||
+                 (tile >= INDBASE && tile <= INDBASE + 8));
+    }
+    return (tile >= RADAR0 && tile < TINYEXP) || (tile >= COALSMOKE1 && tile < VBRDG0);
+}
+
 bool is_water_tile(int raw)
 {
     const int tile = raw < 0 ? -1 : (raw & LOMASK);
@@ -1649,14 +1677,22 @@ void MapView::refresh_pixel_classes()
         const int tx = index % world_w;
         const int ty = index / world_w;
         const bool water = is_water_tile(cached_raw_[static_cast<std::size_t>(index)]);
+        const int raw_tile = cached_raw_[static_cast<std::size_t>(index)] < 0
+                                 ? -1
+                                 : (cached_raw_[static_cast<std::size_t>(index)] & LOMASK);
+        const bool caster = special_cell_[static_cast<std::size_t>(index)] != 0 || casts_shadow(raw_tile);
         for (int r = 0; r < kTile; ++r) {
             const int y = ty * kTile + r;
             std::uint8_t *row = pix_class_.data() + static_cast<std::size_t>(y) * art_w;
             for (int c = 0; c < kTile; ++c) {
                 const int x = tx * kTile + c;
-                std::uint8_t value = static_cast<std::uint8_t>(row[x] & 0x80u);
+                // A building casts from its whole cell: the tile sheets share
+                // too many colours between roofs and ground to cut a
+                // building out pixel by pixel, and a block shadow reads
+                // cleanly at every zoom.
+                std::uint8_t value = caster ? 0x80u : 0u;
+                const std::uint32_t rgb = pixel(x, y);
                 if (water) {
-                    const std::uint32_t rgb = pixel(x, y);
                     for (std::size_t i = 0; i < water_rgb_.size(); ++i) {
                         if (water_rgb_[i] == rgb) {
                             value = static_cast<std::uint8_t>(value | (i + 1));
@@ -1701,12 +1737,13 @@ void MapView::refresh_pixel_classes()
             }
         }
     }
+    refresh_shade(tiles);
 }
 
-void MapView::draw_water(cairo_t *cr, const TileSpan &span)
+bool MapView::draw_water(cairo_t *cr, const TileSpan &span)
 {
     if (pix_class_.empty() || water_rgb_.empty() || span.x1 <= span.x0 || span.y1 <= span.y0) {
-        return;
+        return false;
     }
     const int kTile = TileAtlas::kSize;
     const int art_w = CitySession::kWorldW * kTile;
@@ -1728,8 +1765,19 @@ void MapView::draw_water(cairo_t *cr, const TileSpan &span)
         cairo_surface_flush(fx_pixels_);
         unsigned char *out = cairo_image_surface_get_data(fx_pixels_);
         const int ostride = cairo_image_surface_get_stride(fx_pixels_);
+        // Start from the sun shadows for these tiles (or clear), then lay
+        // the water step over them.
+        const bool with_shade = shade_pixels_ != nullptr && cairo_image_surface_get_width(shade_pixels_) == art_w;
+        const unsigned char *shade = with_shade ? cairo_image_surface_get_data(shade_pixels_) : nullptr;
+        const int sstride = with_shade ? cairo_image_surface_get_stride(shade_pixels_) : 0;
         for (int y = 0; y < h; ++y) {
-            std::memset(out + y * ostride, 0, static_cast<std::size_t>(w) * 4);
+            if (with_shade) {
+                std::memcpy(out + y * ostride,
+                            shade + static_cast<std::size_t>(y + span.y0 * kTile) * sstride + span.x0 * kTile * 4,
+                            static_cast<std::size_t>(w) * 4);
+            } else {
+                std::memset(out + y * ostride, 0, static_cast<std::size_t>(w) * 4);
+            }
         }
         const float *table = wave_table();
         const int crest = static_cast<int>(water_rgb_.size()) - 1;
@@ -1774,14 +1822,113 @@ void MapView::draw_water(cairo_t *cr, const TileSpan &span)
         fx_cache_span_ = span;
         fx_water_seen_ = any;
     }
-    if (!fx_water_seen_) {
-        return;
+    if (fx_water_seen_) {
+        fx_animated_ = true;
     }
-    fx_animated_ = true;
     cairo_save(cr);
     cairo_rectangle(cr, span.x0 * kTile, span.y0 * kTile, w, h);
     cairo_clip(cr);
     cairo_set_source_surface(cr, fx_pixels_, span.x0 * kTile, span.y0 * kTile);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    return true;
+}
+
+void MapView::refresh_shade(const std::vector<int> &tiles)
+{
+    const int world_w = CitySession::kWorldW;
+    const int world_h = CitySession::kWorldH;
+    const int kTile = TileAtlas::kSize;
+    const int art_w = world_w * kTile;
+    const int art_h = world_h * kTile;
+    if (pix_class_.size() != static_cast<std::size_t>(art_w) * static_cast<std::size_t>(art_h)) {
+        return;
+    }
+    bool all = false;
+    if (shade_pixels_ == nullptr || cairo_image_surface_get_width(shade_pixels_) != art_w ||
+        cairo_image_surface_get_height(shade_pixels_) != art_h) {
+        if (shade_pixels_ != nullptr) {
+            cairo_surface_destroy(shade_pixels_);
+        }
+        shade_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, art_w, art_h);
+        all = true;
+    }
+    const bool classic = classic_fx();
+    cairo_surface_flush(shade_pixels_);
+    unsigned char *data = cairo_image_surface_get_data(shade_pixels_);
+    const int stride = cairo_image_surface_get_stride(shade_pixels_);
+    auto solid = [&](int x, int y) {
+        return x >= 0 && y >= 0 && (pix_class_[static_cast<std::size_t>(y) * art_w + x] & 0x80u) != 0;
+    };
+    // A changed tile throws shadow into the tiles right of and below it.
+    std::vector<std::uint8_t> todo(static_cast<std::size_t>(world_w * world_h), all ? 1 : 0);
+    if (!all) {
+        for (int index : tiles) {
+            const int tx = index % world_w;
+            const int ty = index / world_w;
+            for (int dy = 0; dy <= 1; ++dy) {
+                for (int dx = 0; dx <= 1; ++dx) {
+                    if (tx + dx < world_w && ty + dy < world_h) {
+                        todo[static_cast<std::size_t>((ty + dy) * world_w + tx + dx)] = 1;
+                    }
+                }
+            }
+        }
+    }
+    // A soft shadow cast down and to the right: a 4px offset with a little
+    // spread around it, and a tight contact shade at 2px. Only open ground
+    // receives it. Classic gets an ordered dither of black instead of alpha.
+    struct Tap {
+        int dx;
+        int dy;
+        float weight;
+    };
+    static const Tap kTaps[] = {{4, 4, 0.36f}, {3, 4, 0.07f}, {4, 3, 0.07f}, {5, 4, 0.07f}, {4, 5, 0.07f},
+                                {3, 3, 0.06f}, {5, 5, 0.06f}, {2, 2, 0.18f}};
+    for (int ty = 0; ty < world_h; ++ty) {
+        for (int tx = 0; tx < world_w; ++tx) {
+            if (todo[static_cast<std::size_t>(ty * world_w + tx)] == 0) {
+                continue;
+            }
+            for (int y = ty * kTile; y < (ty + 1) * kTile; ++y) {
+                auto *out = reinterpret_cast<std::uint32_t *>(data + y * stride);
+                for (int x = tx * kTile; x < (tx + 1) * kTile; ++x) {
+                    float a = 0.0f;
+                    if (!solid(x, y)) {
+                        for (const Tap &tap : kTaps) {
+                            if (solid(x - tap.dx, y - tap.dy)) {
+                                a += tap.weight;
+                            }
+                        }
+                    }
+                    a = std::min(a, 0.66f);
+                    if (a <= 0.0f) {
+                        out[x] = 0;
+                    } else if (classic) {
+                        out[x] = look_fx::dither_on(x, y, a * 0.6) ? 0xff000000u : 0u;
+                    } else {
+                        const std::uint32_t alpha = static_cast<std::uint32_t>(a * 255.0f + 0.5f);
+                        // Premultiplied cool shade (12, 14, 34).
+                        out[x] = (alpha << 24) | ((12u * alpha / 255u) << 16) | ((14u * alpha / 255u) << 8) |
+                                 (34u * alpha / 255u);
+                    }
+                }
+            }
+        }
+    }
+    cairo_surface_mark_dirty(shade_pixels_);
+    // The water layer starts from these shadows.
+    fx_cache_step_ = -1;
+}
+
+void MapView::draw_shadows(cairo_t *cr)
+{
+    if (shade_pixels_ == nullptr) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_set_source_surface(cr, shade_pixels_, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
     cairo_restore(cr);

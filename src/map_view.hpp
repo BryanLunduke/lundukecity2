@@ -140,9 +140,10 @@ private:
     };
     TileSpan visible_tiles(cairo_t *cr, int source, int pad) const;
     void draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk);
-    void draw_water(cairo_t *cr, const TileSpan &span);
+    bool draw_water(cairo_t *cr, const TileSpan &span);
     // Per art pixel at 16px: bits 0-4 a water colour index + 1 (0 is not
-    // water), bit 6 shore (water beside land). Rebuilt for changed tiles.
+    // water), bit 6 shore (water beside land), bit 7 solid (a pixel of a
+    // building cell, which casts a shadow). Rebuilt for changed tiles.
     void refresh_pixel_classes();
     void learn_fx_palette();
     std::vector<std::uint8_t> pix_class_;
@@ -154,6 +155,12 @@ private:
     std::vector<std::uint32_t> water_rgb_;
     std::vector<std::uint32_t> water_lift_;
     std::uint32_t foam_rgb_ = 0;
+    // 1 for a map cell drawn from a landmark sprite (always a caster).
+    std::vector<std::uint8_t> special_cell_;
+    // Soft lower-right drop shadows at art resolution, premultiplied.
+    cairo_surface_t *shade_pixels_ = nullptr;
+    void refresh_shade(const std::vector<int> &tiles);
+    void draw_shadows(cairo_t *cr);
     cairo_surface_t *fx_pixels_ = nullptr;
     int fx_cache_step_ = -1;
     TileSpan fx_cache_span_{};
