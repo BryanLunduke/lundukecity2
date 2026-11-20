@@ -2006,6 +2006,11 @@ public:
     void markRiotFire(int x, int y);
     void pruneRiotFires();
     int riotFiresBurning() const;
+    // After loading a saved city, put land value, pollution, crime and
+    // terrain density back to the values that were saved, or recompute them
+    // when the file is from before those maps were saved.
+    void applyOrSettleScanMapsAfterLoad();
+    void paintServiceCoverage();
 
     /**
      * City 2 Lion Escape: the residential zone or house nearest (x, y),
@@ -2496,6 +2501,17 @@ public:
 
     /** City 2 lasting disasters. Saved in the LCD1 trailer after LCM1. */
     CityEvents cityEvents;
+    // Scan maps from a save's LCS1 trailer, applied after doSimInit so a
+    // loaded city shows the same crime and land value it was saved with.
+    bool pendingScanMapsValid;
+    short pendingCrimeAverage;
+    short pendingLandValueAverage;
+    short pendingPollutionAverage;
+    Byte pendingLandValueMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
+    Byte pendingPollutionMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
+    Byte pendingCrimeMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
+    Byte pendingTerrainMap[((WORLD_W + 3) / 4) * ((WORLD_H + 3) / 4)];
+
 
     /**
      * LCW1 trailer decoded by loadFileDir and applied by loadFile after

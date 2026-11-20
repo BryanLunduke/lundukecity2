@@ -620,3 +620,71 @@ void Micropolis::computeComRateMap()
 
 
 ////////////////////////////////////////////////////////////////////////
+
+
+/**
+ * Rebuild unsmoothed police and fire coverage from the map. crimeScan and
+ * fireAnalysis smooth those maps in place, so a second pass after load has
+ * to paint them again first.
+ */
+void Micropolis::paintServiceCoverage()
+{
+    policeStationMap.clear();
+    fireStationMap.clear();
+    for (int x = 0; x < WORLD_W; x++) {
+        for (int y = 0; y < WORLD_H; y++) {
+            const MapValue v = map[x][y];
+            if (!(v & ZONEBIT)) {
+                continue;
+            }
+            const MapTile tile = v & LOMASK;
+            if (tile != POLICESTATION && tile != FIRESTATION) {
+                continue;
+            }
+            int z = (tile == POLICESTATION) ? (int)policeEffect : (int)fireEffect;
+            if ((v & PWRBIT) == 0) {
+                z /= 2;
+            }
+            Position pos2(x, y);
+            if (!findPerimeterRoad(&pos2)) {
+                z /= 2;
+            }
+            if (tile == POLICESTATION) {
+                const int value = policeStationMap.worldGet(pos2.posX, pos2.posY);
+                policeStationMap.worldSet(pos2.posX, pos2.posY, value + z);
+            } else {
+                const int value = fireStationMap.worldGet(pos2.posX, pos2.posY);
+                fireStationMap.worldSet(pos2.posX, pos2.posY, value + z);
+            }
+        }
+    }
+}
+
+void Micropolis::applyOrSettleScanMapsAfterLoad()
+{
+    if (pendingScanMapsValid) {
+        if (landValueMap.MAP_W * landValueMap.MAP_H == (int)sizeof(pendingLandValueMap)) {
+            memcpy(landValueMap.getBase(), pendingLandValueMap, sizeof(pendingLandValueMap));
+            memcpy(pollutionDensityMap.getBase(), pendingPollutionMap, sizeof(pendingPollutionMap));
+            memcpy(crimeRateMap.getBase(), pendingCrimeMap, sizeof(pendingCrimeMap));
+        }
+        if (terrainDensityMap.MAP_W * terrainDensityMap.MAP_H == (int)sizeof(pendingTerrainMap)) {
+            memcpy(terrainDensityMap.getBase(), pendingTerrainMap, sizeof(pendingTerrainMap));
+        }
+        crimeAverage = pendingCrimeAverage;
+        landValueAverage = pendingLandValueAverage;
+        pollutionAverage = pendingPollutionAverage;
+        pendingScanMapsValid = false;
+        return;
+    }
+    // Older saves have no LCS1 trailer. Land value uses last pass's terrain
+    // and pollution, which start empty, so the first scan after load looks
+    // like a new city (low land value, high crime) for one period. Run one
+    // more land pass now that those maps are filled, then recompute crime.
+    paintServiceCoverage();
+    pollutionTerrainLandValueScan();
+    paintServiceCoverage();
+    crimeScan();
+    paintServiceCoverage();
+    fireAnalysis();
+}

@@ -957,6 +957,92 @@ static bool read_city_events(Micropolis *sim, const unsigned char *bytes, std::s
     return true;
 }
 
+// Bytes the LCD1 trailer at bytes takes, or 0 when there is none.
+static std::size_t events_span(const unsigned char *bytes, std::size_t avail)
+{
+    if (bytes == NULL || avail < 8 || std::memcmp(bytes, kEventsMagic, 4) != 0) {
+        return 0;
+    }
+    const std::size_t span = 8 + (std::size_t)read_le_u16(bytes + 6);
+    return span <= avail ? span : 0;
+}
+
+// Land value, pollution, crime and terrain density as they stood at save
+// time. Magic "LCS1", after LCD1 and before LCV1. Little-endian:
+//   char magic[4] = { 'L','C','S','1' }
+//   uint16 version = 1
+//   uint16 payload
+//   int16 crimeAverage, landValueAverage, pollutionAverage, reserved
+//   landValueMap, pollutionDensityMap, crimeRateMap (MapByte2, getBase order)
+//   terrainDensityMap (MapByte4, getBase order)
+// A file without it (older saves) is settled again after load.
+static const char kScanMapsMagic[4] = {'L', 'C', 'S', '1'};
+static const unsigned int kScanMapsVersion = 1;
+
+static unsigned scan_map2_bytes(const Micropolis *sim)
+{
+    return (unsigned)(sim->landValueMap.MAP_W * sim->landValueMap.MAP_H);
+}
+
+static unsigned scan_map4_bytes(const Micropolis *sim)
+{
+    return (unsigned)(sim->terrainDensityMap.MAP_W * sim->terrainDensityMap.MAP_H);
+}
+
+static bool write_scan_maps(FILE *f, const Micropolis *sim)
+{
+    const unsigned map2 = scan_map2_bytes(sim);
+    const unsigned map4 = scan_map4_bytes(sim);
+    const unsigned payload = 8 + 3 * map2 + map4;
+    std::vector<unsigned char> bytes(8 + payload);
+    for (int i = 0; i < 4; ++i) {
+        bytes[i] = (unsigned char)kScanMapsMagic[i];
+    }
+    write_le_u16(bytes.data() + 4, kScanMapsVersion);
+    write_le_u16(bytes.data() + 6, payload);
+    write_le_u16(bytes.data() + 8, (unsigned short)sim->crimeAverage);
+    write_le_u16(bytes.data() + 10, (unsigned short)sim->landValueAverage);
+    write_le_u16(bytes.data() + 12, (unsigned short)sim->pollutionAverage);
+    write_le_u16(bytes.data() + 14, 0);
+    unsigned char *out = bytes.data() + 16;
+    Micropolis *mut = const_cast<Micropolis *>(sim);
+    std::memcpy(out, mut->landValueMap.getBase(), map2); out += map2;
+    std::memcpy(out, mut->pollutionDensityMap.getBase(), map2); out += map2;
+    std::memcpy(out, mut->crimeRateMap.getBase(), map2); out += map2;
+    std::memcpy(out, mut->terrainDensityMap.getBase(), map4);
+    return fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+}
+
+static bool read_scan_maps(Micropolis *sim, const unsigned char *bytes, std::size_t avail)
+{
+    if (bytes == NULL || avail < 16 || std::memcmp(bytes, kScanMapsMagic, 4) != 0) {
+        return false;
+    }
+    if (read_le_u16(bytes + 4) != kScanMapsVersion) {
+        return false;
+    }
+    const unsigned int payload = read_le_u16(bytes + 6);
+    const unsigned map2 = scan_map2_bytes(sim);
+    const unsigned map4 = scan_map4_bytes(sim);
+    if (payload != 8 + 3 * map2 + map4 || avail < 8 + (std::size_t)payload) {
+        return false;
+    }
+    if (map2 != (unsigned)sizeof(sim->pendingLandValueMap) ||
+        map4 != (unsigned)sizeof(sim->pendingTerrainMap)) {
+        return false;
+    }
+    sim->pendingCrimeAverage = (short)read_le_u16(bytes + 8);
+    sim->pendingLandValueAverage = (short)read_le_u16(bytes + 10);
+    sim->pendingPollutionAverage = (short)read_le_u16(bytes + 12);
+    const unsigned char *in = bytes + 16;
+    std::memcpy(sim->pendingLandValueMap, in, map2); in += map2;
+    std::memcpy(sim->pendingPollutionMap, in, map2); in += map2;
+    std::memcpy(sim->pendingCrimeMap, in, map2); in += map2;
+    std::memcpy(sim->pendingTerrainMap, in, map4);
+    sim->pendingScanMapsValid = true;
+    return true;
+}
+
 // Save-format marker (C1), always the last 12 bytes of a City 2 save:
 // "LCV1", u16 format version, u16 flags, u16 original corner tile, u16 0.
 // Format 1 is every save before the marker; format 2 adds the Data Center
@@ -1202,12 +1288,21 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
     }
     const std::size_t dock_at = trailer + wide_bytes;
     std::memset(&cityEvents, 0, sizeof(cityEvents));
+    pendingScanMapsValid = false;
     if (data.size() > dock_at + format_bytes) {
         const std::size_t avail = data.size() - dock_at - format_bytes;
         read_marina_dock(this, data.data() + dock_at, avail);
         const std::size_t dock_bytes = marina_dock_span(data.data() + dock_at, avail);
+        std::size_t ev_bytes = 0;
         if (avail > dock_bytes) {
-            read_city_events(this, data.data() + dock_at + dock_bytes, avail - dock_bytes);
+            ev_bytes = events_span(data.data() + dock_at + dock_bytes, avail - dock_bytes);
+            if (ev_bytes > 0) {
+                read_city_events(this, data.data() + dock_at + dock_bytes, ev_bytes);
+            }
+        }
+        const std::size_t scan_at = dock_bytes + ev_bytes;
+        if (avail > scan_at) {
+            read_scan_maps(this, data.data() + dock_at + scan_at, avail - scan_at);
         }
     }
 
@@ -1430,6 +1525,11 @@ bool Micropolis::loadFile(const char *filename)
     roadEffect = (Quad)(roadPercent * (float)MAX_ROAD_EFFECT);
     policeEffect = (Quad)(policePercent * (float)MAX_POLICE_STATION_EFFECT);
     fireEffect = (Quad)(firePercent * (float)MAX_FIRE_STATION_EFFECT);
+
+    // doSimInit's first land/crime pass cannot use last-period terrain and
+    // pollution, so crime reads too high until the next scan. Put the saved
+    // maps back (or settle them, on a file from before LCS1).
+    applyOrSettleScanMapsAfterLoad();
 
     restoreEnableDisasters();
     invalidateMaps();
@@ -1795,6 +1895,7 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
         write_wide_city(f, this, funds_for_file) &&
         write_marina_dock(f, this) &&
         write_city_events(f, this) &&
+        write_scan_maps(f, this) &&
         write_city_format(f, format_guard, corner);
 
     int ioerr = 0;

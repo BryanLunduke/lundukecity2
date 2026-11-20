@@ -267,18 +267,25 @@ int main()
         }
 
         // A save keeps the riot-fire record after the riot itself has ended.
+        // Loading a city scans the map, and a fire tile may burn out in that
+        // pass, so mark a cluster of riot fires and require that at least
+        // one is still burning with its flag set.
         const std::string path = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") +
                                  "/portland_riot_fire.cty";
-        sim.map[50][60] = FIRE | ANIMBIT;
-        sim.markRiotFire(50, 60);
+        for (int i = 0; i < 12; ++i) {
+            const int fx = 40 + i * 2;
+            const int fy = 60;
+            sim.map[fx][fy] = FIRE | ANIMBIT;
+            sim.markRiotFire(fx, fy);
+        }
         if (!sim.saveFile(path.c_str())) {
             return fail(24, "the Portland city did not save");
         }
         Micropolis back;
         back.resourceDir = LUNDUKE_CITY_ASSET_DIR "/../../data/scenarios";
         if (!back.loadFile(path.c_str()) || back.cityEvents.riotSteps != 0 ||
-            back.cityEvents.riotFire[50][60] == 0 || back.riotFiresBurning() == 0) {
-            return fail(25, "a Portland save lost a riot fire still burning");
+            back.riotFiresBurning() == 0) {
+            return fail(25, "a Portland save lost the riot fires still burning");
         }
         Heard after;
         listen(back, after);
