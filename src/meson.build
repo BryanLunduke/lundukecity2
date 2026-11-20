@@ -19,6 +19,7 @@ lunduke_city_src = files(
   'side_widgets.cpp',
   'sound_player.cpp',
   'sprite_art.cpp',
+  'terrain_paint.cpp',
   'tile_atlas.cpp',
   'tool_palette.cpp',
   'tools.cpp',

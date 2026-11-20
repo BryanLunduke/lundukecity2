@@ -439,6 +439,9 @@ void Micropolis::init()
     // int CreateIsland; /* -1 => 10%, 0 => never, 1 => always */
     terrainCreateIsland = -1;
 
+    // Painted terrain from the editor; nullptr keeps the generated land.
+    terrainOverride = NULL;
+
 
     ////////////////////////////////////////////////////////////////////////
     // graph.cpp

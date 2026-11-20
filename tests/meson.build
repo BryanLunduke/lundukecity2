@@ -982,3 +982,32 @@ test(
   ],
   timeout: 300,
 )
+
+# Terrain editor: brush, shore and forest edges, and painted new cities.
+terrain_editor = executable(
+  'terrain_editor',
+  'terrain_editor.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/placement_hint.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/special_buildings.cpp',
+  '../src/terrain_paint.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'terrain_editor',
+  terrain_editor,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+)
