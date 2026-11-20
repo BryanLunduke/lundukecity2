@@ -1672,6 +1672,98 @@ void Shell::drive_ui_test()
             cancel_dialog();
             mouse(SDL_EVENT_MOUSE_BUTTON_UP, cx, cy, false);
         }
+        // Escape's last step (after rebind, dialog, menu, overlay, sticky
+        // notice, keyboard cursor) drops the tool to Inspect, like a
+        // right-click; gamepad Back does the same. B alone does not.
+        {
+            const int inspect = kToolCount - 1;
+            const int build_tool = 1;
+            if (dialog_ != Dialog::None || menu_.open()) {
+                fail("Escape check started under a dialog or menu");
+                return;
+            }
+            if (notice_sticky_) {
+                dismiss_background_notice();
+            }
+            const bool overlay_was = overlay_on_;
+            overlay_on_ = false;
+            select_tool(build_tool);
+            key_cursor_ = true;
+            key_down(SDLK_ESCAPE);
+            if (key_cursor_ || tool_index_ != build_tool) {
+                fail("Escape should hide the keyboard cursor first and keep the tool");
+                return;
+            }
+            key_down(SDLK_ESCAPE);
+            if (tool_index_ != inspect) {
+                fail("Escape did not go back to Inspect (tool " + std::to_string(tool_index_) + ")");
+                return;
+            }
+            select_tool(build_tool);
+            menu_.open_first();
+            key_down(SDLK_ESCAPE);
+            if (menu_.open() || tool_index_ != build_tool) {
+                fail("Escape with a menu open should close the menu and keep the tool");
+                return;
+            }
+            // A mouse stroke in progress ends with the tool.
+            const Hotspot *map_spot = find_hot(hot_, kMapId, 0);
+            if (map_spot == nullptr) {
+                fail("no map hotspot for the Escape stroke check");
+                return;
+            }
+            {
+                int ww = 1;
+                int wh = 1;
+                int pw = 1;
+                int ph = 1;
+                SDL_GetWindowSize(window_, &ww, &wh);
+                SDL_GetWindowSizeInPixels(window_, &pw, &ph);
+                SDL_Event press{};
+                press.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+                press.button.button = SDL_BUTTON_LEFT;
+                press.button.down = true;
+                press.button.clicks = 1;
+                press.button.x = static_cast<float>((map_spot->x + map_spot->w * 0.3) * ww / std::max(pw, 1));
+                press.button.y = static_cast<float>((map_spot->y + map_spot->h * 0.6) * wh / std::max(ph, 1));
+                handle_event(press);
+                if (!pointer_on_map_) {
+                    fail("the map press for the Escape check did not start a stroke");
+                    return;
+                }
+                key_down(SDLK_ESCAPE);
+                if (pointer_on_map_ || map_.dragging() || tool_index_ != inspect) {
+                    fail("Escape did not end the map stroke and go to Inspect");
+                    return;
+                }
+                press.type = SDL_EVENT_MOUSE_BUTTON_UP;
+                press.button.down = false;
+                handle_event(press);
+            }
+            select_tool(build_tool);
+            {
+                SDL_Event b{};
+                b.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                b.gbutton.button = SDL_GAMEPAD_BUTTON_EAST;
+                b.gbutton.down = true;
+                handle_event(b);
+                if (tool_index_ != build_tool) {
+                    fail("B on the map changed the tool");
+                    return;
+                }
+                SDL_Event back{};
+                back.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                back.gbutton.button = SDL_GAMEPAD_BUTTON_BACK;
+                back.gbutton.down = true;
+                handle_event(back);
+                if (tool_index_ != inspect) {
+                    fail("gamepad Back did not go back to Inspect");
+                    return;
+                }
+            }
+            gamepad_nav_ = false;
+            overlay_on_ = overlay_was;
+        }
         // Cloud shadows: their own clock, scaled by the speed (Slow 0.75,
         // Medium 1, Fast 2); the shared ambient clock is not.
         {

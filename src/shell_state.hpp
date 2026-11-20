@@ -216,6 +216,9 @@ private:
     void reset_touch_state();
     // Ends a left-button minimap drag and its mouse capture.
     void end_mini_drag();
+    // Escape's last step, and gamepad Back's: end any map stroke in progress
+    // and go back to Inspect, the same as a right-click.
+    void escape_to_inspect();
     std::string context_hint() const;
     std::string dialog_title_hint() const;
     std::string idle_message() const;

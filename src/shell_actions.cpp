@@ -1467,6 +1467,19 @@ void Shell::end_mini_drag()
     }
 }
 
+void Shell::escape_to_inspect()
+{
+    if (pad_dragging_ || pointer_on_map_) {
+        const bool mouse_stroke = pointer_on_map_ && !pad_dragging_;
+        // Tiles already placed stay; the stroke just ends here.
+        release_pad_drag();
+        if (mouse_stroke) {
+            SDL_CaptureMouse(false);
+        }
+    }
+    select_tool(kToolCount - 1);
+}
+
 void Shell::reset_touch_state()
 {
     if (touch_armed_) {

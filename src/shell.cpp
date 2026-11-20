@@ -2650,6 +2650,11 @@ void Shell::handle_event(const SDL_Event &event)
             key_cursor_ = false;
             break;
         }
+        // Last in the chain: nothing else wanted Escape, so drop the tool.
+        if (accel == AccelKey::Escape && dialog_ == Dialog::None && !menu_.open()) {
+            escape_to_inspect();
+            break;
+        }
         if (accel == AccelKey::Space) {
             toggle_pause();
             break;
@@ -2758,6 +2763,9 @@ void Shell::handle_event(const SDL_Event &event)
                 menu_.handle_key(AccelKey::Escape, 0, 0);
             } else if (dialog_ != Dialog::None) {
                 cancel_dialog();
+            } else if (pact == PadBack) {
+                // Back's last step matches Escape: end the stroke, Inspect.
+                escape_to_inspect();
             } else if (pad_dragging_ || pointer_on_map_) {
                 release_pad_drag();
             }
