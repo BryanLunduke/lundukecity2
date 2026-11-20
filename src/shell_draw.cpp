@@ -945,8 +945,18 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         }
         const double text_y = y + pitch.text_dy;
         const double text_x = (deck_ || touch_used_) ? drop_x + 12.0 + pitch.mark : drop_x + 28.0;
-        paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, ink_text.r, ink_text.g,
-                       ink_text.b);
+        // A disaster this city cannot have (no zoo, no prison, one already
+        // running) is greyed. It still opens its dialog, which says why.
+        const bool greyed =
+            menu_table::city_event_index(item.action) >= 0 &&
+            !session_.event_unavailable(static_cast<city_events::Kind>(menu_table::city_event_index(item.action))).empty();
+        if (greyed) {
+            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, ink_accel.r, ink_accel.g,
+                           ink_accel.b);
+        } else {
+            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, ink_text.r, ink_text.g,
+                           ink_text.b);
+        }
         if (item.kind == ItemKind::Submenu) {
             paint_text(cr, menu_font(), ">", drop_x + drop_w - dp(28), text_y, ink_text.r, ink_text.g,
                        ink_text.b, -1);
@@ -1528,6 +1538,21 @@ void Shell::draw_dialog(cairo_t *cr)
             question = "Cause a nuclear meltdown?";
             detail = "A nuclear plant will melt down. This cannot be undone.";
         }
+        // City 2's own disasters take their words from city_events, and say
+        // why when the city cannot have one (no zoo, no prison, ...).
+        std::string blocked;
+        if (menu_table::city_event_index(disaster_) >= 0) {
+            const auto kind = static_cast<city_events::Kind>(menu_table::city_event_index(disaster_));
+            const city_events::KindInfo &row = city_events::info(kind);
+            title = row.title;
+            question = row.question;
+            detail = row.detail;
+            blocked = session_.event_unavailable(kind);
+            if (!blocked.empty()) {
+                question = "This disaster cannot start right now.";
+                detail = blocked.c_str();
+            }
+        }
         const double width = message_width(win_w_, margin, dp(420), dp(520));
         const double body_h = text_block_height(std::string(question) + "\n" + detail, width - 2 * margin);
         const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
@@ -1544,8 +1569,12 @@ void Shell::draw_dialog(cairo_t *cr)
         theme::reading_ink(ink_r, ink_g, ink_b);
         place_line(body_font(), detail, panel.x + margin, panel.y + dp(52) + question_h + dp(6), panel.w - 2 * margin,
                    ink_r, ink_g, ink_b);
-        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_Start", kOk}}, 0,
-                   kOk);
+        if (!blocked.empty()) {
+            buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kCancel}}, 0, kCancel);
+        } else {
+            buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Cancel", kCancel}, {"_Start", kOk}},
+                       0, kOk);
+        }
         return;
     }
     if (dialog_ == Dialog::NewCity) {

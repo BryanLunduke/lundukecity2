@@ -2110,6 +2110,10 @@ void Shell::apply_action(Action action)
     case Action::Earthquake:
     case Action::Monster:
     case Action::Meltdown:
+    case Action::Riot:
+    case Action::AutonomousZone:
+    case Action::LionEscape:
+    case Action::PrisonEscape:
         disaster_ = action;
         open_dialog(Dialog::Disaster);
         break;
@@ -2566,6 +2570,9 @@ void Shell::on_dialog_button(int id)
                 session_.disaster_meltdown();
                 break;
             default:
+                if (menu_table::city_event_index(disaster) >= 0) {
+                    session_.start_event(static_cast<city_events::Kind>(menu_table::city_event_index(disaster)));
+                }
                 break;
             }
             return;

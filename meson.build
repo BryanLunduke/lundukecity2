@@ -131,6 +131,15 @@ install_data(
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'special-tiles',
 )
 install_data(
+  [
+    'data/disaster-art/lion.png',
+    'data/disaster-art/lion-svga.png',
+    'data/disaster-art/barricade.png',
+    'data/disaster-art/barricade-svga.png',
+  ],
+  install_dir: get_option('datadir') / 'lunduke-city-2' / 'disaster-art',
+)
+install_data(
   'data/welcome/welcome-bg.png',
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'welcome',
 )

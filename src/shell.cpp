@@ -1047,7 +1047,9 @@ void Shell::bind_session()
             return;
         }
         bulldoze_drag_noted_ = false;
-        if (tool->engine_id == TOOL_BULLDOZER) {
+        if (tool->engine_id == TOOL_BULLDOZER && !session_.bulldoze_blocked(x, y)) {
+            // (Inside the Autonomous Zone use_tool refuses with its notice;
+            // no point asking first.)
             std::string name;
             const int worth = session_.bulldoze_worth(x, y, &name);
             if (worth >= CitySession::kBulldozeConfirmCost) {

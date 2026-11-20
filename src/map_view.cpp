@@ -321,6 +321,60 @@ cairo_surface_t *load_png(const std::string &path)
     return surface;
 }
 
+// City 2's own disaster art: data/disaster-art/<name>.png for the Classic
+// look and <name>-svga.png for SVGA (Spooky uses SVGA). Sheets are rows of
+// 16x16 cells. Null when the file is missing; the map just goes without.
+cairo_surface_t *disaster_sheet(const char *name)
+{
+    struct Cache {
+        cairo_surface_t *image[2][2] = {{nullptr, nullptr}, {nullptr, nullptr}};
+        bool tried[2][2] = {{false, false}, {false, false}};
+        ~Cache()
+        {
+            for (auto &row : image) {
+                for (cairo_surface_t *surface : row) {
+                    if (surface != nullptr) {
+                        cairo_surface_destroy(surface);
+                    }
+                }
+            }
+        }
+    };
+    static Cache cache;
+    const int which = std::string(name) == "lion" ? 0 : 1;
+    const int look = tile_atlas().look() >= 1 ? 1 : 0;
+    if (!cache.tried[which][look]) {
+        cache.tried[which][look] = true;
+        cache.image[which][look] =
+            load_png(ui_data_file(std::string("disaster-art/") + name + (look == 1 ? "-svga.png" : ".png")));
+    }
+    return cache.image[which][look];
+}
+
+// One 16x16 cell of a disaster sheet with its top-left at (x, y) in 16px
+// map pixels. At dusk it takes the same tint as the engine's sprites.
+void paint_disaster_cell(cairo_t *cr, cairo_surface_t *sheet, int cell, double x, double y, double sprite_to_source,
+                         bool dusk, double dusk_r, double dusk_g, double dusk_b)
+{
+    if (sheet == nullptr) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_translate(cr, x * sprite_to_source, y * sprite_to_source);
+    cairo_scale(cr, sprite_to_source, sprite_to_source);
+    cairo_rectangle(cr, 0, 0, 16, 16);
+    cairo_clip(cr);
+    cairo_set_source_surface(cr, sheet, -16.0 * cell, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    if (dusk) {
+        cairo_set_operator(cr, CAIRO_OPERATOR_MULTIPLY);
+        cairo_set_source_rgb(cr, dusk_r, dusk_g, dusk_b);
+        cairo_mask_surface(cr, sheet, -16.0 * cell, 0);
+    }
+    cairo_restore(cr);
+}
+
 // How the 8px overview snaps a special sheet: like the atlas the sheet
 // belongs to (SVGA sheets keep their tan dirt ramp, Spooky snaps to VGA).
 enum class SpecialSnap { None, Vga, Svga };
@@ -1217,6 +1271,9 @@ void MapView::draw(cairo_t *cr)
     }
     if (dusk) {
         tint_sprites(cr, sprite_to_source);
+    }
+    draw_city_events(cr, sprite_to_source, dusk);
+    if (dusk) {
         draw_night(cr, source);
     }
     fx_animated_ = false;
@@ -1319,6 +1376,42 @@ void MapView::refresh_night_base()
     }
     night_dirty_.clear();
     cairo_surface_mark_dirty(night_pixels_);
+}
+
+void MapView::draw_city_events(cairo_t *cr, double sprite_to_source, bool dusk)
+{
+    // Autonomous Zone barricades on the border, then the escaped lion. Both
+    // are City 2's own art, drawn like the engine's sprites.
+    if (session_ == nullptr) {
+        return;
+    }
+    cairo_surface_t *fence = disaster_sheet("barricade");
+    for (const city_events::Barricade &piece : session_->barricades()) {
+        const double left = piece.x * 16.0;
+        const double top = piece.y * 16.0;
+        // Three kinds of barricade (sawhorse, concrete, cones), picked by
+        // place so the line does not repeat but stays put frame to frame.
+        // Cells 0-2 run along a horizontal edge, 3-5 along a vertical one.
+        // The piece's middle (row 7, or column 7.5) sits on the tile edge.
+        const int kind = ((piece.x * 7 + piece.y * 13 + piece.side * 5) & 0x7fff) % 3;
+        if (piece.side == 0) {
+            paint_disaster_cell(cr, fence, kind, left, top - 7.0, sprite_to_source, dusk, kDuskR, kDuskG, kDuskB);
+        } else if (piece.side == 2) {
+            paint_disaster_cell(cr, fence, kind, left, top + 16.0 - 7.0, sprite_to_source, dusk, kDuskR, kDuskG,
+                                kDuskB);
+        } else if (piece.side == 1) {
+            paint_disaster_cell(cr, fence, 3 + kind, left + 16.0 - 8.0, top, sprite_to_source, dusk, kDuskR, kDuskG,
+                                kDuskB);
+        } else {
+            paint_disaster_cell(cr, fence, 3 + kind, left - 8.0, top, sprite_to_source, dusk, kDuskR, kDuskG, kDuskB);
+        }
+    }
+    const city_events::LionView cat = session_->lion();
+    if (cat.active) {
+        const int cell = (cat.dir & 3) * 2 + (cat.frame & 1);
+        paint_disaster_cell(cr, disaster_sheet("lion"), cell, cat.x - 8.0, cat.y - 8.0, sprite_to_source, dusk, kDuskR,
+                            kDuskG, kDuskB);
+    }
 }
 
 void MapView::tint_sprites(cairo_t *cr, double sprite_to_source)

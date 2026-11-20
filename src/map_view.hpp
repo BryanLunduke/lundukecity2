@@ -260,6 +260,7 @@ private:
     cairo_surface_t *map_pixels_ = nullptr;
     void draw_night(cairo_t *cr, int source);
     void tint_sprites(cairo_t *cr, double sprite_to_source);
+    void draw_city_events(cairo_t *cr, double sprite_to_source, bool dusk);
     bool night_ = false;
     bool night_hold_ = false;
     bool slate_tags_ = false;
