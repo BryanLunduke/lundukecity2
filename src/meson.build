@@ -5,6 +5,7 @@ lunduke_city_src = files(
   'city_glance.cpp',
   'engraved_map.cpp',
   'city_session.cpp',
+  'city_events.cpp',
   'map_view.cpp',
   'messages.cpp',
   'night_light.cpp',

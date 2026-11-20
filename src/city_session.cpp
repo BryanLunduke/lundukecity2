@@ -15,6 +15,7 @@
 #include "special_buildings.hpp"
 
 #include "micropolis.h"
+#include "text.h"
 #include "tile_kind.hpp"
 
 #include <algorithm>
@@ -432,9 +433,28 @@ CitySession::CitySession()
         self->on_callback(name, params, args);
     };
     engine_->sim.callbackData = this;
-    engine_->sim.specialLandFn = boost_special_land_value;
-    engine_->sim.specialCrimeFn = boost_special_crime;
+    // The lasting disasters change land value and crime after the special
+    // buildings do, on the same once-per-scan passes.
+    engine_->sim.specialLandFn = [](Micropolis *sim) {
+        boost_special_land_value(sim);
+        city_events::apply_land(sim);
+    };
+    engine_->sim.specialCrimeFn = [](Micropolis *sim) {
+        boost_special_crime(sim);
+        city_events::apply_crime(sim);
+    };
     engine_->sim.specialIncomeFn = special_annual_income;
+    engine_->sim.eventFrameFn = [](Micropolis *sim) {
+        if (auto *self = static_cast<CitySession *>(sim->callbackData)) {
+            self->on_event_frame();
+        }
+    };
+    engine_->sim.eventRandomFn = [](Micropolis *sim) {
+        if (auto *self = static_cast<CitySession *>(sim->callbackData)) {
+            self->on_random_event();
+        }
+    };
+    engine_->sim.editBlockedFn = city_events::edit_blocked;
     engine_->sim.setEnableSound(sound_enabled_);
 }
 
@@ -445,6 +465,9 @@ CitySession::~CitySession()
     engine_->sim.specialLandFn = nullptr;
     engine_->sim.specialCrimeFn = nullptr;
     engine_->sim.specialIncomeFn = nullptr;
+    engine_->sim.eventFrameFn = nullptr;
+    engine_->sim.eventRandomFn = nullptr;
+    engine_->sim.editBlockedFn = nullptr;
     delete engine_;
 }
 
@@ -787,6 +810,8 @@ void CitySession::new_city(const NewCitySpec &spec)
     sim.terrainOverride = painted ? spec.terrain.data() : nullptr;
     sim.generateSomeCity(used_seed);
     sim.terrainOverride = nullptr;
+    // A new city starts with no riot, zone, lion or prison break.
+    city_events::clear(&sim);
     int level = spec.difficulty;
     if (level < kLevelEasy || level > kLevelHard) {
         level = kLevelEasy;
@@ -1296,6 +1321,12 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
     if (engine_tool == kSpecialEngineId) {
         return;
     }
+    if (engine_tool == TOOL_BULLDOZER && bulldoze_blocked(tile_x, tile_y)) {
+        // Landmarks are bulldozed here, before the engine's own check.
+        refuse_in_zone();
+        notify();
+        return;
+    }
     if (engine_tool == TOOL_BULLDOZER && bulldoze_special_at(&engine_->sim, tile_x, tile_y)) {
         dirty_ = true;
         tool_stroke_placed_ = 1;
@@ -1320,7 +1351,14 @@ bool CitySession::place_special(int index, int tile_x, int tile_y)
     tool_stroke_placed_ = 0;
     const long long before = funds();
     std::string error;
-    if (!place_special_building(&engine_->sim, index, tile_x, tile_y, error)) {
+    if (index >= 0 && index < special_building_count()) {
+        const SpecialBuilding &building = special_building(index);
+        if (city_events::footprint_in_zone(&engine_->sim, tile_x - building.anchor_x, tile_y - building.anchor_y,
+                                           building.width, building.height)) {
+            error = message_for_number(MESSAGE_AUTONOMOUS_ZONE);
+        }
+    }
+    if (!error.empty() || !place_special_building(&engine_->sim, index, tile_x, tile_y, error)) {
         if (!error.empty()) {
             post_message(error);
             placement_note_.ok = false;
@@ -2078,6 +2116,156 @@ void CitySession::disaster_meltdown()
     notify();
 }
 
+void CitySession::post_event_notes(const std::vector<city_events::Note> &notes, bool jump)
+{
+    bool jumped = false;
+    for (const city_events::Note &note : notes) {
+        post_message(note.text);
+        remember_notice(note.text, note.x, note.y, note.has_place);
+        if (jump && !jumped && note.has_place && Micropolis::testBounds(note.x, note.y)) {
+            // Like the classic disasters: with Auto goto on, the view jumps
+            // to where it started. Later notices (lion meals, zone reviews)
+            // do not pull the view around.
+            jumped = true;
+            goto_x_ = note.x;
+            goto_y_ = note.y;
+            goto_pending_ = true;
+        }
+    }
+}
+
+bool CitySession::start_event(city_events::Kind kind)
+{
+    if (!ready_) {
+        return false;
+    }
+    std::vector<city_events::Note> notes;
+    const bool started = city_events::start(&engine_->sim, kind, notes);
+    if (started) {
+        // Fires show at once; the crime and land-value maps take the
+        // change on their next scan.
+        engine_->sim.invalidateMaps();
+        dirty_ = true;
+    }
+    post_event_notes(notes, started);
+    notify();
+    return started;
+}
+
+bool CitySession::start_event_named(const std::string &key)
+{
+    city_events::Kind kind = city_events::Kind::Riot;
+    if (!city_events::kind_from_key(key, kind)) {
+        return false;
+    }
+    return start_event(kind);
+}
+
+bool CitySession::start_autonomous_zone_at(int block_x, int block_y)
+{
+    if (!ready_) {
+        return false;
+    }
+    std::vector<city_events::Note> notes;
+    const bool started = city_events::start_zone_at(&engine_->sim, block_x, block_y, notes);
+    if (started) {
+        dirty_ = true;
+        engine_->sim.invalidateMaps();
+    }
+    post_event_notes(notes, started);
+    notify();
+    return started;
+}
+
+std::string CitySession::event_unavailable(city_events::Kind kind) const
+{
+    return city_events::unavailable_reason(&engine_->sim, kind);
+}
+
+bool CitySession::in_autonomous_zone(int x, int y) const
+{
+    return city_events::in_zone(&engine_->sim, x, y);
+}
+
+bool CitySession::bulldoze_blocked(int x, int y) const
+{
+    if (!ready_ || engine_->sim.cityEvents.zoneCount <= 0) {
+        return false;
+    }
+    if (city_events::in_zone(&engine_->sim, x, y)) {
+        return true;
+    }
+    // A building that straddles the border goes all at once, so clicking
+    // its outside half must not clear the inside half.
+    const TileInspect card = inspect_tile(x, y);
+    return card.valid && (card.zone || card.special >= 0) &&
+           city_events::footprint_in_zone(&engine_->sim, card.left, card.top, card.width, card.height);
+}
+
+city_events::LionView CitySession::lion() const
+{
+    return city_events::lion(&engine_->sim);
+}
+
+std::vector<city_events::Barricade> CitySession::barricades() const
+{
+    return city_events::barricades(&engine_->sim);
+}
+
+std::vector<std::pair<int, int>> CitySession::autonomous_zone_blocks() const
+{
+    return city_events::zone_blocks(&engine_->sim);
+}
+
+const CityEvents &CitySession::events_state() const
+{
+    return engine_->sim.cityEvents;
+}
+
+int CitySession::riot_crime() const
+{
+    return city_events::riot_crime_now(&engine_->sim);
+}
+
+void CitySession::on_event_frame()
+{
+    std::vector<city_events::Note> notes;
+    const bool lion_was = engine_->sim.cityEvents.lionActive != 0;
+    city_events::frame(&engine_->sim, notes);
+    if (lion_was) {
+        // The lion's notices follow it, so Go to finds it where it is now.
+        const city_events::LionView now = city_events::lion(&engine_->sim);
+        if (now.active) {
+            for (CityNotice &notice : notices_) {
+                if (notice.text == city_events::info(city_events::Kind::LionEscape).notice ||
+                    notice.text == "The lion is eating residents! Send the police.") {
+                    notice.tile_x = now.x / 16;
+                    notice.tile_y = now.y / 16;
+                    notice.has_place = true;
+                }
+            }
+        }
+    }
+    if (!notes.empty()) {
+        post_event_notes(notes);
+    }
+}
+
+void CitySession::on_random_event()
+{
+    std::vector<city_events::Note> notes;
+    city_events::random_event(&engine_->sim, notes);
+    if (!notes.empty()) {
+        dirty_ = true;
+        post_event_notes(notes, true);
+    }
+}
+
+void CitySession::refuse_in_zone()
+{
+    post_message(message_for_number(MESSAGE_AUTONOMOUS_ZONE));
+}
+
 std::string CitySession::city_name() const
 {
     if (engine_->sim.cityName.empty()) {
@@ -2801,6 +2989,10 @@ CitySession::TileInspect CitySession::inspect_tile(int x, int y) const
     } else {
         card.access = "No direct road";
     }
+    if (city_events::in_zone(&engine_->sim, x, y)) {
+        // Says why a build or bulldoze here will be refused.
+        card.condition = "Autonomous Zone";
+    }
     return card;
 }
 
@@ -3046,6 +3238,9 @@ CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
         facts.idle = income.intact && income.powered && income.road && income.dollars <= 0;
     }
     out.notes = special_inspect_notes(x, y);
+    if (city_events::in_zone(&engine_->sim, x, y)) {
+        out.notes.push_back("Inside the Autonomous Zone: nothing can be built or bulldozed here.");
+    }
     facts.density = layer_value(MapLayer::Population, x, y);
     facts.land_value = layer_value(MapLayer::LandValue, x, y);
     facts.crime = layer_value(MapLayer::Crime, x, y);
@@ -3663,6 +3858,16 @@ unsigned CitySession::sprite_sample() const
         hash ^= static_cast<unsigned>(dot.y);
         hash *= 16777619u;
         hash ^= static_cast<unsigned>(dot.frame);
+        hash *= 16777619u;
+    }
+    // City 2's lion and the zone's barricades move without a tile change.
+    const CityEvents &events = engine_->sim.cityEvents;
+    hash ^= static_cast<unsigned>(events.lionActive ? events.lionX * 977 + events.lionY : 0);
+    hash *= 16777619u;
+    hash ^= static_cast<unsigned>(events.zoneCount);
+    hash *= 16777619u;
+    for (int i = 0; i < events.zoneCount && i < CityEvents::kMaxZoneBlocks; ++i) {
+        hash ^= static_cast<unsigned>(events.zoneBlock[i][0] * 64 + events.zoneBlock[i][1]);
         hash *= 16777619u;
     }
     return hash;

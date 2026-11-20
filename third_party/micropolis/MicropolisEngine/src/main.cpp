@@ -424,6 +424,9 @@ void Micropolis::simLoop(bool doSim)
        // used to move planes and tornadoes on every 100 ms tick.
        if (stepped) {
            moveObjects();
+           if (eventFrameFn != NULL) {
+               eventFrameFn(this);
+           }
        }
        simRobots();
    }

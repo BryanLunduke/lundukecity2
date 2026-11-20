@@ -733,6 +733,141 @@ static bool read_marina_dock(Micropolis *sim, const unsigned char *bytes, std::s
     return true;
 }
 
+// City 2 lasting disasters, magic "LCD1", appended after LCM1 (or LCW1
+// when there is no dock trailer). Little-endian:
+//   char magic[4] = { 'L','C','D','1' }
+//   uint16 version = 1
+//   uint16 payload bytes (76 + 2 * zone block count for version 1)
+//   int32 x 19: riotPeak, riotSteps, riotTotal, zoneCount, zoneClock,
+//               lionActive, lionX, lionY, lionDir, lionSteps, lionMealClock,
+//               lionEaten, lionHomeX, lionHomeY, lionRng, prisonCrime,
+//               prisonX, prisonY, prisonSteps
+//   zoneCount times: uint8 block x, uint8 block y
+// A city with nothing active omits the trailer, so its file is the same
+// as before. Older builds skip it: they only look for LCM1 at that spot.
+static const char kEventsMagic[4] = {'L', 'C', 'D', '1'};
+static const unsigned int kEventsFields = 19;
+
+static void write_le_i32(unsigned char *out, int value)
+{
+    const unsigned int v = (unsigned int)value;
+    out[0] = (unsigned char)(v & 0xff);
+    out[1] = (unsigned char)((v >> 8) & 0xff);
+    out[2] = (unsigned char)((v >> 16) & 0xff);
+    out[3] = (unsigned char)((v >> 24) & 0xff);
+}
+
+static int read_le_i32(const unsigned char *in)
+{
+    const unsigned int v = (unsigned int)in[0] | ((unsigned int)in[1] << 8) | ((unsigned int)in[2] << 16) |
+                           ((unsigned int)in[3] << 24);
+    return (int)v;
+}
+
+static bool events_active(const CityEvents &e)
+{
+    return e.riotSteps > 0 || e.zoneCount > 0 || e.lionActive != 0 || e.prisonSteps > 0;
+}
+
+static bool write_city_events(FILE *f, const Micropolis *sim)
+{
+    const CityEvents &e = sim->cityEvents;
+    if (!events_active(e)) {
+        return true;
+    }
+    const int zones = e.zoneCount < 0 ? 0 : (e.zoneCount > CityEvents::kMaxZoneBlocks ? CityEvents::kMaxZoneBlocks
+                                                                                      : e.zoneCount);
+    const int fields[kEventsFields] = {e.riotPeak,   e.riotSteps,  e.riotTotal,     zones,         e.zoneClock,
+                                       e.lionActive, e.lionX,      e.lionY,         e.lionDir,     e.lionSteps,
+                                       e.lionMealClock, e.lionEaten, e.lionHomeX,   e.lionHomeY,   (int)e.lionRng,
+                                       e.prisonCrime, e.prisonX,   e.prisonY,       e.prisonSteps};
+    const unsigned int payload = kEventsFields * 4 + (unsigned int)zones * 2;
+    std::vector<unsigned char> bytes(8 + payload);
+    for (int i = 0; i < 4; ++i) {
+        bytes[i] = (unsigned char)kEventsMagic[i];
+    }
+    write_le_u16(bytes.data() + 4, 1);
+    write_le_u16(bytes.data() + 6, payload);
+    for (unsigned int i = 0; i < kEventsFields; ++i) {
+        write_le_i32(bytes.data() + 8 + i * 4, fields[i]);
+    }
+    for (int i = 0; i < zones; ++i) {
+        bytes[8 + kEventsFields * 4 + i * 2] = e.zoneBlock[i][0];
+        bytes[8 + kEventsFields * 4 + i * 2 + 1] = e.zoneBlock[i][1];
+    }
+    return fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+}
+
+// Bytes the LCM1 trailer at bytes takes, or 0 when there is none.
+static std::size_t marina_dock_span(const unsigned char *bytes, std::size_t avail)
+{
+    if (bytes == NULL || avail < 8 || std::memcmp(bytes, kMarinaDockMagic, 4) != 0) {
+        return 0;
+    }
+    const std::size_t span = 8 + (std::size_t)read_le_u16(bytes + 6) * 6;
+    return span <= avail ? span : 0;
+}
+
+static bool read_city_events(Micropolis *sim, const unsigned char *bytes, std::size_t avail)
+{
+    if (bytes == NULL || avail < 8 || std::memcmp(bytes, kEventsMagic, 4) != 0) {
+        return false;
+    }
+    if (read_le_u16(bytes + 4) != 1) {
+        return false;
+    }
+    const unsigned int payload = read_le_u16(bytes + 6);
+    if (payload < kEventsFields * 4 || avail < 8 + (std::size_t)payload) {
+        return false;
+    }
+    int f[kEventsFields];
+    for (unsigned int i = 0; i < kEventsFields; ++i) {
+        f[i] = read_le_i32(bytes + 8 + i * 4);
+    }
+    const int zones = f[3];
+    if (zones < 0 || zones > CityEvents::kMaxZoneBlocks || payload < kEventsFields * 4 + (unsigned int)zones * 2) {
+        return false;
+    }
+    CityEvents e;
+    std::memset(&e, 0, sizeof(e));
+    e.riotPeak = f[0];
+    e.riotSteps = f[1];
+    e.riotTotal = f[2];
+    e.zoneCount = zones;
+    e.zoneClock = f[4];
+    e.lionActive = f[5] != 0 ? 1 : 0;
+    e.lionX = f[6];
+    e.lionY = f[7];
+    e.lionDir = f[8] & 3;
+    e.lionSteps = f[9];
+    e.lionMealClock = f[10];
+    e.lionEaten = f[11];
+    e.lionHomeX = f[12];
+    e.lionHomeY = f[13];
+    e.lionRng = (unsigned int)f[14];
+    e.prisonCrime = f[15];
+    e.prisonX = f[16];
+    e.prisonY = f[17];
+    e.prisonSteps = f[18];
+    int kept = 0;
+    for (int i = 0; i < zones; ++i) {
+        const unsigned char bx = bytes[8 + kEventsFields * 4 + i * 2];
+        const unsigned char by = bytes[8 + kEventsFields * 4 + i * 2 + 1];
+        if (bx >= (WORLD_W + 7) / 8 || by >= (WORLD_H + 7) / 8) {
+            continue;
+        }
+        e.zoneBlock[kept][0] = bx;
+        e.zoneBlock[kept][1] = by;
+        ++kept;
+    }
+    e.zoneCount = kept;
+    if (e.lionX < 0 || e.lionX >= WORLD_W * 16 || e.lionY < 0 || e.lionY >= WORLD_H * 16) {
+        e.lionActive = 0;
+    }
+    sim->cityEvents = e;
+    return true;
+}
+
 // Save-format marker (C1), always the last 12 bytes of a City 2 save:
 // "LCV1", u16 format version, u16 flags, u16 original corner tile, u16 0.
 // Format 1 is every save before the marker; format 2 adds the Data Center
@@ -977,8 +1112,14 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
         }
     }
     const std::size_t dock_at = trailer + wide_bytes;
+    std::memset(&cityEvents, 0, sizeof(cityEvents));
     if (data.size() > dock_at + format_bytes) {
-        read_marina_dock(this, data.data() + dock_at, data.size() - dock_at - format_bytes);
+        const std::size_t avail = data.size() - dock_at - format_bytes;
+        read_marina_dock(this, data.data() + dock_at, avail);
+        const std::size_t dock_bytes = marina_dock_span(data.data() + dock_at, avail);
+        if (avail > dock_bytes) {
+            read_city_events(this, data.data() + dock_at + dock_bytes, avail - dock_bytes);
+        }
     }
 
     return true;
@@ -1116,6 +1257,8 @@ bool Micropolis::loadFile(const char *filename)
        and pollutionRamp in miscHist[10] and miscHist[11]. */
     n = get_mac_long(miscHist + 8);
     cityTime = n;
+    // The lasting disasters step when the city time moves on, not at once.
+    cityEvents.lastStepTime = cityTime;
 
     setAutoBulldoze(miscHist[52] != 0);   // flag for autoBulldoze
     setAutoBudget(miscHist[53] != 0);     // flag for autoBudget
@@ -1562,6 +1705,7 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
         write_cash_flow_history(f, this) &&
         write_wide_city(f, this, funds_for_file) &&
         write_marina_dock(f, this) &&
+        write_city_events(f, this) &&
         write_city_format(f, format_guard, corner);
 
     int ioerr = 0;

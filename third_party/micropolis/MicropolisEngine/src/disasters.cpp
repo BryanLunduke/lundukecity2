@@ -132,7 +132,12 @@ void Micropolis::doDisasters()
             case 4:
                 // 1/9 chance nothing happens (was airplane crash,
                 // which EA removed after 9/11, and requested it be
-                // removed from this code)
+                // removed from this code). City 2 may start one of its
+                // own rarer disasters here; it uses no engine random
+                // numbers, so the classic sequence after it is unchanged.
+                if (eventRandomFn != NULL) {
+                    eventRandomFn(this);
+                }
                 break;
 
             case 5:
@@ -328,6 +333,78 @@ void Micropolis::makeFire()
  * @param tem Tile data
  * @return Function returns \c true if tile is vulnerable, and \c false if not
  */
+bool Micropolis::eventFireAt(int x, int y)
+{
+    if (!testBounds(x, y)) {
+        return false;
+    }
+    const MapValue z = map[x][y];
+    if ((z & ZONEBIT) != 0 || (z & BURNBIT) == 0) {
+        return false;
+    }
+    const MapTile tile = z & LOMASK;
+    // A building: not trees, rubble, roads or rail (the classic fire also
+    // takes trees; these City 2 events do not).
+    if (tile != SPECIAL_BODY && (tile < RESBASE || tile >= LASTZONE)) {
+        return false;
+    }
+    map[x][y] = randomFire();
+    return true;
+}
+
+
+int Micropolis::eventEatResidents(int x, int y, int radius)
+{
+    int best_x = -1;
+    int best_y = -1;
+    int best_d = 1 << 30;
+    for (int dy = -radius - 1; dy <= radius + 1; ++dy) {
+        for (int dx = -radius - 1; dx <= radius + 1; ++dx) {
+            const int cx = x + dx;
+            const int cy = y + dy;
+            if (!testBounds(cx, cy)) {
+                continue;
+            }
+            const MapValue z = map[cx][cy];
+            const MapTile tile = z & LOMASK;
+            if ((z & ZONEBIT) == 0 || tile < FREEZ || tile >= HOSPITAL) {
+                continue;
+            }
+            // The zone's nearest tile must be within the radius.
+            const int ex = dx < -1 ? -dx - 1 : (dx > 1 ? dx - 1 : 0);
+            const int ey = dy < -1 ? -dy - 1 : (dy > 1 ? dy - 1 : 0);
+            if (ex > radius || ey > radius) {
+                continue;
+            }
+            const int d = dx * dx + dy * dy;
+            if (d < best_d) {
+                best_d = d;
+                best_x = cx;
+                best_y = cy;
+            }
+        }
+    }
+    if (best_x < 0) {
+        return 0;
+    }
+    const Position pos(best_x, best_y);
+    const MapTile tile = map[best_x][best_y] & LOMASK;
+    int pop = 0;
+    int value = 0;
+    if (tile == FREEZ) {
+        pop = doFreePop(pos);
+    } else {
+        pop = getResZonePop(tile);
+        value = ((tile - RZB) / 9) / 4;
+    }
+    if (pop <= 0) {
+        return 0;
+    }
+    doResOut(pos, pop, value);
+    return pop > 16 ? 8 : 1;
+}
+
+
 bool Micropolis::vulnerable(int tem)
 {
     int tem2 = tem & LOMASK;

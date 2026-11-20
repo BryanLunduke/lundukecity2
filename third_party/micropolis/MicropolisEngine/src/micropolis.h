@@ -1062,6 +1062,52 @@ typedef void (*CallbackFunction)(
 typedef int (*SpecialIncomeFunction)(const Micropolis *micropolis);
 typedef void (*SpecialLandFunction)(Micropolis *micropolis);
 typedef void (*SpecialCrimeFunction)(Micropolis *micropolis);
+// City 2 lasting disasters (src/city_events.cpp). The frame hook runs after
+// the sprites move on every stepped frame; the random hook gets the classic
+// "nothing happens" roll; the edit hook may refuse a tool on a tile.
+typedef void (*EventFrameFunction)(Micropolis *micropolis);
+typedef void (*EventRandomFunction)(Micropolis *micropolis);
+typedef bool (*EditBlockedFunction)(const Micropolis *micropolis, int tool, int x, int y);
+
+/**
+ * State of the City 2 disasters that last: Riot, Autonomous Zone, Lion
+ * Escape and Prison Escape. The engine only stores it (the LCD1 trailer in
+ * fileio.cpp); src/city_events.cpp runs it. All zero means nothing active.
+ */
+struct CityEvents {
+    static const int kMaxZoneBlocks = 48;
+    // Riot: extra crime on every developed crime block. riotSteps counts
+    // city-time steps (4 a month) down from riotTotal; the boost fades
+    // linearly from riotPeak.
+    int riotPeak;
+    int riotSteps;
+    int riotTotal;
+    // Autonomous Zone: police-map blocks (8x8 tiles). zoneClock counts the
+    // steps to the next two-monthly review.
+    int zoneCount;
+    int zoneClock;
+    unsigned char zoneBlock[kMaxZoneBlocks][2];
+    // Lion Escape. Position in 16px map pixels (the tile centre the lion
+    // walks through). lionDir 0 north, 1 east, 2 south, 3 west.
+    int lionActive;
+    int lionX;
+    int lionY;
+    int lionDir;
+    int lionSteps;
+    int lionMealClock;
+    int lionEaten;
+    int lionHomeX;
+    int lionHomeY;
+    unsigned int lionRng;
+    // Prison Escape: extra crime around the prison centre, fading faster
+    // where the police cover it.
+    int prisonCrime;
+    int prisonX;
+    int prisonY;
+    int prisonSteps;
+    // Not saved: the city time the step logic last ran.
+    long lastStepTime;
+};
 
 
 ////////////////////////////////////////////////////////////////////////
@@ -1895,6 +1941,19 @@ public:
 
     void fireBomb();
 
+    /**
+     * City 2 disasters: set a burnable building tile (not a zone centre)
+     * at (x, y) on fire. Returns true when a fire started.
+     */
+    bool eventFireAt(int x, int y);
+
+    /**
+     * City 2 Lion Escape: the residential zone or house nearest (x, y),
+     * within radius tiles, loses one step of people (a house, or one
+     * density level of a full zone). Returns the residents' units lost.
+     */
+    int eventEatResidents(int x, int y, int radius);
+
   private:
 
     friend struct Nov19Probe;
@@ -2374,6 +2433,9 @@ public:
         unsigned short tile;
     };
     std::vector<MarinaDock> marinaDock;
+
+    /** City 2 lasting disasters. Saved in the LCD1 trailer after LCM1. */
+    CityEvents cityEvents;
 
     /**
      * LCW1 trailer decoded by loadFileDir and applied by loadFile after
@@ -2997,6 +3059,9 @@ public:
     SpecialIncomeFunction specialIncomeFn;
     SpecialLandFunction specialLandFn;
     SpecialCrimeFunction specialCrimeFn;
+    EventFrameFunction eventFrameFn;
+    EventRandomFunction eventRandomFn;
+    EditBlockedFunction editBlockedFn;
 
     /**
      * Special-building income paid the last time taxes were collected.
