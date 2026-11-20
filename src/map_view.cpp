@@ -5,6 +5,9 @@
 #include "map_view.hpp"
 #include "night_light.hpp"
 
+#include "dither_mask.hpp"
+#include "look_fx.hpp"
+
 #include "assets.hpp"
 #include "map_fit.hpp"
 #include "present.hpp"
@@ -19,9 +22,16 @@
 #include "micropolis.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <string>
+
+namespace {
+// Ambient effects step at 10 frames a second; enough for smoke and water,
+// and a running city already wakes about that often for the simulation.
+constexpr int kFxStepMs = 100;
+} // namespace
 
 MapView::MapView()
 {
@@ -50,6 +60,26 @@ MapView::~MapView()
         cairo_surface_destroy(lamp_pixels_);
         lamp_pixels_ = nullptr;
     }
+    if (fx_pixels_ != nullptr) {
+        cairo_surface_destroy(fx_pixels_);
+        fx_pixels_ = nullptr;
+    }
+    if (shade_pixels_ != nullptr) {
+        cairo_surface_destroy(shade_pixels_);
+        shade_pixels_ = nullptr;
+    }
+    if (cloud_pixels_ != nullptr) {
+        cairo_surface_destroy(cloud_pixels_);
+        cloud_pixels_ = nullptr;
+    }
+    if (ghost_pixels_ != nullptr) {
+        cairo_surface_destroy(ghost_pixels_);
+        ghost_pixels_ = nullptr;
+    }
+    if (dirt_pixels_ != nullptr) {
+        cairo_surface_destroy(dirt_pixels_);
+        dirt_pixels_ = nullptr;
+    }
 }
 
 bool MapView::tick(int elapsed_ms)
@@ -77,6 +107,7 @@ int MapView::blink_remaining_ms() const
 
 void MapView::invalidate_all()
 {
+    class_all_ = true;
     if (!cached_raw_.empty()) {
         std::fill(cached_raw_.begin(), cached_raw_.end(), -1);
         std::fill(cached_shown_.begin(), cached_shown_.end(), -1);
@@ -86,6 +117,7 @@ void MapView::invalidate_all()
 void MapView::set_session(CitySession *session)
 {
     session_ = session;
+    class_all_ = true;
     cached_raw_.clear();
     cached_shown_.clear();
 }
@@ -166,6 +198,20 @@ void MapView::draw_dust(cairo_t *cr) const
 
 void MapView::set_cue(const MapCue &cue)
 {
+    const bool placing = cue.active && cue.mark >= 1 && cue.mark <= 2 && cue.width > 0 && cue.height > 0;
+    if (placing && (cue.left != pulse_left_ || cue.top != pulse_top_)) {
+        // A short pulse each time the footprint snaps to a new cell. The
+        // first cue of a hover only records where it is.
+        if (pulse_left_ >= 0 && look_fx::motion_allowed(effects_)) {
+            pulse_ms_ = 0;
+        }
+        pulse_left_ = cue.left;
+        pulse_top_ = cue.top;
+    } else if (!cue.active) {
+        pulse_left_ = -1;
+        pulse_top_ = -1;
+        pulse_ms_ = -1;
+    }
     cue_ = cue;
 }
 
@@ -211,6 +257,7 @@ void MapView::ensure_surface()
         }
         map_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
         night_stale_ = true;
+        class_all_ = true;
         cached_raw_.clear();
         cached_shown_.clear();
     }
@@ -218,6 +265,9 @@ void MapView::ensure_surface()
     if (cached_raw_.size() != cells) {
         cached_raw_.assign(cells, -1);
         cached_shown_.assign(cells, -1);
+    }
+    if (special_cell_.size() != cells) {
+        special_cell_.assign(cells, 0);
     }
 }
 
@@ -546,10 +596,12 @@ void MapView::sync()
     if (atlas.loaded() != atlas_was_loaded_ || atlas.look_generation() != look_generation_) {
         atlas_was_loaded_ = atlas.loaded();
         look_generation_ = atlas.look_generation();
+        class_all_ = true;
         std::fill(cached_raw_.begin(), cached_raw_.end(), -1);
         std::fill(cached_shown_.begin(), cached_shown_.end(), -1);
     }
     int dirty = 0;
+    std::vector<int> grown;
     const int world_w = CitySession::kWorldW;
     const int world_h = CitySession::kWorldH;
     for (int y = 0; y < world_h; ++y) {
@@ -559,6 +611,9 @@ void MapView::sync()
             int special_index = -1;
             int special_cell = 0;
             const int special_key = special_display_key(session_, x, y, special_index, special_cell);
+            if (special_cell_.size() == cached_raw_.size()) {
+                special_cell_[index] = special_key != 0 ? 1 : 0;
+            }
             if (special_key != 0) {
                 const bool bolt = special_center_needs_bolt(raw, special_index, special_cell, blink_on_);
                 const int shown_key = bolt ? special_key + 50000 : special_key;
@@ -573,6 +628,9 @@ void MapView::sync()
                 cached_raw_[index] = raw;
                 cached_shown_[index] = shown_key;
                 ++dirty;
+                if (!class_all_) {
+                    class_dirty_.push_back(static_cast<int>(index));
+                }
                 if (!night_stale_) {
                     night_dirty_.push_back(static_cast<int>(index));
                 }
@@ -582,16 +640,34 @@ void MapView::sync()
             if (cached_raw_[index] == raw && cached_shown_[index] == shown) {
                 continue;
             }
+            if (cached_raw_[index] >= 0 && (raw & ZONEBIT) != 0 && (cached_raw_[index] & ZONEBIT) != 0 &&
+                (raw & LOMASK) != (cached_raw_[index] & LOMASK) && (raw & LOMASK) >= RESBASE &&
+                (raw & LOMASK) < PORTBASE) {
+                grown.push_back(static_cast<int>(index));
+            }
             blit_tile(x, y, shown, atlas);
             cached_raw_[index] = raw;
             cached_shown_[index] = shown;
             ++dirty;
+            if (!class_all_) {
+                class_dirty_.push_back(static_cast<int>(index));
+            }
             if (!night_stale_) {
                 night_dirty_.push_back(static_cast<int>(index));
             }
         }
     }
     last_sync_blits_ = dirty;
+    if (!grown.empty() && dirty < 160) {
+        // A zone centre changed building by itself (growth or decline).
+        // Not on a load or a look change, where every tile is new.
+        for (int index : grown) {
+            start_rise(index % world_w - 1, index / world_w - 1, 3, 3, true);
+        }
+    }
+    if (dirty > 0 || class_all_) {
+        refresh_pixel_classes();
+    }
     if (night_dirty_.size() > static_cast<std::size_t>(world_w * world_h)) {
         // Night was held off a long while; retint the whole map once.
         night_dirty_.clear();
@@ -997,8 +1073,13 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double y = cue_.top * tile;
             const double w = cue_.width * tile;
             const double h = cue_.height * tile;
+            // Right after a successful click the pointer still covers the
+            // new building; its receipt speaks for it, not a red ghost.
+            const bool just_built = overlap && cue_.receipt_ok;
             if (cue_.sprite >= 0) {
                 paint_special_ghost(cr, cue_.sprite, x, y, w, h, cue_.mark >= 3);
+            } else if (!just_built) {
+                draw_ghost(cr, x, y, w, h);
             }
             if (cue_.outline) {
                 cairo_rectangle(cr, x + 1.0, y + 1.0, w - 2.0, h - 2.0);
@@ -1081,6 +1162,7 @@ void MapView::draw_footprint(cairo_t *cr) const
 
 void MapView::draw(cairo_t *cr)
 {
+    ui_tail_ = false;
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
     if (map_pixels_ == nullptr) {
         sync();
@@ -1105,6 +1187,18 @@ void MapView::draw(cairo_t *cr)
     cairo_set_source_surface(cr, dusk && night_pixels_ != nullptr ? night_pixels_ : map_pixels_, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
+    const bool sunlit = !night_hold_ && !dusk && source == TileAtlas::kSize;
+    bool shaded = false;
+    if (sunlit && look_fx::ambient_allowed(effects_)) {
+        // Shimmer and shore foam, under the boats and the other sprites.
+        // The layer carries the sun shadows too, so a frame pays for one
+        // paint instead of two.
+        shaded = draw_water(cr, visible_tiles(cr, source, 0));
+    }
+    if (sunlit && !shaded) {
+        // Sun shadows: still, so Calm and Off keep them; none at night.
+        draw_shadows(cr);
+    }
 
     if (session_ != nullptr) {
         for (const auto &dot : session_->sprites()) {
@@ -1125,7 +1219,19 @@ void MapView::draw(cairo_t *cr)
         tint_sprites(cr, sprite_to_source);
         draw_night(cr, source);
     }
+    fx_animated_ = false;
+    fx_drawn_step_ = fx_ms_ / kFxStepMs;
+    if (!night_hold_ && !dusk && tile_size_ > kMapTileOverview && look_fx::ambient_allowed(effects_)) {
+        draw_clouds(cr, visible_tiles(cr, source, 0));
+    }
+    if (!night_hold_ && tile_size_ > kMapTileOverview) {
+        // Effects sit on the city, not on a data map, and not at the
+        // overview zoom where a tile is a few pixels.
+        const TileSpan span = visible_tiles(cr, source, 2);
+        draw_fire(cr, source, span, dusk);
+    }
     cairo_restore(cr);
+    draw_rises(cr);
     draw_dust(cr);
     draw_footprint(cr);
     cairo_restore(cr);
@@ -1338,5 +1444,1047 @@ void MapView::draw_night(cairo_t *cr, int source)
     cairo_pattern_set_filter(cairo_get_source(cr), source >= night_light::kTile ? CAIRO_FILTER_NEAREST
                                                                                 : CAIRO_FILTER_GOOD);
     cairo_paint(cr);
+    cairo_restore(cr);
+}
+
+// ---------------------------------------------------------------------------
+// Look-and-feel effects drawn over the tiles. Nothing here touches the tile
+// sheets; it is all drawn in code each frame from the map words.
+
+void MapView::set_effects(int effects)
+{
+    effects_ = look_fx::clamp_effects(effects);
+}
+
+void MapView::advance_fx(int elapsed_ms, bool running)
+{
+    if (!running || !look_fx::motion_allowed(effects_) || elapsed_ms <= 0) {
+        return;
+    }
+    // Wraps well before int overflow; every phase below is periodic in it.
+    fx_ms_ = (fx_ms_ + std::min(elapsed_ms, 500)) % (kFxStepMs * 360000);
+}
+
+bool MapView::fx_frame_due() const
+{
+    return fx_animated_ && look_fx::motion_allowed(effects_) && fx_ms_ / kFxStepMs != fx_drawn_step_;
+}
+
+bool MapView::classic_fx() const
+{
+    return tile_atlas().look() == 0;
+}
+
+MapView::TileSpan MapView::visible_tiles(cairo_t *cr, int source, int pad) const
+{
+    double x1 = 0;
+    double y1 = 0;
+    double x2 = 0;
+    double y2 = 0;
+    cairo_clip_extents(cr, &x1, &y1, &x2, &y2);
+    TileSpan span;
+    const int px = std::max(1, source);
+    span.x0 = std::max(0, static_cast<int>(std::floor(x1 / px)) - pad);
+    span.y0 = std::max(0, static_cast<int>(std::floor(y1 / px)) - pad);
+    span.x1 = std::min(CitySession::kWorldW, static_cast<int>(std::ceil(x2 / px)) + pad);
+    span.y1 = std::min(CitySession::kWorldH, static_cast<int>(std::ceil(y2 / px)) + pad);
+    return span;
+}
+
+void MapView::draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk)
+{
+    if (cached_raw_.empty()) {
+        return;
+    }
+    struct Fire {
+        int x;
+        int y;
+    };
+    std::vector<Fire> fires;
+    for (int y = span.y0; y < span.y1; ++y) {
+        for (int x = span.x0; x < span.x1; ++x) {
+            const int raw = cached_raw_[static_cast<std::size_t>(y * CitySession::kWorldW + x)];
+            const int tile = raw < 0 ? -1 : (raw & LOMASK);
+            if (tile >= FIREBASE && tile <= LASTFIRE) {
+                fires.push_back(Fire{x, y});
+            }
+        }
+    }
+    if (fires.empty()) {
+        return;
+    }
+    const bool moving = look_fx::motion_allowed(effects_);
+    const bool classic = classic_fx();
+    const double px = static_cast<double>(source);
+    const int step = fx_ms_ / kFxStepMs;
+    fx_animated_ = fx_animated_ || moving;
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    if (!dusk) {
+        // Heat glow on the ground around a fire. Night lighting already
+        // lights fires, so the day glow steps aside at dusk. The fire
+        // tiles themselves are left out so the flames keep their art.
+        cairo_save(cr);
+        double cx1 = 0;
+        double cy1 = 0;
+        double cx2 = 0;
+        double cy2 = 0;
+        cairo_clip_extents(cr, &cx1, &cy1, &cx2, &cy2);
+        cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+        cairo_rectangle(cr, cx1, cy1, cx2 - cx1, cy2 - cy1);
+        for (const Fire &fire : fires) {
+            cairo_rectangle(cr, fire.x * px, fire.y * px, px, px);
+        }
+        cairo_clip(cr);
+        cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
+        if (classic) {
+            // Opaque orange specks thinning with distance: two dithered rings.
+            for (const Fire &fire : fires) {
+                const double cx = (fire.x + 0.5) * px;
+                const double cy = (fire.y + 0.5) * px;
+                const double flick = moving ? look_fx::hash01(static_cast<std::uint32_t>(fire.x * 977 + fire.y * 131 + step)) : 0.5;
+                cairo_new_path(cr);
+                cairo_arc(cr, cx, cy, px * (1.25 + 0.15 * flick), 0, 2 * look_fx::kPi);
+                look_fx::fill_fx(cr, 1.0, 125.0 / 255.0, 0.0, 2.0 / 16.0, true);
+                cairo_new_path(cr);
+                cairo_arc(cr, cx, cy, px * 0.95, 0, 2 * look_fx::kPi);
+                look_fx::fill_fx(cr, 1.0, 190.0 / 255.0, 0.0, 2.0 / 16.0, true);
+            }
+        } else {
+            cairo_set_operator(cr, CAIRO_OPERATOR_ADD);
+            for (const Fire &fire : fires) {
+                const double cx = (fire.x + 0.5) * px;
+                const double cy = (fire.y + 0.5) * px;
+                const double flick =
+                    moving ? 0.78 + 0.22 * look_fx::hash01(static_cast<std::uint32_t>(fire.x * 977 + fire.y * 131 + step))
+                           : 0.9;
+                const double radius = px * 2.4;
+                cairo_pattern_t *glow = cairo_pattern_create_radial(cx, cy, px * 0.2, cx, cy, radius);
+                cairo_pattern_add_color_stop_rgba(glow, 0.0, 1.0, 0.45, 0.08, 0.55 * flick);
+                cairo_pattern_add_color_stop_rgba(glow, 0.4, 1.0, 0.36, 0.05, 0.26 * flick);
+                cairo_pattern_add_color_stop_rgba(glow, 1.0, 1.0, 0.30, 0.0, 0.0);
+                cairo_set_source(cr, glow);
+                cairo_rectangle(cr, cx - radius, cy - radius, radius * 2, radius * 2);
+                cairo_fill(cr);
+                cairo_pattern_destroy(glow);
+            }
+        }
+        cairo_restore(cr);
+    }
+    if (moving) {
+        // Smoke plumes drifting up and to the right, and a few embers.
+        // Each puff's phase is a hash of its tile, so nothing is stored.
+        const int per_fire = fires.size() > 80 ? 2 : (fires.size() > 30 ? 3 : 5);
+        for (const Fire &fire : fires) {
+            const double cx = (fire.x + 0.5) * px;
+            const double cy = (fire.y + 0.3) * px;
+            for (int k = 0; k < per_fire; ++k) {
+                const std::uint32_t seed = static_cast<std::uint32_t>(fire.x * 7919 + fire.y * 131 + k * 31337);
+                const double sd = look_fx::hash01(seed);
+                const double period = 1500.0 + 700.0 * look_fx::hash01(seed ^ 0x55u);
+                const double age = std::fmod(fx_ms_ / period + look_fx::hash01(seed ^ 0xa7u), 1.0);
+                const double drift = std::sin(age * 6.0 + sd * 9.0) * px * 0.18;
+                const double x = cx + age * px * 1.2 * (0.6 + sd) + drift;
+                const double y = cy - age * px * 3.6 * (0.7 + sd * 0.6);
+                const double r = std::max(1.0, px * (0.15 + age * 0.45));
+                const double alpha = 0.95 * std::pow(1.0 - age, 0.8) * std::min(1.0, age / 0.1);
+                const double grey = (34.0 + 64.0 * age) / 255.0;
+                // A hard-edged disc on whole pixels, like the tile art.
+                cairo_new_path(cr);
+                cairo_arc(cr, std::round(x), std::round(y), std::round(r), 0, 2 * look_fx::kPi);
+                if (classic) {
+                    const double vga = age < 0.45 ? 81.0 / 255.0 : 130.0 / 255.0;
+                    look_fx::fill_fx(cr, vga, vga, vga, alpha, true);
+                } else {
+                    look_fx::fill_fx(cr, grey, grey, grey + 0.015, alpha, false);
+                }
+                if (age < 0.35 && sd > 0.55) {
+                    const double ex = std::round(x + sd * px * 0.25);
+                    const double ey = std::round(y + px * 0.15);
+                    const double es = std::max(1.0, std::round(px / 16.0));
+                    cairo_new_path(cr);
+                    cairo_rectangle(cr, ex, ey, es, es);
+                    cairo_set_source_rgb(cr, 1.0, classic ? 190.0 / 255.0 : 0.80, classic ? 0.0 : 0.24);
+                    cairo_fill(cr);
+                }
+            }
+        }
+    }
+    cairo_restore(cr);
+}
+
+namespace {
+
+int luma(std::uint32_t rgb)
+{
+    return static_cast<int>(((rgb >> 16) & 255u) * 3 + ((rgb >> 8) & 255u) * 6 + (rgb & 255u));
+}
+
+// Buildings cast a shadow; open ground, empty zone lots and explosions do not.
+bool casts_shadow(int tile)
+{
+    if (tile >= RESBASE && tile <= LASTZONE) {
+        return !(tile <= RESBASE + 8 || (tile >= COMBASE && tile <= COMBASE + 8) ||
+                 (tile >= INDBASE && tile <= INDBASE + 8));
+    }
+    return (tile >= RADAR0 && tile < TINYEXP) || (tile >= COALSMOKE1 && tile < VBRDG0);
+}
+
+bool is_water_tile(int raw)
+{
+    const int tile = raw < 0 ? -1 : (raw & LOMASK);
+    return tile >= WATER_LOW && tile <= WATER_HIGH;
+}
+
+// One cycle of a sine in 256 steps, -1..1.
+const float *wave_table()
+{
+    static float table[256];
+    static bool built = false;
+    if (!built) {
+        for (int i = 0; i < 256; ++i) {
+            table[i] = static_cast<float>(std::sin(i * 2.0 * look_fx::kPi / 256.0));
+        }
+        built = true;
+    }
+    return table;
+}
+
+} // namespace
+
+void MapView::learn_fx_palette()
+{
+    TileAtlas &atlas = tile_atlas();
+    if (fx_palette_generation_ == atlas.look_generation() && !water_rgb_.empty()) {
+        return;
+    }
+    fx_palette_generation_ = atlas.look_generation();
+    water_rgb_.clear();
+    water_lift_.clear();
+    if (!atlas.loaded()) {
+        return;
+    }
+    // Every colour of the open-water and channel tiles is a water colour.
+    std::uint32_t pixels[TileAtlas::kSize * TileAtlas::kSize];
+    for (int tile : {static_cast<int>(RIVER), static_cast<int>(CHANNEL)}) {
+        atlas.blit(tile, reinterpret_cast<unsigned char *>(pixels), TileAtlas::kSize * 4);
+        for (std::uint32_t pixel : pixels) {
+            const std::uint32_t rgb = pixel & 0xffffffu;
+            if (std::find(water_rgb_.begin(), water_rgb_.end(), rgb) == water_rgb_.end() && water_rgb_.size() < 31) {
+                water_rgb_.push_back(rgb);
+            }
+        }
+    }
+    std::sort(water_rgb_.begin(), water_rgb_.end(), [](std::uint32_t a, std::uint32_t b) { return luma(a) < luma(b); });
+    const std::size_t count = water_rgb_.size();
+    const std::size_t lift = std::max<std::size_t>(1, count / 4);
+    for (std::size_t i = 0; i < count; ++i) {
+        water_lift_.push_back(water_rgb_[std::min(count - 1, i + lift)]);
+    }
+    // Foam: a pale blue-white, on the VGA palette for Classic.
+    foam_rgb_ = atlas.look() == 0 ? (snap_vga_rgb(190, 225, 245) & 0xffffffu) : 0xc4e2f4u;
+}
+
+void MapView::refresh_pixel_classes()
+{
+    if (map_pixels_ == nullptr || source_px() != TileAtlas::kSize || cached_raw_.empty()) {
+        class_dirty_.clear();
+        return;
+    }
+    learn_fx_palette();
+    const int world_w = CitySession::kWorldW;
+    const int world_h = CitySession::kWorldH;
+    const int kTile = TileAtlas::kSize;
+    const int art_w = world_w * kTile;
+    const std::size_t want = static_cast<std::size_t>(art_w) * static_cast<std::size_t>(world_h * kTile);
+    if (pix_class_.size() != want) {
+        pix_class_.assign(want, 0);
+        class_all_ = true;
+    }
+    std::vector<int> tiles;
+    if (class_all_) {
+        tiles.resize(static_cast<std::size_t>(world_w * world_h));
+        for (std::size_t i = 0; i < tiles.size(); ++i) {
+            tiles[i] = static_cast<int>(i);
+        }
+    } else {
+        tiles.swap(class_dirty_);
+    }
+    class_dirty_.clear();
+    class_all_ = false;
+    if (tiles.empty()) {
+        return;
+    }
+    fx_cache_step_ = -1;
+    cairo_surface_flush(map_pixels_);
+    const unsigned char *data = cairo_image_surface_get_data(map_pixels_);
+    const int stride = cairo_image_surface_get_stride(map_pixels_);
+    auto pixel = [&](int x, int y) {
+        return *reinterpret_cast<const std::uint32_t *>(data + y * stride + x * 4) & 0xffffffu;
+    };
+    for (int index : tiles) {
+        const int tx = index % world_w;
+        const int ty = index / world_w;
+        const bool water = is_water_tile(cached_raw_[static_cast<std::size_t>(index)]);
+        const int raw_tile = cached_raw_[static_cast<std::size_t>(index)] < 0
+                                 ? -1
+                                 : (cached_raw_[static_cast<std::size_t>(index)] & LOMASK);
+        const bool caster = special_cell_[static_cast<std::size_t>(index)] != 0 || casts_shadow(raw_tile);
+        for (int r = 0; r < kTile; ++r) {
+            const int y = ty * kTile + r;
+            std::uint8_t *row = pix_class_.data() + static_cast<std::size_t>(y) * art_w;
+            for (int c = 0; c < kTile; ++c) {
+                const int x = tx * kTile + c;
+                // A building casts from its whole cell: the tile sheets share
+                // too many colours between roofs and ground to cut a
+                // building out pixel by pixel, and a block shadow reads
+                // cleanly at every zoom.
+                std::uint8_t value = caster ? 0x80u : 0u;
+                const std::uint32_t rgb = pixel(x, y);
+                if (water) {
+                    for (std::size_t i = 0; i < water_rgb_.size(); ++i) {
+                        if (water_rgb_[i] == rgb) {
+                            value = static_cast<std::uint8_t>(value | (i + 1));
+                            break;
+                        }
+                    }
+                }
+                row[x] = value;
+            }
+        }
+    }
+    // Shore: water with a non-water pixel beside it. A changed tile can
+    // change its neighbours' shore, so redo a one-tile ring too.
+    const int art_h = world_h * kTile;
+    auto is_water = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= art_w || y >= art_h) {
+            return true;
+        }
+        return (pix_class_[static_cast<std::size_t>(y) * art_w + x] & 0x1fu) != 0;
+    };
+    std::vector<std::uint8_t> done(static_cast<std::size_t>(world_w * world_h), 0);
+    for (int index : tiles) {
+        const int tx0 = index % world_w;
+        const int ty0 = index / world_w;
+        for (int ty = std::max(0, ty0 - 1); ty <= std::min(world_h - 1, ty0 + 1); ++ty) {
+            for (int tx = std::max(0, tx0 - 1); tx <= std::min(world_w - 1, tx0 + 1); ++tx) {
+                std::uint8_t &mark = done[static_cast<std::size_t>(ty * world_w + tx)];
+                if (mark != 0) {
+                    continue;
+                }
+                mark = 1;
+                for (int y = ty * kTile; y < (ty + 1) * kTile; ++y) {
+                    std::uint8_t *row = pix_class_.data() + static_cast<std::size_t>(y) * art_w;
+                    for (int x = tx * kTile; x < (tx + 1) * kTile; ++x) {
+                        row[x] = static_cast<std::uint8_t>(row[x] & ~0x40u);
+                        if ((row[x] & 0x1fu) != 0 &&
+                            (!is_water(x - 1, y) || !is_water(x + 1, y) || !is_water(x, y - 1) || !is_water(x, y + 1))) {
+                            row[x] = static_cast<std::uint8_t>(row[x] | 0x40u);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    refresh_shade(tiles);
+}
+
+bool MapView::draw_water(cairo_t *cr, const TileSpan &span)
+{
+    if (pix_class_.empty() || water_rgb_.empty() || span.x1 <= span.x0 || span.y1 <= span.y0) {
+        return false;
+    }
+    const int kTile = TileAtlas::kSize;
+    const int art_w = CitySession::kWorldW * kTile;
+    const int w = (span.x1 - span.x0) * kTile;
+    const int h = (span.y1 - span.y0) * kTile;
+    const int step = fx_ms_ / kFxStepMs;
+    if (fx_pixels_ == nullptr || cairo_image_surface_get_width(fx_pixels_) < w ||
+        cairo_image_surface_get_height(fx_pixels_) < h) {
+        if (fx_pixels_ != nullptr) {
+            cairo_surface_destroy(fx_pixels_);
+        }
+        fx_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w + 4 * kTile, h + 4 * kTile);
+        fx_cache_step_ = -1;
+    }
+    bool any = false;
+    const bool fresh = fx_cache_step_ == step && fx_cache_span_.x0 == span.x0 && fx_cache_span_.y0 == span.y0 &&
+                       fx_cache_span_.x1 == span.x1 && fx_cache_span_.y1 == span.y1;
+    if (!fresh) {
+        cairo_surface_flush(fx_pixels_);
+        unsigned char *out = cairo_image_surface_get_data(fx_pixels_);
+        const int ostride = cairo_image_surface_get_stride(fx_pixels_);
+        // Start from the sun shadows for these tiles (or clear), then lay
+        // the water step over them.
+        const bool with_shade = shade_pixels_ != nullptr && cairo_image_surface_get_width(shade_pixels_) == art_w;
+        const unsigned char *shade = with_shade ? cairo_image_surface_get_data(shade_pixels_) : nullptr;
+        const int sstride = with_shade ? cairo_image_surface_get_stride(shade_pixels_) : 0;
+        for (int y = 0; y < h; ++y) {
+            if (with_shade) {
+                std::memcpy(out + y * ostride,
+                            shade + static_cast<std::size_t>(y + span.y0 * kTile) * sstride + span.x0 * kTile * 4,
+                            static_cast<std::size_t>(w) * 4);
+            } else {
+                std::memset(out + y * ostride, 0, static_cast<std::size_t>(w) * 4);
+            }
+        }
+        const float *table = wave_table();
+        const int crest = static_cast<int>(water_rgb_.size()) - 1;
+        // Two slow waves crossing; a band where they add up gets the next
+        // lighter water colour, the very top a rare glint. Shore pixels
+        // get a dotted foam line that crawls along the coast.
+        const int phase_a = (step * 18) & 255;
+        const int phase_b = (step * 11) & 255;
+        for (int ty = span.y0; ty < span.y1; ++ty) {
+            for (int tx = span.x0; tx < span.x1; ++tx) {
+                if (!is_water_tile(cached_raw_[static_cast<std::size_t>(ty * CitySession::kWorldW + tx)])) {
+                    continue;
+                }
+                any = true;
+                for (int y = ty * kTile; y < (ty + 1) * kTile; ++y) {
+                    const std::uint8_t *row = pix_class_.data() + static_cast<std::size_t>(y) * art_w;
+                    auto *dest = reinterpret_cast<std::uint32_t *>(out + (y - span.y0 * kTile) * ostride);
+                    for (int x = tx * kTile; x < (tx + 1) * kTile; ++x) {
+                        const std::uint8_t cls = row[x];
+                        const int idx = (cls & 0x1f) - 1;
+                        if (idx < 0) {
+                            continue;
+                        }
+                        const int ox = x - span.x0 * kTile;
+                        if ((cls & 0x40u) != 0 && ((x + y + step) % 5) == 0) {
+                            dest[ox] = 0xff000000u | foam_rgb_;
+                            continue;
+                        }
+                        const float wave = 0.6f * table[(x * 9 + y * 14 - phase_a) & 255] +
+                                           0.4f * table[(x * 3 - y * 8 + phase_b) & 255];
+                        if (wave > 0.86f && look_fx::hash01(static_cast<std::uint32_t>(x * 73856093 ^ y * 19349663)) > 0.82) {
+                            dest[ox] = 0xff000000u | water_rgb_[static_cast<std::size_t>(crest)];
+                        } else if (wave > 0.55f) {
+                            dest[ox] = 0xff000000u | water_lift_[static_cast<std::size_t>(idx)];
+                        }
+                    }
+                }
+            }
+        }
+        cairo_surface_mark_dirty(fx_pixels_);
+        fx_cache_step_ = step;
+        fx_cache_span_ = span;
+        fx_water_seen_ = any;
+    }
+    if (fx_water_seen_) {
+        fx_animated_ = true;
+    }
+    cairo_save(cr);
+    cairo_rectangle(cr, span.x0 * kTile, span.y0 * kTile, w, h);
+    cairo_clip(cr);
+    cairo_set_source_surface(cr, fx_pixels_, span.x0 * kTile, span.y0 * kTile);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    return true;
+}
+
+void MapView::refresh_shade(const std::vector<int> &tiles)
+{
+    const int world_w = CitySession::kWorldW;
+    const int world_h = CitySession::kWorldH;
+    const int kTile = TileAtlas::kSize;
+    const int art_w = world_w * kTile;
+    const int art_h = world_h * kTile;
+    if (pix_class_.size() != static_cast<std::size_t>(art_w) * static_cast<std::size_t>(art_h)) {
+        return;
+    }
+    bool all = false;
+    if (shade_pixels_ == nullptr || cairo_image_surface_get_width(shade_pixels_) != art_w ||
+        cairo_image_surface_get_height(shade_pixels_) != art_h) {
+        if (shade_pixels_ != nullptr) {
+            cairo_surface_destroy(shade_pixels_);
+        }
+        shade_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, art_w, art_h);
+        all = true;
+    }
+    const bool classic = classic_fx();
+    cairo_surface_flush(shade_pixels_);
+    unsigned char *data = cairo_image_surface_get_data(shade_pixels_);
+    const int stride = cairo_image_surface_get_stride(shade_pixels_);
+    auto solid = [&](int x, int y) {
+        return x >= 0 && y >= 0 && (pix_class_[static_cast<std::size_t>(y) * art_w + x] & 0x80u) != 0;
+    };
+    // A changed tile throws shadow into the tiles right of and below it.
+    std::vector<std::uint8_t> todo(static_cast<std::size_t>(world_w * world_h), all ? 1 : 0);
+    if (!all) {
+        for (int index : tiles) {
+            const int tx = index % world_w;
+            const int ty = index / world_w;
+            for (int dy = 0; dy <= 1; ++dy) {
+                for (int dx = 0; dx <= 1; ++dx) {
+                    if (tx + dx < world_w && ty + dy < world_h) {
+                        todo[static_cast<std::size_t>((ty + dy) * world_w + tx + dx)] = 1;
+                    }
+                }
+            }
+        }
+    }
+    // A soft shadow cast down and to the right: a 4px offset with a little
+    // spread around it, and a tight contact shade at 2px. Only open ground
+    // receives it. Classic gets an ordered dither of black instead of alpha.
+    struct Tap {
+        int dx;
+        int dy;
+        float weight;
+    };
+    static const Tap kTaps[] = {{4, 4, 0.36f}, {3, 4, 0.07f}, {4, 3, 0.07f}, {5, 4, 0.07f}, {4, 5, 0.07f},
+                                {3, 3, 0.06f}, {5, 5, 0.06f}, {2, 2, 0.18f}};
+    for (int ty = 0; ty < world_h; ++ty) {
+        for (int tx = 0; tx < world_w; ++tx) {
+            if (todo[static_cast<std::size_t>(ty * world_w + tx)] == 0) {
+                continue;
+            }
+            for (int y = ty * kTile; y < (ty + 1) * kTile; ++y) {
+                auto *out = reinterpret_cast<std::uint32_t *>(data + y * stride);
+                for (int x = tx * kTile; x < (tx + 1) * kTile; ++x) {
+                    float a = 0.0f;
+                    if (!solid(x, y)) {
+                        for (const Tap &tap : kTaps) {
+                            if (solid(x - tap.dx, y - tap.dy)) {
+                                a += tap.weight;
+                            }
+                        }
+                    }
+                    a = std::min(a, 0.66f);
+                    if (a <= 0.0f) {
+                        out[x] = 0;
+                    } else if (classic) {
+                        out[x] = look_fx::dither_on(x, y, a * 0.6) ? 0xff000000u : 0u;
+                    } else {
+                        const std::uint32_t alpha = static_cast<std::uint32_t>(a * 255.0f + 0.5f);
+                        // Premultiplied cool shade (12, 14, 34).
+                        out[x] = (alpha << 24) | ((12u * alpha / 255u) << 16) | ((14u * alpha / 255u) << 8) |
+                                 (34u * alpha / 255u);
+                    }
+                }
+            }
+        }
+    }
+    cairo_surface_mark_dirty(shade_pixels_);
+    // The water layer starts from these shadows.
+    fx_cache_step_ = -1;
+}
+
+void MapView::draw_shadows(cairo_t *cr)
+{
+    if (shade_pixels_ == nullptr) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_set_source_surface(cr, shade_pixels_, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
+}
+
+namespace {
+
+constexpr int kCloudTex = 256;
+// One cloud texel covers this many 16px-art pixels: the pattern repeats
+// every 96 tiles, wider than the map is tall.
+constexpr double kCloudTexel = 6.0;
+
+// Tileable value noise: a few octaves on lattices that divide the texture.
+void build_cloud_cover(std::vector<float> &cover)
+{
+    cover.assign(static_cast<std::size_t>(kCloudTex * kCloudTex), 0.0f);
+    auto lattice = [](int cells, int ix, int iy, int salt) {
+        ix = ((ix % cells) + cells) % cells;
+        iy = ((iy % cells) + cells) % cells;
+        return static_cast<float>(look_fx::hash01(static_cast<std::uint32_t>(ix * 92821 + iy * 68917 + salt * 7919)));
+    };
+    const int octaves[] = {4, 8, 16};
+    const float weights[] = {0.6f, 0.28f, 0.12f};
+    for (int o = 0; o < 3; ++o) {
+        const int cells = octaves[o];
+        const float size = static_cast<float>(kCloudTex) / static_cast<float>(cells);
+        for (int y = 0; y < kCloudTex; ++y) {
+            for (int x = 0; x < kCloudTex; ++x) {
+                const float fx = x / size;
+                const float fy = y / size;
+                const int ix = static_cast<int>(fx);
+                const int iy = static_cast<int>(fy);
+                float tx = fx - ix;
+                float ty = fy - iy;
+                tx = tx * tx * (3.0f - 2.0f * tx);
+                ty = ty * ty * (3.0f - 2.0f * ty);
+                const float a = lattice(cells, ix, iy, o);
+                const float b = lattice(cells, ix + 1, iy, o);
+                const float c = lattice(cells, ix, iy + 1, o);
+                const float d = lattice(cells, ix + 1, iy + 1, o);
+                const float v = (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * ty;
+                cover[static_cast<std::size_t>(y * kCloudTex + x)] += v * weights[o];
+            }
+        }
+    }
+    // Keep roughly a third of the sky cloudy, with soft edges.
+    for (float &v : cover) {
+        const float t = std::max(0.0f, std::min(1.0f, (v - 0.50f) / 0.10f));
+        v = t * t * (3.0f - 2.0f * t);
+    }
+}
+
+} // namespace
+
+void MapView::draw_clouds(cairo_t *cr, const TileSpan &span)
+{
+    if (span.x1 <= span.x0 || span.y1 <= span.y0) {
+        return;
+    }
+    fx_animated_ = true;
+    const int source = source_px();
+    const bool classic = classic_fx();
+    const int key = source * 2 + (classic ? 1 : 0);
+    // The cover repeats every kCloudTex texels; one repeat at art resolution
+    // is built once (per zoom source and look) and then only slid, so a
+    // frame pays for one plain repeating paint.
+    const int period = static_cast<int>(kCloudTex * kCloudTexel) * source / TileAtlas::kSize;
+    if (cloud_pixels_ == nullptr || cloud_cache_key_ != key) {
+        if (cloud_cover_.empty()) {
+            build_cloud_cover(cloud_cover_);
+        }
+        if (cloud_pixels_ != nullptr) {
+            cairo_surface_destroy(cloud_pixels_);
+        }
+        cloud_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, period, period);
+        cloud_cache_key_ = key;
+        unsigned char *data = cairo_image_surface_get_data(cloud_pixels_);
+        const int stride = cairo_image_surface_get_stride(cloud_pixels_);
+        const double texel = static_cast<double>(period) / kCloudTex;
+        auto cover_at = [&](double u, double v) {
+            const double fu = std::floor(u);
+            const double fv = std::floor(v);
+            const int iu = static_cast<int>(fu) & (kCloudTex - 1);
+            const int iv = static_cast<int>(fv) & (kCloudTex - 1);
+            const int ju = (iu + 1) & (kCloudTex - 1);
+            const int jv = (iv + 1) & (kCloudTex - 1);
+            const float tu = static_cast<float>(u - fu);
+            const float tv = static_cast<float>(v - fv);
+            const float *row0 = cloud_cover_.data() + iv * kCloudTex;
+            const float *row1 = cloud_cover_.data() + jv * kCloudTex;
+            const float top = row0[iu] + (row0[ju] - row0[iu]) * tu;
+            const float bot = row1[iu] + (row1[ju] - row1[iu]) * tu;
+            return top + (bot - top) * tv;
+        };
+        for (int y = 0; y < period; ++y) {
+            auto *row = reinterpret_cast<std::uint32_t *>(data + y * stride);
+            const double v = (y + 0.5) / texel - 0.5;
+            for (int x = 0; x < period; ++x) {
+                const float c = cover_at((x + 0.5) / texel - 0.5, v);
+                if (classic) {
+                    // A sparse black dither inside the cloud outline. The
+                    // repeat is a multiple of 4, so the dither tiles too.
+                    row[x] = c > 0.5f && look_fx::dither_on(x, y, 0.25) ? 0xff000000u : 0u;
+                } else {
+                    // A cool shade, deepest in the middle of a cloud.
+                    const std::uint32_t a = static_cast<std::uint32_t>(c * 0.32f * 255.0f + 0.5f);
+                    row[x] = a == 0 ? 0u
+                                    : (a << 24) | ((15u * a / 255u) << 16) | ((20u * a / 255u) << 8) | (51u * a / 255u);
+                }
+            }
+        }
+        cairo_surface_mark_dirty(cloud_pixels_);
+    }
+    // Drift east-south-east at about 9 art pixels a second of city time,
+    // in whole pixels (whole dither cells on Classic, so it never crawls).
+    const double drift = (fx_ms_ / kFxStepMs) * static_cast<double>(kFxStepMs) * 0.009 * source / TileAtlas::kSize;
+    const int snap = classic ? 4 : 1;
+    const int ox = (static_cast<int>(drift) / snap * snap) % period;
+    const int oy = (static_cast<int>(drift * 0.35) / snap * snap) % period;
+    cairo_save(cr);
+    cairo_rectangle(cr, span.x0 * source, span.y0 * source, (span.x1 - span.x0) * source, (span.y1 - span.y0) * source);
+    cairo_clip(cr);
+    cairo_set_source_surface(cr, cloud_pixels_, ox, oy);
+    cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_restore(cr);
+}
+
+namespace {
+
+constexpr int kPulseMs = 160;
+// Brackets 0-90 ms, rise 90-360 ms, settle and glint 360-450 ms.
+constexpr int kRiseMs = 450;
+
+// First tile and footprint of the building a tool lays, for the ghost.
+// Zones and plants are laid row by row from their base tile.
+bool ghost_tiles(int tool, int &base, int &size)
+{
+    switch (tool) {
+    case TOOL_RESIDENTIAL:
+        base = RESBASE;
+        size = 3;
+        return true;
+    case TOOL_COMMERCIAL:
+        base = COMBASE;
+        size = 3;
+        return true;
+    case TOOL_INDUSTRIAL:
+        base = INDBASE;
+        size = 3;
+        return true;
+    case TOOL_FIRESTATION:
+        base = FIRESTBASE;
+        size = 3;
+        return true;
+    case TOOL_POLICESTATION:
+        base = POLICESTBASE;
+        size = 3;
+        return true;
+    case TOOL_STADIUM:
+        base = STADIUMBASE;
+        size = 4;
+        return true;
+    case TOOL_SEAPORT:
+        base = PORTBASE;
+        size = 4;
+        return true;
+    case TOOL_COALPOWER:
+        base = COALBASE;
+        size = 4;
+        return true;
+    case TOOL_NUCLEARPOWER:
+        base = NUCLEARBASE;
+        size = 4;
+        return true;
+    case TOOL_AIRPORT:
+        base = AIRPORTBASE;
+        size = 6;
+        return true;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
+void MapView::advance_ui(int elapsed_ms)
+{
+    for (Rise &rise : rises_) {
+        rise.ms += std::max(0, elapsed_ms);
+    }
+    const std::size_t before = rises_.size();
+    rises_.erase(std::remove_if(rises_.begin(), rises_.end(), [](const Rise &rise) { return rise.ms >= kRiseMs; }),
+                 rises_.end());
+    if (rises_.size() != before) {
+        ui_tail_ = true;
+    }
+    if (pulse_ms_ >= 0) {
+        pulse_ms_ += std::max(0, elapsed_ms);
+        if (pulse_ms_ >= kPulseMs) {
+            pulse_ms_ = -1;
+            ui_tail_ = true;
+        }
+    }
+}
+
+bool MapView::ui_animating() const
+{
+    return pulse_ms_ >= 0 || !rises_.empty() || ui_tail_;
+}
+
+void MapView::draw_ghost(cairo_t *cr, double x, double y, double w, double h) const
+{
+    const int mark = cue_.mark;
+    const bool blocked = mark >= 3;
+    const bool classic = classic_fx();
+    TileAtlas &atlas = tile_atlas();
+    int base = 0;
+    int size = 0;
+    const bool tiles = atlas.loaded() && ghost_tiles(engine_tool_, base, size) && size == cue_.width &&
+                       size == cue_.height && base + size * size <= atlas.count();
+    cairo_save(cr);
+    if (tiles) {
+        if (ghost_pixels_ == nullptr || ghost_tool_ != engine_tool_ || ghost_generation_ != atlas.look_generation()) {
+            if (ghost_pixels_ != nullptr) {
+                cairo_surface_destroy(ghost_pixels_);
+            }
+            const int k = TileAtlas::kSize;
+            ghost_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size * k, size * k);
+            cairo_surface_flush(ghost_pixels_);
+            unsigned char *data = cairo_image_surface_get_data(ghost_pixels_);
+            const int stride = cairo_image_surface_get_stride(ghost_pixels_);
+            for (int row = 0; row < size; ++row) {
+                for (int col = 0; col < size; ++col) {
+                    atlas.blit(base + row * size + col, data + row * k * stride + col * k * 4, stride);
+                }
+            }
+            cairo_surface_mark_dirty(ghost_pixels_);
+            ghost_tool_ = engine_tool_;
+            ghost_generation_ = atlas.look_generation();
+        }
+        // The building it will lay, see-through: blended in SVGA, a 50%
+        // dither in Classic. A blocked spot shows it washed red.
+        cairo_save(cr);
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_clip(cr);
+        {
+            cairo_matrix_t matrix;
+            cairo_matrix_init_scale(&matrix, cairo_image_surface_get_width(ghost_pixels_) / w,
+                                    cairo_image_surface_get_height(ghost_pixels_) / h);
+            cairo_matrix_translate(&matrix, -x, -y);
+            cairo_pattern_t *art = cairo_pattern_create_for_surface(ghost_pixels_);
+            cairo_pattern_set_filter(art, CAIRO_FILTER_NEAREST);
+            cairo_pattern_set_matrix(art, &matrix);
+            cairo_set_source(cr, art);
+            if (classic) {
+                look_fx::dither_paint(cr, blocked ? 6.0 / 16.0 : 8.0 / 16.0);
+            } else {
+                cairo_paint_with_alpha(cr, blocked ? 0.45 : 0.6);
+            }
+            cairo_pattern_destroy(art);
+        }
+        if (blocked) {
+            cairo_rectangle(cr, x, y, w, h);
+            look_fx::fill_fx(cr, 0.85, 0.12, 0.08, classic ? 4.0 / 16.0 : 0.30, classic);
+        }
+        cairo_restore(cr);
+    }
+    // Glow around the footprint: green ready, amber caution, red blocked.
+    double r = 110 / 255.0;
+    double g = 1.0;
+    double b = 140 / 255.0;
+    if (mark == 2) {
+        r = 1.0;
+        g = 220 / 255.0;
+        b = 90 / 255.0;
+    } else if (blocked) {
+        r = 1.0;
+        g = 70 / 255.0;
+        b = 60 / 255.0;
+    }
+    cairo_set_line_width(cr, 1.0);
+    if (classic) {
+        cairo_rectangle(cr, x - 2.0, y - 2.0, w + 4.0, h + 4.0);
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+        look_fx::fill_fx(cr, r, g, b, 0.5, true);
+        cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
+    } else {
+        const double alphas[3] = {50 / 255.0, 90 / 255.0, 140 / 255.0};
+        for (int i = 3; i >= 1; --i) {
+            cairo_rectangle(cr, x - i + 0.5, y - i + 0.5, w + 2 * i - 1, h + 2 * i - 1);
+            cairo_set_source_rgba(cr, r, g, b, alphas[3 - i]);
+            cairo_stroke(cr);
+        }
+    }
+    cairo_rectangle(cr, x + 0.5, y + 0.5, w - 1, h - 1);
+    cairo_set_source_rgb(cr, r, g, b);
+    cairo_stroke(cr);
+    const double tile = static_cast<double>(std::max(tile_size_, 1));
+    if (!classic && tile >= 16) {
+        // Faint cell lines inside a multi-tile footprint.
+        for (double gx = x + tile; gx < x + w - 1; gx += tile) {
+            cairo_move_to(cr, gx + 0.5, y + 2);
+            cairo_line_to(cr, gx + 0.5, y + h - 2);
+        }
+        for (double gy = y + tile; gy < y + h - 1; gy += tile) {
+            cairo_move_to(cr, x + 2, gy + 0.5);
+            cairo_line_to(cr, x + w - 2, gy + 0.5);
+        }
+        cairo_set_source_rgba(cr, r, g, b, 70 / 255.0);
+        cairo_stroke(cr);
+    }
+    if (blocked) {
+        // Hatch across a blocked footprint.
+        cairo_save(cr);
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_clip(cr);
+        const double gap = classic ? 8.0 : 6.0;
+        for (double k = -h; k < w; k += gap) {
+            cairo_move_to(cr, x + k, y + h);
+            cairo_line_to(cr, x + k + h, y);
+        }
+        if (classic) {
+            cairo_set_source_rgb(cr, 1.0, 85 / 255.0, 85 / 255.0);
+        } else {
+            cairo_set_source_rgba(cr, 1.0, 60 / 255.0, 50 / 255.0, 90 / 255.0);
+        }
+        cairo_stroke(cr);
+        cairo_restore(cr);
+    }
+    if (pulse_ms_ >= 0 && !blocked) {
+        // Snap pulse: a white ring that grows and fades.
+        const double p = std::min(1.0, pulse_ms_ / static_cast<double>(kPulseMs));
+        const double e = std::round(2.0 + 8.0 * look_fx::ease_out_cubic(p));
+        cairo_set_line_width(cr, 2.0);
+        cairo_rectangle(cr, x - e, y - e, w + 2 * e, h + 2 * e);
+        if (classic) {
+            if (p < 0.6) {
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_stroke(cr);
+            }
+        } else {
+            cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.86 * (1.0 - p));
+            cairo_stroke(cr);
+        }
+        cairo_new_path(cr);
+    }
+    cairo_new_path(cr);
+    cairo_restore(cr);
+}
+
+void MapView::start_rise(int left, int top, int width, int height, bool growth)
+{
+    if (!look_fx::motion_allowed(effects_) || width < 1 || height < 1) {
+        return;
+    }
+    for (Rise &rise : rises_) {
+        if (rise.left == left && rise.top == top) {
+            rise = Rise{left, top, width, height, 0, growth};
+            return;
+        }
+    }
+    // A handful at once; a burst of growth should not become a light show.
+    const auto grown = std::count_if(rises_.begin(), rises_.end(), [](const Rise &rise) { return rise.growth; });
+    if (rises_.size() >= 6 || (growth && grown >= 2)) {
+        return;
+    }
+    rises_.push_back(Rise{left, top, width, height, 0, growth});
+}
+
+void MapView::draw_rises(cairo_t *cr) const
+{
+    if (rises_.empty() || map_pixels_ == nullptr) {
+        return;
+    }
+    TileAtlas &atlas = tile_atlas();
+    if (atlas.loaded() && (dirt_pixels_ == nullptr || dirt_generation_ != atlas.look_generation())) {
+        if (dirt_pixels_ != nullptr) {
+            cairo_surface_destroy(dirt_pixels_);
+        }
+        dirt_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, TileAtlas::kSize, TileAtlas::kSize);
+        cairo_surface_flush(dirt_pixels_);
+        atlas.blit(DIRT, cairo_image_surface_get_data(dirt_pixels_), cairo_image_surface_get_stride(dirt_pixels_));
+        cairo_surface_mark_dirty(dirt_pixels_);
+        dirt_generation_ = atlas.look_generation();
+    }
+    const bool classic = classic_fx();
+    const double tile = static_cast<double>(std::max(tile_size_, 1));
+    const double art = tile / TileAtlas::kSize;
+    const double unit = std::max(1.0, std::round(art));
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    for (const Rise &rise : rises_) {
+        const double x = rise.left * tile;
+        const double y = rise.top * tile;
+        const double w = rise.width * tile;
+        const double h = rise.height * tile;
+        const int ms = rise.ms;
+        if (ms < 360 && dirt_pixels_ != nullptr) {
+            // Not topped out yet: bare lot over the part still to rise.
+            const double u = ms < 90 ? 0.0 : look_fx::ease_out_cubic((ms - 90) / 270.0);
+            const double cover = std::round(h * (1.0 - u));
+            if (cover > 0) {
+                cairo_save(cr);
+                cairo_rectangle(cr, x, y, w, cover);
+                cairo_clip(cr);
+                cairo_pattern_t *dirt = cairo_pattern_create_for_surface(dirt_pixels_);
+                cairo_pattern_set_extend(dirt, CAIRO_EXTEND_REPEAT);
+                cairo_pattern_set_filter(dirt, CAIRO_FILTER_NEAREST);
+                cairo_matrix_t matrix;
+                cairo_matrix_init_scale(&matrix, 1.0 / art, 1.0 / art);
+                cairo_matrix_translate(&matrix, -x, -y);
+                cairo_pattern_set_matrix(dirt, &matrix);
+                cairo_set_source(cr, dirt);
+                cairo_paint(cr);
+                cairo_pattern_destroy(dirt);
+                if (ms >= 90) {
+                    // Scaffold over the rising edge: posts, planks, braces.
+                    const double top_edge = y + cover;
+                    const double band = std::min(cover, std::max(6.0 * unit, h * 0.35));
+                    const double sy = top_edge - band;
+                    if (classic) {
+                        cairo_set_source_rgb(cr, 170 / 255.0, 85 / 255.0, 0.0);
+                    } else {
+                        cairo_set_source_rgb(cr, 150 / 255.0, 105 / 255.0, 60 / 255.0);
+                    }
+                    cairo_set_line_width(cr, unit);
+                    for (double px = x + 2 * unit; px < x + w; px += 8 * unit) {
+                        cairo_move_to(cr, px + unit / 2, sy);
+                        cairo_line_to(cr, px + unit / 2, top_edge);
+                    }
+                    for (double py = top_edge - unit / 2; py > sy; py -= 10 * unit) {
+                        cairo_move_to(cr, x, py);
+                        cairo_line_to(cr, x + w, py);
+                    }
+                    cairo_stroke(cr);
+                    if (classic) {
+                        cairo_set_source_rgb(cr, 130 / 255.0, 130 / 255.0, 130 / 255.0);
+                    } else {
+                        cairo_set_source_rgb(cr, 120 / 255.0, 85 / 255.0, 45 / 255.0);
+                    }
+                    for (double px = x; px < x + w; px += 10 * unit) {
+                        cairo_move_to(cr, px, top_edge);
+                        cairo_line_to(cr, px + std::min(band, 10 * unit), top_edge - std::min(band, 10 * unit));
+                    }
+                    cairo_stroke(cr);
+                }
+                cairo_restore(cr);
+            }
+        }
+        if (!rise.growth && ms < 120) {
+            // Placement brackets snapping in at the corners.
+            const double len = std::round(std::min(10.0 * unit, tile * 0.6) * look_fx::ease_out_cubic(ms / 90.0));
+            cairo_set_source_rgb(cr, 1.0, classic ? 1.0 : 230 / 255.0, classic ? 85 / 255.0 : 120 / 255.0);
+            cairo_set_line_width(cr, 2.0);
+            const double xs[2] = {x + 1, x + w - 1};
+            const double ys[2] = {y + 1, y + h - 1};
+            for (int i = 0; i < 2; ++i) {
+                for (int j = 0; j < 2; ++j) {
+                    const double sx = i == 0 ? 1.0 : -1.0;
+                    const double sy = j == 0 ? 1.0 : -1.0;
+                    cairo_move_to(cr, xs[i] + sx * len, ys[j]);
+                    cairo_line_to(cr, xs[i], ys[j]);
+                    cairo_line_to(cr, xs[i], ys[j] + sy * len);
+                }
+            }
+            cairo_stroke(cr);
+        }
+        if (ms < 360) {
+            // Dust kicked out from the base.
+            const double radius = (0.45 + 0.5 * ms / 360.0) * std::max(w, h) * 0.5;
+            const double cx = x + w / 2;
+            const double cy = y + h * 0.62;
+            const int specks = rise.growth ? 12 : 26;
+            for (int i = 0; i < specks; ++i) {
+                const double angle = look_fx::hash01(static_cast<std::uint32_t>(i * 977 + rise.left * 31 + rise.top)) * 2 * look_fx::kPi;
+                const double reach = 0.7 + 0.5 * look_fx::hash01(static_cast<std::uint32_t>(i * 131 + 7));
+                const double sx = std::round(cx + std::cos(angle) * radius * reach);
+                const double sy = std::round(cy + std::sin(angle) * radius * reach * 0.6 - ms / 180.0 * unit);
+                const double size = (ms < 240 ? 3.0 : 2.0) * unit * 0.5 + 1.0;
+                if (i % 2 == 0) {
+                    cairo_set_source_rgb(cr, 1.0, classic ? 1.0 : 219 / 255.0, classic ? 85 / 255.0 : 140 / 255.0);
+                } else {
+                    cairo_set_source_rgb(cr, classic ? 170 / 255.0 : 184 / 255.0, classic ? 85 / 255.0 : 140 / 255.0,
+                                         classic ? 0.0 : 71 / 255.0);
+                }
+                cairo_rectangle(cr, sx, sy, std::round(size), std::round(size));
+                cairo_fill(cr);
+            }
+        }
+        if (ms >= 360) {
+            // Three little glints on the finished roof.
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_set_line_width(cr, unit);
+            const double arm = 3.0 * unit;
+            const double gx[3] = {x + 2 * unit, x + w - 4 * unit, x + w - 8 * unit};
+            const double gy[3] = {y + unit, y + 4 * unit, y + h - 6 * unit};
+            for (int i = 0; i < 3; ++i) {
+                cairo_move_to(cr, gx[i] - arm, gy[i] + unit / 2);
+                cairo_line_to(cr, gx[i] + arm, gy[i] + unit / 2);
+                cairo_move_to(cr, gx[i] + unit / 2, gy[i] - arm);
+                cairo_line_to(cr, gx[i] + unit / 2, gy[i] + arm);
+            }
+            cairo_stroke(cr);
+        }
+    }
     cairo_restore(cr);
 }

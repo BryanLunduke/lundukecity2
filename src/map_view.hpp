@@ -91,6 +91,21 @@ public:
     int blink_remaining_ms() const;
 
     void draw(cairo_t *cr);
+    // Look-and-feel effects, a look_fx::Effects value. Off draws them still.
+    void set_effects(int effects);
+    int effects() const { return effects_; }
+    // The ambient clock (fire smoke, and later water and clouds) runs only
+    // while the city runs, so a paused city keeps a still frame.
+    void advance_fx(int elapsed_ms, bool running);
+    // A new ambient step is due and the last frame had something moving.
+    bool fx_frame_due() const;
+    // Feedback animation (the placement snap pulse) runs on wall time,
+    // paused or not. True while one still has frames to show.
+    void advance_ui(int elapsed_ms);
+    bool ui_animating() const;
+    // Construction rise over a footprint just built (tiles). growth is a
+    // zone that developed by itself: no placement brackets.
+    void start_rise(int left, int top, int width, int height, bool growth);
     // Night mode: darken the map and add the light layer (lit windows,
     // street lamps, fires). The tile art is not touched. hold hides it for
     // a frame, for example under a data map.
@@ -123,6 +138,76 @@ public:
     std::function<void(int, int, int, int)> on_tool_drag;
 
 private:
+    // Tiles inside the current clip, padded by `pad` and kept on the map.
+    struct TileSpan {
+        int x0 = 0;
+        int y0 = 0;
+        int x1 = 0;
+        int y1 = 0;
+    };
+    TileSpan visible_tiles(cairo_t *cr, int source, int pad) const;
+    void draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk);
+    bool draw_water(cairo_t *cr, const TileSpan &span);
+    void draw_clouds(cairo_t *cr, const TileSpan &span);
+    void draw_ghost(cairo_t *cr, double x, double y, double w, double h) const;
+    // The tool's own tiles from the drawn sheet, for the placement ghost.
+    mutable cairo_surface_t *ghost_pixels_ = nullptr;
+    mutable int ghost_tool_ = -1;
+    mutable int ghost_generation_ = -1;
+    // Snap pulse when the footprint moves to a new cell; -1 is idle.
+    int pulse_ms_ = -1;
+    // One more frame after a feedback animation ends, to clear its last look.
+    mutable bool ui_tail_ = false;
+    struct Rise {
+        int left;
+        int top;
+        int width;
+        int height;
+        int ms;
+        bool growth;
+    };
+    std::vector<Rise> rises_;
+    void draw_rises(cairo_t *cr) const;
+    // The sheet's bare dirt tile, under a rise that has not topped out.
+    mutable cairo_surface_t *dirt_pixels_ = nullptr;
+    mutable int dirt_generation_ = -1;
+    int pulse_left_ = -1;
+    int pulse_top_ = -1;
+    // Tileable cloud cover, 0..1 per texel; built once.
+    std::vector<float> cloud_cover_;
+    // One repeat of the cloud shade at art resolution, premultiplied (a
+    // black dither on Classic); slid by the drift each frame.
+    cairo_surface_t *cloud_pixels_ = nullptr;
+    int cloud_cache_key_ = -1;
+    // Per art pixel at 16px: bits 0-4 a water colour index + 1 (0 is not
+    // water), bit 6 shore (water beside land), bit 7 solid (a pixel of a
+    // building cell, which casts a shadow). Rebuilt for changed tiles.
+    void refresh_pixel_classes();
+    void learn_fx_palette();
+    std::vector<std::uint8_t> pix_class_;
+    std::vector<int> class_dirty_;
+    bool class_all_ = true;
+    int fx_palette_generation_ = -1;
+    // Water colours of the drawn sheet, darkest first, with the lighter
+    // colour each one shimmers to. Shimmer never leaves the sheet palette.
+    std::vector<std::uint32_t> water_rgb_;
+    std::vector<std::uint32_t> water_lift_;
+    std::uint32_t foam_rgb_ = 0;
+    // 1 for a map cell drawn from a landmark sprite (always a caster).
+    std::vector<std::uint8_t> special_cell_;
+    // Soft lower-right drop shadows at art resolution, premultiplied.
+    cairo_surface_t *shade_pixels_ = nullptr;
+    void refresh_shade(const std::vector<int> &tiles);
+    void draw_shadows(cairo_t *cr);
+    cairo_surface_t *fx_pixels_ = nullptr;
+    int fx_cache_step_ = -1;
+    TileSpan fx_cache_span_{};
+    bool fx_water_seen_ = false;
+    bool classic_fx() const;
+    int effects_ = 0;
+    int fx_ms_ = 0;
+    mutable int fx_drawn_step_ = -1;
+    bool fx_animated_ = false;
     bool tile_at(double x, double y, int &tx, int &ty) const;
     void draw_footprint(cairo_t *cr) const;
     void draw_dust(cairo_t *cr) const;

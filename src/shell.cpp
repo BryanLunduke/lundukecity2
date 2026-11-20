@@ -298,6 +298,7 @@ int Shell::run(int argc, char **argv)
     // on the command line, and not for the scripted demo / review runs.
     const bool scripted = smoke_ || ui_test_ || review_ || !demo_.empty();
     motion_fx_ = !ui_test_ && !review_ && !smoke_ && demo_.empty();
+    map_.set_effects(motion_fx_ ? effects_ : look_fx::EffectsOff);
     if (!scripted && !launched_with_file) {
         welcome_gate_ = true;
         // Offer recovery before Welcome. The gate used to keep a dialog
@@ -483,6 +484,7 @@ void Shell::save_window_settings()
     stored.night = night_ ? 1 : 0;
     stored.layout = layout_mode::clamp_choice(layout_pref_);
     stored.minimap = minimap_engraved_ ? 1 : 0;
+    stored.effects = look_fx::clamp_effects(effects_);
     keep_required_pad(binds_);
     stored.binds = binds_override_text(binds_);
     {
@@ -558,6 +560,10 @@ void Shell::apply_loaded_settings()
     if (stored.minimap >= 0) {
         minimap_engraved_ = stored.minimap != 0;
     }
+    if (stored.effects >= 0) {
+        effects_ = look_fx::clamp_effects(stored.effects);
+    }
+    apply_effects();
     map_.set_night(night_);
     if (!stored.binds.empty()) {
         binds_ = binds_from_text(stored.binds);
@@ -1139,7 +1145,7 @@ std::string Shell::visual_stamp() const
         << menu_.open_menu << ' ' << menu_.cursor << ' ' << menu_.recent_open << ' ' << menu_.recent_cursor << ' '
         << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
         << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << slate_ << night_
-        << layout_pref_ << handheld_ << ' ' << session_.map_serial()
+        << layout_pref_ << handheld_ << effects_ << ' ' << session_.map_serial()
         << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
         << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
         << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_gate_ << ' ' << shown_message_ << ' '
@@ -1234,8 +1240,9 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.blink = blink_drew_;
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
-    reasons.motion = scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                     puff_on_ || pop_on_ || flash_on_;
+    reasons.motion = scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
+                     puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due() || map_.ui_animating() ||
+                     funds_tick_.active();
     return reasons;
 }
 
@@ -1297,8 +1304,8 @@ void Shell::loop()
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);
             }
-            if (scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                puff_on_ || pop_on_ || flash_on_) {
+            if (scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
+                puff_on_ || pop_on_ || flash_on_ || map_.ui_animating() || funds_tick_.active()) {
                 timeout = std::min(timeout, 16);
             }
             if (menu_.open() && menu_edge_dir_ != 0) {
@@ -1343,6 +1350,8 @@ void Shell::loop()
         if (speed_ > 0 && !dialog_pauses()) {
             blink_drew_ = map_.tick(elapsed);
         }
+        map_.advance_fx(elapsed, speed_ > 0 && !dialog_pauses());
+        map_.advance_ui(elapsed);
         palette_.advance(elapsed);
         if (hover_id_ != tracked_hover_) {
             tracked_hover_ = hover_id_;
@@ -1484,7 +1493,7 @@ void Shell::loop()
         note_year_stamp();
         if (session_.take_budget_request()) {
             // Let "Jan 19xx" stay on the map before the year-in-review card.
-            if (motion_fx_ && year_stamp_.visible() && year_stamp_.elapsed_ms < kYearStampHold) {
+            if (motion_on() && year_stamp_.visible() && year_stamp_.elapsed_ms < kYearStampHold) {
                 session_.keep_budget_request();
             } else if (dialog_pauses() && dialog_ != Dialog::Budget) {
                 session_.keep_budget_request();

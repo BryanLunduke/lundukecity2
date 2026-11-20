@@ -207,16 +207,38 @@ void Shell::clear_pause_notice()
 
 void Shell::begin_scene_fade()
 {
-    if (!motion_fx_ || map_.dragging()) {
+    if (!motion_on() || map_.dragging()) {
         return;
     }
     scene_fade_.start();
 }
 
+void Shell::begin_city_reveal()
+{
+    if (!motion_on() || map_.dragging()) {
+        return;
+    }
+    scene_fade_.skip();
+    reveal_ms_ = 0;
+    // Building the city took this loop step; start the clock on the next.
+    reveal_fresh_ = true;
+}
+
+void Shell::apply_effects()
+{
+    effects_ = look_fx::clamp_effects(effects_);
+    // Tests, smoke runs and demos (no motion_fx_) get the still frame.
+    map_.set_effects(motion_fx_ ? effects_ : look_fx::EffectsOff);
+    if (!motion_on()) {
+        skip_motion();
+    }
+}
+
 void Shell::skip_motion()
 {
     scene_fade_.skip();
-    panel_settle_ = 0;
+    dialog_anim_ms_ = -1;
+    reveal_ms_ = -1;
     event_pan_on_ = false;
     marker_on_ = false;
     puff_on_ = false;
@@ -231,7 +253,7 @@ void Shell::begin_event_pan(int tile_x, int tile_y)
     marker_ty_ = tile_y;
     const double fx = (static_cast<double>(tile_x) + 0.5) / CitySession::kWorldW;
     const double fy = (static_cast<double>(tile_y) + 0.5) / CitySession::kWorldH;
-    if (!motion_fx_) {
+    if (!motion_on()) {
         center_on_fraction(fx, fy);
         event_pan_on_ = false;
         marker_on_ = false;
@@ -269,7 +291,7 @@ void Shell::note_year_stamp()
 {
     const std::string date = session_.date_text();
     const int month = date.compare(0, 3, "Jan") == 0 ? 0 : 1;
-    if (motion_fx_ || !year_stamp_.armed) {
+    if (motion_on() || !year_stamp_.armed) {
         year_stamp_.observe(session_.city_year(), month);
     }
 }
@@ -278,6 +300,27 @@ void Shell::advance_presentation(int elapsed_ms)
 {
     if (elapsed_ms < 0) {
         elapsed_ms = 0;
+    }
+    funds_tick_.observe(session_.funds(), city_generation_, motion_on() && city_chosen_ && !welcome_gate_);
+    funds_tick_.advance(elapsed_ms);
+    if (reveal_ms_ >= 0) {
+        if (reveal_fresh_) {
+            reveal_fresh_ = false;
+        } else {
+            // A step is capped so the first frames of a fresh map (slow to
+            // build) do not swallow the opening.
+            reveal_ms_ = reveal_ms_ >= kRevealMs ? -1 : std::min(kRevealMs, reveal_ms_ + std::min(elapsed_ms, 33));
+        }
+    }
+    if (dialog_anim_ms_ >= 0) {
+        // The frame drawn at the full length is the settled one; the next
+        // step ends the clock.
+        const int len = dialog_anim_len();
+        if (dialog_ == Dialog::None || dialog_anim_ms_ >= len) {
+            dialog_anim_ms_ = -1;
+        } else {
+            dialog_anim_ms_ = std::min(len, dialog_anim_ms_ + elapsed_ms);
+        }
     }
     if (event_pan_on_) {
         if (std::fabs(scroll_x_ - event_written_x_) > 0.75 || std::fabs(scroll_y_ - event_written_y_) > 0.75) {
@@ -303,7 +346,7 @@ void Shell::advance_presentation(int elapsed_ms)
     }
     const std::string date = session_.date_text();
     const int month = date.compare(0, 3, "Jan") == 0 ? 0 : 1;
-    if (motion_fx_ || !year_stamp_.armed) {
+    if (motion_on() || !year_stamp_.armed) {
         year_stamp_.observe(session_.city_year(), month);
     }
     year_stamp_.advance(elapsed_ms);
@@ -334,7 +377,7 @@ void Shell::note_disaster_fx()
         return;
     }
     disaster_seen_ = text;
-    if (!motion_fx_ || !notice_is_disaster(text)) {
+    if (!motion_on() || !notice_is_disaster(text)) {
         return;
     }
     flash_on_ = true;
@@ -428,11 +471,13 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     menu_.close();
     dialog_ = dialog;
     dialog_error_.clear();
-    panel_settle_ = 0;
-    if (motion_fx_ && (dialog == Dialog::Budget || dialog == Dialog::Evaluation || dialog == Dialog::Graphs ||
+    dialog_anim_ms_ = -1;
+    if (motion_on() && (dialog == Dialog::Budget || dialog == Dialog::Evaluation || dialog == Dialog::Graphs ||
                        dialog == Dialog::Messages || dialog == Dialog::Welcome || dialog == Dialog::Scenario ||
-                       dialog == Dialog::Query || dialog == Dialog::Disaster)) {
-        panel_settle_ = 2;
+                       dialog == Dialog::Query || dialog == Dialog::Disaster || dialog == Dialog::Settings ||
+                       dialog == Dialog::About || dialog == Dialog::HowToPlay || dialog == Dialog::Info ||
+                       dialog == Dialog::Ledger || dialog == Dialog::Outcome)) {
+        dialog_anim_ms_ = 0;
     }
     if (!prompted) {
         arm_modal_grace();
@@ -532,6 +577,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         open_autosave_ = autosave_seconds_;
         open_slate_ = slate_;
         open_night_ = night_;
+        open_effects_ = effects_;
         open_minimap_engraved_ = minimap_engraved_;
         open_layout_pref_ = layout_pref_;
         focus_id_ = kSlider + 1;
@@ -2200,6 +2246,11 @@ void Shell::on_dialog_button(int id)
             map_.set_night(night_);
             return;
         }
+        if (id == kEffectsBox) {
+            effects_ = (look_fx::clamp_effects(effects_) + 1) % look_fx::EffectsCount;
+            apply_effects();
+            return;
+        }
         if (id == kMinimapBox) {
             minimap_engraved_ = !minimap_engraved_;
             return;
@@ -2226,6 +2277,8 @@ void Shell::on_dialog_button(int id)
             }
             night_ = open_night_;
             map_.set_night(night_);
+            effects_ = open_effects_;
+            apply_effects();
             minimap_engraved_ = open_minimap_engraved_;
             schedule_autosave();
             user_scale_ = scale_percent_ <= 0 ? 0.0f : static_cast<float>(scale_percent_) / 100.0f;
@@ -2537,7 +2590,9 @@ void Shell::on_dialog_button(int id)
             }
             center_on_fraction(0.5, 0.5);
             sync_title();
-            if (from_welcome) {
+            if (motion_on()) {
+                begin_city_reveal();
+            } else if (from_welcome) {
                 begin_scene_fade();
             }
         }
@@ -2562,7 +2617,7 @@ void Shell::on_dialog_button(int id)
                     adopt_loaded_speed(session_.speed());
                     center_on_fraction(0.5, 0.5);
                     sync_title();
-                    begin_scene_fade();
+                    begin_city_reveal();
                 }
             }
             return;
@@ -3376,8 +3431,21 @@ int Shell::hit(double x, double y) const
     return 0;
 }
 
+int Shell::dialog_anim_len() const
+{
+    return dialog_ == Dialog::Budget && budget_cover_ && budget_is_tax_ ? kYearRevealMs : kDialogEaseMs;
+}
+
 void Shell::push_hot(double x, double y, double w, double h, int id)
 {
+    // Hot rects follow the dialog ease: scaled about its centre, then slid.
+    const double s = dialog_hot_scale_;
+    if (s != 1.0) {
+        x = dialog_hot_cx_ + (x - dialog_hot_cx_) * s;
+        y = dialog_hot_cy_ + (y - dialog_hot_cy_) * s;
+        w *= s;
+        h *= s;
+    }
     next_hot_.push_back(Hotspot{x, y + dialog_hot_dy_, w, h, id});
 }
 
@@ -4595,19 +4663,30 @@ void Shell::absorb_placement_note()
     const ToolFootprint foot = tool_footprint(note.tool);
     receipt_on_ = true;
     receipt_ok_ = note.ok;
-    if (motion_fx_ && note.ok) {
+    if (motion_on() && note.ok) {
         if (note.tool == TOOL_BULLDOZER) {
             puff_on_ = true;
             puff_ms_ = 0;
             puff_tx_ = note.x;
             puff_ty_ = note.y;
         } else {
-            pop_on_ = true;
-            pop_ms_ = 0;
             pop_tx_ = note.width > 0 ? note.x - note.anchor_x : note.x;
             pop_ty_ = note.height > 0 ? note.y - note.anchor_y : note.y;
             pop_tw_ = note.width > 0 ? note.width : 1;
             pop_th_ = note.height > 0 ? note.height : 1;
+            // Zones and plants report their centre; the footprint says how big.
+            const int rise_w = note.width > 0 ? note.width : std::max(1, foot.width);
+            const int rise_h = note.height > 0 ? note.height : std::max(1, foot.height);
+            if (rise_w * rise_h >= 4) {
+                // A building: it rises out of the lot. Roads, rails, wires
+                // and single park tiles keep the quick outline pop.
+                const int rise_x = note.width > 0 ? note.x - note.anchor_x : note.x - foot.cursor_to_left;
+                const int rise_y = note.height > 0 ? note.y - note.anchor_y : note.y - foot.cursor_to_top;
+                map_.start_rise(rise_x, rise_y, rise_w, rise_h, false);
+            } else {
+                pop_on_ = true;
+                pop_ms_ = 0;
+            }
         }
     }
     if (note.width > 0 && note.height > 0) {

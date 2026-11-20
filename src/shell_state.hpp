@@ -6,6 +6,8 @@
 
 #include "chart.hpp"
 #include "hotspots.hpp"
+#include "funds_tick.hpp"
+#include "look_fx.hpp"
 #include "pad_feel.hpp"
 #include "city_recovery.hpp"
 #include "city_session.hpp"
@@ -119,6 +121,7 @@ private:
     void draw(cairo_t *cr);
     void draw_menubar(cairo_t *cr);
     void draw_info_band(cairo_t *cr);
+    void draw_funds_floats(cairo_t *cr);
     void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
     void draw_handheld_hud(cairo_t *cr);
     void draw_minimap_overlay(cairo_t *cr);
@@ -508,6 +511,11 @@ private:
     int paused_from_ = 2;
     int tool_index_ = 26; // kDefaultToolIndex (Query)
     unsigned city_generation_ = 1;
+    // The rolling Funds readout and its floating change; the band or the
+    // handheld chip sets the float anchor each frame it draws.
+    FundsTicker funds_tick_;
+    double funds_float_x_ = -1.0;
+    double funds_float_y_ = 0.0;
     unsigned save_generation_ = 0;
 
     Dialog dialog_ = Dialog::None;
@@ -654,9 +662,27 @@ private:
     // Short dither and panel settle. Off for tests, smoke, and demos so a
     // screenshot is the settled screen. Click or a key skips either one.
     bool motion_fx_ = false;
+    // Settings > Effects (look_fx::Effects). Off also stops motion_fx_.
+    int effects_ = 0;
+    int open_effects_ = 0;
+    bool motion_on() const { return motion_fx_ && look_fx::motion_allowed(effects_); }
+    void apply_effects();
     bool look_live_ = false;
     SceneFade scene_fade_{};
-    int panel_settle_ = 0;
+    // A dialog eases in (slide, and scale with a fade off Classic) over
+    // kDialogEaseMs; the Year in Review keeps the clock running while its
+    // cards land and the Funds and People figures count up.
+    static constexpr int kDialogEaseMs = 170;
+    static constexpr int kYearRevealMs = 900;
+    int dialog_anim_ms_ = -1;
+    // A new city or scenario opens through an iris while the map settles
+    // from a slight zoom; -1 is idle.
+    static constexpr int kRevealMs = 700;
+    int reveal_ms_ = -1;
+    bool reveal_fresh_ = false;
+    void begin_city_reveal();
+    void draw_city_reveal(cairo_t *cr);
+    int dialog_anim_len() const;
     bool event_pan_on_ = false;
     double event_from_x_ = 0;
     double event_from_y_ = 0;
@@ -687,6 +713,9 @@ private:
     double inspect_card_w_ = 0;
     double inspect_card_h_ = 0;
     double dialog_hot_dy_ = 0;
+    double dialog_hot_scale_ = 1.0;
+    double dialog_hot_cx_ = 0;
+    double dialog_hot_cy_ = 0;
     std::string own_recovery_;
     std::string autosave_fingerprint_;
     bool autosave_warned_ = false;

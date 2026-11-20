@@ -10,6 +10,7 @@
 #include "city_glance.hpp"
 #include "city_seed.hpp"
 #include "controls_page.hpp"
+#include "dither_mask.hpp"
 #include "vga_palette.hpp"
 #include "dialog_copy.hpp"
 #include "dialog_layout.hpp"
@@ -1067,21 +1068,46 @@ void Shell::draw_dialog(cairo_t *cr)
     if (hold_title) {
         paint_dim_plate(cr, 0, 0, win_w_, win_h_, 0.02, 0.03, 0.08);
     }
-    struct SettleShift {
+    // The dialog eases in: it slides up into place and, off the Classic look,
+    // grows from 94% about the window centre while it fades in. Classic
+    // only slides, so nothing is blended there.
+    struct DialogEase {
         Shell *shell;
         cairo_t *cr;
-        SettleShift(Shell *self, cairo_t *context) : shell(self), cr(context)
+        bool group = false;
+        double alpha = 1.0;
+        DialogEase(Shell *self, cairo_t *context, double rise, bool soft) : shell(self), cr(context)
         {
-            shell->dialog_hot_dy_ = shell->panel_settle_ > 0 ? shell->panel_settle_ * 2.0 : 0.0;
+            double e = 1.0;
+            if (shell->dialog_anim_ms_ >= 0) {
+                e = look_fx::ease_out_cubic(std::min(1.0, static_cast<double>(shell->dialog_anim_ms_) / kDialogEaseMs));
+            }
+            const double s = soft ? 0.94 + 0.06 * e : 1.0;
+            shell->dialog_hot_dy_ = rise * (1.0 - e);
+            shell->dialog_hot_scale_ = s;
+            shell->dialog_hot_cx_ = shell->win_w_ / 2.0;
+            shell->dialog_hot_cy_ = shell->win_h_ / 2.0;
             cairo_save(cr);
-            cairo_translate(cr, 0, shell->dialog_hot_dy_);
+            cairo_translate(cr, shell->dialog_hot_cx_, shell->dialog_hot_cy_ + shell->dialog_hot_dy_);
+            cairo_scale(cr, s, s);
+            cairo_translate(cr, -shell->dialog_hot_cx_, -shell->dialog_hot_cy_);
+            if (soft && e < 1.0) {
+                cairo_push_group(cr);
+                group = true;
+                alpha = std::min(1.0, 0.15 + e * 1.4);
+            }
         }
-        ~SettleShift()
+        ~DialogEase()
         {
+            if (group) {
+                cairo_pop_group_to_source(cr);
+                cairo_paint_with_alpha(cr, alpha);
+            }
             cairo_restore(cr);
             shell->dialog_hot_dy_ = 0;
+            shell->dialog_hot_scale_ = 1.0;
         }
-    } settle_shift(this, cr);
+    } dialog_ease(this, cr, dp(12), tile_atlas().look() != 0);
     const double margin = dp(16);
     text_spans_.clear();
     // Dialogs stay above the status line. Centering them in the full window
@@ -2413,11 +2439,11 @@ void Shell::draw_dialog(cairo_t *cr)
         const double stack_gap = static_cast<double>(dp(12));
         const SettingsStack volume_row = settings_stack(0, text_h, bar_h, stack_gap);
         const SettingsStack scale_row = settings_stack(volume_row.next_caption, text_h, bar_h, stack_gap);
-        // Eight switches in one column when the window is tall enough, else
-        // two columns of four so the dialog still fits a 960x600 window.
-        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 8.0 + dp(8) + bh + margin;
+        // Nine switches in one column when the window is tall enough, else
+        // two columns (four and five) so the dialog still fits a 960x600 window.
+        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 9.0 + dp(8) + bh + margin;
         const bool paired = one_column > win_h_ - 2.0 * margin;
-        const double toggles = (bh + stack_gap) * (paired ? 4.0 : 8.0);
+        const double toggles = (bh + stack_gap) * (paired ? 5.0 : 9.0);
         const double rows = scale_row.next_caption + toggles;
         const double height = dp(48) + margin + rows + dp(8) + bh + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, paired ? dp(760) : dp(640), height, margin);
@@ -2542,6 +2568,8 @@ void Shell::draw_dialog(cairo_t *cr)
             py += bh + stack_gap;
             pair_row("Night lighting", night_ ? "On" : "Off", kNightBox, py);
             py += bh + stack_gap;
+            pair_row("Effects", look_fx::effects_label(effects_), kEffectsBox, py);
+            py += bh + stack_gap;
             pair_row("Layout", layout_state.c_str(), kLayoutBox, py);
             py += bh + stack_gap;
             pair_row(minimap_label, minimap_state, kMinimapBox, py);
@@ -2549,6 +2577,8 @@ void Shell::draw_dialog(cairo_t *cr)
             switch_row("Interface", slate_ ? "Slate" : "Light", kSkinBox, sy);
             sy += bh + stack_gap;
             switch_row("Night lighting", night_ ? "On" : "Off", kNightBox, sy);
+            sy += bh + stack_gap;
+            switch_row("Effects", look_fx::effects_label(effects_), kEffectsBox, sy);
             sy += bh + stack_gap;
             switch_row("Layout", layout_state.c_str(), kLayoutBox, sy);
             sy += bh + stack_gap;
@@ -3749,6 +3779,16 @@ void Shell::draw(cairo_t *cr)
         cairo_clip(live.cr);
         const double map_origin_x = snapped_map_origin(view_x_, map_ox_, scroll_x_);
         const double map_origin_y = snapped_map_origin(view_y_, map_oy_, scroll_y_);
+        if (reveal_ms_ >= 0) {
+            // The new city settles from 125% about the middle of the view.
+            const double t = look_fx::ease_out_cubic(std::min(1.0, static_cast<double>(reveal_ms_) / kRevealMs));
+            const double zoom = 1.25 - 0.25 * t;
+            const double mid_x = view_x_ + view_w_ / 2.0;
+            const double mid_y = view_y_ + view_h_ / 2.0;
+            cairo_translate(live.cr, mid_x, mid_y);
+            cairo_scale(live.cr, zoom, zoom);
+            cairo_translate(live.cr, -mid_x, -mid_y);
+        }
         cairo_rectangle(live.cr, map_origin_x, map_origin_y, map_.pixel_width(), map_.pixel_height());
         cairo_clip(live.cr);
         cairo_translate(live.cr, map_origin_x, map_origin_y);
@@ -3846,12 +3886,15 @@ void Shell::draw(cairo_t *cr)
         paint_dim_plate(cr, view_x_, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
         paint_dim_plate(cr, view_x_ + view_w_ - edge, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
     }
+    draw_city_reveal(cr);
     push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
     if (handheld_) {
         draw_handheld_hud(cr);
     } else {
         draw_minimap_overlay(cr);
     }
+    draw_funds_floats(cr);
+    funds_float_x_ = -1.0;
     draw_hover_card(cr);
     if (overlay_on_ && overlay_return_eval_ && dialog_ == Dialog::None) {
         const double chip_w = dp(180);
@@ -4996,8 +5039,30 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
     const double card_w = std::max(1.0, (inner_w - 2.0 * gap) / 3.0);
     const double col_w = std::max(1.0, (inner_w - gap) / 2.0);
 
-    auto card_box = [&](double x, double y, double w, double h, const char *title, const std::string &body, double tr,
-                        double tg, double tb) {
+    // While the review eases in, the cards land one after another (a wipe
+    // down with a small drop) and the Funds and People figures count up.
+    const int reveal_ms = dialog_anim_ms_;
+    auto card_box = [&](double x, double y, double w, double h, const char *title, const std::string &body_text,
+                        double tr, double tg, double tb, int order = -1, bool count = false) {
+        std::string body = body_text;
+        double land = 1.0;
+        if (reveal_ms >= 0 && order >= 0) {
+            land = std::clamp((reveal_ms - 120.0 - order * 80.0) / 240.0, 0.0, 1.0);
+            if (count) {
+                body = look_fx::count_up(body_text,
+                                         look_fx::ease_out_cubic(std::clamp((reveal_ms - 200.0 - order * 80.0) / 600.0, 0.0, 1.0)));
+            }
+        }
+        if (land <= 0.0) {
+            return;
+        }
+        const double e = look_fx::ease_out_cubic(land);
+        cairo_save(cr);
+        if (land < 1.0) {
+            cairo_rectangle(cr, x - 1, y - 1, w + 2, (h + 2) * e);
+            cairo_clip(cr);
+            cairo_translate(cr, 0, dp(8) * (1.0 - e));
+        }
         fill(cr, x, y, w, h, card_r, card_g, card_b);
         stroke_rect(cr, x + 0.5, y + 0.5, w - 1, h - 1, gold_r, gold_g, gold_b);
         cairo_save(cr);
@@ -5010,15 +5075,16 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         paint_text(cr, year_body_font.c_str(), body, x + dp(10), y + box_top + title_h + box_mid, body_r, body_g, body_b,
                    body_w);
         cairo_restore(cr);
+        cairo_restore(cr);
     };
 
-    card_box(inner_x, cursor, card_w, top_h, "Funds", funds_body, funds_r, funds_g, funds_b);
-    card_box(inner_x + card_w + gap, cursor, card_w, top_h, "People", people_body, people_r, people_g, people_b);
+    card_box(inner_x, cursor, card_w, top_h, "Funds", funds_body, funds_r, funds_g, funds_b, 0, true);
+    card_box(inner_x + card_w + gap, cursor, card_w, top_h, "People", people_body, people_r, people_g, people_b, 1, true);
     card_box(inner_x + 2.0 * (card_w + gap), cursor, card_w, top_h, "Standing", standing, standing_r, standing_g,
-             standing_b);
+             standing_b, 2);
     cursor += top_h + gap;
-    card_box(inner_x, cursor, col_w, low_h, "Highlights", highlights, funds_r, funds_g, funds_b);
-    card_box(inner_x + col_w + gap, cursor, col_w, low_h, "Challenges", challenges, title_r, title_g, title_b);
+    card_box(inner_x, cursor, col_w, low_h, "Highlights", highlights, funds_r, funds_g, funds_b, 3);
+    card_box(inner_x + col_w + gap, cursor, col_w, low_h, "Challenges", challenges, title_r, title_g, title_b, 4);
     const double buttons_top = cursor + low_h + button_gap;
 
     auto ornate = [&](double x, double y, double w, double h, const char *label, int id, bool primary) {
@@ -5221,9 +5287,6 @@ void Shell::render()
             fullscreen_hold_frames_ = 0;
         }
     }
-    if (panel_settle_ > 0) {
-        --panel_settle_;
-    }
     cairo_destroy(context);
     visual_stamp_ = visual_stamp();
     presented_ = true;
@@ -5365,6 +5428,92 @@ const char *Shell::tag_font() const
     return font_tag_.c_str();
 }
 
+// The iris over a new city: night-dark outside a growing circle, a soft
+// edge (dithered on the Classic look) and a gold rim that fades as it
+// opens past the corners of the view.
+void Shell::draw_city_reveal(cairo_t *cr)
+{
+    if (reveal_ms_ < 0 || reveal_ms_ >= kRevealMs) {
+        return;
+    }
+    const double t = static_cast<double>(reveal_ms_) / kRevealMs;
+    const double open = look_fx::ease_in_out(t);
+    const double mid_x = view_x_ + view_w_ / 2.0;
+    const double mid_y = view_y_ + view_h_ / 2.0;
+    const double reach = std::hypot(view_w_ / 2.0, view_h_ / 2.0);
+    const double edge = dp(28);
+    const double radius = dp(24) + open * (reach + edge);
+    const bool classic = tile_atlas().look() == 0;
+    const double kTurn = 6.283185307179586;
+    const double dark_r = 0.02;
+    const double dark_g = 0.03;
+    const double dark_b = 0.08;
+    cairo_save(cr);
+    cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
+    cairo_clip(cr);
+    cairo_new_path(cr);
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+    cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
+    cairo_arc(cr, mid_x, mid_y, radius + edge, 0, kTurn);
+    cairo_set_source_rgb(cr, dark_r, dark_g, dark_b);
+    cairo_fill(cr);
+    // The soft band between the open circle and the dark.
+    cairo_new_path(cr);
+    cairo_arc(cr, mid_x, mid_y, radius + edge, 0, kTurn);
+    cairo_arc_negative(cr, mid_x, mid_y, radius, kTurn, 0);
+    if (classic) {
+        cairo_save(cr);
+        cairo_clip(cr);
+        cairo_set_source_rgb(cr, dark_r, dark_g, dark_b);
+        cairo_scale(cr, 2, 2);
+        look_fx::dither_paint(cr, 0.5);
+        cairo_restore(cr);
+    } else {
+        cairo_pattern_t *band = cairo_pattern_create_radial(mid_x, mid_y, radius, mid_x, mid_y, radius + edge);
+        cairo_pattern_add_color_stop_rgba(band, 0, dark_r, dark_g, dark_b, 0);
+        cairo_pattern_add_color_stop_rgba(band, 1, dark_r, dark_g, dark_b, 1);
+        cairo_set_source(cr, band);
+        cairo_fill(cr);
+        cairo_pattern_destroy(band);
+    }
+    const double rim = 1.0 - std::clamp((radius - reach * 0.7) / (reach * 0.4), 0.0, 1.0);
+    // Classic has no fade, so its rim is solid until halfway, then gone.
+    if (classic ? rim >= 0.5 : rim > 0.0) {
+        cairo_new_path(cr);
+        cairo_arc(cr, mid_x, mid_y, radius, 0, kTurn);
+        cairo_set_line_width(cr, std::max(1.0, static_cast<double>(dp(2))));
+        cairo_set_source_rgba(cr, 0.95, 0.76, 0.31, classic ? 1.0 : 0.85 * rim);
+        cairo_stroke(cr);
+    }
+    cairo_restore(cr);
+}
+
+// The change in Funds drifts away from the readout: income rises toward it
+// in green, spending falls away from it in red. Drawn over the map, after
+// the band or chip has set the anchor this frame.
+void Shell::draw_funds_floats(cairo_t *cr)
+{
+    if (funds_float_x_ < 0.0 || funds_tick_.floats.empty()) {
+        return;
+    }
+    for (const FundsTicker::Float &one : funds_tick_.floats) {
+        const double age = std::clamp(static_cast<double>(one.ms) / FundsTicker::kFloatMs, 0.0, 1.0);
+        const double travel = look_fx::ease_out_cubic(age);
+        const bool income = one.delta > 0;
+        const double y = income ? funds_float_y_ + dp(14) * (1.0 - travel) : funds_float_y_ + dp(18) * travel;
+        const double alpha = age < 0.55 ? 1.0 : 1.0 - (age - 0.55) / 0.45;
+        const double pop = one.ms < 120 ? one.ms / 120.0 : 1.0;
+        const std::string text = (income ? "+" : "") + civic::dollars(one.delta);
+        const SlateInk &ink = income ? kSlateGood : kSlateBad;
+        const TextMetrics m = measure_text(cr, bold_font(), text, -1);
+        cairo_push_group(cr);
+        slate_round(cr, funds_float_x_ - dp(4), y - dp(1), m.width + dp(8), m.height + dp(2), dp(5), kSlateDeep, 0.78);
+        slate_text(cr, bold_font(), text, funds_float_x_, y, ink);
+        cairo_pop_group_to_source(cr);
+        cairo_paint_with_alpha(cr, std::max(0.0, alpha) * pop);
+    }
+}
+
 void Shell::draw_info_band(cairo_t *cr)
 {
     const double y = band_y_;
@@ -5461,8 +5610,18 @@ void Shell::draw_info_band(cairo_t *cr)
         switch (k) {
         case Funds: {
             const bool broke = session_.funds() < 0;
-            slate_text(cr, bold_font(), funds, x, value_y, broke ? kSlateBad : kSlateGold);
-            const double tx = x + measure_text(cr, bold_font(), funds, -1).width + dp(6);
+            const std::string funds_now = civic::dollars(funds_tick_.shown());
+            const double now_w = measure_text(cr, bold_font(), funds_now, -1).width;
+            const double glint = funds_tick_.glint();
+            if (glint > 0.0) {
+                slate_round(cr, x - dp(4), value_y - dp(1), now_w + dp(8), dp(18), dp(5), kSlateGold, 0.24 * glint);
+            }
+            const int roll = funds_tick_.trend();
+            slate_text(cr, bold_font(), funds_now, x, value_y,
+                       roll > 0 ? kSlateGood : (roll < 0 || broke ? kSlateBad : kSlateGold));
+            funds_float_x_ = x;
+            funds_float_y_ = value_y + dp(18);
+            const double tx = x + std::max(now_w, static_cast<double>(measure_text(cr, bold_font(), funds, -1).width)) + dp(6);
             const double ty = value_y + dp(8);
             if (flow != 0) {
                 const SlateInk &trend = flow > 0 ? kSlateGood : kSlateBad;
@@ -5810,7 +5969,18 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         slate_round(cr, x, top, w, chip_h, dp(10), kSlateBand, 0.94);
         const double ty = top + (chip_h - measure_text(cr, bold_font(), "Ag", -1).height) / 2.0;
         double cx = x + pad;
-        slate_text(cr, bold_font(), funds, cx, ty, session_.funds() < 0 ? kSlateBad : kSlateGold);
+        {
+            const std::string funds_now = civic::dollars(funds_tick_.shown());
+            const double glint = funds_tick_.glint();
+            if (glint > 0.0) {
+                slate_round(cr, cx - dp(4), top + dp(4), fw + dp(8), chip_h - dp(8), dp(6), kSlateGold, 0.24 * glint);
+            }
+            const int roll = funds_tick_.trend();
+            slate_text(cr, bold_font(), funds_now, cx, ty,
+                       roll > 0 ? kSlateGood : (roll < 0 || session_.funds() < 0 ? kSlateBad : kSlateGold));
+            funds_float_x_ = cx;
+            funds_float_y_ = top + chip_h + dp(4);
+        }
         cx += fw + sep;
         slate_text(cr, bold_font(), date, cx, ty, kSlateInk);
         cx += dw + sep;
