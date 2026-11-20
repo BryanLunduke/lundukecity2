@@ -1350,7 +1350,7 @@ void Shell::loop()
         if (speed_ > 0 && !dialog_pauses()) {
             blink_drew_ = map_.tick(elapsed);
         }
-        map_.advance_fx(elapsed, speed_ > 0 && !dialog_pauses());
+        map_.advance_fx(elapsed, speed_ > 0 && !dialog_pauses(), speed_);
         map_.advance_ui(elapsed);
         palette_.advance(elapsed);
         if (hover_id_ != tracked_hover_) {

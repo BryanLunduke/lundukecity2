@@ -49,6 +49,20 @@ inline bool motion_allowed(int effects)
     return clamp_effects(effects) != EffectsOff;
 }
 
+// Cloud shadows drift with the city speed: Slow 0.75x, Medium (the normal
+// pace) 1x, Fast 2x. Paused holds them still. Only the cloud offset uses this;
+// the shared ambient clock (water shimmer, smoke) keeps its own pace.
+inline double cloud_speed_factor(int speed)
+{
+    if (speed <= 0) {
+        return 0.0;
+    }
+    if (speed == 1) {
+        return 0.75;
+    }
+    return speed == 2 ? 1.0 : 2.0;
+}
+
 inline double clamp01(double t)
 {
     return t < 0.0 ? 0.0 : (t > 1.0 ? 1.0 : t);

@@ -10,6 +10,7 @@
 #include "sound_player.hpp"
 #include "tools.hpp"
 #include "graph_legend.hpp"
+#include "look_fx.hpp"
 #include "messages.hpp"
 #include "version.hpp"
 #include "view_math.hpp"
@@ -524,6 +525,14 @@ int main()
             }
         }
         (void)saw_body;
+    }
+    // Cloud shadows drift with the city speed; paused holds them.
+    if (look_fx::cloud_speed_factor(1) != 0.75 || look_fx::cloud_speed_factor(2) != 1.0 ||
+        look_fx::cloud_speed_factor(3) != 2.0) {
+        return fail(65, "cloud speed factors should be Slow 0.75, Medium 1, Fast 2");
+    }
+    if (look_fx::cloud_speed_factor(0) != 0.0 || look_fx::cloud_speed_factor(-1) != 0.0) {
+        return fail(66, "a paused city should not move the clouds");
     }
     return 0;
 }

@@ -1587,6 +1587,32 @@ void Shell::drive_ui_test()
             return;
         }
         set_speed(0);
+        ui_step_ = 40;
+        return;
+    }
+    case 40: {
+        // Cloud shadows: their own clock, scaled by the speed (Slow 0.75,
+        // Medium 1, Fast 2); the shared ambient clock is not.
+        {
+            const int effects_were = map_.effects();
+            map_.set_effects(look_fx::EffectsFull);
+            double moved[4] = {0, 0, 0, 0};
+            for (int speed = 1; speed <= 3; ++speed) {
+                const double before = map_.cloud_ms();
+                map_.advance_fx(400, true, speed);
+                moved[speed] = map_.cloud_ms() - before;
+            }
+            const double before_paused = map_.cloud_ms();
+            map_.advance_fx(400, false, 3);
+            moved[0] = map_.cloud_ms() - before_paused;
+            map_.set_effects(effects_were);
+            if (std::abs(moved[1] - 300.0) > 0.01 || std::abs(moved[2] - 400.0) > 0.01 ||
+                std::abs(moved[3] - 800.0) > 0.01 || moved[0] != 0.0) {
+                fail("cloud clock moved " + std::to_string(moved[1]) + "/" + std::to_string(moved[2]) + "/" +
+                     std::to_string(moved[3]) + " (paused " + std::to_string(moved[0]) + ") for 400 ms");
+                return;
+            }
+        }
         // The road was a control check. The quit test still expects a clean city.
         session_.set_dirty(false);
         welcome_gate_ = true;
