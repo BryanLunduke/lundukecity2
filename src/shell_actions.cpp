@@ -1456,6 +1456,17 @@ void Shell::arm_touch_tool()
     map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), true);
 }
 
+void Shell::end_mini_drag()
+{
+    if (!mini_drag_) {
+        return;
+    }
+    mini_drag_ = false;
+    if (!pointer_on_map_ && !pan_pointer_) {
+        SDL_CaptureMouse(false);
+    }
+}
+
 void Shell::reset_touch_state()
 {
     if (touch_armed_) {

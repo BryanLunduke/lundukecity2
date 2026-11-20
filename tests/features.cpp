@@ -526,6 +526,28 @@ int main()
         }
         (void)saw_body;
     }
+    // A minimap drag that leaves the land box clamps to its nearest edge.
+    {
+        AspectBox box;
+        box.x = 10;
+        box.y = 20;
+        box.width = 100;
+        box.height = 50;
+        double fx = -1;
+        double fy = -1;
+        aspect_box_fraction_clamped(box, 60, 45, fx, fy);
+        if (fx != 0.5 || fy != 0.5) {
+            return fail(67, "a point inside the minimap should keep its fraction");
+        }
+        aspect_box_fraction_clamped(box, -500, 900, fx, fy);
+        if (fx != 0.0 || fy != 1.0) {
+            return fail(68, "a drag past the minimap edge should clamp to 0..1");
+        }
+        aspect_box_fraction_clamped(box, 400, -3, fx, fy);
+        if (fx != 1.0 || fy != 0.0) {
+            return fail(69, "a drag past the top right should clamp to 1, 0");
+        }
+    }
     // Cloud shadows drift with the city speed; paused holds them.
     if (look_fx::cloud_speed_factor(1) != 0.75 || look_fx::cloud_speed_factor(2) != 1.0 ||
         look_fx::cloud_speed_factor(3) != 2.0) {

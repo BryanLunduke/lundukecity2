@@ -1591,6 +1591,87 @@ void Shell::drive_ui_test()
         return;
     }
     case 40: {
+        // Minimap: a held left drag keeps recentring, clamps past the edge,
+        // and lets go on release or when a dialog opens.
+        {
+            const Hotspot *mini = find_hot(hot_, kMinimapId, 0);
+            if (mini == nullptr || dialog_ != Dialog::None || menu_.open()) {
+                fail("no minimap to drag");
+                return;
+            }
+            int ww = 1;
+            int wh = 1;
+            int pw = 1;
+            int ph = 1;
+            SDL_GetWindowSize(window_, &ww, &wh);
+            SDL_GetWindowSizeInPixels(window_, &pw, &ph);
+            auto mouse = [&](Uint32 type, double x, double y, bool held) {
+                SDL_Event event{};
+                event.type = type;
+                const float wx = static_cast<float>(x * ww / std::max(pw, 1));
+                const float wy = static_cast<float>(y * wh / std::max(ph, 1));
+                if (type == SDL_EVENT_MOUSE_MOTION) {
+                    event.motion.x = wx;
+                    event.motion.y = wy;
+                    event.motion.state = held ? SDL_BUTTON_LMASK : 0;
+                } else {
+                    event.button.button = SDL_BUTTON_LEFT;
+                    event.button.down = type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+                    event.button.clicks = 1;
+                    event.button.x = wx;
+                    event.button.y = wy;
+                }
+                handle_event(event);
+            };
+            const double cx = mini->x + mini->w * 0.5;
+            const double cy = mini->y + mini->h * 0.5;
+            const int tool_before = tool_index_;
+            mouse(SDL_EVENT_MOUSE_BUTTON_DOWN, cx, cy, true);
+            const double centre_x = scroll_x_;
+            const double centre_y = scroll_y_;
+            if (!mini_drag_) {
+                fail("pressing the minimap did not start a drag");
+                return;
+            }
+            // Right of centre, then past the right edge (clamps to the map's
+            // east edge, further than any inside point), then further still.
+            mouse(SDL_EVENT_MOUSE_MOTION, mini->x + mini->w * 0.6, cy, true);
+            const double inside_x = scroll_x_;
+            mouse(SDL_EVENT_MOUSE_MOTION, mini->x + mini->w + 300, cy, true);
+            const double edge_x = scroll_x_;
+            mouse(SDL_EVENT_MOUSE_MOTION, mini->x + mini->w + 900, cy, true);
+            if (!(inside_x > centre_x) || !(edge_x > inside_x) || scroll_x_ != edge_x || scroll_y_ != centre_y) {
+                fail("minimap drag scroll " + std::to_string(centre_x) + " -> " + std::to_string(inside_x) + " -> " +
+                     std::to_string(edge_x) + " -> " + std::to_string(scroll_x_));
+                return;
+            }
+            mouse(SDL_EVENT_MOUSE_MOTION, cx, mini->y + mini->h + 400, true);
+            const double below_y = scroll_y_;
+            if (!(below_y >= centre_y) || pointer_on_map_ || tool_index_ != tool_before) {
+                fail("dragging off the bottom of the minimap moved the map or drew");
+                return;
+            }
+            mouse(SDL_EVENT_MOUSE_BUTTON_UP, cx, mini->y + mini->h + 400, false);
+            if (mini_drag_) {
+                fail("releasing the button did not end the minimap drag");
+                return;
+            }
+            const double after_x = scroll_x_;
+            mouse(SDL_EVENT_MOUSE_MOTION, cx, cy, false);
+            if (scroll_x_ != after_x) {
+                fail("the minimap kept following after the button came up");
+                return;
+            }
+            mouse(SDL_EVENT_MOUSE_BUTTON_DOWN, cx, cy, true);
+            open_dialog(Dialog::About);
+            mouse(SDL_EVENT_MOUSE_MOTION, mini->x + 2, cy, true);
+            if (mini_drag_ || scroll_x_ != centre_x) {
+                fail("a dialog opening did not end the minimap drag");
+                return;
+            }
+            cancel_dialog();
+            mouse(SDL_EVENT_MOUSE_BUTTON_UP, cx, cy, false);
+        }
         // Cloud shadows: their own clock, scaled by the speed (Slow 0.75,
         // Medium 1, Fast 2); the shared ambient clock is not.
         {

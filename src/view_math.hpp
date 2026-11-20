@@ -46,6 +46,15 @@ inline void aspect_box_fraction(const AspectBox &box, double px, double py, doub
     fy = (py - box.y) / box.height;
 }
 
+// The same fraction held inside 0..1, for a drag that leaves the box: the
+// view keeps following along the nearest edge instead of stopping.
+inline void aspect_box_fraction_clamped(const AspectBox &box, double px, double py, double &fx, double &fy)
+{
+    aspect_box_fraction(box, px, py, fx, fy);
+    fx = fx < 0.0 ? 0.0 : (fx > 1.0 ? 1.0 : fx);
+    fy = fy < 0.0 ? 0.0 : (fy > 1.0 ? 1.0 : fy);
+}
+
 // Tile under a widget pixel. A coordinate that falls left of or above the
 // shaken map is outside, including the gap an earthquake exposes.
 inline bool map_tile_at(double x, double y, int shake_x, int shake_y, int tile_size, int world_w,
