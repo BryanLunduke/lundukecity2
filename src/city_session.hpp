@@ -103,7 +103,8 @@ public:
     void set_listener(Listener listener);
 
     // Pre-made scenarios the engine loads from res/snro.* (Dullsville
-    // through Rio de Janeiro). id matches the engine Scenario ordinal.
+    // through Rio de Janeiro), and Lunduke City 2's own Seattle map
+    // (data/scenarios/seattle.cty). id matches the engine Scenario ordinal.
     struct ScenarioDef {
         int id = 0;
         const char *name = "";
@@ -114,7 +115,11 @@ public:
         int years = 0;
     };
 
-    static constexpr int kScenarioCount = 8;
+    static constexpr int kScenarioCount = 9;
+    // Seattle: the Autonomous Zone forms on the road block holding this tile
+    // (Cal Anderson Park on Capitol Hill) and its least-policed neighbour.
+    static constexpr int kSeattleZoneX = 75;
+    static constexpr int kSeattleZoneY = 59;
     static const ScenarioDef &scenario_def(int index);
 
     // Difficulty is the engine GameLevel: easy $20,000, medium $12,500,
@@ -379,6 +384,9 @@ public:
     // The zone on the road block holding tile (x, y) and its least-policed
     // neighbour, for scenarios.
     bool start_autonomous_zone_at(int x, int y);
+    // The Seattle scenario's zone on Capitol Hill (the engine asks for it
+    // a few weeks in). False outside Seattle or when no zone can form.
+    bool start_seattle_zone();
     // Empty when it can start now.
     std::string event_unavailable(city_events::Kind kind) const;
     bool in_autonomous_zone(int x, int y) const;
@@ -459,7 +467,7 @@ public:
     // Body of the win/loss dialog. Keep playing is what starts the clock.
     // Closing the window, or cancelling the scenario list, leaves it paused.
     std::string scenario_outcome_text(bool won) const;
-    // 0 when this city is not one of the eight scenarios.
+    // 0 when this city is not one of the nine scenarios.
     int scenario_id() const;
     // Whole years until the scenario is scored, rounded down. -1 when no
     // scenario is running. 0 when the deadline has already passed.
@@ -612,6 +620,9 @@ private:
     long long saved_city_time_ = 0;
     void mark_clean_time();
     bool in_callback_ = false;
+    // The engine asked for the Seattle scenario's Autonomous Zone; it is
+    // raised on the next event frame, outside the simulation step.
+    bool scenario_zone_pending_ = false;
     bool eval_month_pending_ = false;
     int eval_month_ = -1;
     int speed_before_outcome_ = 2;

@@ -389,6 +389,13 @@ void Micropolis::doScenarioScore(Scenario type)
         }
         break;
 
+    case SC_SEATTLE:
+        // Lunduke City 2: the Autonomous Zone must be gone and crime down.
+        if (cityEvents.zoneCount <= 0 && crimeAverage < SEATTLE_CRIME_GOAL) {
+            z = MESSAGE_SCENARIO_WON;
+        }
+        break;
+
     default:
         NOT_REACHED();
         scoreType = SC_NONE;

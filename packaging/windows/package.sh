@@ -48,6 +48,8 @@ mkdir -p "$root/share/$name/special-tiles"
 cp "$src"/data/special-tiles/*.png "$root/share/$name/special-tiles/"
 mkdir -p "$root/share/$name/disaster-art"
 cp "$src"/data/disaster-art/*.png "$root/share/$name/disaster-art/"
+mkdir -p "$root/share/$name/scenarios"
+cp "$src"/data/scenarios/*.cty "$root/share/$name/scenarios/"
 mkdir -p "$root/share/$name/welcome" "$root/share/$name/fonts"
 cp "$src/data/welcome/welcome-bg.png" "$root/share/$name/welcome/"
 cp "$src/data/fonts/DejaVuSerif.ttf" "$src/data/fonts/DejaVuSerif-Bold.ttf" \

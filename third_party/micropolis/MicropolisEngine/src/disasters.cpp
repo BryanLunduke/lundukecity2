@@ -198,6 +198,14 @@ void Micropolis::scenarioDisaster()
             }
             break;
 
+        case SC_SEATTLE:
+            // Lunduke City 2: the front end raises the Autonomous Zone on
+            // Capitol Hill (city_events lives outside the engine).
+            if (disasterWait == 1) {
+                callback("scenarioAutonomousZone", "");
+            }
+            break;
+
         default:
             NOT_REACHED();
             break; // Never used

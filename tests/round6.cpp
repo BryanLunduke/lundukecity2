@@ -34,10 +34,11 @@ int main()
         "Bring average crime below 60 within 10 years.",
         "Raise the score above 500 by 2015.",
         "Keep the city score above 500 until 2057.",
+        "Clear the Autonomous Zone and bring average crime below 60 by mid-2025.",
     };
-    static const int kYears[] = {30, 5, 5, 10, 5, 10, 5, 10};
-    if (CitySession::kScenarioCount != 8) {
-        return fail(1, "the scenario catalog is no longer the eight classic cities");
+    static const int kYears[] = {30, 5, 5, 10, 5, 10, 5, 10, 5};
+    if (CitySession::kScenarioCount != 9) {
+        return fail(1, "the scenario catalog is no longer the eight classic cities and Seattle");
     }
     for (int i = 0; i < CitySession::kScenarioCount; ++i) {
         const CitySession::ScenarioDef &def = CitySession::scenario_def(i);

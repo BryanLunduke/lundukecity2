@@ -133,9 +133,65 @@ const char *city_class_name(CityClass city_class)
     }
 }
 
+// The Seattle goal number as text for the catalog's goal sentence (a test
+// checks it matches SEATTLE_CRIME_GOAL).
+#define SEATTLE_CRIME_GOAL_TEXT "60"
+
+// The folder holding one of City 2's own scenario maps: the installed
+// share/lunduke-city-2/scenarios (or data/scenarios beside a build), else
+// the source tree's data/scenarios next to the asset folder.
+std::string city2_scenario_dir(const std::string &filename)
+{
+    std::string path = ui_data_file("scenarios/" + filename);
+    if (path.empty()) {
+        const std::string root = asset_root();
+        if (!root.empty()) {
+            std::string up = root;
+            for (int level = 0; level < 2; ++level) {
+                const std::string::size_type slash = up.find_last_of("/\\");
+                up = slash == std::string::npos ? std::string() : up.substr(0, slash);
+            }
+            if (!up.empty()) {
+                const std::string candidate = up + "/data/scenarios/" + filename;
+                std::ifstream in(candidate, std::ios::binary);
+                if (in.good()) {
+                    path = candidate;
+                }
+            }
+        }
+    }
+    const std::string::size_type slash = path.find_last_of("/\\");
+    if (path.empty() || slash == std::string::npos) {
+        return {};
+    }
+    return path.substr(0, slash);
+}
+
+// The Seattle meter's Autonomous Zone part.
+std::string seattle_zone_short(const Micropolis &sim)
+{
+    const int blocks = sim.cityEvents.zoneCount;
+    if (blocks <= 0) {
+        return "Zone cleared";
+    }
+    return "Zone " + std::to_string(blocks) + (blocks == 1 ? " block" : " blocks");
+}
+
+std::string seattle_zone_long(const Micropolis &sim)
+{
+    const int blocks = sim.cityEvents.zoneCount;
+    if (blocks <= 0) {
+        return "no Autonomous Zone";
+    }
+    return "Autonomous Zone holds " + std::to_string(blocks) + (blocks == 1 ? " block" : " blocks") +
+           " → clear it";
+}
+
 struct ScenarioEntry {
     CitySession::ScenarioDef def;
     const char *filename;
+    // City 2's own map in data/scenarios/ rather than the classic res/.
+    bool city2_data = false;
 };
 
 // Names, years, funds, and filenames are the engine's loadScenario() table.
@@ -169,11 +225,17 @@ const ScenarioEntry kScenarios[] = {
     {{SC_RIO, "Rio de Janeiro", 2047, "Flooding threatens the city.",
       "Keep the city score above 500 until 2057.", 10},
      "snro.888"},
+    // Lunduke City 2's own scenario (data/scenarios/seattle.cty, built by
+    // tools/seattle_map.cpp). It opens in late May 2020; the Autonomous
+    // Zone takes Cal Anderson Park and a block of Capitol Hill in June.
+    {{SC_SEATTLE, "Seattle", 2020, "An Autonomous Zone takes over Capitol Hill.",
+      "Clear the Autonomous Zone and bring average crime below " SEATTLE_CRIME_GOAL_TEXT " by mid-2025.", SEATTLE_YEARS},
+     "seattle.cty", true},
 };
 
 static_assert(sizeof(kScenarios) / sizeof(kScenarios[0]) == CitySession::kScenarioCount,
               "scenario catalog size");
-static_assert(SC_DULLSVILLE == 1 && SC_RIO == 8, "scenario ids");
+static_assert(SC_DULLSVILLE == 1 && SC_RIO == 8 && SC_SEATTLE == 9, "scenario ids");
 static_assert(static_cast<int>(LEVEL_EASY) == CitySession::kLevelEasy, "easy level");
 static_assert(static_cast<int>(LEVEL_MEDIUM) == CitySession::kLevelMedium, "medium level");
 static_assert(static_cast<int>(LEVEL_HARD) == CitySession::kLevelHard, "hard level");
@@ -587,6 +649,12 @@ void CitySession::on_callback(const char *name, const char *params, va_list args
         return s != nullptr ? s : "";
     };
     auto take_int = [&]() { return va_arg(args, int); };
+
+    if (which == "scenarioAutonomousZone") {
+        // Raised on the next event frame, outside the simulation step.
+        scenario_zone_pending_ = true;
+        return;
+    }
 
     if (which == "update" && params != nullptr && params[0] == 's') {
         const std::string kind = take_string();
@@ -1151,13 +1219,16 @@ bool CitySession::load_scenario(int id)
     }
 
     const std::string root = asset_root();
-    const std::string dir = root.empty() ? std::string() : root + "/res";
+    std::string dir = root.empty() ? std::string() : root + "/res";
+    if (entry->city2_data) {
+        dir = city2_scenario_dir(entry->filename);
+    }
     const std::string file = dir.empty() ? std::string() : dir + "/" + entry->filename;
     std::ifstream in(file, std::ios::binary);
     in.seekg(0, std::ios::end);
     const auto bytes = in.good() ? static_cast<long>(in.tellg()) : -1L;
     if (bytes != 27120) {
-        if (root.empty()) {
+        if (dir.empty()) {
             message_ = "Could not start that scenario. The game data files were not found.";
         } else {
             message_ = "Could not start that scenario.\n" + file + " is missing or the wrong size.";
@@ -2155,6 +2226,20 @@ bool CitySession::start_event_named(const std::string &key)
     return start_event(kind);
 }
 
+bool CitySession::start_seattle_zone()
+{
+    if (!ready_ || scenario_id() != SC_SEATTLE) {
+        return false;
+    }
+    // Cal Anderson Park and its least-policed neighbour. If Capitol Hill has
+    // been rebuilt so that block is gone, the zone forms wherever the
+    // ordinary Autonomous Zone would.
+    if (start_autonomous_zone_at(kSeattleZoneX, kSeattleZoneY)) {
+        return true;
+    }
+    return start_event(city_events::Kind::AutonomousZone);
+}
+
 bool CitySession::start_autonomous_zone_at(int x, int y)
 {
     if (!ready_) {
@@ -2223,6 +2308,10 @@ int CitySession::riot_crime() const
 
 void CitySession::on_event_frame()
 {
+    if (scenario_zone_pending_) {
+        scenario_zone_pending_ = false;
+        start_seattle_zone();
+    }
     std::vector<city_events::Note> notes;
     const bool lion_was = engine_->sim.cityEvents.lionActive != 0;
     city_events::frame(&engine_->sim, notes);
@@ -2335,7 +2424,7 @@ int CitySession::take_scenario_outcome()
 int CitySession::scenario_id() const
 {
     const int id = static_cast<int>(engine_->sim.scenario);
-    if (id < SC_DULLSVILLE || id > SC_RIO) {
+    if (id < SC_DULLSVILLE || id > SC_SEATTLE) {
         return 0;
     }
     return id;
@@ -2420,6 +2509,10 @@ std::string CitySession::scenario_meter_short() const
     if (id == SC_DETROIT) {
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <60";
     }
+    if (id == SC_SEATTLE) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → <" +
+               std::to_string(SEATTLE_CRIME_GOAL) + " · " + seattle_zone_short(sim);
+    }
     if (id == SC_BERN) {
         const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
         return "Traffic " + traffic + " → <" +
@@ -2456,6 +2549,10 @@ std::string CitySession::scenario_meter() const
     const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
     if (id == SC_DETROIT) {
         return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < 60";
+    }
+    if (id == SC_SEATTLE) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + " → goal < " +
+               std::to_string(SEATTLE_CRIME_GOAL) + ", " + seattle_zone_long(sim);
     }
     if (id == SC_BERN) {
         const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
@@ -3744,7 +3841,7 @@ void CitySession::read_scenario_sidecar(const std::string &path)
         return;
     }
     Micropolis &sim = engine_->sim;
-    if (clock.scenario >= SC_DULLSVILLE && clock.scenario <= SC_RIO) {
+    if (clock.scenario >= SC_DULLSVILLE && clock.scenario <= SC_SEATTLE) {
         sim.scenario = static_cast<Scenario>(clock.scenario);
     }
     scenario_result_ = clock.outcome;
