@@ -10,6 +10,7 @@
 #include "city_glance.hpp"
 #include "city_seed.hpp"
 #include "controls_page.hpp"
+#include "dither_mask.hpp"
 #include "vga_palette.hpp"
 #include "dialog_copy.hpp"
 #include "dialog_layout.hpp"
@@ -3778,6 +3779,16 @@ void Shell::draw(cairo_t *cr)
         cairo_clip(live.cr);
         const double map_origin_x = snapped_map_origin(view_x_, map_ox_, scroll_x_);
         const double map_origin_y = snapped_map_origin(view_y_, map_oy_, scroll_y_);
+        if (reveal_ms_ >= 0) {
+            // The new city settles from 125% about the middle of the view.
+            const double t = look_fx::ease_out_cubic(std::min(1.0, static_cast<double>(reveal_ms_) / kRevealMs));
+            const double zoom = 1.25 - 0.25 * t;
+            const double mid_x = view_x_ + view_w_ / 2.0;
+            const double mid_y = view_y_ + view_h_ / 2.0;
+            cairo_translate(live.cr, mid_x, mid_y);
+            cairo_scale(live.cr, zoom, zoom);
+            cairo_translate(live.cr, -mid_x, -mid_y);
+        }
         cairo_rectangle(live.cr, map_origin_x, map_origin_y, map_.pixel_width(), map_.pixel_height());
         cairo_clip(live.cr);
         cairo_translate(live.cr, map_origin_x, map_origin_y);
@@ -3875,6 +3886,7 @@ void Shell::draw(cairo_t *cr)
         paint_dim_plate(cr, view_x_, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
         paint_dim_plate(cr, view_x_ + view_w_ - edge, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
     }
+    draw_city_reveal(cr);
     push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
     if (handheld_) {
         draw_handheld_hud(cr);
@@ -5414,6 +5426,66 @@ const char *Shell::tag_font() const
         font_tag_scale_ = ui_scale_;
     }
     return font_tag_.c_str();
+}
+
+// The iris over a new city: night-dark outside a growing circle, a soft
+// edge (dithered on the Classic look) and a gold rim that fades as it
+// opens past the corners of the view.
+void Shell::draw_city_reveal(cairo_t *cr)
+{
+    if (reveal_ms_ < 0 || reveal_ms_ >= kRevealMs) {
+        return;
+    }
+    const double t = static_cast<double>(reveal_ms_) / kRevealMs;
+    const double open = look_fx::ease_in_out(t);
+    const double mid_x = view_x_ + view_w_ / 2.0;
+    const double mid_y = view_y_ + view_h_ / 2.0;
+    const double reach = std::hypot(view_w_ / 2.0, view_h_ / 2.0);
+    const double edge = dp(28);
+    const double radius = dp(24) + open * (reach + edge);
+    const bool classic = tile_atlas().look() == 0;
+    const double kTurn = 6.283185307179586;
+    const double dark_r = 0.02;
+    const double dark_g = 0.03;
+    const double dark_b = 0.08;
+    cairo_save(cr);
+    cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
+    cairo_clip(cr);
+    cairo_new_path(cr);
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+    cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
+    cairo_arc(cr, mid_x, mid_y, radius + edge, 0, kTurn);
+    cairo_set_source_rgb(cr, dark_r, dark_g, dark_b);
+    cairo_fill(cr);
+    // The soft band between the open circle and the dark.
+    cairo_new_path(cr);
+    cairo_arc(cr, mid_x, mid_y, radius + edge, 0, kTurn);
+    cairo_arc_negative(cr, mid_x, mid_y, radius, kTurn, 0);
+    if (classic) {
+        cairo_save(cr);
+        cairo_clip(cr);
+        cairo_set_source_rgb(cr, dark_r, dark_g, dark_b);
+        cairo_scale(cr, 2, 2);
+        look_fx::dither_paint(cr, 0.5);
+        cairo_restore(cr);
+    } else {
+        cairo_pattern_t *band = cairo_pattern_create_radial(mid_x, mid_y, radius, mid_x, mid_y, radius + edge);
+        cairo_pattern_add_color_stop_rgba(band, 0, dark_r, dark_g, dark_b, 0);
+        cairo_pattern_add_color_stop_rgba(band, 1, dark_r, dark_g, dark_b, 1);
+        cairo_set_source(cr, band);
+        cairo_fill(cr);
+        cairo_pattern_destroy(band);
+    }
+    const double rim = 1.0 - std::clamp((radius - reach * 0.7) / (reach * 0.4), 0.0, 1.0);
+    // Classic has no fade, so its rim is solid until halfway, then gone.
+    if (classic ? rim >= 0.5 : rim > 0.0) {
+        cairo_new_path(cr);
+        cairo_arc(cr, mid_x, mid_y, radius, 0, kTurn);
+        cairo_set_line_width(cr, std::max(1.0, static_cast<double>(dp(2))));
+        cairo_set_source_rgba(cr, 0.95, 0.76, 0.31, classic ? 1.0 : 0.85 * rim);
+        cairo_stroke(cr);
+    }
+    cairo_restore(cr);
 }
 
 // The change in Funds drifts away from the readout: income rises toward it

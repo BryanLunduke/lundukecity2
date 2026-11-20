@@ -675,6 +675,13 @@ private:
     static constexpr int kDialogEaseMs = 170;
     static constexpr int kYearRevealMs = 900;
     int dialog_anim_ms_ = -1;
+    // A new city or scenario opens through an iris while the map settles
+    // from a slight zoom; -1 is idle.
+    static constexpr int kRevealMs = 700;
+    int reveal_ms_ = -1;
+    bool reveal_fresh_ = false;
+    void begin_city_reveal();
+    void draw_city_reveal(cairo_t *cr);
     int dialog_anim_len() const;
     bool event_pan_on_ = false;
     double event_from_x_ = 0;

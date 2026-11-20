@@ -213,6 +213,17 @@ void Shell::begin_scene_fade()
     scene_fade_.start();
 }
 
+void Shell::begin_city_reveal()
+{
+    if (!motion_on() || map_.dragging()) {
+        return;
+    }
+    scene_fade_.skip();
+    reveal_ms_ = 0;
+    // Building the city took this loop step; start the clock on the next.
+    reveal_fresh_ = true;
+}
+
 void Shell::apply_effects()
 {
     effects_ = look_fx::clamp_effects(effects_);
@@ -227,6 +238,7 @@ void Shell::skip_motion()
 {
     scene_fade_.skip();
     dialog_anim_ms_ = -1;
+    reveal_ms_ = -1;
     event_pan_on_ = false;
     marker_on_ = false;
     puff_on_ = false;
@@ -291,6 +303,15 @@ void Shell::advance_presentation(int elapsed_ms)
     }
     funds_tick_.observe(session_.funds(), city_generation_, motion_on() && city_chosen_ && !welcome_gate_);
     funds_tick_.advance(elapsed_ms);
+    if (reveal_ms_ >= 0) {
+        if (reveal_fresh_) {
+            reveal_fresh_ = false;
+        } else {
+            // A step is capped so the first frames of a fresh map (slow to
+            // build) do not swallow the opening.
+            reveal_ms_ = reveal_ms_ >= kRevealMs ? -1 : std::min(kRevealMs, reveal_ms_ + std::min(elapsed_ms, 33));
+        }
+    }
     if (dialog_anim_ms_ >= 0) {
         // The frame drawn at the full length is the settled one; the next
         // step ends the clock.
@@ -2569,7 +2590,9 @@ void Shell::on_dialog_button(int id)
             }
             center_on_fraction(0.5, 0.5);
             sync_title();
-            if (from_welcome) {
+            if (motion_on()) {
+                begin_city_reveal();
+            } else if (from_welcome) {
                 begin_scene_fade();
             }
         }
@@ -2594,7 +2617,7 @@ void Shell::on_dialog_button(int id)
                     adopt_loaded_speed(session_.speed());
                     center_on_fraction(0.5, 0.5);
                     sync_title();
-                    begin_scene_fade();
+                    begin_city_reveal();
                 }
             }
             return;
