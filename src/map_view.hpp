@@ -140,6 +140,24 @@ private:
     };
     TileSpan visible_tiles(cairo_t *cr, int source, int pad) const;
     void draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk);
+    void draw_water(cairo_t *cr, const TileSpan &span);
+    // Per art pixel at 16px: bits 0-4 a water colour index + 1 (0 is not
+    // water), bit 6 shore (water beside land). Rebuilt for changed tiles.
+    void refresh_pixel_classes();
+    void learn_fx_palette();
+    std::vector<std::uint8_t> pix_class_;
+    std::vector<int> class_dirty_;
+    bool class_all_ = true;
+    int fx_palette_generation_ = -1;
+    // Water colours of the drawn sheet, darkest first, with the lighter
+    // colour each one shimmers to. Shimmer never leaves the sheet palette.
+    std::vector<std::uint32_t> water_rgb_;
+    std::vector<std::uint32_t> water_lift_;
+    std::uint32_t foam_rgb_ = 0;
+    cairo_surface_t *fx_pixels_ = nullptr;
+    int fx_cache_step_ = -1;
+    TileSpan fx_cache_span_{};
+    bool fx_water_seen_ = false;
     bool classic_fx() const;
     int effects_ = 0;
     int fx_ms_ = 0;

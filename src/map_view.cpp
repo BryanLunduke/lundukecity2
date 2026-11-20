@@ -60,6 +60,10 @@ MapView::~MapView()
         cairo_surface_destroy(lamp_pixels_);
         lamp_pixels_ = nullptr;
     }
+    if (fx_pixels_ != nullptr) {
+        cairo_surface_destroy(fx_pixels_);
+        fx_pixels_ = nullptr;
+    }
 }
 
 bool MapView::tick(int elapsed_ms)
@@ -87,6 +91,7 @@ int MapView::blink_remaining_ms() const
 
 void MapView::invalidate_all()
 {
+    class_all_ = true;
     if (!cached_raw_.empty()) {
         std::fill(cached_raw_.begin(), cached_raw_.end(), -1);
         std::fill(cached_shown_.begin(), cached_shown_.end(), -1);
@@ -96,6 +101,7 @@ void MapView::invalidate_all()
 void MapView::set_session(CitySession *session)
 {
     session_ = session;
+    class_all_ = true;
     cached_raw_.clear();
     cached_shown_.clear();
 }
@@ -221,6 +227,7 @@ void MapView::ensure_surface()
         }
         map_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
         night_stale_ = true;
+        class_all_ = true;
         cached_raw_.clear();
         cached_shown_.clear();
     }
@@ -556,6 +563,7 @@ void MapView::sync()
     if (atlas.loaded() != atlas_was_loaded_ || atlas.look_generation() != look_generation_) {
         atlas_was_loaded_ = atlas.loaded();
         look_generation_ = atlas.look_generation();
+        class_all_ = true;
         std::fill(cached_raw_.begin(), cached_raw_.end(), -1);
         std::fill(cached_shown_.begin(), cached_shown_.end(), -1);
     }
@@ -583,6 +591,9 @@ void MapView::sync()
                 cached_raw_[index] = raw;
                 cached_shown_[index] = shown_key;
                 ++dirty;
+                if (!class_all_) {
+                    class_dirty_.push_back(static_cast<int>(index));
+                }
                 if (!night_stale_) {
                     night_dirty_.push_back(static_cast<int>(index));
                 }
@@ -596,12 +607,18 @@ void MapView::sync()
             cached_raw_[index] = raw;
             cached_shown_[index] = shown;
             ++dirty;
+            if (!class_all_) {
+                class_dirty_.push_back(static_cast<int>(index));
+            }
             if (!night_stale_) {
                 night_dirty_.push_back(static_cast<int>(index));
             }
         }
     }
     last_sync_blits_ = dirty;
+    if (dirty > 0 || class_all_) {
+        refresh_pixel_classes();
+    }
     if (night_dirty_.size() > static_cast<std::size_t>(world_w * world_h)) {
         // Night was held off a long while; retint the whole map once.
         night_dirty_.clear();
@@ -1115,6 +1132,10 @@ void MapView::draw(cairo_t *cr)
     cairo_set_source_surface(cr, dusk && night_pixels_ != nullptr ? night_pixels_ : map_pixels_, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
     cairo_paint(cr);
+    if (!night_hold_ && !dusk && source == TileAtlas::kSize && look_fx::ambient_allowed(effects_)) {
+        // Shimmer and shore foam, under the boats and the other sprites.
+        draw_water(cr, visible_tiles(cr, source, 0));
+    }
 
     if (session_ != nullptr) {
         for (const auto &dot : session_->sprites()) {
@@ -1522,5 +1543,246 @@ void MapView::draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk
             }
         }
     }
+    cairo_restore(cr);
+}
+
+namespace {
+
+int luma(std::uint32_t rgb)
+{
+    return static_cast<int>(((rgb >> 16) & 255u) * 3 + ((rgb >> 8) & 255u) * 6 + (rgb & 255u));
+}
+
+bool is_water_tile(int raw)
+{
+    const int tile = raw < 0 ? -1 : (raw & LOMASK);
+    return tile >= WATER_LOW && tile <= WATER_HIGH;
+}
+
+// One cycle of a sine in 256 steps, -1..1.
+const float *wave_table()
+{
+    static float table[256];
+    static bool built = false;
+    if (!built) {
+        for (int i = 0; i < 256; ++i) {
+            table[i] = static_cast<float>(std::sin(i * 2.0 * look_fx::kPi / 256.0));
+        }
+        built = true;
+    }
+    return table;
+}
+
+} // namespace
+
+void MapView::learn_fx_palette()
+{
+    TileAtlas &atlas = tile_atlas();
+    if (fx_palette_generation_ == atlas.look_generation() && !water_rgb_.empty()) {
+        return;
+    }
+    fx_palette_generation_ = atlas.look_generation();
+    water_rgb_.clear();
+    water_lift_.clear();
+    if (!atlas.loaded()) {
+        return;
+    }
+    // Every colour of the open-water and channel tiles is a water colour.
+    std::uint32_t pixels[TileAtlas::kSize * TileAtlas::kSize];
+    for (int tile : {static_cast<int>(RIVER), static_cast<int>(CHANNEL)}) {
+        atlas.blit(tile, reinterpret_cast<unsigned char *>(pixels), TileAtlas::kSize * 4);
+        for (std::uint32_t pixel : pixels) {
+            const std::uint32_t rgb = pixel & 0xffffffu;
+            if (std::find(water_rgb_.begin(), water_rgb_.end(), rgb) == water_rgb_.end() && water_rgb_.size() < 31) {
+                water_rgb_.push_back(rgb);
+            }
+        }
+    }
+    std::sort(water_rgb_.begin(), water_rgb_.end(), [](std::uint32_t a, std::uint32_t b) { return luma(a) < luma(b); });
+    const std::size_t count = water_rgb_.size();
+    const std::size_t lift = std::max<std::size_t>(1, count / 4);
+    for (std::size_t i = 0; i < count; ++i) {
+        water_lift_.push_back(water_rgb_[std::min(count - 1, i + lift)]);
+    }
+    // Foam: a pale blue-white, on the VGA palette for Classic.
+    foam_rgb_ = atlas.look() == 0 ? (snap_vga_rgb(190, 225, 245) & 0xffffffu) : 0xc4e2f4u;
+}
+
+void MapView::refresh_pixel_classes()
+{
+    if (map_pixels_ == nullptr || source_px() != TileAtlas::kSize || cached_raw_.empty()) {
+        class_dirty_.clear();
+        return;
+    }
+    learn_fx_palette();
+    const int world_w = CitySession::kWorldW;
+    const int world_h = CitySession::kWorldH;
+    const int kTile = TileAtlas::kSize;
+    const int art_w = world_w * kTile;
+    const std::size_t want = static_cast<std::size_t>(art_w) * static_cast<std::size_t>(world_h * kTile);
+    if (pix_class_.size() != want) {
+        pix_class_.assign(want, 0);
+        class_all_ = true;
+    }
+    std::vector<int> tiles;
+    if (class_all_) {
+        tiles.resize(static_cast<std::size_t>(world_w * world_h));
+        for (std::size_t i = 0; i < tiles.size(); ++i) {
+            tiles[i] = static_cast<int>(i);
+        }
+    } else {
+        tiles.swap(class_dirty_);
+    }
+    class_dirty_.clear();
+    class_all_ = false;
+    if (tiles.empty()) {
+        return;
+    }
+    fx_cache_step_ = -1;
+    cairo_surface_flush(map_pixels_);
+    const unsigned char *data = cairo_image_surface_get_data(map_pixels_);
+    const int stride = cairo_image_surface_get_stride(map_pixels_);
+    auto pixel = [&](int x, int y) {
+        return *reinterpret_cast<const std::uint32_t *>(data + y * stride + x * 4) & 0xffffffu;
+    };
+    for (int index : tiles) {
+        const int tx = index % world_w;
+        const int ty = index / world_w;
+        const bool water = is_water_tile(cached_raw_[static_cast<std::size_t>(index)]);
+        for (int r = 0; r < kTile; ++r) {
+            const int y = ty * kTile + r;
+            std::uint8_t *row = pix_class_.data() + static_cast<std::size_t>(y) * art_w;
+            for (int c = 0; c < kTile; ++c) {
+                const int x = tx * kTile + c;
+                std::uint8_t value = static_cast<std::uint8_t>(row[x] & 0x80u);
+                if (water) {
+                    const std::uint32_t rgb = pixel(x, y);
+                    for (std::size_t i = 0; i < water_rgb_.size(); ++i) {
+                        if (water_rgb_[i] == rgb) {
+                            value = static_cast<std::uint8_t>(value | (i + 1));
+                            break;
+                        }
+                    }
+                }
+                row[x] = value;
+            }
+        }
+    }
+    // Shore: water with a non-water pixel beside it. A changed tile can
+    // change its neighbours' shore, so redo a one-tile ring too.
+    const int art_h = world_h * kTile;
+    auto is_water = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= art_w || y >= art_h) {
+            return true;
+        }
+        return (pix_class_[static_cast<std::size_t>(y) * art_w + x] & 0x1fu) != 0;
+    };
+    std::vector<std::uint8_t> done(static_cast<std::size_t>(world_w * world_h), 0);
+    for (int index : tiles) {
+        const int tx0 = index % world_w;
+        const int ty0 = index / world_w;
+        for (int ty = std::max(0, ty0 - 1); ty <= std::min(world_h - 1, ty0 + 1); ++ty) {
+            for (int tx = std::max(0, tx0 - 1); tx <= std::min(world_w - 1, tx0 + 1); ++tx) {
+                std::uint8_t &mark = done[static_cast<std::size_t>(ty * world_w + tx)];
+                if (mark != 0) {
+                    continue;
+                }
+                mark = 1;
+                for (int y = ty * kTile; y < (ty + 1) * kTile; ++y) {
+                    std::uint8_t *row = pix_class_.data() + static_cast<std::size_t>(y) * art_w;
+                    for (int x = tx * kTile; x < (tx + 1) * kTile; ++x) {
+                        row[x] = static_cast<std::uint8_t>(row[x] & ~0x40u);
+                        if ((row[x] & 0x1fu) != 0 &&
+                            (!is_water(x - 1, y) || !is_water(x + 1, y) || !is_water(x, y - 1) || !is_water(x, y + 1))) {
+                            row[x] = static_cast<std::uint8_t>(row[x] | 0x40u);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void MapView::draw_water(cairo_t *cr, const TileSpan &span)
+{
+    if (pix_class_.empty() || water_rgb_.empty() || span.x1 <= span.x0 || span.y1 <= span.y0) {
+        return;
+    }
+    const int kTile = TileAtlas::kSize;
+    const int art_w = CitySession::kWorldW * kTile;
+    const int w = (span.x1 - span.x0) * kTile;
+    const int h = (span.y1 - span.y0) * kTile;
+    const int step = fx_ms_ / kFxStepMs;
+    if (fx_pixels_ == nullptr || cairo_image_surface_get_width(fx_pixels_) < w ||
+        cairo_image_surface_get_height(fx_pixels_) < h) {
+        if (fx_pixels_ != nullptr) {
+            cairo_surface_destroy(fx_pixels_);
+        }
+        fx_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w + 4 * kTile, h + 4 * kTile);
+        fx_cache_step_ = -1;
+    }
+    bool any = false;
+    const bool fresh = fx_cache_step_ == step && fx_cache_span_.x0 == span.x0 && fx_cache_span_.y0 == span.y0 &&
+                       fx_cache_span_.x1 == span.x1 && fx_cache_span_.y1 == span.y1;
+    if (!fresh) {
+        cairo_surface_flush(fx_pixels_);
+        unsigned char *out = cairo_image_surface_get_data(fx_pixels_);
+        const int ostride = cairo_image_surface_get_stride(fx_pixels_);
+        for (int y = 0; y < h; ++y) {
+            std::memset(out + y * ostride, 0, static_cast<std::size_t>(w) * 4);
+        }
+        const float *table = wave_table();
+        const int crest = static_cast<int>(water_rgb_.size()) - 1;
+        // Two slow waves crossing; a band where they add up gets the next
+        // lighter water colour, the very top a rare glint. Shore pixels
+        // get a dotted foam line that crawls along the coast.
+        const int phase_a = (step * 18) & 255;
+        const int phase_b = (step * 11) & 255;
+        for (int ty = span.y0; ty < span.y1; ++ty) {
+            for (int tx = span.x0; tx < span.x1; ++tx) {
+                if (!is_water_tile(cached_raw_[static_cast<std::size_t>(ty * CitySession::kWorldW + tx)])) {
+                    continue;
+                }
+                any = true;
+                for (int y = ty * kTile; y < (ty + 1) * kTile; ++y) {
+                    const std::uint8_t *row = pix_class_.data() + static_cast<std::size_t>(y) * art_w;
+                    auto *dest = reinterpret_cast<std::uint32_t *>(out + (y - span.y0 * kTile) * ostride);
+                    for (int x = tx * kTile; x < (tx + 1) * kTile; ++x) {
+                        const std::uint8_t cls = row[x];
+                        const int idx = (cls & 0x1f) - 1;
+                        if (idx < 0) {
+                            continue;
+                        }
+                        const int ox = x - span.x0 * kTile;
+                        if ((cls & 0x40u) != 0 && ((x + y + step) % 5) == 0) {
+                            dest[ox] = 0xff000000u | foam_rgb_;
+                            continue;
+                        }
+                        const float wave = 0.6f * table[(x * 9 + y * 14 - phase_a) & 255] +
+                                           0.4f * table[(x * 3 - y * 8 + phase_b) & 255];
+                        if (wave > 0.86f && look_fx::hash01(static_cast<std::uint32_t>(x * 73856093 ^ y * 19349663)) > 0.82) {
+                            dest[ox] = 0xff000000u | water_rgb_[static_cast<std::size_t>(crest)];
+                        } else if (wave > 0.55f) {
+                            dest[ox] = 0xff000000u | water_lift_[static_cast<std::size_t>(idx)];
+                        }
+                    }
+                }
+            }
+        }
+        cairo_surface_mark_dirty(fx_pixels_);
+        fx_cache_step_ = step;
+        fx_cache_span_ = span;
+        fx_water_seen_ = any;
+    }
+    if (!fx_water_seen_) {
+        return;
+    }
+    fx_animated_ = true;
+    cairo_save(cr);
+    cairo_rectangle(cr, span.x0 * kTile, span.y0 * kTile, w, h);
+    cairo_clip(cr);
+    cairo_set_source_surface(cr, fx_pixels_, span.x0 * kTile, span.y0 * kTile);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
     cairo_restore(cr);
 }
