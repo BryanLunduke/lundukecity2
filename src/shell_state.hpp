@@ -6,6 +6,7 @@
 
 #include "chart.hpp"
 #include "hotspots.hpp"
+#include "funds_tick.hpp"
 #include "look_fx.hpp"
 #include "pad_feel.hpp"
 #include "city_recovery.hpp"
@@ -120,6 +121,7 @@ private:
     void draw(cairo_t *cr);
     void draw_menubar(cairo_t *cr);
     void draw_info_band(cairo_t *cr);
+    void draw_funds_floats(cairo_t *cr);
     void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
     void draw_handheld_hud(cairo_t *cr);
     void draw_minimap_overlay(cairo_t *cr);
@@ -509,6 +511,11 @@ private:
     int paused_from_ = 2;
     int tool_index_ = 26; // kDefaultToolIndex (Query)
     unsigned city_generation_ = 1;
+    // The rolling Funds readout and its floating change; the band or the
+    // handheld chip sets the float anchor each frame it draws.
+    FundsTicker funds_tick_;
+    double funds_float_x_ = -1.0;
+    double funds_float_y_ = 0.0;
     unsigned save_generation_ = 0;
 
     Dialog dialog_ = Dialog::None;

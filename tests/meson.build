@@ -444,6 +444,15 @@ hotspots = executable(
 
 test('hotspots', hotspots)
 
+# The rolling Funds readout and its floating change.
+funds_tick = executable(
+  'funds_tick',
+  'funds_tick.cpp',
+  include_directories: include_directories('../src'),
+)
+
+test('funds_tick', funds_tick)
+
 # Original 24px toolbar sprites, found beside the source tree.
 tool_icons = executable(
   'tool_icons',

@@ -289,6 +289,8 @@ void Shell::advance_presentation(int elapsed_ms)
     if (elapsed_ms < 0) {
         elapsed_ms = 0;
     }
+    funds_tick_.observe(session_.funds(), city_generation_, motion_on() && city_chosen_ && !welcome_gate_);
+    funds_tick_.advance(elapsed_ms);
     if (event_pan_on_) {
         if (std::fabs(scroll_x_ - event_written_x_) > 0.75 || std::fabs(scroll_y_ - event_written_y_) > 0.75) {
             event_pan_on_ = false;

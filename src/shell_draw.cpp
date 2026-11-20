@@ -3856,6 +3856,8 @@ void Shell::draw(cairo_t *cr)
     } else {
         draw_minimap_overlay(cr);
     }
+    draw_funds_floats(cr);
+    funds_float_x_ = -1.0;
     draw_hover_card(cr);
     if (overlay_on_ && overlay_return_eval_ && dialog_ == Dialog::None) {
         const double chip_w = dp(180);
@@ -5369,6 +5371,32 @@ const char *Shell::tag_font() const
     return font_tag_.c_str();
 }
 
+// The change in Funds drifts away from the readout: income rises toward it
+// in green, spending falls away from it in red. Drawn over the map, after
+// the band or chip has set the anchor this frame.
+void Shell::draw_funds_floats(cairo_t *cr)
+{
+    if (funds_float_x_ < 0.0 || funds_tick_.floats.empty()) {
+        return;
+    }
+    for (const FundsTicker::Float &one : funds_tick_.floats) {
+        const double age = std::clamp(static_cast<double>(one.ms) / FundsTicker::kFloatMs, 0.0, 1.0);
+        const double travel = look_fx::ease_out_cubic(age);
+        const bool income = one.delta > 0;
+        const double y = income ? funds_float_y_ + dp(14) * (1.0 - travel) : funds_float_y_ + dp(18) * travel;
+        const double alpha = age < 0.55 ? 1.0 : 1.0 - (age - 0.55) / 0.45;
+        const double pop = one.ms < 120 ? one.ms / 120.0 : 1.0;
+        const std::string text = (income ? "+" : "") + civic::dollars(one.delta);
+        const SlateInk &ink = income ? kSlateGood : kSlateBad;
+        const TextMetrics m = measure_text(cr, bold_font(), text, -1);
+        cairo_push_group(cr);
+        slate_round(cr, funds_float_x_ - dp(4), y - dp(1), m.width + dp(8), m.height + dp(2), dp(5), kSlateDeep, 0.78);
+        slate_text(cr, bold_font(), text, funds_float_x_, y, ink);
+        cairo_pop_group_to_source(cr);
+        cairo_paint_with_alpha(cr, std::max(0.0, alpha) * pop);
+    }
+}
+
 void Shell::draw_info_band(cairo_t *cr)
 {
     const double y = band_y_;
@@ -5465,8 +5493,18 @@ void Shell::draw_info_band(cairo_t *cr)
         switch (k) {
         case Funds: {
             const bool broke = session_.funds() < 0;
-            slate_text(cr, bold_font(), funds, x, value_y, broke ? kSlateBad : kSlateGold);
-            const double tx = x + measure_text(cr, bold_font(), funds, -1).width + dp(6);
+            const std::string funds_now = civic::dollars(funds_tick_.shown());
+            const double now_w = measure_text(cr, bold_font(), funds_now, -1).width;
+            const double glint = funds_tick_.glint();
+            if (glint > 0.0) {
+                slate_round(cr, x - dp(4), value_y - dp(1), now_w + dp(8), dp(18), dp(5), kSlateGold, 0.24 * glint);
+            }
+            const int roll = funds_tick_.trend();
+            slate_text(cr, bold_font(), funds_now, x, value_y,
+                       roll > 0 ? kSlateGood : (roll < 0 || broke ? kSlateBad : kSlateGold));
+            funds_float_x_ = x;
+            funds_float_y_ = value_y + dp(18);
+            const double tx = x + std::max(now_w, static_cast<double>(measure_text(cr, bold_font(), funds, -1).width)) + dp(6);
             const double ty = value_y + dp(8);
             if (flow != 0) {
                 const SlateInk &trend = flow > 0 ? kSlateGood : kSlateBad;
@@ -5814,7 +5852,18 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         slate_round(cr, x, top, w, chip_h, dp(10), kSlateBand, 0.94);
         const double ty = top + (chip_h - measure_text(cr, bold_font(), "Ag", -1).height) / 2.0;
         double cx = x + pad;
-        slate_text(cr, bold_font(), funds, cx, ty, session_.funds() < 0 ? kSlateBad : kSlateGold);
+        {
+            const std::string funds_now = civic::dollars(funds_tick_.shown());
+            const double glint = funds_tick_.glint();
+            if (glint > 0.0) {
+                slate_round(cr, cx - dp(4), top + dp(4), fw + dp(8), chip_h - dp(8), dp(6), kSlateGold, 0.24 * glint);
+            }
+            const int roll = funds_tick_.trend();
+            slate_text(cr, bold_font(), funds_now, cx, ty,
+                       roll > 0 ? kSlateGood : (roll < 0 || session_.funds() < 0 ? kSlateBad : kSlateGold));
+            funds_float_x_ = cx;
+            funds_float_y_ = top + chip_h + dp(4);
+        }
         cx += fw + sep;
         slate_text(cr, bold_font(), date, cx, ty, kSlateInk);
         cx += dw + sep;

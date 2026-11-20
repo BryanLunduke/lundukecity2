@@ -1241,7 +1241,8 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
     reasons.motion = scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                     puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due() || map_.ui_animating();
+                     puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due() || map_.ui_animating() ||
+                     funds_tick_.active();
     return reasons;
 }
 
@@ -1304,7 +1305,7 @@ void Shell::loop()
                 timeout = std::min(timeout, 30);
             }
             if (scene_fade_.active() || panel_settle_ > 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                puff_on_ || pop_on_ || flash_on_ || map_.ui_animating()) {
+                puff_on_ || pop_on_ || flash_on_ || map_.ui_animating() || funds_tick_.active()) {
                 timeout = std::min(timeout, 16);
             }
             if (menu_.open() && menu_edge_dir_ != 0) {
