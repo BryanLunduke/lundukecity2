@@ -1,81 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Lunduke City 2 app icon (A3f): slate tile, polished gold frame with a fine
+     inner line, and the city skyline as one continuous gold stroke that rises
+     from the horizon, runs over every roof, and returns to the horizon. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-
   <defs>
-    <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="8" result="b"/>
-      <feOffset dx="8" dy="12" result="o"/>
-      <feComponentTransfer in="o" result="a">
-        <feFuncA type="linear" slope="0.40"/>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5.6"/>
+      <feOffset dy="4.6" result="blur"/>
+      <feComponentTransfer in="blur" result="soft">
+        <feFuncA type="linear" slope="0.45"/>
       </feComponentTransfer>
       <feMerge>
-        <feMergeNode in="a"/>
+        <feMergeNode in="soft"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-    <linearGradient id="bpFace" x1="0.15" y1="0.05" x2="0.85" y2="0.95">
-      <stop offset="0%" stop-color="#78b4e0"/>
-      <stop offset="45%" stop-color="#3a82b8"/>
-      <stop offset="100%" stop-color="#1e5088"/>
+    <linearGradient id="slate" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="244">
+      <stop offset="0" stop-color="#202936"/>
+      <stop offset="1" stop-color="#121820"/>
     </linearGradient>
-    <linearGradient id="bpEdge" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#3a78b0"/>
-      <stop offset="100%" stop-color="#123868"/>
+    <linearGradient id="frame" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="244">
+      <stop offset="0" stop-color="#FFE08A"/>
+      <stop offset="0.35" stop-color="#F2C14E"/>
+      <stop offset="0.6" stop-color="#8F6A1E"/>
+      <stop offset="0.8" stop-color="#F2C14E"/>
+      <stop offset="1" stop-color="#FFE08A"/>
     </linearGradient>
-    <linearGradient id="bpGloss" x1="0" y1="0" x2="0.6" y2="0.7">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
-      <stop offset="55%" stop-color="#ffffff" stop-opacity="0.06"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="pencilY" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffe070"/>
-      <stop offset="40%" stop-color="#e0a820"/>
-      <stop offset="100%" stop-color="#986810"/>
-    </linearGradient>
-    <linearGradient id="pencilHL" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff8d0"/>
-      <stop offset="100%" stop-color="#e0a820" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="ferrule" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f0f4f8"/>
-      <stop offset="40%" stop-color="#a8b0bc"/>
-      <stop offset="100%" stop-color="#606870"/>
-    </linearGradient>
-    <linearGradient id="eraser" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffb0c0"/>
-      <stop offset="100%" stop-color="#d06078"/>
-    </linearGradient>
-    <linearGradient id="curlUnd" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#c8e4f4"/>
-      <stop offset="100%" stop-color="#78b0d8"/>
+    <linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="0" y1="44" x2="0" y2="192">
+      <stop offset="0" stop-color="#FFE08A"/>
+      <stop offset="0.45" stop-color="#F2C14E"/>
+      <stop offset="0.75" stop-color="#C9A646"/>
+      <stop offset="1" stop-color="#F2C14E"/>
     </linearGradient>
   </defs>
-
-
-  <g filter="url(#softShadow)" transform="rotate(-10 128 128)">
-    <!-- thickness edge -->
-    <polygon points="52,48 208,42 220,214 64,222" fill="url(#bpEdge)"/>
-    <!-- face -->
-    <polygon points="48,42 200,36 208,204 56,212" fill="url(#bpFace)"/>
-    <!-- gloss -->
-    <polygon points="48,42 170,38 110,120 48,130" fill="url(#bpGloss)"/>
-    <!-- top rim highlight -->
-    <polyline points="48,42 200,36" fill="none" stroke="#c8e8fc" stroke-width="2.2" stroke-opacity="0.7"/>
-    <polyline points="48,42 56,212" fill="none" stroke="#a0d0f0" stroke-width="1.6" stroke-opacity="0.45"/>
-
-    <g fill="none" stroke="#e8f6ff" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M78,70 V190 M105,68 V192 M138,66 V194 M168,64 V192" stroke-width="1.6" stroke-opacity="0.75"/>
-      <path d="M60,78 H190 M58,105 H192 M56,135 H194 M58,162 H192 M60,188 H188" stroke-width="1.5" stroke-opacity="0.7"/>
-      <path d="M60,132 H192" stroke-width="3.2" stroke="#f4fbff"/>
-      <path d="M128,55 V200" stroke-width="2.6"/>
-      <ellipse cx="168" cy="92" rx="18" ry="13" stroke-width="1.8"/>
-      <path d="M158,84 l6,16 M164,82 l6,16 M170,82 l6,16" stroke-width="1.2" stroke-opacity="0.7"/>
-      <rect x="80" y="78" width="22" height="22" stroke-width="1.5"/>
-      <rect x="142" y="142" width="24" height="22" stroke-width="1.5"/>
-      <rect x="80" y="142" width="22" height="22" stroke-width="1.5"/>
-    </g>
-
-
+  <g filter="url(#shadow)">
+    <rect x="12" y="12" width="232" height="232" rx="40" fill="url(#slate)" stroke="url(#frame)" stroke-width="5"/>
+    <rect x="22" y="22" width="212" height="212" rx="32" fill="none" stroke="#C9A646" stroke-opacity="0.55" stroke-width="1"/>
+    <path fill="#161D27" d="M40 192 L40 146 L59 134 L59 122 L62 122 L62 115 L65 115 L65 109 L71 109 L71 115 L74 115 L74 122 L77 122 L77 134 L101 134 L101 80 L106 80 L106 72 L110 72 L110 64 L111.6 64 L114 38 L116.4 64 L118 64 L118 72 L122 72 L122 80 L127 80 L127 108 L131 108 L131 102 L134 102 L134 96 L140 96 L140 102 L143 102 L143 108 L147 108 L147 128 L153 128 L153 122 L165 122 L165 128 L171 128 L171 100 L175 100 L175 94 L178.5 94 L178.5 74 L181.5 74 L181.5 94 L185 94 L185 100 L189 100 L189 142 L216 142 L216 192 Z"/>
+    <path fill="none" stroke="url(#gold)" stroke-width="2.4" stroke-linejoin="miter" stroke-miterlimit="8" stroke-linecap="round"
+          d="M30 192 L40 192 L40 146 L59 134 L59 122 L62 122 L62 115 L65 115 L65 109 L71 109 L71 115 L74 115 L74 122 L77 122 L77 134 L101 134 L101 80 L106 80 L106 72 L110 72 L110 64 L111.6 64 L114 38 L116.4 64 L118 64 L118 72 L122 72 L122 80 L127 80 L127 108 L131 108 L131 102 L134 102 L134 96 L140 96 L140 102 L143 102 L143 108 L147 108 L147 128 L153 128 L153 122 L165 122 L165 128 L171 128 L171 100 L175 100 L175 94 L178.5 94 L178.5 74 L181.5 74 L181.5 94 L185 94 L185 100 L189 100 L189 142 L216 142 L216 192 L226 192"/>
   </g>
-
 </svg>
