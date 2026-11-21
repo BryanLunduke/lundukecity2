@@ -414,6 +414,44 @@ int main()
             cairo_surface_destroy(sheet);
         }
 #endif
+        {
+            // The added churches (956-1018) light like a zone of their own
+            // 3x3 size: a powered one glows around its centre, an unpowered
+            // one and the ground beside it stay dark.
+            const int cw = 14;
+            const int ch = 6;
+            std::vector<int> church_map(static_cast<std::size_t>(cw * ch), DIRT);
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    church_map[static_cast<std::size_t>((2 + dy) * cw + 2 + dx)] = (CHURCH3 - 4 + (dy + 1) * 3 + dx + 1);
+                    church_map[static_cast<std::size_t>((2 + dy) * cw + 9 + dx)] = (CHURCH3 - 4 + (dy + 1) * 3 + dx + 1);
+                }
+            }
+            church_map[static_cast<std::size_t>(2 * cw + 2)] |= ZONEBIT | PWRBIT;
+            church_map[static_cast<std::size_t>(2 * cw + 9)] |= ZONEBIT;
+            const int clw = cw * night_light::kPx;
+            std::vector<std::uint32_t> church_px(static_cast<std::size_t>(clw * ch * night_light::kPx), 0);
+            std::vector<night_light::MaskRows> church_masks(static_cast<std::size_t>(TILE_COUNT * night_light::kTile), 0);
+            night_light::build(church_map, cw, ch, reinterpret_cast<unsigned char *>(church_px.data()), clw * 4,
+                               &church_masks);
+            auto church_light = [&](int tx0, int tx1) {
+                int sum = 0;
+                for (int py = 0; py < ch * night_light::kPx; ++py) {
+                    for (int px = tx0 * night_light::kPx; px < (tx1 + 1) * night_light::kPx; ++px) {
+                        sum += static_cast<int>(church_px[static_cast<std::size_t>(py * clw + px)] >> 24);
+                    }
+                }
+                return sum;
+            };
+            check(night_light::glow_for_tile(CHURCH1BASE) == night_light::Glow::Church &&
+                      night_light::glow_for_tile(CHURCH7LAST) == night_light::Glow::Church &&
+                      night_light::glow_for_tile(CHURCH7LAST + 1) == night_light::Glow::None,
+                  "church tiles 956-1018 have a lighting type");
+            check(night_light::wants_windows(CHURCH1BASE + 4), "a church's panes can light");
+            check(church_light(1, 3) > 0, "a powered church glows");
+            check(church_light(8, 10) == 0, "an unpowered church is dark");
+            check(church_light(5, 6) == 0, "a church's light stays near it");
+        }
         check(night_light::glow_for_tile(DIRT) == night_light::Glow::None, "dirt does not glow");
         check(night_light::glow_for_tile(RESBASE) == night_light::Glow::None, "an empty lot has no windows");
         check(night_light::hash(3, 4, 5) == night_light::hash(3, 4, 5) && night_light::hash(3, 4, 5) != night_light::hash(4, 3, 5),

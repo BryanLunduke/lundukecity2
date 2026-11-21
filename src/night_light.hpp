@@ -26,7 +26,7 @@ constexpr int kTile = 16;
 // is a window. Masks for a whole atlas are kept as 16 rows per tile.
 using MaskRows = std::uint16_t;
 
-enum class Glow { None, Home, Shop, Works, Civic, Plant, Stadium, Port, Fire, Road };
+enum class Glow { None, Home, Shop, Works, Civic, Plant, Stadium, Port, Fire, Road, Church };
 
 Glow glow_for_tile(int tile);
 
