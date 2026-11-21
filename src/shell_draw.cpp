@@ -1879,7 +1879,16 @@ void Shell::draw_dialog(cairo_t *cr)
               static_cast<int>(dw - 2 * margin));
         const double list_top = y + header;
         const double buttons_y = y + dh - margin - dp(36);
-        const double detail_h = dp(52);
+        // Room for the chosen scenario's goal: two lines, or more when the
+        // longest goal (with its hint) wraps further at a large UI scale.
+        // The longest, so the list does not change length as you scroll.
+        double goal_h = 0;
+        for (int i = 0; i < count; ++i) {
+            goal_h = std::max(goal_h, static_cast<double>(measure_text(cr, ui_font(), CitySession::scenario_def(i).goal,
+                                                                       static_cast<int>(dw - 2 * margin))
+                                                              .height));
+        }
+        const double detail_h = std::max(static_cast<double>(dp(52)), goal_h + dp(12));
         const double list_room = std::max(row_h, buttons_y - dp(8) - detail_h - list_top);
         int visible = static_cast<int>(list_room / row_h);
         if (visible < 1) {
