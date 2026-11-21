@@ -1031,6 +1031,7 @@ void Shell::bind_session()
     select_tool(kDefaultToolIndex);
     map_.on_tool_down = [this](int x, int y) {
         if (terrain_edit_) {
+            terrain_history_.begin_stroke();
             paint_terrain_line(x, y, x, y);
             return;
         }
@@ -1157,6 +1158,10 @@ std::string Shell::visual_stamp() const
         << menu_.alt_shown << ' ' << scroll_x_ << ' ' << scroll_y_ << ' ' << map_.tile_size() << ' ' << tool_index_ << ' '
         << speed_ << ' ' << volume_ << ' ' << scale_percent_ << ' ' << pause_unfocused_ << ' ' << slate_ << night_
         << layout_pref_ << handheld_ << effects_ << ' ' << session_.map_serial()
+        // The terrain editor paints its own session: an undo (a key, no
+        // pointer motion) or a piece or brush key has to repaint too.
+        << ' ' << terrain_edit_ << ' ' << terrain_piece_ << ' ' << terrain_brush_ << ' '
+        << (terrain_session_ != nullptr ? terrain_session_->map_serial() : 0u)
         << ' ' << session_.funds() << ' ' << session_.city_name() << ' '
         << session_.date_text() << ' ' << session_.scenario_years_left() << ' ' << session_.scenario_progress() << ' '
         << session_.message_serial() << ' ' << session_.message() << ' ' << welcome_gate_ << ' ' << shown_message_ << ' '
@@ -2636,8 +2641,19 @@ void Shell::handle_event(const SDL_Event &event)
                     gamepad_use_cursor(true);
                     release_pad_drag();
                 } else {
-                    close_terrain_editor(true);
+                    complete_terrain_editor();
                 }
+                break;
+            }
+#if defined(__APPLE__)
+            const bool command = ctrl || (event.key.mod & SDL_KMOD_GUI) != 0;
+#else
+            const bool command = ctrl;
+#endif
+            const bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+            if (command && !alt && (letter == 'z' || letter == 'y')) {
+                // Undo the last stroke; Ctrl+Y or Ctrl+Shift+Z lays it again.
+                step_terrain_history(letter == 'y' || shift);
                 break;
             }
             if (!ctrl && !alt && key >= SDLK_1 && key < SDLK_1 + terrain_paint::kPieceCount) {

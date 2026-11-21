@@ -549,7 +549,8 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         select_save_name();
     } else if (dialog == Dialog::FileDelete) {
         focus_id_ = kCancel;
-    } else if (dialog == Dialog::QuitConfirm || dialog == Dialog::BulldozeConfirm || dialog == Dialog::TerrainDiscard) {
+    } else if (dialog == Dialog::QuitConfirm || dialog == Dialog::BulldozeConfirm || dialog == Dialog::TerrainDiscard ||
+               dialog == Dialog::TerrainLowLand) {
         // Cancel is the focused button, so a stray A does not leave the game
         // or knock down the building.
         focus_id_ = kCancel;
@@ -2494,6 +2495,14 @@ void Shell::on_dialog_button(int id)
         close_dialog();
         if (id == kDiscard) {
             close_terrain_editor(false);
+        }
+        return;
+    }
+    if (dialog_ == Dialog::TerrainLowLand) {
+        // Keep editing, or keep the mostly-water map as it is.
+        close_dialog();
+        if (id == kOk) {
+            close_terrain_editor(true);
         }
         return;
     }

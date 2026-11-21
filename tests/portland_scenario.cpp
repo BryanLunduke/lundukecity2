@@ -20,6 +20,11 @@
 #include <string>
 #include <vector>
 
+// Micropolis names this struct a friend, so the test can run doFire.
+struct SimulatorProbe {
+    static void fire(Micropolis &sim, int x, int y) { sim.doFire(Position(x, y)); }
+};
+
 namespace {
 
 int fail(int code, const std::string &message)
@@ -296,6 +301,47 @@ int main()
             return fail(26, "a reloaded riot fire did not block the win");
         }
         std::remove(path.c_str());
+    }
+
+    // In Portland a riot fire in a fire station's good cover burns out on
+    // its next pass (PORTLAND_RIOT_FIRE_RATE_DIVISOR). An ordinary fire
+    // there, or a riot fire in any other city, keeps the classic odds (out
+    // one pass in three), so some of 200 of those are still burning.
+    {
+        Micropolis f;
+        for (int x = 0; x < WORLD_W; ++x) {
+            for (int y = 0; y < WORLD_H; ++y) {
+                f.map[x][y] = DIRT;
+            }
+        }
+        f.fireStationEffectMap.worldSet(50, 60, 50);
+        auto burning = [&f]() {
+            const int tile = f.map[50][60] & LOMASK;
+            return tile >= FIREBASE && tile <= LASTFIRE;
+        };
+        auto survivors = [&](Scenario type, bool riot) {
+            f.scoreType = type;
+            int left = 0;
+            for (int i = 0; i < 200; ++i) {
+                f.map[50][60] = FIRE | ANIMBIT;
+                f.cityEvents.riotFire[50][60] = 0;
+                if (riot) {
+                    f.markRiotFire(50, 60);
+                }
+                SimulatorProbe::fire(f, 50, 60);
+                left += burning() ? 1 : 0;
+            }
+            return left;
+        };
+        if (survivors(SC_PORTLAND, true) != 0) {
+            return fail(28, "a Portland riot fire in good fire cover did not burn out on its next pass");
+        }
+        if (survivors(SC_PORTLAND, false) == 0) {
+            return fail(29, "an ordinary fire in Portland burns out as fast as a riot fire");
+        }
+        if (survivors(SC_NONE, true) == 0) {
+            return fail(30, "a riot fire outside the Portland scenario burns out faster than the classic odds");
+        }
     }
 
     // A city with no riot fires reads as riot fires out on the meter.

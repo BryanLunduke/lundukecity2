@@ -139,7 +139,7 @@ const char *city_class_name(CityClass city_class)
 #define SEATTLE_CRIME_GOAL_TEXT "60"
 #define SF1962_CRIME_GOAL_TEXT "45"
 #define PORTLAND_CRIME_GOAL_TEXT "60"
-#define SANDIEGO_POPULATION_GOAL_TEXT "120,000"
+#define SANDIEGO_POPULATION_GOAL_TEXT "100,000"
 
 // The folder holding one of City 2's own scenario maps: the installed
 // share/lunduke-city-2/scenarios (or data/scenarios beside a build), else
@@ -189,7 +189,8 @@ std::string sf1962_escape_short(const Micropolis &sim)
 
 std::string sf1962_escape_long(const Micropolis &sim)
 {
-    return sim.cityEvents.prisonSteps > 0 ? "Alcatraz escapees at large → round them up" : "no escapees at large";
+    return sim.cityEvents.prisonSteps > 0 ? "Alcatraz escapees at large → police by the Wharf round them up"
+                                          : "no escapees at large";
 }
 
 // The Portland meter's riot and fire part. Only fires the riot started
@@ -210,7 +211,7 @@ std::string portland_fires_long(const Micropolis &sim)
     std::string text = sim.cityEvents.riotSteps > 0 ? "riot under way, " : "";
     if (fires > 0) {
         return text + std::to_string(fires) + (fires == 1 ? " riot fire burning" : " riot fires burning") +
-               " → put them out";
+               " → fire stations by them, bulldoze firebreaks";
     }
     return text + "all riot fires out";
 }
@@ -254,7 +255,7 @@ std::string seattle_zone_long(const Micropolis &sim)
         return "no Autonomous Zone";
     }
     return "Autonomous Zone holds " + std::to_string(blocks) + (blocks == 1 ? " block" : " blocks") +
-           " → clear it";
+           " → ring it with police stations";
 }
 
 struct ScenarioEntry {
@@ -299,19 +300,23 @@ const ScenarioEntry kScenarios[] = {
     // tools/seattle_map.cpp). It opens in late May 2020; the Autonomous
     // Zone takes Cal Anderson Park and a block of Capitol Hill in June.
     {{SC_SEATTLE, "Seattle", 2020, "An Autonomous Zone takes over Capitol Hill.",
-      "Clear the Autonomous Zone and bring average crime below " SEATTLE_CRIME_GOAL_TEXT " by mid-2025.", SEATTLE_YEARS},
+      "Clear the Autonomous Zone and bring average crime below " SEATTLE_CRIME_GOAL_TEXT
+      " by mid-2025. Ring the zone with police stations: strong police cover shrinks it.",
+      SEATTLE_YEARS},
      "seattle.cty", true},
     // San Francisco as it stood in 1962 (data/scenarios/sanfrancisco1962.cty,
     // built by tools/sf1962_map.cpp). It opens in May 1962; in June the
     // inmates break out of Alcatraz and come ashore at Fisherman's Wharf.
     {{SC_SAN_FRANCISCO_1962, "San Francisco", 1962, "Inmates break out of Alcatraz.",
-      "Round up the Alcatraz escapees and bring average crime below " SF1962_CRIME_GOAL_TEXT " by mid-1964.",
+      "Round up the Alcatraz escapees and bring average crime below " SF1962_CRIME_GOAL_TEXT
+      " by mid-1964. Police stations by Fisherman's Wharf round them up sooner.",
       SF1962_YEARS},
      "sanfrancisco1962.cty", true},
     // Portland (data/scenarios/portland.cty, built by tools/portland_map.cpp).
     // It opens in mid-July 2020; in August a riot breaks out downtown.
     {{SC_PORTLAND, "Portland", 2020, "A riot sets downtown Portland on fire.",
-      "Put out the riot fires and bring average crime below " PORTLAND_CRIME_GOAL_TEXT " by summer 2021.",
+      "Put out the riot fires and bring average crime below " PORTLAND_CRIME_GOAL_TEXT
+      " by summer 2021. Build fire stations by the riot, and bulldoze firebreaks if it spreads.",
       PORTLAND_YEARS},
      "portland.cty", true},
     // San Diego (data/scenarios/sandiego.cty, built by tools/sandiego_map.cpp).

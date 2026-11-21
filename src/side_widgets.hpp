@@ -67,6 +67,8 @@ public:
 private:
     AspectBox land_box(int width, int height) const;
     void paint_viewport(cairo_t *cr, int width, int height) const;
+    // A small marker where the San Diego lion (or any loose zoo lion) is.
+    void paint_lion(cairo_t *cr, int width, int height) const;
     void sync_engraved();
     void draw_engraved(cairo_t *cr, int width, int height);
 

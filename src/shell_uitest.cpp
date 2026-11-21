@@ -1865,6 +1865,28 @@ void Shell::drive_ui_test()
             fail("a 3x3 water click turned " + std::to_string(wet) + " tiles wet (or touched the city)");
             return;
         }
+        // Ctrl+Z takes the water click back; Ctrl+Y lays it again.
+        {
+            const std::vector<unsigned short> wet_map = terrain_work_;
+            auto chord = [&](SDL_Keycode key) {
+                SDL_Event event{};
+                event.type = SDL_EVENT_KEY_DOWN;
+                event.key.key = key;
+                event.key.down = true;
+                event.key.mod = SDL_KMOD_LCTRL;
+                handle_event(event);
+            };
+            chord(SDLK_Z);
+            if (terrain_work_ != before || terrain_session_->terrain_tiles() != before || !terrain_edit_) {
+                fail("Ctrl+Z did not undo the last brush stroke");
+                return;
+            }
+            chord(SDLK_Y);
+            if (terrain_work_ != wet_map || terrain_session_->terrain_tiles() != wet_map || terrain_changed_ == 0) {
+                fail("Ctrl+Y did not redo the brush stroke");
+                return;
+            }
+        }
         key_down(SDLK_B);
         if (terrain_brush_ != terrain_paint::kBrushSmall) {
             fail("B did not switch the brush back to 1x1");
@@ -1898,6 +1920,23 @@ void Shell::drive_ui_test()
                 return;
             }
             gamepad_nav_ = false;
+        }
+        // Map Complete on a map that is nearly all water asks first;
+        // Escape there keeps editing with the map as it was.
+        {
+            const std::vector<unsigned short> kept = terrain_work_;
+            terrain_work_.assign(kept.size(), terrain_paint::piece_tile(terrain_paint::Piece::Water));
+            key_down(SDLK_RETURN);
+            if (dialog_ != Dialog::TerrainLowLand || !terrain_edit_) {
+                fail("Map Complete on an all-water map did not warn first");
+                return;
+            }
+            key_down(SDLK_ESCAPE);
+            if (dialog_ != Dialog::None || !terrain_edit_) {
+                fail("Escape on the low-land warning did not keep editing");
+                return;
+            }
+            terrain_work_ = kept;
         }
         // Escape after painting asks first; Escape there keeps editing.
         key_down(SDLK_ESCAPE);

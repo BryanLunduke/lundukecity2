@@ -69,7 +69,7 @@ void census(Micropolis &sim, long people)
 }
 
 // SANDIEGO_POPULATION_GOAL as the catalog and the meter write it.
-const char *const kGoalText = "120,000";
+const char *const kGoalText = "100,000";
 
 } // namespace
 
@@ -86,7 +86,7 @@ int main()
         std::string(def.goal).find("four months") == std::string::npos) {
         return fail(2, std::string("the goal text does not match the San Diego goal: ") + def.goal);
     }
-    if (SANDIEGO_POPULATION_GOAL != 120000) {
+    if (SANDIEGO_POPULATION_GOAL != 100000) {
         return fail(2, "update kGoalText with SANDIEGO_POPULATION_GOAL");
     }
     if (SANDIEGO_LION_CATCH_STEPS != 16 || SANDIEGO_LION_CATCH_STEPS >= city_events::kLionMaxSteps) {

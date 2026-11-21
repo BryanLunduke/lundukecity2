@@ -912,6 +912,13 @@ static const int SF1962_YEARS = 2;
 static const int PORTLAND_CRIME_GOAL = 60;
 static const int PORTLAND_RIOT_WAIT = 3;
 static const int PORTLAND_YEARS = 1;
+/**
+ * Portland: Micropolis::doFire divides a riot fire's extinguish rate by
+ * this (10 → 3 with no fire station close by, 3 → 1 in thin cover, 2 or 1 → 0
+ * in good cover, which puts it out on its next pass). Ordinary fires keep
+ * the classic rates.
+ */
+static const int PORTLAND_RIOT_FIRE_RATE_DIVISOR = 3;
 
 /**
  * San Diego scenario (Lunduke City 2): a lion gets out of the San Diego Zoo
@@ -924,7 +931,7 @@ static const int PORTLAND_YEARS = 1;
  */
 static const int SANDIEGO_LION_WAIT = 5;
 static const int SANDIEGO_LION_CATCH_STEPS = 16;
-static const int SANDIEGO_POPULATION_GOAL = 120000;
+static const int SANDIEGO_POPULATION_GOAL = 100000;
 static const int SANDIEGO_YEARS = 2;
 
 

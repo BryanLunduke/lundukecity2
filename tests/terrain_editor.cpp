@@ -7,6 +7,7 @@
 // a new city starts on.
 
 #include "city_session.hpp"
+#include "terrain_history.hpp"
 #include "terrain_paint.hpp"
 
 #include "micropolis.h"
@@ -153,6 +154,47 @@ int main()
         if (tile_at(tiles, 21, 21) != CHANNEL) {
             return fail(23, "channel was not laid");
         }
+        // Channel on clear land brings a shore-edged ring of water, and no
+        // channel tile is left touching land (it showed flat sides).
+        {
+            std::vector<unsigned short> dry(static_cast<std::size_t>(kW * kH), DIRT);
+            terrain_paint::paint(dry, kW, kH, 70, 40, Piece::Channel, terrain_paint::kBrushSmall);
+            if (tile_at(dry, 70, 40) != CHANNEL) {
+                return fail(25, "channel on land was not laid");
+            }
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const unsigned short raw = tile_at(dry, 70 + dx, 40 + dy);
+                    if ((dx != 0 || dy != 0) && (!terrain_paint::is_water(raw) || (raw & BULLBIT) == 0)) {
+                        return fail(26, "channel on land has no shore-edged water around it");
+                    }
+                }
+            }
+            terrain_paint::paint(dry, kW, kH, 90, 40, Piece::Channel, terrain_paint::kBrushLarge);
+            terrain_paint::paint(dry, kW, kH, 92, 42, Piece::Ground, terrain_paint::kBrushSmall);
+            terrain_paint::paint(dry, kW, kH, 0, 0, Piece::Channel, terrain_paint::kBrushLarge);
+            for (int y = 0; y < kH; ++y) {
+                for (int x = 0; x < kW; ++x) {
+                    if (tile_at(dry, x, y) != CHANNEL) {
+                        continue;
+                    }
+                    for (int dy = -1; dy <= 1; ++dy) {
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            const int nx = x + dx;
+                            const int ny = y + dy;
+                            if (nx >= 0 && ny >= 0 && nx < kW && ny < kH && !terrain_paint::is_water(tile_at(dry, nx, ny))) {
+                                std::fprintf(stderr, "channel %d,%d touches land at %d,%d\n", x, y, nx, ny);
+                                return fail(27, "a channel tile touches land");
+                            }
+                        }
+                    }
+                }
+            }
+            // The corner channel still runs off the map edge.
+            if (tile_at(dry, 0, 0) != CHANNEL) {
+                return fail(28, "channel at the map corner was not laid");
+            }
+        }
         // Water over forest: the trees around it redraw their edges.
         std::vector<unsigned short> wood(static_cast<std::size_t>(kW * kH), DIRT);
         terrain_paint::paint(wood, kW, kH, 51, 51, Piece::Trees, terrain_paint::kBrushLarge);
@@ -234,6 +276,90 @@ int main()
         editor.set_terrain_tiles(std::vector<unsigned short>(3, DIRT));
         if (editor.terrain_tiles() != land) {
             return fail(44, "a wrong-size set_terrain_tiles was used");
+        }
+    }
+
+    // 5b. How much of a map is land, for Map Complete's warning.
+    {
+        std::vector<unsigned short> sea(static_cast<std::size_t>(kW * kH), RIVER);
+        if (terrain_paint::land_percent(sea) != 0) {
+            return fail(45, "an all-water map has land");
+        }
+        for (std::size_t i = 0; i < sea.size() / 10; ++i) {
+            sea[i] = static_cast<unsigned short>(i % 2 == 0 ? DIRT : (WOODS | BLBNBIT));
+        }
+        if (terrain_paint::land_percent(sea) != 10 || terrain_paint::land_percent(sea) >= terrain_paint::kLowLandPercent) {
+            return fail(46, "a tenth of land and trees is not 10% land");
+        }
+        if (terrain_paint::land_percent(generated(42, -1, -1, -1, -1)) < terrain_paint::kLowLandPercent) {
+            return fail(47, "a generated map would warn about too little land");
+        }
+    }
+
+    // 6. Undo and redo, one step per brush stroke, the way the editor
+    // drives TerrainHistory: begin_stroke on button down, a snapshot before
+    // the stroke's first change, Ctrl+Z / Ctrl+Y.
+    {
+        std::vector<unsigned short> work(static_cast<std::size_t>(kW * kH), DIRT);
+        const std::vector<unsigned short> opened = work;
+        TerrainHistory history;
+        auto stroke = [&](int x0, int x1, int y, Piece piece, int size) {
+            history.begin_stroke();
+            for (int x = x0; x <= x1; ++x) {
+                const bool first = history.wants_snapshot();
+                std::vector<unsigned short> before;
+                if (first) {
+                    before = work;
+                }
+                if (terrain_paint::paint(work, kW, kH, x, y, piece, size) > 0 && first) {
+                    history.record(std::move(before));
+                }
+            }
+        };
+        stroke(10, 20, 30, Piece::Water, terrain_paint::kBrushLarge);
+        const std::vector<unsigned short> after_one = work;
+        stroke(40, 45, 50, Piece::Trees, terrain_paint::kBrushSmall);
+        const std::vector<unsigned short> after_two = work;
+        if (history.undo_steps() != 2 || after_one == opened || after_two == after_one) {
+            return fail(50, "two strokes did not make two undo steps");
+        }
+        // A click that changes nothing (water on water) is not a step.
+        stroke(15, 15, 30, Piece::Water, terrain_paint::kBrushSmall);
+        if (history.undo_steps() != 2 || work != after_two) {
+            return fail(51, "a stroke that changed nothing made an undo step");
+        }
+        if (!history.undo(work) || work != after_one || !history.undo(work) || work != opened) {
+            return fail(52, "undo did not put the map back stroke by stroke");
+        }
+        if (history.undo(work) || work != opened) {
+            return fail(53, "undo with nothing left changed the map");
+        }
+        if (!history.redo(work) || work != after_one || !history.redo(work) || work != after_two ||
+            history.redo(work)) {
+            return fail(54, "redo did not lay the strokes again");
+        }
+        // A new stroke after an undo drops what could be redone.
+        history.undo(work);
+        stroke(60, 62, 20, Piece::Channel, terrain_paint::kBrushSmall);
+        if (history.can_redo() || history.undo_steps() != 2) {
+            return fail(55, "a new stroke kept the redo steps");
+        }
+        // The stack is bounded: the oldest steps fall off.
+        TerrainHistory capped;
+        std::vector<unsigned short> map(static_cast<std::size_t>(kW * kH), DIRT);
+        for (int i = 0; i < 40; ++i) {
+            capped.begin_stroke();
+            std::vector<unsigned short> before = map;
+            terrain_paint::paint(map, kW, kH, 2 + i * 2, 2, Piece::Trees, terrain_paint::kBrushSmall);
+            capped.record(std::move(before));
+        }
+        int undone = 0;
+        while (capped.undo(map)) {
+            ++undone;
+        }
+        if (undone != static_cast<int>(TerrainHistory::kMaxSteps) || capped.undo_steps() != 0 ||
+            capped.redo_steps() != TerrainHistory::kMaxSteps) {
+            return fail(56, "the undo stack is not bounded at kMaxSteps");
         }
     }
     return 0;

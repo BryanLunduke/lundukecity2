@@ -282,6 +282,8 @@ void Shell::open_terrain_editor()
     terrain_session_->set_sound_enabled(false);
     terrain_session_->new_city(spec);
     terrain_work_ = terrain_session_->terrain_tiles();
+    terrain_opened_ = terrain_work_;
+    terrain_history_.clear();
     terrain_land_ = land;
     terrain_changed_ = 0;
     terrain_confirm_id_ = 0;
@@ -334,6 +336,8 @@ void Shell::close_terrain_editor(bool apply)
     demand_.set_session(&session_);
     terrain_session_.reset();
     terrain_work_.clear();
+    terrain_opened_.clear();
+    terrain_history_.clear();
     overlay_on_ = terrain_saved_overlay_;
     select_tool(tool_index_);
     map_.set_tile_size(terrain_saved_tile_);
@@ -368,6 +372,20 @@ void Shell::cancel_terrain_editor()
     close_terrain_editor(false);
 }
 
+void Shell::complete_terrain_editor()
+{
+    if (!terrain_edit_) {
+        return;
+    }
+    if (terrain_paint::land_percent(terrain_work_) < terrain_paint::kLowLandPercent) {
+        map_.release();
+        pointer_on_map_ = false;
+        open_dialog(Dialog::TerrainLowLand);
+        return;
+    }
+    close_terrain_editor(true);
+}
+
 void Shell::paint_terrain_line(int x0, int y0, int x1, int y1)
 {
     if (!terrain_edit_ || terrain_session_ == nullptr) {
@@ -375,6 +393,12 @@ void Shell::paint_terrain_line(int x0, int y0, int x1, int y1)
     }
     const auto piece = static_cast<terrain_paint::Piece>(terrain_piece_);
     const int steps = std::max(std::abs(x1 - x0), std::abs(y1 - y0));
+    // The stroke's first change records the map before it, for undo.
+    const bool first = terrain_history_.wants_snapshot();
+    std::vector<unsigned short> before;
+    if (first) {
+        before = terrain_work_;
+    }
     int changed = 0;
     for (int i = 0; i <= steps; ++i) {
         const int tx = steps == 0 ? x1 : x0 + (x1 - x0) * i / steps;
@@ -383,9 +407,26 @@ void Shell::paint_terrain_line(int x0, int y0, int x1, int y1)
                                         terrain_brush_);
     }
     if (changed > 0) {
+        if (first) {
+            terrain_history_.record(std::move(before));
+        }
         terrain_changed_ += changed;
         terrain_session_->set_terrain_tiles(terrain_work_);
     }
+}
+
+bool Shell::step_terrain_history(bool forward)
+{
+    if (!terrain_edit_ || terrain_session_ == nullptr) {
+        return false;
+    }
+    if (!(forward ? terrain_history_.redo(terrain_work_) : terrain_history_.undo(terrain_work_))) {
+        return false;
+    }
+    terrain_session_->set_terrain_tiles(terrain_work_);
+    // Back at the map the editor opened with: Cancel has nothing to lose.
+    terrain_changed_ = terrain_work_ == terrain_opened_ ? 0 : std::max(1, terrain_changed_);
+    return true;
 }
 
 void Shell::select_terrain_piece(int index)
@@ -415,7 +456,7 @@ bool Shell::on_terrain_hotspot(int id)
         return true;
     }
     if (id == kTerrainComplete) {
-        close_terrain_editor(true);
+        complete_terrain_editor();
         return true;
     }
     if (id == kTerrainCancel) {
@@ -712,7 +753,23 @@ void Shell::draw_terrain_status(cairo_t *cr, const std::string &hint)
     double right = win_w_ - dp(10);
     const int left_w = measure_text(cr, ui_font(), left, -1).width;
     const int hint_room = static_cast<int>(right - x - std::min(left_w, dp(420)) - dp(24));
-    const std::string hint_line = hint_room < dp(120) ? std::string() : fit(cr, ui_font(), hint, hint_room);
+    std::string hint_line;
+    if (hint_room >= dp(120)) {
+        hint_line = hint;
+        if (measure_text(cr, ui_font(), hint_line, -1).width > hint_room) {
+            // A shorter form of the keyboard hint before an ellipsis.
+            const std::vector<std::string> forms = terrain_hint_forms();
+            if (hint == forms.front()) {
+                for (const std::string &form : forms) {
+                    hint_line = form;
+                    if (measure_text(cr, ui_font(), form, -1).width <= hint_room) {
+                        break;
+                    }
+                }
+            }
+            hint_line = fit(cr, ui_font(), hint_line, hint_room);
+        }
+    }
     if (!hint_line.empty()) {
         const int w = measure_text(cr, ui_font(), hint_line, -1).width;
         right -= w;

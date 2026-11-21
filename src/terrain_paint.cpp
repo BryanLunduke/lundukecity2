@@ -114,6 +114,27 @@ void fix_forest(std::vector<unsigned short> &tiles, int w, int h, int x, int y)
     tiles[at(w, x, y)] = static_cast<unsigned short>(next | BLBNBIT);
 }
 
+// True when any of the eight tiles around (x, y) on the map is not water.
+// Off the map does not count: channel may run off the edge (boats come in
+// that way).
+bool touches_land(const std::vector<unsigned short> &tiles, int w, int h, int x, int y)
+{
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            const int nx = x + dx;
+            const int ny = y + dy;
+            if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx >= w || ny >= h) {
+                continue;
+            }
+            const int tile = tiles[at(w, nx, ny)] & LOMASK;
+            if (tile < WATER_LOW || tile > WATER_HIGH) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 const char *piece_name(Piece piece)
@@ -187,6 +208,20 @@ Piece piece_of(unsigned short raw)
     return Piece::Ground;
 }
 
+int land_percent(const std::vector<unsigned short> &tiles)
+{
+    if (tiles.empty()) {
+        return 0;
+    }
+    std::size_t land = 0;
+    for (const unsigned short raw : tiles) {
+        if (!is_water(raw)) {
+            ++land;
+        }
+    }
+    return static_cast<int>(land * 100 / tiles.size());
+}
+
 void fix_edges(std::vector<unsigned short> &tiles, int w, int h, int x0, int y0, int x1, int y1)
 {
     if (w < 1 || h < 1 || tiles.size() != static_cast<std::size_t>(w) * static_cast<std::size_t>(h)) {
@@ -231,12 +266,37 @@ int paint(std::vector<unsigned short> &tiles, int w, int h, int cx, int cy, Piec
             tiles[at(w, x, y)] = laid;
         }
     }
-    // The painted square and the ring around it: their edges may now face
-    // a different neighbour.
-    fix_edges(tiles, w, h, x0 - 1, y0 - 1, x1 + 1, y1 + 1);
+    // Channel is the deep middle of a river: the generator always lays
+    // water around it and never draws it a shore. So channel painted on
+    // land brings a ring of water with it, and channel left touching land
+    // (even corner to corner) becomes plain water, which then takes a
+    // shore below. Otherwise channel on land showed flat, edgeless sides.
+    if (piece == Piece::Channel) {
+        for (int y = std::max(0, y0 - 1); y <= std::min(h - 1, y1 + 1); ++y) {
+            for (int x = std::max(0, x0 - 1); x <= std::min(w - 1, x1 + 1); ++x) {
+                if (!is_water(tiles[at(w, x, y)])) {
+                    tiles[at(w, x, y)] = RIVER;
+                }
+            }
+        }
+    }
+    const int ex0 = std::max(0, x0 - 2);
+    const int ey0 = std::max(0, y0 - 2);
+    const int ex1 = std::min(w - 1, x1 + 2);
+    const int ey1 = std::min(h - 1, y1 + 2);
+    for (int y = ey0; y <= ey1; ++y) {
+        for (int x = ex0; x <= ex1; ++x) {
+            if ((tiles[at(w, x, y)] & LOMASK) == CHANNEL && touches_land(tiles, w, h, x, y)) {
+                tiles[at(w, x, y)] = RIVER;
+            }
+        }
+    }
+    // The painted square, the ring around it and the ring beyond that (a
+    // channel's water ring): their edges may now face a different neighbour.
+    fix_edges(tiles, w, h, ex0, ey0, ex1, ey1);
     int changed = 0;
-    for (int y = std::max(0, y0 - 1); y <= std::min(h - 1, y1 + 1); ++y) {
-        for (int x = std::max(0, x0 - 1); x <= std::min(w - 1, x1 + 1); ++x) {
+    for (int y = ey0; y <= ey1; ++y) {
+        for (int x = ex0; x <= ex1; ++x) {
             if (tiles[at(w, x, y)] != before[at(w, x, y)]) {
                 ++changed;
             }

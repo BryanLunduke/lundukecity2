@@ -242,6 +242,7 @@ void MinimapView::draw_engraved(cairo_t *cr, int width, int height)
     cairo_paint(cr);
     cairo_restore(cr);
     paint_viewport(cr, width, height);
+    paint_lion(cr, width, height);
 }
 
 void MinimapView::sync()
@@ -385,6 +386,36 @@ void MinimapView::paint_viewport(cairo_t *cr, int width, int height) const
     cairo_stroke(cr);
 }
 
+void MinimapView::paint_lion(cairo_t *cr, int width, int height) const
+{
+    if (session_ == nullptr) {
+        return;
+    }
+    const city_events::LionView lion = session_->lion();
+    if (!lion.active) {
+        return;
+    }
+    const AspectBox box = land_box(width, height);
+    const double cx = box.x + box.width * lion.x / (16.0 * CitySession::kWorldW);
+    const double cy = box.y + box.height * lion.y / (16.0 * CitySession::kWorldH);
+    // A gold dot (the demand bars' industrial gold) in a dark ring, big
+    // enough to find on the smallest minimap, small enough to keep the
+    // streets around it readable.
+    const double r = std::max(2.5, 2.5 * unit_);
+    // A full turn (M_PI is not in every C++ library, MinGW's included).
+    constexpr double kTurn = 6.283185307179586;
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+    cairo_new_path(cr);
+    cairo_arc(cr, cx, cy, r + std::max(1.0, unit_), 0, kTurn);
+    cairo_set_source_rgb(cr, 0.10, 0.08, 0.05);
+    cairo_fill(cr);
+    cairo_arc(cr, cx, cy, r, 0, kTurn);
+    cairo_set_source_rgb(cr, 0.95, 0.78, 0.02);
+    cairo_fill(cr);
+    cairo_restore(cr);
+}
+
 void MinimapView::draw(cairo_t *cr, int width, int height)
 {
     if (engraved_) {
@@ -421,6 +452,7 @@ void MinimapView::draw(cairo_t *cr, int width, int height)
         cairo_restore(cr);
     }
     paint_viewport(cr, width, height);
+    paint_lion(cr, width, height);
 }
 
 void DemandView::set_session(CitySession *session)

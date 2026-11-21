@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "terrain_paint.hpp"
 
 #include "focus_ring.hpp"
 
@@ -56,6 +57,8 @@ namespace {
 
 // Status line tool text, cut to fit (defined with fit_text below).
 std::string fit_tool_line(cairo_t *cr, const char *font, const std::string &text, int room);
+// A line cut to `room` pixels with an ellipsis (defined below).
+std::string fit_text(cairo_t *cr, const char *font, std::string text, int room);
 
 const char *speed_word(int speed)
 {
@@ -1454,6 +1457,23 @@ void Shell::draw_dialog(cairo_t *cr)
                    {{"_Keep editing", kCancel}, {"_Discard", kDiscard}}, 0, focus_id_);
         return;
     }
+    if (dialog_ == Dialog::TerrainLowLand) {
+        const int land = terrain_paint::land_percent(terrain_work_);
+        const std::string question = "Only " + std::to_string(land) +
+                                     "% of this map is land to build on, so a city will have little room to grow. "
+                                     "Use it anyway?";
+        const double width = message_width(win_w_, margin, dp(420), dp(520));
+        const double column = std::max(1.0, width - 2.0 * margin);
+        const double body_h = text_block_height(question, column);
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Not much land");
+        place_line(body_font(), question, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
+                   theme::kTextG, theme::kTextB);
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
+                   {{"_Keep editing", kCancel}, {"_Use this map", kOk}}, 0, focus_id_);
+        return;
+    }
     if (dialog_ == Dialog::QuitConfirm) {
         const std::string question = "Quit Lunduke City 2?";
         const double width = message_width(win_w_, margin, dp(420), dp(520));
@@ -1859,7 +1879,16 @@ void Shell::draw_dialog(cairo_t *cr)
               static_cast<int>(dw - 2 * margin));
         const double list_top = y + header;
         const double buttons_y = y + dh - margin - dp(36);
-        const double detail_h = dp(52);
+        // Room for the chosen scenario's goal: two lines, or more when the
+        // longest goal (with its hint) wraps further at a large UI scale.
+        // The longest, so the list does not change length as you scroll.
+        double goal_h = 0;
+        for (int i = 0; i < count; ++i) {
+            goal_h = std::max(goal_h, static_cast<double>(measure_text(cr, ui_font(), CitySession::scenario_def(i).goal,
+                                                                       static_cast<int>(dw - 2 * margin))
+                                                              .height));
+        }
+        const double detail_h = std::max(static_cast<double>(dp(52)), goal_h + dp(12));
         const double list_room = std::max(row_h, buttons_y - dp(8) - detail_h - list_top);
         int visible = static_cast<int>(list_room / row_h);
         if (visible < 1) {
@@ -4129,11 +4158,36 @@ void Shell::draw(cairo_t *cr)
         if (fits_in(status + "    " + session_.date_text(), full_room)) {
             status += "    " + session_.date_text();
         }
-        if (!clock.empty() && fits_in(status + "    " + clock, full_room)) {
-            status += "    " + clock;
-        }
-        if (!meter.empty() && fits_in(status + "    " + meter, full_room)) {
-            status += "    " + meter;
+        // The scenario clock and goal meter, like the Slate info band: the
+        // full forms, then the short ones, then the short meter cut to the
+        // room left. A tool line on the right keeps some room of its own.
+        // (The meter used to be dropped whole at 1024 wide.)
+        if (!clock.empty() || !meter.empty()) {
+            const int keep_for_tool = tool_text.empty() ? 0 : dp(180);
+            const int goal_room = std::max(1, full_room - keep_for_tool);
+            const std::string short_clock = session_.scenario_clock_short();
+            const std::string short_meter = session_.scenario_meter_short();
+            auto join = [](const std::string &a, const std::string &b) {
+                return a.empty() ? b : (b.empty() ? a : a + "    " + b);
+            };
+            const std::string forms[] = {join(clock, meter), join(clock, short_meter), join(short_clock, short_meter)};
+            bool placed = false;
+            for (const std::string &form : forms) {
+                if (!form.empty() && fits_in(status + "    " + form, goal_room)) {
+                    status += "    " + form;
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                const std::string head = status + "    " + (short_clock.empty() ? std::string() : short_clock + "    ");
+                const int meter_room = goal_room - width_of(ui_font(), head);
+                if (!short_meter.empty() && meter_room >= dp(80)) {
+                    status = head + fit_text(cr, ui_font(), short_meter, meter_room);
+                } else if (!short_clock.empty() && fits_in(status + "    " + short_clock, goal_room)) {
+                    status += "    " + short_clock;
+                }
+            }
         }
         const int status_w = width_of(ui_font(), status);
         int right_x = win_w_ - 8;
@@ -4442,6 +4496,11 @@ std::string Shell::dialog_title_hint() const
         return pad ? hint_join({"D-pad adjusts", hint_pair(left, right, "step"), hint_button(a, "confirms"),
                                 hint_button(b, "closes")})
                    : "Left and right adjust. Enter confirms. Esc closes";
+    }
+    if (dialog_ == Dialog::TerrainLowLand) {
+        const char *verb = focus_id_ == kOk ? "uses this map" : "keeps editing";
+        return pad ? hint_join({hint_button(a, verb), hint_button(b, "keeps editing")})
+                   : std::string("Enter ") + verb + ". Esc keeps editing";
     }
     if (dialog_ == Dialog::TerrainDiscard) {
         const char *verb = focus_id_ == kDiscard ? "discards" : "keeps editing";
@@ -4787,7 +4846,24 @@ std::string Shell::terrain_hint() const
     if (finger) {
         return "Tap to paint, or hold and drag. A plain drag pans";
     }
-    return "Click or drag to paint. 1-4 terrain. B brush size. Enter: Map Complete. Esc: Cancel";
+    return terrain_hint_forms().front();
+}
+
+std::vector<std::string> Shell::terrain_hint_forms() const
+{
+    // Longest first; the status line shows the first that fits. At the
+    // smallest window (960x600) the full one was cut to "Enter: Map Com…".
+#if defined(__APPLE__)
+    const std::string undo = "Cmd+Z";
+#else
+    const std::string undo = "Ctrl+Z";
+#endif
+    return {
+        "Click or drag to paint. 1-4 terrain. B brush size. " + undo + " undo. Enter: Map Complete. Esc: Cancel",
+        "Drag to paint · 1-4 terrain · B brush · " + undo + " undo · Enter: done · Esc: cancel",
+        "1-4 terrain · B brush · " + undo + " undo · Enter: done · Esc: cancel",
+        undo + " undo · Enter: done · Esc: cancel",
+    };
 }
 
 std::string Shell::idle_message() const

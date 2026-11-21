@@ -1521,6 +1521,15 @@ void Micropolis::doFire(const Position &pos)
         }
     }
 
+    // Lunduke City 2, Portland scenario: a riot fire (one the riot lit, or
+    // one that spread from it) burns out sooner, so fire stations can put
+    // a riot down without firebreaks. getRandom(rate) is 0 one time in
+    // rate + 1: with no cover 1 in 4 rather than 1 in 11, and in a fire
+    // station's good cover (z > 20) always. Other fires are unchanged.
+    if (fromRiot && scoreType == SC_PORTLAND) {
+        rate = rate / PORTLAND_RIOT_FIRE_RATE_DIVISOR;
+    }
+
     // Decide whether to put out the fire.
     if (getRandom(rate) == 0) {
         map[pos.posX][pos.posY] = randomRubble();

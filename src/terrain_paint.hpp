@@ -38,8 +38,18 @@ bool is_tree(unsigned short raw);
 Piece piece_of(unsigned short raw);
 
 // Paints a size x size square (1 or 3) centred on (cx, cy), clipped to the
-// map, and fixes the edges it touched. Returns how many map words changed.
+// map, and fixes the edges it touched. Channel brings a ring of water onto
+// any land around it, and channel left touching land turns to plain water,
+// as the generator never lets the two meet. Returns how many map words
+// changed.
 int paint(std::vector<unsigned short> &tiles, int w, int h, int cx, int cy, Piece piece, int size);
+
+// The share of the map (0-100, rounded down) that is land a city can be
+// built on: anything but water (trees are cleared as you build).
+int land_percent(const std::vector<unsigned short> &tiles);
+
+// Map Complete asks first when less of the map than this is land.
+inline constexpr int kLowLandPercent = 20;
 
 // Redraws shore and forest edges for every water or tree tile in the
 // inclusive rectangle (clipped to the map). Other tiles are left alone.
