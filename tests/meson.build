@@ -575,6 +575,14 @@ test(
   timeout: 180,
 )
 
+# packaging/steam: the Steam Input layouts send what factory_pad expects.
+test(
+  'steam_input',
+  python,
+  args: [meson.project_source_root() / 'tests' / 'steam_input_test.py', meson.project_source_root()],
+  env: ['PYTHONDONTWRITEBYTECODE=1'],
+)
+
 # Evaluation / Budget wording restored from 0.9.5, and the query em dash.
 dialog_copy = executable(
   'dialog_copy',
