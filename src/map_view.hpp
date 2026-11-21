@@ -196,8 +196,11 @@ private:
     std::vector<std::uint32_t> water_rgb_;
     std::vector<std::uint32_t> water_lift_;
     std::uint32_t foam_rgb_ = 0;
-    // 1 for a map cell drawn from a landmark sprite (always a caster).
+    // 1 for a map cell drawn from a landmark sprite (a caster), 2 for a
+    // Marina basin cell (water for the shimmer and shore foam, no shadow).
     std::vector<std::uint8_t> special_cell_;
+    // A real water tile or a Marina basin cell, for the water layer.
+    bool fx_water_cell(std::size_t index) const;
     // Soft lower-right drop shadows at art resolution, premultiplied.
     cairo_surface_t *shade_pixels_ = nullptr;
     void refresh_shade(const std::vector<int> &tiles);

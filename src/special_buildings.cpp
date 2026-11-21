@@ -422,7 +422,6 @@ bool shore_water_at(const Micropolis *sim, int x, int y)
 
 void reedge_below(Micropolis *sim, int left, int top, int width, int height, bool docks_above)
 {
-    static const int kEdgeTable[16] = {13, 13, 17, 15, 5, RIVER, 19, 17, 9, 11, RIVER, 13, 7, 9, 5, RIVER};
     const int y = top + height;
     for (int x = left; x < left + width; ++x) {
         if (!in_bounds(x, y)) {
@@ -432,22 +431,12 @@ void reedge_below(Micropolis *sim, int left, int top, int width, int height, boo
         if (tile < FIRSTRIVEDGE || tile > LASTRIVEDGE) {
             continue;
         }
-        int bits = 0;
-        bits = (bits << 1) | (shore_water_at(sim, x - 1, y) ? 1 : 0);
-        bits = (bits << 1) | (shore_water_at(sim, x, y + 1) ? 1 : 0);
-        bits = (bits << 1) | (shore_water_at(sim, x + 1, y) ? 1 : 0);
         // Above is the old footprint. After a bulldoze only real water there
         // (the restored shoreline) counts. Rubble is the beach again.
-        bits = (bits << 1) | ((docks_above || (in_bounds(x, y - 1) && is_water_tile(tile_of(sim, x, y - 1)))) ? 1 : 0);
-        int next = kEdgeTable[bits & 15];
-        if (next == RIVER) {
-            sim->map[x][y] = static_cast<unsigned short>(RIVER);
-            continue;
-        }
-        if (((tile - FIRSTRIVEDGE) & 1) != 0) {
-            ++next;
-        }
-        sim->map[x][y] = static_cast<unsigned short>(next | BULLBIT);
+        const bool above = docks_above || (in_bounds(x, y - 1) && is_water_tile(tile_of(sim, x, y - 1)));
+        const int next = shore_edge_tile(tile, shore_water_at(sim, x - 1, y), shore_water_at(sim, x, y + 1),
+                                         shore_water_at(sim, x + 1, y), above);
+        sim->map[x][y] = static_cast<unsigned short>(next == RIVER ? RIVER : (next | BULLBIT));
     }
 }
 
@@ -861,6 +850,31 @@ bool special_sheet_at(int x, int y, SpecialWordFn word_at, const void *ctx, int 
     const int oy = y - found.top;
     cell = oy * building.width + ox;
     return true;
+}
+
+int shore_edge_tile(int tile, bool water_w, bool water_s, bool water_e, bool water_n)
+{
+    // Micropolis::smoothRiver's table, indexed west, south, east, north.
+    static const int kEdgeTable[16] = {13, 13, 17, 15, 5, RIVER, 19, 17, 9, 11, RIVER, 13, 7, 9, 5, RIVER};
+    const int bits = (water_w ? 8 : 0) | (water_s ? 4 : 0) | (water_e ? 2 : 0) | (water_n ? 1 : 0);
+    int next = kEdgeTable[bits];
+    if (next == RIVER) {
+        return RIVER;
+    }
+    // Keep the edge variant (+1) so the water does not reshuffle.
+    if (tile >= FIRSTRIVEDGE && tile <= LASTRIVEDGE && ((tile - FIRSTRIVEDGE) & 1) != 0) {
+        ++next;
+    }
+    return next;
+}
+
+bool special_basin_cell(int index, int cell)
+{
+    if (index < 0 || index >= special_building_count()) {
+        return false;
+    }
+    const SpecialBuilding &building = kBuildings[index];
+    return building.needs_south_water && building.width > 0 && cell / building.width >= 1;
 }
 
 static int count_group(const Micropolis *sim, int group)

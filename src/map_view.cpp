@@ -545,6 +545,114 @@ int session_word(int x, int y, const void *ctx)
     return session->map_value(x, y);
 }
 
+// Marina basin joins (map_view only; the sim map is unchanged).
+// True for a map cell that is a Marina basin cell (under the quay).
+bool basin_at(const CitySession *session, int x, int y)
+{
+    if (session == nullptr || !Micropolis::testBounds(x, y)) {
+        return false;
+    }
+    const int tile = session->map_value(x, y) & LOMASK;
+    if (tile != kSpecialBodyTile && special_index_for_tile(tile) < 0) {
+        return false;
+    }
+    int index = -1;
+    int cell = 0;
+    return special_sheet_at(x, y, session_word, session, index, cell) && special_basin_cell(index, cell);
+}
+
+// Open water for the basin's edges: a water tile or another basin. Off the
+// map counts as water, like the water layer's shore test.
+bool basin_open_at(const CitySession *session, int x, int y)
+{
+    if (!Micropolis::testBounds(x, y)) {
+        return true;
+    }
+    const int tile = session->map_value(x, y) & LOMASK;
+    return (tile >= WATER_LOW && tile <= WATER_HIGH) || basin_at(session, x, y);
+}
+
+// Which banks a basin cell draws where land meets it, and where each bank
+// ends at open water (and tapers). 0 for any other cell.
+enum BasinBank : int {
+    kBankW = 1,       // land west of the left column
+    kBankE = 2,       // land east of the right column
+    kBankS = 4,       // land south of the dock row
+    kBankWTop = 8,    // the west bank ends at water above (row 2 only)
+    kBankWEnd = 16,   // the west bank ends at water below
+    kBankETop = 32,
+    kBankEEnd = 64,
+    kBankSLeft = 128, // the south bank ends at water to the left
+    kBankSRight = 256,
+};
+
+int basin_banks(const CitySession *session, int x, int y, int index, int cell)
+{
+    if (session == nullptr || !special_basin_cell(index, cell)) {
+        return 0;
+    }
+    const SpecialBuilding &building = special_building(index);
+    const int col = cell % building.width;
+    const int row = cell / building.width;
+    const bool last_row = row == building.height - 1;
+    const bool last_col = col == building.width - 1;
+    int banks = 0;
+    const bool south_land = last_row && !basin_open_at(session, x, y + 1);
+    if (south_land) {
+        banks |= kBankS;
+        const bool left_open = col > 0 ? basin_open_at(session, x - 1, y + 1) : basin_open_at(session, x - 1, y);
+        const bool right_open = !last_col ? basin_open_at(session, x + 1, y + 1) : basin_open_at(session, x + 1, y);
+        banks |= left_open ? kBankSLeft : 0;
+        banks |= right_open ? kBankSRight : 0;
+    }
+    auto side = [&](int dx, int bank, int top, int end) {
+        if (basin_open_at(session, x + dx, y)) {
+            return;
+        }
+        banks |= bank;
+        if (row > 1 && basin_open_at(session, x + dx, y - 1)) {
+            banks |= top;
+        }
+        // The bank runs on along the side below, or into the south bank.
+        const bool end_open = last_row ? !south_land : basin_open_at(session, x + dx, y + 1);
+        if (end_open) {
+            banks |= end;
+        }
+    };
+    if (col == 0) {
+        side(-1, kBankW, kBankWTop, kBankWEnd);
+    }
+    if (last_col) {
+        side(1, kBankE, kBankETop, kBankEEnd);
+    }
+    return banks;
+}
+
+// The river edge a shoreline tile shows beside a Marina basin: the basin is
+// water, so the beach strip facing it goes. Other sides keep the beach
+// wherever there is no real water. tile itself when no basin touches it.
+int basin_shore_tile(const CitySession *session, int x, int y, int tile)
+{
+    if (tile < FIRSTRIVEDGE || tile > LASTRIVEDGE || session == nullptr) {
+        return tile;
+    }
+    const bool w = basin_at(session, x - 1, y);
+    const bool s = basin_at(session, x, y + 1);
+    const bool e = basin_at(session, x + 1, y);
+    const bool n = basin_at(session, x, y - 1);
+    if (!w && !s && !e && !n) {
+        return tile;
+    }
+    auto water = [&](int wx, int wy, bool basin) {
+        if (basin || !Micropolis::testBounds(wx, wy)) {
+            return true;
+        }
+        const int t = session->map_value(wx, wy) & LOMASK;
+        return t >= WATER_LOW && t <= WATER_HIGH;
+    };
+    return shore_edge_tile(tile, water(x - 1, y, w), water(x, y + 1, s), water(x + 1, y, e), water(x, y - 1, n));
+}
+
 // 0 when this cell is not part of a special building. Otherwise a key that
 // changes when the building identity or the cell inside it changes.
 int special_display_key(const CitySession *session, int x, int y, int &index, int &cell)
@@ -562,7 +670,142 @@ int special_display_key(const CitySession *session, int x, int y, int &index, in
     if (!special_sheet_at(x, y, session_word, session, index, cell)) {
         return 39990;
     }
-    return 40000 + index * 32 + cell;
+    return 40000 + index * 32 + cell + (basin_banks(session, x, y, index, cell) << 17);
+}
+
+// The look's ground and beach rim, from the drawn sheet: the ground tile's
+// pixels and the commonest river-edge colour that is neither ground nor
+// water. Banks use the ground tile at the same grid position, so a bank
+// runs on into the land beside it without a seam.
+struct BankPaint {
+    std::uint32_t dirt[TileAtlas::kSize * TileAtlas::kSize] = {};
+    std::uint32_t rim = 0xff997f4cu;
+    int generation = -1;
+    bool loaded = false;
+};
+
+const BankPaint &bank_paint()
+{
+    static BankPaint paint;
+    TileAtlas &atlas = tile_atlas();
+    if (paint.generation == atlas.look_generation() && paint.loaded == atlas.loaded()) {
+        return paint;
+    }
+    paint.generation = atlas.look_generation();
+    paint.loaded = atlas.loaded();
+    if (!atlas.loaded()) {
+        std::fill(std::begin(paint.dirt), std::end(paint.dirt), 0xffcc7f66u);
+        return paint;
+    }
+    constexpr int kArea = TileAtlas::kSize * TileAtlas::kSize;
+    atlas.blit(DIRT, reinterpret_cast<unsigned char *>(paint.dirt), TileAtlas::kSize * 4);
+    std::uint32_t scratch[kArea];
+    std::vector<std::uint32_t> plain(paint.dirt, paint.dirt + kArea);
+    for (int tile : {static_cast<int>(RIVER), static_cast<int>(CHANNEL)}) {
+        atlas.blit(tile, reinterpret_cast<unsigned char *>(scratch), TileAtlas::kSize * 4);
+        plain.insert(plain.end(), scratch, scratch + kArea);
+    }
+    std::sort(plain.begin(), plain.end());
+    std::vector<std::pair<std::uint32_t, int>> counts;
+    for (int tile = FIRSTRIVEDGE; tile <= LASTRIVEDGE; ++tile) {
+        atlas.blit(tile, reinterpret_cast<unsigned char *>(scratch), TileAtlas::kSize * 4);
+        for (std::uint32_t pixel : scratch) {
+            if (std::binary_search(plain.begin(), plain.end(), pixel)) {
+                continue;
+            }
+            auto found = std::find_if(counts.begin(), counts.end(), [pixel](const auto &c) { return c.first == pixel; });
+            if (found == counts.end()) {
+                counts.emplace_back(pixel, 1);
+            } else {
+                ++found->second;
+            }
+        }
+    }
+    int best = 0;
+    for (const auto &c : counts) {
+        if (c.second > best) {
+            best = c.second;
+            paint.rim = c.first;
+        }
+    }
+    return paint;
+}
+
+// Lays the banks on one 16px basin cell. sx, sy is the cell's corner in the
+// sheet; sheet_w and sheet_h its size. Water below the quay starts at kBasinTop. A bank
+// is ground with a one-pixel beach rim on the water side, 3px on the sides
+// (the sheet's open margin, so the piers meet it) and 4px along the south
+// (the dock row's last boats tie up out of sight). It narrows to nothing
+// over 3px where it ends at open water.
+void paint_basin_banks(std::uint32_t *cell_px, int banks, int sx, int sy, int sheet_w, int sheet_h)
+{
+    constexpr int kTile = TileAtlas::kSize;
+    constexpr int kBasinTop = 21;
+    const int x0 = sx;
+    const int x1 = sx + kTile - 1;
+    const int y0 = sy;
+    const int y1 = sy + kTile - 1;
+    // A gentle wobble so a bank does not read as a ruler line.
+    auto wobble = [](int v) { return ((v * 7 + 3) % 11) == 0 ? 1 : 0; };
+    auto side_width = [&](int bank, int top, int end, int y) {
+        if ((banks & bank) == 0 || y < kBasinTop) {
+            return 0;
+        }
+        if (y < y0) {
+            return (banks & top) != 0 ? 0 : 3 - wobble(y);
+        }
+        if (y > y1) {
+            return (banks & end) != 0 ? 0 : 3 - wobble(y);
+        }
+        int width = 3 - wobble(y);
+        if ((banks & top) != 0) {
+            width = std::min(width, y - y0 + 1);
+        }
+        if ((banks & end) != 0) {
+            width = std::min(width, y1 - y + 1);
+        }
+        return width;
+    };
+    auto south_height = [&](int x) {
+        if ((banks & kBankS) == 0) {
+            return 0;
+        }
+        if (x < x0) {
+            return (banks & kBankSLeft) != 0 ? 0 : 4 - wobble(x + 5);
+        }
+        if (x > x1) {
+            return (banks & kBankSRight) != 0 ? 0 : 4 - wobble(x + 5);
+        }
+        int height = 4 - wobble(x + 5);
+        if ((banks & kBankSLeft) != 0) {
+            height = std::min(height, x - x0 + 1);
+        }
+        if ((banks & kBankSRight) != 0) {
+            height = std::min(height, x1 - x + 1);
+        }
+        return height;
+    };
+    auto bank_at = [&](int x, int y) {
+        if (y < kBasinTop || x < 0 || x >= sheet_w || y >= sheet_h) {
+            return false;
+        }
+        return x < side_width(kBankW, kBankWTop, kBankWEnd, y) ||
+               x >= sheet_w - side_width(kBankE, kBankETop, kBankEEnd, y) || y >= sheet_h - south_height(x);
+    };
+    auto basin_px = [&](int x, int y) { return y >= kBasinTop && x >= 0 && x < sheet_w && y < sheet_h; };
+    const BankPaint &paint = bank_paint();
+    for (int r = 0; r < kTile; ++r) {
+        for (int c = 0; c < kTile; ++c) {
+            const int x = sx + c;
+            const int y = sy + r;
+            if (!bank_at(x, y)) {
+                continue;
+            }
+            const bool rim = (basin_px(x + 1, y) && !bank_at(x + 1, y)) || (basin_px(x - 1, y) && !bank_at(x - 1, y)) ||
+                             (basin_px(x, y - 1) && !bank_at(x, y - 1));
+            cell_px[r * kTile + c] = rim ? paint.rim : paint.dirt[r * kTile + c];
+        }
+    }
 }
 
 } // namespace
@@ -608,12 +851,18 @@ void MapView::blit_special(int x, int y, int index, int cell)
     }
     const int sstride = cairo_image_surface_get_stride(sprite);
     const unsigned char *src = cairo_image_surface_get_data(sprite);
+    // The cell at 16px, then the Marina's banks where land meets its basin.
+    std::uint32_t cell_px[TileAtlas::kSize * TileAtlas::kSize];
+    for (int r = 0; r < TileAtlas::kSize; ++r) {
+        std::memcpy(cell_px + r * TileAtlas::kSize, src + (sy + r) * sstride + sx * 4,
+                    static_cast<std::size_t>(TileAtlas::kSize * 4));
+    }
+    const int banks = basin_banks(session_, x, y, index, cell);
+    if (banks != 0) {
+        paint_basin_banks(cell_px, banks, sx, sy, sw, sh);
+    }
     if (px == TileAtlas::kOverview) {
-        auto word_at = [&](int rx, int ry) {
-            const unsigned char *p = src + (sy + ry) * sstride + (sx + rx) * 4;
-            return static_cast<std::uint32_t>(p[0]) | (static_cast<std::uint32_t>(p[1]) << 8) |
-                   (static_cast<std::uint32_t>(p[2]) << 16) | (static_cast<std::uint32_t>(p[3]) << 24);
-        };
+        auto word_at = [&](int rx, int ry) { return cell_px[ry * TileAtlas::kSize + rx]; };
         auto mix = [](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d, int shift) {
             const unsigned sum = ((a >> shift) & 255u) + ((b >> shift) & 255u) + ((c >> shift) & 255u) + ((d >> shift) & 255u);
             return (sum + 2u) / 4u;
@@ -641,7 +890,7 @@ void MapView::blit_special(int x, int y, int index, int cell)
         return;
     }
     for (int r = 0; r < TileAtlas::kSize; ++r) {
-        std::memcpy(dest + r * stride, src + (sy + r) * sstride + sx * 4, static_cast<std::size_t>(TileAtlas::kSize * 4));
+        std::memcpy(dest + r * stride, cell_px + r * TileAtlas::kSize, static_cast<std::size_t>(TileAtlas::kSize * 4));
     }
 }
 
@@ -668,7 +917,7 @@ void MapView::sync()
             int special_cell = 0;
             const int special_key = special_display_key(session_, x, y, special_index, special_cell);
             if (special_cell_.size() == cached_raw_.size()) {
-                special_cell_[index] = special_key != 0 ? 1 : 0;
+                special_cell_[index] = special_key == 0 ? 0 : special_basin_cell(special_index, special_cell) ? 2 : 1;
             }
             if (special_key != 0) {
                 const bool bolt = special_center_needs_bolt(raw, special_index, special_cell, blink_on_);
@@ -692,7 +941,10 @@ void MapView::sync()
                 }
                 continue;
             }
-            const int shown = display_tile(raw, atlas);
+            int shown = display_tile(raw, atlas);
+            if (shown == (raw & LOMASK)) {
+                shown = basin_shore_tile(session_, x, y, shown);
+            }
             if (cached_raw_[index] == raw && cached_shown_[index] == shown) {
                 continue;
             }
@@ -1891,11 +2143,12 @@ void MapView::refresh_pixel_classes()
     for (int index : tiles) {
         const int tx = index % world_w;
         const int ty = index / world_w;
-        const bool water = is_water_tile(cached_raw_[static_cast<std::size_t>(index)]);
+        const bool water = fx_water_cell(static_cast<std::size_t>(index));
         const int raw_tile = cached_raw_[static_cast<std::size_t>(index)] < 0
                                  ? -1
                                  : (cached_raw_[static_cast<std::size_t>(index)] & LOMASK);
-        const bool caster = special_cell_[static_cast<std::size_t>(index)] != 0 || casts_shadow(raw_tile);
+        // A Marina basin cell is water: no block shadow (2 in special_cell_).
+        const bool caster = special_cell_[static_cast<std::size_t>(index)] == 1 || casts_shadow(raw_tile);
         for (int r = 0; r < kTile; ++r) {
             const int y = ty * kTile + r;
             std::uint8_t *row = pix_class_.data() + static_cast<std::size_t>(y) * art_w;
@@ -2003,7 +2256,7 @@ bool MapView::draw_water(cairo_t *cr, const TileSpan &span)
         const int phase_b = (step * 11) & 255;
         for (int ty = span.y0; ty < span.y1; ++ty) {
             for (int tx = span.x0; tx < span.x1; ++tx) {
-                if (!is_water_tile(cached_raw_[static_cast<std::size_t>(ty * CitySession::kWorldW + tx)])) {
+                if (!fx_water_cell(static_cast<std::size_t>(ty * CitySession::kWorldW + tx))) {
                     continue;
                 }
                 any = true;
@@ -2655,4 +2908,15 @@ void MapView::draw_rises(cairo_t *cr) const
         }
     }
     cairo_restore(cr);
+}
+
+bool MapView::fx_water_cell(std::size_t index) const
+{
+    if (index >= cached_raw_.size()) {
+        return false;
+    }
+    if (index < special_cell_.size() && special_cell_[index] == 2) {
+        return true;
+    }
+    return is_water_tile(cached_raw_[index]);
 }
