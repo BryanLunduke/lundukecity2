@@ -38,7 +38,10 @@ bool is_tree(unsigned short raw);
 Piece piece_of(unsigned short raw);
 
 // Paints a size x size square (1 or 3) centred on (cx, cy), clipped to the
-// map, and fixes the edges it touched. Returns how many map words changed.
+// map, and fixes the edges it touched. Channel brings a ring of water onto
+// any land around it, and channel left touching land turns to plain water,
+// as the generator never lets the two meet. Returns how many map words
+// changed.
 int paint(std::vector<unsigned short> &tiles, int w, int h, int cx, int cy, Piece piece, int size);
 
 // Redraws shore and forest edges for every water or tree tile in the

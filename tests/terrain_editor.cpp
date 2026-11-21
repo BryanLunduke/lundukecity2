@@ -154,6 +154,47 @@ int main()
         if (tile_at(tiles, 21, 21) != CHANNEL) {
             return fail(23, "channel was not laid");
         }
+        // Channel on clear land brings a shore-edged ring of water, and no
+        // channel tile is left touching land (it showed flat sides).
+        {
+            std::vector<unsigned short> dry(static_cast<std::size_t>(kW * kH), DIRT);
+            terrain_paint::paint(dry, kW, kH, 70, 40, Piece::Channel, terrain_paint::kBrushSmall);
+            if (tile_at(dry, 70, 40) != CHANNEL) {
+                return fail(25, "channel on land was not laid");
+            }
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const unsigned short raw = tile_at(dry, 70 + dx, 40 + dy);
+                    if ((dx != 0 || dy != 0) && (!terrain_paint::is_water(raw) || (raw & BULLBIT) == 0)) {
+                        return fail(26, "channel on land has no shore-edged water around it");
+                    }
+                }
+            }
+            terrain_paint::paint(dry, kW, kH, 90, 40, Piece::Channel, terrain_paint::kBrushLarge);
+            terrain_paint::paint(dry, kW, kH, 92, 42, Piece::Ground, terrain_paint::kBrushSmall);
+            terrain_paint::paint(dry, kW, kH, 0, 0, Piece::Channel, terrain_paint::kBrushLarge);
+            for (int y = 0; y < kH; ++y) {
+                for (int x = 0; x < kW; ++x) {
+                    if (tile_at(dry, x, y) != CHANNEL) {
+                        continue;
+                    }
+                    for (int dy = -1; dy <= 1; ++dy) {
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            const int nx = x + dx;
+                            const int ny = y + dy;
+                            if (nx >= 0 && ny >= 0 && nx < kW && ny < kH && !terrain_paint::is_water(tile_at(dry, nx, ny))) {
+                                std::fprintf(stderr, "channel %d,%d touches land at %d,%d\n", x, y, nx, ny);
+                                return fail(27, "a channel tile touches land");
+                            }
+                        }
+                    }
+                }
+            }
+            // The corner channel still runs off the map edge.
+            if (tile_at(dry, 0, 0) != CHANNEL) {
+                return fail(28, "channel at the map corner was not laid");
+            }
+        }
         // Water over forest: the trees around it redraw their edges.
         std::vector<unsigned short> wood(static_cast<std::size_t>(kW * kH), DIRT);
         terrain_paint::paint(wood, kW, kH, 51, 51, Piece::Trees, terrain_paint::kBrushLarge);
