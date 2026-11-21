@@ -57,6 +57,8 @@ namespace {
 
 // Status line tool text, cut to fit (defined with fit_text below).
 std::string fit_tool_line(cairo_t *cr, const char *font, const std::string &text, int room);
+// A line cut to `room` pixels with an ellipsis (defined below).
+std::string fit_text(cairo_t *cr, const char *font, std::string text, int room);
 
 const char *speed_word(int speed)
 {
@@ -4147,11 +4149,36 @@ void Shell::draw(cairo_t *cr)
         if (fits_in(status + "    " + session_.date_text(), full_room)) {
             status += "    " + session_.date_text();
         }
-        if (!clock.empty() && fits_in(status + "    " + clock, full_room)) {
-            status += "    " + clock;
-        }
-        if (!meter.empty() && fits_in(status + "    " + meter, full_room)) {
-            status += "    " + meter;
+        // The scenario clock and goal meter, like the Slate info band: the
+        // full forms, then the short ones, then the short meter cut to the
+        // room left. A tool line on the right keeps some room of its own.
+        // (The meter used to be dropped whole at 1024 wide.)
+        if (!clock.empty() || !meter.empty()) {
+            const int keep_for_tool = tool_text.empty() ? 0 : dp(180);
+            const int goal_room = std::max(1, full_room - keep_for_tool);
+            const std::string short_clock = session_.scenario_clock_short();
+            const std::string short_meter = session_.scenario_meter_short();
+            auto join = [](const std::string &a, const std::string &b) {
+                return a.empty() ? b : (b.empty() ? a : a + "    " + b);
+            };
+            const std::string forms[] = {join(clock, meter), join(clock, short_meter), join(short_clock, short_meter)};
+            bool placed = false;
+            for (const std::string &form : forms) {
+                if (!form.empty() && fits_in(status + "    " + form, goal_room)) {
+                    status += "    " + form;
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                const std::string head = status + "    " + (short_clock.empty() ? std::string() : short_clock + "    ");
+                const int meter_room = goal_room - width_of(ui_font(), head);
+                if (!short_meter.empty() && meter_room >= dp(80)) {
+                    status = head + fit_text(cr, ui_font(), short_meter, meter_room);
+                } else if (!short_clock.empty() && fits_in(status + "    " + short_clock, goal_room)) {
+                    status += "    " + short_clock;
+                }
+            }
         }
         const int status_w = width_of(ui_font(), status);
         int right_x = win_w_ - 8;
