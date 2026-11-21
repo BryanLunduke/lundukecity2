@@ -811,10 +811,11 @@ inline long long cityPopulationOf(long long res, long long com, long long ind, l
 }
 
 // The shipped tiles.png is 256 by 960, so it draws indices 0 through 959.
-// TILE_COUNT is larger: later ids are simulator values the sheet does not
-// draw. Raise this when the sheet actually contains the extra church
-// graphics. Those types start at CHURCH1 (tile 960).
-constexpr int kShippedTileCount = 960;
+// The game adds a church sheet (data/special-tiles/churches*.png) that
+// draws 956 through 1019, so every church type (CHURCH1BASE 956 through
+// CHURCH7LAST 1018) has art. Ids from 1020 up are the landmark tiles,
+// which draw from their own sprites.
+constexpr int kShippedTileCount = 1020;
 
 // Mayor's House, Casino, and Amusement Park. These ids are not radiation
 // and they are not rubble, even though they fall in that numeric gap.

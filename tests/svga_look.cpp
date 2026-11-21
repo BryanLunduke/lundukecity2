@@ -85,7 +85,8 @@ int main()
     std::vector<std::uint32_t> classic16(static_cast<std::size_t>(TileAtlas::kSize * TileAtlas::kSize));
     std::vector<std::uint32_t> classic8(static_cast<std::size_t>(TileAtlas::kOverview * TileAtlas::kOverview));
     std::vector<std::uint32_t> classic_ground;
-    for (int tile = 0; tile < 960; ++tile) {
+    // 956-959 are blank in tiles.png; the church sheet draws over them.
+    for (int tile = 0; tile < 956; ++tile) {
         const int col = tile % columns;
         const int row = tile / columns;
         atlas.blit(tile, reinterpret_cast<unsigned char *>(classic16.data()), TileAtlas::kSize * 4);
@@ -215,8 +216,9 @@ int main()
     atlas.blit(52, reinterpret_cast<unsigned char *>(tile0.data()), TileAtlas::kSize * 4);
 
     // Spooky starts from the SVGA sheet. The night ground (tile 0) and the
-    // graveyard (tile 40) both differ. Blank tile 956 stays white, and the
-    // 8px overview of the park is the snapped average.
+    // graveyard (tile 40) both differ. Tile 956, blank in every atlas PNG,
+    // draws the first church from the church sheet in each look (Spooky has
+    // night churches), and the 8px overview of the park is the snapped average.
     if (!atlas.set_look(1)) {
         return fail("could not return to SVGA for the Spooky compare");
     }
@@ -248,8 +250,18 @@ int main()
         return fail("could not return to Spooky for the blank-tile compare");
     }
     atlas.blit(956, reinterpret_cast<unsigned char *>(spooky_blank.data()), TileAtlas::kSize * 4);
-    if (std::memcmp(svga_blank.data(), spooky_blank.data(), svga_blank.size() * sizeof(std::uint32_t)) != 0) {
-        return fail("Spooky changed the blank tile");
+    if (atlas.count() != 1020) {
+        return fail("the church sheet did not extend the atlas to 1020 tiles");
+    }
+    int white = 0;
+    for (const std::uint32_t px : svga_blank) {
+        white += (px & 0x00ffffffu) == 0x00ffffffu ? 1 : 0;
+    }
+    if (white == static_cast<int>(svga_blank.size())) {
+        return fail("tile 956 is still the blank atlas cell, not church art");
+    }
+    if (std::memcmp(svga_blank.data(), spooky_blank.data(), svga_blank.size() * sizeof(std::uint32_t)) == 0) {
+        return fail("Spooky churches match SVGA");
     }
     if (std::memcmp(spooky_park.data(), svga_park.data(), svga_park.size() * sizeof(std::uint32_t)) == 0) {
         return fail("Spooky park matches SVGA");
