@@ -76,6 +76,8 @@ enum class Dialog : int {
     BulldozeConfirm,
     // Leaving the terrain editor with changes: keep editing or discard.
     TerrainDiscard,
+    // Map Complete on a map that is mostly water: go back or use it anyway.
+    TerrainLowLand,
     // NOTICE and COPYING, opened from About. Closing returns to About.
     License
 };
@@ -231,6 +233,8 @@ private:
     // Cancel, Escape, gamepad B: leave at once, or ask first when the map
     // was changed since the editor opened.
     void cancel_terrain_editor();
+    // Map Complete: asks first when little of the map is land.
+    void complete_terrain_editor();
     // New terrain or another land knob would replace a painted map. The
     // first press warns and returns false; pressing the same control again
     // drops the painted map and returns true.
@@ -246,6 +250,8 @@ private:
     void draw_terrain_band(cairo_t *cr);
     void draw_terrain_status(cairo_t *cr, const std::string &hint);
     std::string terrain_hint() const;
+    // The keyboard hint for the terrain status line, longest form first.
+    std::vector<std::string> terrain_hint_forms() const;
     void jump_notice(int index);
     void arm_touch_tool();
     // Drop a pending tap, end a drag, and forget every finger. A drag that

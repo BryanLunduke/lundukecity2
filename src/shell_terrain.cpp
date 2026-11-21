@@ -372,6 +372,20 @@ void Shell::cancel_terrain_editor()
     close_terrain_editor(false);
 }
 
+void Shell::complete_terrain_editor()
+{
+    if (!terrain_edit_) {
+        return;
+    }
+    if (terrain_paint::land_percent(terrain_work_) < terrain_paint::kLowLandPercent) {
+        map_.release();
+        pointer_on_map_ = false;
+        open_dialog(Dialog::TerrainLowLand);
+        return;
+    }
+    close_terrain_editor(true);
+}
+
 void Shell::paint_terrain_line(int x0, int y0, int x1, int y1)
 {
     if (!terrain_edit_ || terrain_session_ == nullptr) {
@@ -442,7 +456,7 @@ bool Shell::on_terrain_hotspot(int id)
         return true;
     }
     if (id == kTerrainComplete) {
-        close_terrain_editor(true);
+        complete_terrain_editor();
         return true;
     }
     if (id == kTerrainCancel) {
@@ -739,7 +753,23 @@ void Shell::draw_terrain_status(cairo_t *cr, const std::string &hint)
     double right = win_w_ - dp(10);
     const int left_w = measure_text(cr, ui_font(), left, -1).width;
     const int hint_room = static_cast<int>(right - x - std::min(left_w, dp(420)) - dp(24));
-    const std::string hint_line = hint_room < dp(120) ? std::string() : fit(cr, ui_font(), hint, hint_room);
+    std::string hint_line;
+    if (hint_room >= dp(120)) {
+        hint_line = hint;
+        if (measure_text(cr, ui_font(), hint_line, -1).width > hint_room) {
+            // A shorter form of the keyboard hint before an ellipsis.
+            const std::vector<std::string> forms = terrain_hint_forms();
+            if (hint == forms.front()) {
+                for (const std::string &form : forms) {
+                    hint_line = form;
+                    if (measure_text(cr, ui_font(), form, -1).width <= hint_room) {
+                        break;
+                    }
+                }
+            }
+            hint_line = fit(cr, ui_font(), hint_line, hint_room);
+        }
+    }
     if (!hint_line.empty()) {
         const int w = measure_text(cr, ui_font(), hint_line, -1).width;
         right -= w;

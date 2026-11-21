@@ -2641,7 +2641,7 @@ void Shell::handle_event(const SDL_Event &event)
                     gamepad_use_cursor(true);
                     release_pad_drag();
                 } else {
-                    close_terrain_editor(true);
+                    complete_terrain_editor();
                 }
                 break;
             }

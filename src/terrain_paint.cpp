@@ -208,6 +208,20 @@ Piece piece_of(unsigned short raw)
     return Piece::Ground;
 }
 
+int land_percent(const std::vector<unsigned short> &tiles)
+{
+    if (tiles.empty()) {
+        return 0;
+    }
+    std::size_t land = 0;
+    for (const unsigned short raw : tiles) {
+        if (!is_water(raw)) {
+            ++land;
+        }
+    }
+    return static_cast<int>(land * 100 / tiles.size());
+}
+
 void fix_edges(std::vector<unsigned short> &tiles, int w, int h, int x0, int y0, int x1, int y1)
 {
     if (w < 1 || h < 1 || tiles.size() != static_cast<std::size_t>(w) * static_cast<std::size_t>(h)) {

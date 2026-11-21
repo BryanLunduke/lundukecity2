@@ -1921,6 +1921,23 @@ void Shell::drive_ui_test()
             }
             gamepad_nav_ = false;
         }
+        // Map Complete on a map that is nearly all water asks first;
+        // Escape there keeps editing with the map as it was.
+        {
+            const std::vector<unsigned short> kept = terrain_work_;
+            terrain_work_.assign(kept.size(), terrain_paint::piece_tile(terrain_paint::Piece::Water));
+            key_down(SDLK_RETURN);
+            if (dialog_ != Dialog::TerrainLowLand || !terrain_edit_) {
+                fail("Map Complete on an all-water map did not warn first");
+                return;
+            }
+            key_down(SDLK_ESCAPE);
+            if (dialog_ != Dialog::None || !terrain_edit_) {
+                fail("Escape on the low-land warning did not keep editing");
+                return;
+            }
+            terrain_work_ = kept;
+        }
         // Escape after painting asks first; Escape there keeps editing.
         key_down(SDLK_ESCAPE);
         if (dialog_ != Dialog::TerrainDiscard || !terrain_edit_) {

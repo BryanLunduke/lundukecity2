@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "terrain_paint.hpp"
 
 #include "focus_ring.hpp"
 
@@ -1452,6 +1453,23 @@ void Shell::draw_dialog(cairo_t *cr)
                    theme::kTextG, theme::kTextB);
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
                    {{"_Keep editing", kCancel}, {"_Discard", kDiscard}}, 0, focus_id_);
+        return;
+    }
+    if (dialog_ == Dialog::TerrainLowLand) {
+        const int land = terrain_paint::land_percent(terrain_work_);
+        const std::string question = "Only " + std::to_string(land) +
+                                     "% of this map is land to build on, so a city will have little room to grow. "
+                                     "Use it anyway?";
+        const double width = message_width(win_w_, margin, dp(420), dp(520));
+        const double column = std::max(1.0, width - 2.0 * margin);
+        const double body_h = text_block_height(question, column);
+        const double height = dp(40) + margin + body_h + dp(12) + dp(36) + margin;
+        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Not much land");
+        place_line(body_font(), question, panel.x + margin, panel.y + dp(40) + dp(8), panel.w - 2 * margin, theme::kTextR,
+                   theme::kTextG, theme::kTextB);
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
+                   {{"_Keep editing", kCancel}, {"_Use this map", kOk}}, 0, focus_id_);
         return;
     }
     if (dialog_ == Dialog::QuitConfirm) {
@@ -4443,6 +4461,11 @@ std::string Shell::dialog_title_hint() const
                                 hint_button(b, "closes")})
                    : "Left and right adjust. Enter confirms. Esc closes";
     }
+    if (dialog_ == Dialog::TerrainLowLand) {
+        const char *verb = focus_id_ == kOk ? "uses this map" : "keeps editing";
+        return pad ? hint_join({hint_button(a, verb), hint_button(b, "keeps editing")})
+                   : std::string("Enter ") + verb + ". Esc keeps editing";
+    }
     if (dialog_ == Dialog::TerrainDiscard) {
         const char *verb = focus_id_ == kDiscard ? "discards" : "keeps editing";
         return pad ? hint_join({hint_button(a, verb), hint_button(b, "keeps editing")})
@@ -4787,7 +4810,24 @@ std::string Shell::terrain_hint() const
     if (finger) {
         return "Tap to paint, or hold and drag. A plain drag pans";
     }
-    return "Click or drag to paint. 1-4 terrain. B brush size. Enter: Map Complete. Esc: Cancel";
+    return terrain_hint_forms().front();
+}
+
+std::vector<std::string> Shell::terrain_hint_forms() const
+{
+    // Longest first; the status line shows the first that fits. At the
+    // smallest window (960x600) the full one was cut to "Enter: Map Com…".
+#if defined(__APPLE__)
+    const std::string undo = "Cmd+Z";
+#else
+    const std::string undo = "Ctrl+Z";
+#endif
+    return {
+        "Click or drag to paint. 1-4 terrain. B brush size. " + undo + " undo. Enter: Map Complete. Esc: Cancel",
+        "Drag to paint · 1-4 terrain · B brush · " + undo + " undo · Enter: done · Esc: cancel",
+        "1-4 terrain · B brush · " + undo + " undo · Enter: done · Esc: cancel",
+        undo + " undo · Enter: done · Esc: cancel",
+    };
 }
 
 std::string Shell::idle_message() const

@@ -279,6 +279,23 @@ int main()
         }
     }
 
+    // 5b. How much of a map is land, for Map Complete's warning.
+    {
+        std::vector<unsigned short> sea(static_cast<std::size_t>(kW * kH), RIVER);
+        if (terrain_paint::land_percent(sea) != 0) {
+            return fail(45, "an all-water map has land");
+        }
+        for (std::size_t i = 0; i < sea.size() / 10; ++i) {
+            sea[i] = static_cast<unsigned short>(i % 2 == 0 ? DIRT : (WOODS | BLBNBIT));
+        }
+        if (terrain_paint::land_percent(sea) != 10 || terrain_paint::land_percent(sea) >= terrain_paint::kLowLandPercent) {
+            return fail(46, "a tenth of land and trees is not 10% land");
+        }
+        if (terrain_paint::land_percent(generated(42, -1, -1, -1, -1)) < terrain_paint::kLowLandPercent) {
+            return fail(47, "a generated map would warn about too little land");
+        }
+    }
+
     // 6. Undo and redo, one step per brush stroke, the way the editor
     // drives TerrainHistory: begin_stroke on button down, a snapshot before
     // the stroke's first change, Ctrl+Z / Ctrl+Y.

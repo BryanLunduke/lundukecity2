@@ -44,6 +44,13 @@ Piece piece_of(unsigned short raw);
 // changed.
 int paint(std::vector<unsigned short> &tiles, int w, int h, int cx, int cy, Piece piece, int size);
 
+// The share of the map (0-100, rounded down) that is land a city can be
+// built on: anything but water (trees are cleared as you build).
+int land_percent(const std::vector<unsigned short> &tiles);
+
+// Map Complete asks first when less of the map than this is land.
+inline constexpr int kLowLandPercent = 20;
+
 // Redraws shore and forest edges for every water or tree tile in the
 // inclusive rectangle (clipped to the map). Other tiles are left alone.
 void fix_edges(std::vector<unsigned short> &tiles, int w, int h, int x0, int y0, int x1, int y1);
