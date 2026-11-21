@@ -805,7 +805,7 @@ def stamp_star_motif(keys, cx, cy, radius):
     # Apex toward the top of the sheet (smaller y).
     up = ((cx, cy - r), (cx - r * 0.866025, cy + r * 0.5), (cx + r * 0.866025, cy + r * 0.5))
     dn = ((cx, cy + r), (cx - r * 0.866025, cy - r * 0.5), (cx + r * 0.866025, cy - r * 0.5))
-    back_r = r + 2.4
+    back_r = r + 1.8
     x0, x1 = int(cx - back_r) - 1, int(cx + back_r) + 2
     y0, y1 = int(cy - back_r) - 1, int(cy + back_r) + 2
     for y in range(max(0, y0), min(S, y1)):
@@ -837,7 +837,7 @@ def build(number, draw):
     if number == 4:
         # Screen position of the frontispiece, measured from the 3/4 projection
         # of its centre, then nudged so the star sits on the gable face.
-        stamp_star_motif(keys, 30, 25.5, 8.0)
+        stamp_star_motif(keys, 30, 25.5, 6.0)
     return keys
 
 
