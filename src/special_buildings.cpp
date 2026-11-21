@@ -64,6 +64,8 @@ static_assert(kSpecialBodyTile == SPECIAL_BODY, "body tile constant");
 static_assert(SPECIAL_DATACENTER_LOT == 873, "vacant data center lot tile");
 static_assert(SPECIAL_MICRONUKE == 874, "micro nuclear plant tile");
 static_assert(SPECIAL_DATACENTER == 875, "built data center tile");
+static_assert(kDataCenterPowerTiles == DATACENTER_POWER_MULTIPLIER * kZonePowerTiles,
+              "the power texts match the engine power scan");
 static_assert(SPECIAL_DATACENTER_LOT > LASTTINYEXP + 2 && SPECIAL_DATACENTER < TINYEXPLAST,
               "data center and micro plant ids sit in the free gap the bulldozer does not treat as rubble");
 
@@ -131,10 +133,11 @@ constexpr SpecialBuilding kBuildings[] = {
     // Center is a zone, not a landmark: no land-value bump, no income.
     // The engine turns the lot into the built row once it has power and
     // counts a powered Data Center as one commercial plus one industrial
-    // zone (DATACENTER_ZONE_DENSITY each). Neither building pollutes. The
+    // zone (DATACENTER_ZONE_DENSITY each) and draws three times the power of
+    // an ordinary 3x3 zone (DATACENTER_POWER_MULTIPLIER, power.cpp). Neither building pollutes. The
     // micro plant is 1/9 of a nuclear plant and cannot melt down.
     {SPECIAL_DATACENTER_LOT, "Data Center", "datacenter", "datacenter-vacant", 400, 0, 3, 3, 0, 0,
-     "Vacant lot. Opens once it has power, then counts as 1 industrial + 1 commercial zone. No pollution", 0, 0, 0,
+     "Vacant lot. Opens once it has power, then counts as 1 industrial + 1 commercial zone. Draws 3x a zone's power. No pollution", 0, 0, 0,
      -1, 0, 1, 1, false, false, false, false, false},
     // $2,000 for 222 tiles is $9.01 a powered tile: about twice coal
     // ($3,000 / 700 = $4.29) and 3.6 times nuclear ($2.50). Coal stays the
@@ -143,7 +146,7 @@ constexpr SpecialBuilding kBuildings[] = {
      "Supplies 1/9 the power of a nuclear plant. Cannot melt down", 0, 0, 0, -1, 0, 0, 0, false, false, false, false,
      false},
     {SPECIAL_DATACENTER, "Data Center", "datacenter", "datacenter", 400, 0, 3, 3, 0, 0,
-     "Counts as 1 industrial + 1 commercial zone while powered. No pollution", 0, 0, 0, -1, 0, 1, 1, false, false,
+     "Counts as 1 industrial + 1 commercial zone while powered. Draws 3x a zone's power. No pollution", 0, 0, 0, -1, 0, 1, 1, false, false,
      false, false, false},
 };
 

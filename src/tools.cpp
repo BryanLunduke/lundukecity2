@@ -20,7 +20,7 @@ const ToolDef kTools[] = {
     {TOOL_RESIDENTIAL, "Residential", 100, "Residential: $100"},
     {TOOL_COMMERCIAL, "Commercial", 100, "Commercial: $100"},
     {TOOL_INDUSTRIAL, "Industrial", 100, "Industrial: $100"},
-    {kSpecialEngineId, "Data Center", 400, "Data Center: $400. Needs power to open. Then industrial + commercial, no pollution",
+    {kSpecialEngineId, "Data Center", 400, "Data Center: $400. Needs power to open, and draws 3x a zone's power. Then industrial + commercial, no pollution",
      SPECIAL_DATACENTER_LOT},
     // Parks
     {TOOL_PARK, "Park", 10, "Park: $10"},

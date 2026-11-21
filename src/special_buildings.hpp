@@ -110,6 +110,10 @@ int special_micro_nuclear_index();
 // Tiles one Micro Nuclear Plant can power: NUCLEAR_POWER_STRENGTH (2000,
 // power.cpp) / 9, rounded down. Nine of them power exactly 2000.
 inline constexpr int kMicroNuclearPowerTiles = 2000 / 9;
+// Plant power one standard 3x3 zone uses, and what a Data Center draws:
+// DATACENTER_POWER_MULTIPLIER (3) times that (power.cpp, micropolis.h).
+inline constexpr int kZonePowerTiles = 9;
+inline constexpr int kDataCenterPowerTiles = 3 * kZonePowerTiles;
 // True for the Data Center lot or the built Data Center.
 bool special_is_datacenter(int index);
 const SpecialBuilding &special_building(int index);

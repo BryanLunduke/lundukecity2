@@ -3357,6 +3357,8 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
     if (index == special_datacenter_lot_index()) {
         notes.push_back("Vacant lot: the Data Center opens once it has power");
         notes.push_back("Then counts as 1 industrial + 1 commercial zone");
+        notes.push_back("Draws 3x the power of a zone (" + std::to_string(kDataCenterPowerTiles) + " tiles of plant power, a zone uses " +
+                        std::to_string(kZonePowerTiles) + ")");
         notes.push_back("No pollution");
     } else if (index == special_datacenter_index()) {
         int found = -1;
@@ -3369,6 +3371,8 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
             notes.push_back(powered ? "Counts as 1 industrial + 1 commercial zone"
                                     : "Counts as 1 industrial + 1 commercial zone with power");
         }
+        notes.push_back("Draws 3x the power of a zone (" + std::to_string(kDataCenterPowerTiles) + " tiles of plant power, a zone uses " +
+                        std::to_string(kZonePowerTiles) + ")");
         notes.push_back("No pollution");
     } else if (index == special_micro_nuclear_index()) {
         notes.push_back("Supplies 1/9 of a nuclear plant's power (about " +
