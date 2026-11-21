@@ -88,6 +88,7 @@ CLASSIC = {
     "tree": (C_DGREEN, C_DGREEN, C_BLACK, C_BLACK),
     "trunk": (C_BROWN, C_BROWN, C_DGRAY, C_DGRAY),
     "concrete": (C_LGRAY, C_GRAY, C_DGRAY, C_BLACK),
+    "dark": (C_DGRAY, C_BLACK, C_BLACK, C_BLACK),
 }
 CLASSIC_GROUND = {
     "grass": C_GRASS, "grass_dot": C_DGREEN, "grass_sh": C_DGREEN,
@@ -95,6 +96,7 @@ CLASSIC_GROUND = {
     "asphalt": C_DGRAY, "asphalt_sh": C_BLACK, "line": C_WHITE, "line_sh": C_GRAY,
     "sand": C_DIRT, "sand_sh": C_BROWN, "water": C_LBLUE, "water_sh": C_BLUE,
     "grave": C_LGRAY, "grave_sh": C_GRAY, "flower": C_YELLOW, "flower_sh": C_ORANGE,
+    "star": C_YELLOW, "star_sh": C_ORANGE,
     "ink": C_BLACK,
 }
 
@@ -119,6 +121,7 @@ SVGA = {
     "tree": ((60, 150, 30), (20, 113, 10), (0, 81, 0), (0, 48, 0)),
     "trunk": ((113, 72, 40), (90, 56, 28), (65, 40, 20), (40, 24, 12)),
     "concrete": ((200, 200, 195), (160, 160, 155), (113, 113, 110), (69, 69, 65)),
+    "dark": ((40, 40, 48), (24, 24, 32), (16, 16, 20), (8, 8, 8)),
 }
 SVGA_GROUND = {
     "grass": (0, 113, 0), "grass_dot": (28, 113, 0), "grass_sh": (32, 65, 32),
@@ -126,6 +129,7 @@ SVGA_GROUND = {
     "asphalt": (69, 69, 69), "asphalt_sh": (40, 40, 40), "line": (227, 227, 227), "line_sh": (130, 130, 130),
     "sand": (255, 219, 182), "sand_sh": (255, 158, 125), "water": (60, 115, 210), "water_sh": (32, 65, 140),
     "grave": (170, 170, 170), "grave_sh": (100, 100, 100), "flower": (255, 210, 60), "flower_sh": (170, 120, 30),
+    "star": (255, 210, 60), "star_sh": (170, 120, 30),
     "ink": (0, 0, 0),
 }
 SPOOKY = dict(SVGA)
@@ -289,6 +293,122 @@ class Model:
         self.set(x - 1, y, z + tall - 2, mat)
         self.set(x + 1, y, z + tall - 2, mat)
 
+    def clear(self, x0, y0, x1, y1, z0, z1):
+        for x in range(x0, x1):
+            for y in range(y0, y1):
+                for z in range(z0, z1):
+                    self.vox.pop((x, y, z), None)
+                    self.norm.pop((x, y, z), None)
+
+    def _arch_top(self, i, i0, i1, z0, z1):
+        """Highest z of an arched opening spanning i0..i1 (half-open)."""
+        span = max(1, i1 - i0)
+        mid = i0 + span / 2.0
+        rx = span / 2.0
+        nx = (i + 0.5 - mid) / rx
+        if abs(nx) >= 1.0:
+            return z0
+        rise = min(span / 2.0, z1 - z0)
+        spring = z1 - rise
+        return min(z1, spring + rise * math.sqrt(max(0.0, 1.0 - nx * nx)))
+
+    def arch_ns(self, x0, y0, x1, y1, z0, z1):
+        """Clear an opening through north-south, arched in the x-z plane."""
+        for x in range(x0, x1):
+            top = int(math.ceil(self._arch_top(x, x0, x1, z0, z1)))
+            for y in range(y0, y1):
+                for z in range(z0, top):
+                    self.vox.pop((x, y, z), None)
+                    self.norm.pop((x, y, z), None)
+
+    def arch_ew(self, x0, y0, x1, y1, z0, z1):
+        """Clear an opening through west-east, arched in the y-z plane."""
+        for y in range(y0, y1):
+            top = int(math.ceil(self._arch_top(y, y0, y1, z0, z1)))
+            for x in range(x0, x1):
+                for z in range(z0, top):
+                    self.vox.pop((x, y, z), None)
+                    self.norm.pop((x, y, z), None)
+
+    def niche_s(self, x0, y_back, x1, y_front, z0, z1):
+        """South-facing arched recess; the wall at y_back stays and is darkened."""
+        self.arch_ns(x0, y_back + 1, x1, y_front, z0, z1)
+        self.south_face(x0, x1, y_back, z0, z1, "window")
+
+    def niche_w(self, x_front, y0, x_back, y1, z0, z1):
+        """West-facing arched recess; the wall at x_back stays and is darkened."""
+        self.arch_ew(x_front, y0, x_back, y1, z0, z1)
+        self.west_face(x_back, y0, y1, z0, z1, "window")
+
+    def hanging_bell(self, cx, cy, z0, z1):
+        """A small gold bell hanging in an opening, wider toward the lip."""
+        mid = z0 + max(1, (z1 - z0) // 3)
+        self.box(cx, cy, cx + 1, cy + 1, mid, z1, "bell")
+        self.box(cx - 1, cy, cx + 2, cy + 1, z0, mid, "bell")
+
+    def disc_south(self, cx, y, cz, r, mat, lift=1.0):
+        """Circle on the south face. lift stretches height so it still reads
+        round after the 3/4 projection."""
+        rz = r * lift
+        for x in range(int(cx - r) - 1, int(cx + r) + 2):
+            for z in range(int(cz - rz) - 1, int(cz + rz) + 2):
+                if ((x + 0.5 - cx) / r) ** 2 + ((z + 0.5 - cz) / rz) ** 2 <= 1.0:
+                    if self.has(x, y, z):
+                        self.vox[(x, y, z)] = mat
+
+    def star_of_david(self, cx, y, cz, radius, mat, lift=1.0):
+        """Upright hexagram on the south face, centred at (cx, cz).
+        lift stretches it in z so it looks even after the 3/4 projection."""
+        r = float(radius)
+        rz = r * lift
+        up = ((cx, cz + rz), (cx - r * 0.866, cz - rz * 0.5), (cx + r * 0.866, cz - rz * 0.5))
+        dn = ((cx, cz - rz), (cx - r * 0.866, cz + rz * 0.5), (cx + r * 0.866, cz + rz * 0.5))
+
+        def in_tri(px, pz, tri):
+            (ax, az), (bx, bz), (cx_, cz_) = tri
+            d = (bz - cz_) * (ax - cx_) + (cx_ - bx) * (az - cz_)
+            if d == 0:
+                return False
+            u = ((bz - cz_) * (px - cx_) + (cx_ - bx) * (pz - cz_)) / d
+            v = ((cz_ - az) * (px - cx_) + (ax - cx_) * (pz - cz_)) / d
+            return u >= 0 and v >= 0 and u + v <= 1
+
+        for x in range(int(cx - r) - 1, int(cx + r) + 2):
+            for z in range(int(cz - rz) - 1, int(cz + rz) + 2):
+                if in_tri(x + 0.5, z + 0.5, up) or in_tri(x + 0.5, z + 0.5, dn):
+                    if self.has(x, y, z):
+                        self.vox[(x, y, z)] = mat
+
+    def star_ground(self, cx, cy, radius, key="star"):
+        """Upright hexagram painted on the ground (no projection squash)."""
+        r = float(radius)
+        up = ((cx, cy + r), (cx - r * 0.866, cy - r * 0.5), (cx + r * 0.866, cy - r * 0.5))
+        dn = ((cx, cy - r), (cx - r * 0.866, cy + r * 0.5), (cx + r * 0.866, cy + r * 0.5))
+
+        def in_tri(px, py, tri):
+            (ax, ay), (bx, by), (cx_, cy_) = tri
+            d = (by - cy_) * (ax - cx_) + (cx_ - bx) * (ay - cy_)
+            if d == 0:
+                return False
+            u = ((by - cy_) * (px - cx_) + (cx_ - bx) * (py - cy_)) / d
+            v = ((cy_ - ay) * (px - cx_) + (ax - cx_) * (py - cy_)) / d
+            return u >= 0 and v >= 0 and u + v <= 1
+
+        for x in range(int(cx - r) - 1, int(cx + r) + 2):
+            for y in range(int(cy - r) - 1, int(cy + r) + 2):
+                if 0 <= x < S and 0 <= y < S and (in_tri(x + 0.5, y + 0.5, up) or in_tri(x + 0.5, y + 0.5, dn)):
+                    self.ground[y][x] = key
+
+    def arch_windows_s(self, x0, x1, y, z0, z1, step=3, mat="window"):
+        for x in range(x0, x1 - 1, step):
+            self.south_face(x, x + 2, y, z0, z1 - 1, mat)
+            self.south_face(x, x + 2, y, z1 - 1, z1, mat)
+
+    def arch_windows_w(self, x, y0, y1, z0, z1, step=3, mat="window"):
+        for y in range(y0, y1 - 1, step):
+            self.west_face(x, y, y + 2, z0, z1 - 1, mat)
+            self.west_face(x, y, y + 2, z1 - 1, z1, mat)
+
 
 # ---------------------------------------------------------------- render
 def surface_normal(m, x, y, z):
@@ -432,23 +552,30 @@ def to_image(keys, ramps, ground, pal8):
 # ---------------------------------------------------------------- churches
 def chapel(m):
     """Type 1, Country Chapel: a small white clapboard chapel with a brown
-    shingle roof, a belfry and short spire over the door, a gravel walk, a
-    churchyard of headstones and shade trees."""
-    m.paint(15, 41, 19, 48, "gravel")
-    for gx in (30, 34, 38):
-        for gy in (28, 33, 38):
-            m.paint(gx, gy, gx + 2, gy + 2, "grave")
-    m.gable_ns(10, 18, 24, 40, 0, 8, 7, "white", "shingle")
-    for y in range(21, 36, 4):
-        m.west_face(10, y, y + 2, 3, 6, "window")
-    m.box(14, 36, 20, 41, 0, 17, "white")
-    m.south_face(15, 19, 40, 0, 5, "door")
-    m.south_face(15, 19, 40, 12, 15, "bell")
-    m.pyramid(14, 36, 20, 41, 17, 9, "slate")
-    m.cross(17, 38, 26, tall=3)
-    m.tree(4, 14, 3)
-    m.tree(40, 16, 3)
-    m.tree(4, 40, 3)
+    shingle roof, a square belfry with open arches and a visible bell, and a
+    short pointed spire over the door, a gravel walk, a churchyard of
+    headstones and shade trees."""
+    m.paint(14, 42, 22, 48, "gravel")
+    for gx, gy in ((30, 26), (35, 26), (40, 26), (30, 32), (36, 32), (41, 32), (32, 38), (38, 38)):
+        m.paint(gx, gy, gx + 2, gy + 2, "grave")
+        m.box(gx, gy, gx + 1, gy + 1, 0, 3, "stone")
+    m.gable_ns(8, 14, 24, 36, 0, 9, 7, "white", "shingle")
+    for y in range(17, 32, 5):
+        m.west_face(8, y, y + 2, 3, 7, "window")
+    # Tower at the front: a door in the shaft, a slightly inset open belfry,
+    # then a sharp slate spire and a gold cross.
+    m.box(12, 34, 20, 42, 0, 14, "white")
+    m.south_face(14, 18, 41, 0, 6, "door")
+    m.box(13, 35, 19, 41, 14, 18, "white")
+    m.box(12, 34, 20, 42, 18, 25, "white")
+    m.niche_s(14, 34, 18, 42, 19, 25)
+    m.niche_w(12, 36, 13, 40, 19, 25)
+    m.hanging_bell(16, 40, 19, 24)
+    m.cone(16, 38, 4.0, 25, 13, "slate")
+    m.cross(16, 38, 38, tall=4)
+    m.tree(3, 12, 3)
+    m.tree(40, 14, 3)
+    m.tree(3, 40, 3)
     m.tree(42, 44, 2)
 
 
@@ -504,64 +631,76 @@ def cathedral(m):
     m.tree(3, 42, 2)
 
 
-def basilica(m):
-    """Type 4, Domed Basilica: a square white church under a great gold dome
-    on a windowed drum, with four gold-capped corner cupolas and a columned
-    porch with a pediment, on a paved square."""
-    m.paint(5, 43, 36, 48, "path")
-    m.box(6, 14, 34, 40, 0, 10, "white")
-    for x in range(8, 33, 3):
-        m.south_face(x, x + 1, 39, 4, 8, "window")
-    for y in range(16, 39, 3):
-        m.west_face(6, y, y + 1, 4, 8, "window")
-    m.cylinder(20, 27, 7.5, 10, 15, "white")
-    for x in range(14, 27, 2):
-        for y in (33, 34):
-            m.south_face(x, x + 1, y, 11, 14, "window")
-    m.dome(20, 27, 15, 8, "gold", squash=1.1)
-    m.cylinder(20, 27, 1.6, 23, 27, "white")
-    m.cross(20, 27, 27, tall=3)
-    for cx, cy in ((8.5, 16.5), (31.5, 16.5), (8.5, 37.5), (31.5, 37.5)):
-        m.cylinder(cx, cy, 2.2, 10, 13, "white")
-        m.dome(cx, cy, 13, 2.2, "gold")
-    m.gable_ns(13, 40, 27, 45, 0, 8, 4, "white", "white")
-    for x in range(14, 27, 2):
-        m.south_face(x, x + 1, 44, 0, 7, "window")
-    m.south_face(18, 22, 44, 0, 4, "door")
-    m.tree(42, 18, 3)
-    m.tree(42, 36, 3)
+def synagogue(m):
+    """Type 4, Synagogue: a brick hall with a dark slate roof, modest square
+    twin towers with pyramidal caps, a paved entry court and steps,
+    round-arched windows, and a large gold Star of David in a dark circular
+    window on a thin south frontispiece, with another star in the pavement.
+    No dome and no minaret-like towers."""
+    m.paint(10, 40, 36, 48, "path")
+    m.star_ground(21.5, 41.5, 6, "ink")
+    m.star_ground(21.5, 41.5, 4.8, "star")
+    # Hall sits south enough that the roof stays on the sheet.
+    m.gable_ns(10, 12, 33, 34, 0, 12, 8, "brick", "slate")
+    m.arch_windows_w(10, 14, 32, 4, 10, step=4)
+    for x0 in (6, 29):
+        m.box(x0, 28, x0 + 8, 40, 0, 20, "brick")
+        m.south_face(x0 + 2, x0 + 3, 39, 6, 12, "window")
+        m.south_face(x0 + 5, x0 + 6, 39, 6, 12, "window")
+        m.south_face(x0 + 3, x0 + 5, 39, 13, 16, "window")
+        m.west_face(x0, 30, 38, 6, 12, "window")
+        m.pyramid(x0, 28, x0 + 8, 40, 20, 6, "slate")
+    # Porch and door. The frontispiece above it is one voxel deep so the
+    # circular window and star are seen on the south face, not as a lid.
+    m.box(16, 34, 27, 40, 0, 10, "brick")
+    m.south_face(19, 24, 39, 0, 6, "door")
+    lift = 1.0 / RISE
+    m.box(16, 39, 27, 40, 10, 23, "brick")
+    m.disc_south(21, 39, 16, 5.2, "dark", lift=lift)
+    m.star_of_david(21, 39, 16, 4.2, "gold", lift=lift)
+    m.tree(2, 16, 3)
+    m.tree(42, 16, 3)
+    m.tree(2, 42, 3)
+    m.tree(43, 42, 2)
 
 
 def mission(m):
     """Type 5, Mission Church: a whitewashed adobe hall with a red clay-tile
-    roof and a stepped bell wall carrying three bells, beside an arcaded
-    sand courtyard with a fountain and two trees."""
-    m.paint(18, 14, 40, 44, "sand")
-    m.gable_ew(18, 10, 42, 15, 0, 5, 2, "white", "terra")
-    m.gable_ns(37, 15, 42, 44, 0, 5, 2, "white", "terra")
-    for x in range(19, 36, 3):
-        m.south_face(x, x + 2, 14, 0, 3, "window")
-    for y in range(17, 43, 3):
-        m.west_face(37, y, y + 2, 0, 3, "window")
+    roof and a tall stepped bell wall (espadaña) with three arched openings
+    and hanging bells, beside an arcaded sand courtyard with a fountain and
+    two trees."""
+    m.paint(20, 12, 44, 44, "sand")
+    m.gable_ew(20, 8, 44, 14, 0, 5, 2, "white", "terra")
+    m.gable_ns(38, 14, 44, 42, 0, 5, 2, "white", "terra")
+    for x in range(22, 37, 3):
+        m.south_face(x, x + 2, 13, 0, 4, "window")
+    for y in range(16, 41, 3):
+        m.west_face(38, y, y + 2, 0, 4, "window")
     for dy in range(-2, 3):
         for dx in range(-3, 4):
             if dx * dx / 9.0 + dy * dy / 4.0 <= 1.0:
-                m.ground[29 + dy][27 + dx] = "water" if abs(dx) < 3 and abs(dy) < 2 else "path"
-    m.cylinder(27.5, 29.5, 0.8, 0, 3, "white")
-    m.tree(22, 40, 2)
-    m.tree(32, 20, 2)
-    m.gable_ns(4, 12, 16, 40, 0, 9, 5, "white", "terra")
-    for y in range(15, 37, 5):
+                m.ground[28 + dy][29 + dx] = "water" if abs(dx) < 3 and abs(dy) < 2 else "path"
+    m.cylinder(29.5, 28.5, 0.8, 0, 3, "white")
+    m.tree(24, 38, 2)
+    m.tree(34, 18, 2)
+    m.gable_ns(4, 8, 18, 36, 0, 9, 5, "white", "terra")
+    for y in range(11, 33, 5):
         m.west_face(4, y, y + 1, 4, 7, "window")
-    m.box(3, 39, 15, 42, 0, 13, "white")
-    m.box(5, 39, 13, 42, 13, 17, "white")
-    m.box(7, 39, 11, 42, 17, 19, "white")
-    m.south_face(7, 11, 41, 0, 5, "door")
-    for bx, bz in ((5, 9), (11, 9), (8, 14)):
-        m.south_face(bx, bx + 2, 41, bz, bz + 2, "window")
-        m.south_face(bx, bx + 2, 41, bz, bz + 1, "bell")
-    m.cross(9, 40, 19, tall=3)
-    m.paint(7, 42, 11, 48, "sand")
+    # Free-standing stepped bell wall, wider than the nave, with large dark
+    # arched niches and a gold bell hanging in each.
+    m.box(1, 38, 21, 43, 0, 11, "white")
+    m.south_face(9, 13, 42, 0, 6, "door")
+    m.box(4, 38, 18, 43, 11, 18, "white")
+    m.niche_s(5, 38, 9, 43, 12, 18)
+    m.niche_s(13, 38, 17, 43, 12, 18)
+    m.hanging_bell(7, 41, 12, 17)
+    m.hanging_bell(15, 41, 12, 17)
+    m.box(7, 38, 15, 43, 18, 26, "white")
+    m.niche_s(9, 38, 13, 43, 19, 26)
+    m.hanging_bell(11, 41, 19, 25)
+    m.box(9, 38, 13, 43, 26, 28, "white")
+    m.cross(11, 40, 28, tall=4)
+    m.paint(8, 43, 14, 48, "sand")
     m.tree(44, 8, 2)
 
 
@@ -627,7 +766,7 @@ CHURCHES = [
     (1, "Country Chapel", chapel),
     (2, "Steeple Church", steeple_church),
     (3, "Cathedral", cathedral),
-    (4, "Domed Basilica", basilica),
+    (4, "Synagogue", synagogue),
     (5, "Mission Church", mission),
     (6, "Abbey", abbey),
     (7, "Modern Church", modern_church),
