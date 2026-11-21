@@ -634,9 +634,9 @@ def cathedral(m):
 def synagogue(m):
     """Type 4, Synagogue: a brick hall with a dark slate roof, modest square
     twin towers with pyramidal caps, a paved entry court and steps,
-    round-arched windows, and a large gold Star of David in a dark circular
-    window on a thin south frontispiece, with another star in the pavement.
-    No dome and no minaret-like towers."""
+    round-arched windows, and a large gold Star of David (two interlocking
+    triangles on a dark round backing) on the front gable, with another
+    star in the pavement. No dome and no minaret-like towers."""
     m.paint(10, 40, 36, 48, "path")
     m.star_ground(21.5, 41.5, 6, "ink")
     m.star_ground(21.5, 41.5, 4.8, "star")
@@ -650,14 +650,17 @@ def synagogue(m):
         m.south_face(x0 + 3, x0 + 5, 39, 13, 16, "window")
         m.west_face(x0, 30, 38, 6, 12, "window")
         m.pyramid(x0, 28, x0 + 8, 40, 20, 6, "slate")
-    # Porch and door. The frontispiece above it is one voxel deep so the
-    # circular window and star are seen on the south face, not as a lid.
+    # Porch and door. A tall, one-voxel-deep peaked gable above the door
+    # gives a large, flat south face for a hand-placed Star of David
+    # stamped in sheet pixels after the render (see stamp_star_motif).
     m.box(16, 34, 27, 40, 0, 10, "brick")
     m.south_face(19, 24, 39, 0, 6, "door")
-    lift = 1.0 / RISE
-    m.box(16, 39, 27, 40, 10, 23, "brick")
-    m.disc_south(21, 39, 16, 5.2, "dark", lift=lift)
-    m.star_of_david(21, 39, 16, 4.2, "gold", lift=lift)
+    m.box(13, 39, 30, 40, 7, 16, "brick")
+    mid, half = 21.5, 8.5
+    for x in range(13, 30):
+        top = 16 + int(round(24 * (1.0 - abs(x + 0.5 - mid) / half)))
+        for z in range(16, top + 1):
+            m.set(x, 39, z, "brick")
     m.tree(2, 16, 3)
     m.tree(42, 16, 3)
     m.tree(2, 42, 3)
@@ -773,10 +776,69 @@ CHURCHES = [
 ]
 
 
+def _in_triangle(px, py, tri):
+    (ax, ay), (bx, by), (cx, cy) = tri
+    d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+    if d == 0:
+        return False
+    u = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / d
+    v = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / d
+    return u >= 0 and v >= 0 and u + v <= 1
+
+
+def _close_to_segment(px, py, x0, y0, x1, y1, half=0.7):
+    dx, dy = x1 - x0, y1 - y0
+    L2 = dx * dx + dy * dy
+    if L2 == 0:
+        return (px - x0) ** 2 + (py - y0) ** 2 <= half * half
+    t = max(0.0, min(1.0, ((px - x0) * dx + (py - y0) * dy) / L2))
+    qx, qy = x0 + t * dx, y0 + t * dy
+    return (px - qx) ** 2 + (py - qy) ** 2 <= half * half
+
+
+def stamp_star_motif(keys, cx, cy, radius):
+    """A large six-pointed star in sheet pixels (not projected), so the two
+    interlocking triangles stay clear at game zoom. Dark round backing,
+    gold points, and gold outlines of both triangles. Only paints over
+    already-drawn building pixels."""
+    cx, cy, r = float(cx), float(cy), float(radius)
+    # Apex toward the top of the sheet (smaller y).
+    up = ((cx, cy - r), (cx - r * 0.866025, cy + r * 0.5), (cx + r * 0.866025, cy + r * 0.5))
+    dn = ((cx, cy + r), (cx - r * 0.866025, cy - r * 0.5), (cx + r * 0.866025, cy - r * 0.5))
+    back_r = r + 2.4
+    x0, x1 = int(cx - back_r) - 1, int(cx + back_r) + 2
+    y0, y1 = int(cy - back_r) - 1, int(cy + back_r) + 2
+    for y in range(max(0, y0), min(S, y1)):
+        for x in range(max(0, x0), min(S, x1)):
+            if keys[y][x][0] != "v":
+                continue
+            px, py = x + 0.5, y + 0.5
+            in_up = _in_triangle(px, py, up)
+            in_dn = _in_triangle(px, py, dn)
+            on_edge = False
+            for tri in (up, dn):
+                for i in range(3):
+                    ax, ay = tri[i]
+                    bx, by = tri[(i + 1) % 3]
+                    if _close_to_segment(px, py, ax, ay, bx, by, 0.75):
+                        on_edge = True
+                        break
+            in_disc = (px - cx) ** 2 + (py - cy) ** 2 <= back_r * back_r
+            if on_edge or (in_up or in_dn) and not (in_up and in_dn):
+                keys[y][x] = ("v", "gold", 0)
+            elif in_disc:
+                keys[y][x] = ("v", "dark", 3)
+
+
 def build(number, draw):
     model = Model(1000 + number)
     draw(model)
-    return render(model)
+    keys = render(model)
+    if number == 4:
+        # Screen position of the frontispiece, measured from the 3/4 projection
+        # of its centre, then nudged so the star sits on the gable face.
+        stamp_star_motif(keys, 30, 25.5, 8.0)
+    return keys
 
 
 def sheet(ramps, ground, pal8, rendered):
