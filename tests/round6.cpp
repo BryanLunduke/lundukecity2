@@ -34,8 +34,10 @@ int main()
         "Bring average crime below 60 within 10 years.",
         "Raise the score above 500 by 2015.",
         "Keep the city score above 500 until 2057.",
-        "Clear the Autonomous Zone and bring average crime below 60 by mid-2025.",
-        "Round up the Alcatraz escapees and bring average crime below 45 by mid-1964.",
+        "Clear the Autonomous Zone and bring average crime below 60 by mid-2025. Ring the zone with police stations: "
+        "strong police cover shrinks it.",
+        "Round up the Alcatraz escapees and bring average crime below 45 by mid-1964. Police stations by Fisherman's "
+        "Wharf round them up sooner.",
         "Put out the riot fires and bring average crime below 60 by summer 2021. Build fire stations by the riot, and "
         "bulldoze firebreaks if it spreads.",
         "Have the police catch the lion within four months and keep at least 100,000 people by spring 2027.",
