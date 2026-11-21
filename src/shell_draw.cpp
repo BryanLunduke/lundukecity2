@@ -2971,8 +2971,8 @@ void Shell::draw_dialog(cairo_t *cr)
         // cash flow, so the player can see what the attractions bring in.
         const std::string attractions =
             copy.attractions.empty() ? std::string() : avoid_short_last_line(cr, ui_font(), copy.attractions, col_px);
-        const double row3 = attractions.empty() ? 0.0 : line_height(ui_font(), attractions, col_w) + gap;
-        const double note_h = copy.closing_note.empty() ? 0.0 : line_height(ui_font(), copy.closing_note, inner) + gap;
+        const double attractions_h = attractions.empty() ? 0.0 : line_height(ui_font(), attractions, col_w);
+        const double note_line_h = copy.closing_note.empty() ? 0.0 : line_height(ui_font(), copy.closing_note, inner);
         auto block_h = [&](const std::string &caption, const std::string &value_text, const std::string &detail) {
             const double value_w = static_cast<double>(measure_text(cr, bold_font(), value_text, -1).width);
             const double cap_w = std::max(1.0, inner - value_w - gap);
@@ -2983,7 +2983,7 @@ void Shell::draw_dialog(cairo_t *cr)
             h += tail + static_cast<double>(dp(16)) + tail;
             return h;
         };
-        const double fund_gap = static_cast<double>(dp(14));
+        double fund_gap = static_cast<double>(dp(14));
         // The tax slider warns before the cliff (dialog_copy.hpp tax_warning).
         const TaxWarning tax_warn = tax_warning(tax_, session_.difficulty());
         // The warning sits under the tax bar in room kept for the longest
@@ -2996,28 +2996,43 @@ void Shell::draw_dialog(cairo_t *cr)
                 tax_note_room = std::max(tax_note_room, line_height(ui_font(), w.note, inner) + gap);
             }
         }
-        const double blocks = block_h(copy.tax_title, copy.tax_value, std::string()) + tax_note_room + fund_gap +
-                              block_h("Road fund", std::to_string(road_) + "%", copy.road) +
-                              block_h("Police fund", std::to_string(police_) + "%", copy.police) +
-                              block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
+        // The window's height at the current rhythm (gap, tail, the room kept
+        // for the tax warning, and the gap before the funds). A short window
+        // tightens these in turn until the fire slider clears Cancel and OK.
         const double treasury_h = static_cast<double>(dp(28));
-        const double height =
-            dp(40) + margin + treasury_h + row1 + gap + row2 + gap + row3 + note_h + blocks + dp(8) + dp(36) + margin;
+        auto layout_height = [&]() {
+            const double row3 = attractions.empty() ? 0.0 : attractions_h + gap;
+            const double note_h = copy.closing_note.empty() ? 0.0 : note_line_h + gap;
+            const double blocks = block_h(copy.tax_title, copy.tax_value, std::string()) + tax_note_room + fund_gap +
+                                  block_h("Road fund", std::to_string(road_) + "%", copy.road) +
+                                  block_h("Police fund", std::to_string(police_) + "%", copy.police) +
+                                  block_h("Fire fund", std::to_string(fire_) + "%", copy.fire);
+            return dp(40) + margin + treasury_h + row1 + gap + row2 + gap + row3 + note_h + blocks + dp(8) + dp(36) + margin;
+        };
+        const double height = layout_height();
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         const double dh = panel.h;
         // A short window clamps the panel. Tighten the rhythm so the fire
-        // slider stays above Cancel and OK.
+        // slider stays above Cancel and OK: the tails, then the gaps, then the
+        // gap before the funds, then the room held for the tax warning (down
+        // to one line, which the warning still fits).
         if (dh + 1 < height) {
-            const double overflow = height - dh;
-            const double tail_save = std::max(0.0, (tail - 1.0) * 8.0);
-            if (overflow <= tail_save) {
-                tail = std::max(1.0, tail - overflow / 8.0);
-            } else {
-                tail = 1;
-                gap = std::max(2.0, gap - (overflow - tail_save) / 12.0);
+            const double warn_floor = tax_note_room > 0 ? line_height(ui_font(), "Ag", inner) + 2.0 : 0.0;
+            for (int guard = 0; guard < 200 && layout_height() > dh; ++guard) {
+                if (tail > 1.0) {
+                    tail = std::max(1.0, tail - 1.0);
+                } else if (gap > 2.0) {
+                    gap = std::max(2.0, gap - 1.0);
+                } else if (fund_gap > 2.0) {
+                    fund_gap = std::max(2.0, fund_gap - 2.0);
+                } else if (tax_note_room > warn_floor) {
+                    tax_note_room = std::max(warn_floor, tax_note_room - 2.0);
+                } else {
+                    break;
+                }
             }
         }
         frame_panel(cr, x, y, dw, dh, "Budget");
