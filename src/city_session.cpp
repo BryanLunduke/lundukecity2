@@ -171,12 +171,19 @@ std::string city2_scenario_dir(const std::string &filename)
     return path.substr(0, slash);
 }
 
+// The scenario's zone is raised by the engine's scenario disaster once its
+// wait runs out. Until then there is nothing to clear.
+bool seattle_zone_pending(const Micropolis &sim)
+{
+    return sim.disasterEvent == SC_SEATTLE && sim.disasterWait > 0;
+}
+
 // The Seattle meter's Autonomous Zone part.
 std::string seattle_zone_short(const Micropolis &sim)
 {
     const int blocks = sim.cityEvents.zoneCount;
     if (blocks <= 0) {
-        return "Zone cleared";
+        return seattle_zone_pending(sim) ? "Zone: not yet formed" : "Zone cleared";
     }
     return "Zone " + std::to_string(blocks) + (blocks == 1 ? " block" : " blocks");
 }
@@ -252,7 +259,7 @@ std::string seattle_zone_long(const Micropolis &sim)
 {
     const int blocks = sim.cityEvents.zoneCount;
     if (blocks <= 0) {
-        return "no Autonomous Zone";
+        return seattle_zone_pending(sim) ? "the Autonomous Zone has not formed yet" : "no Autonomous Zone";
     }
     return "Autonomous Zone holds " + std::to_string(blocks) + (blocks == 1 ? " block" : " blocks") +
            " → ring it with police stations";
