@@ -158,7 +158,11 @@ void Micropolis::simulate()
                 cityEvaluation();
             }
 
-            cityTime++;
+            if (holdClockOnce) {
+                holdClockOnce = false;
+            } else {
+                cityTime++;
+            }
             cityTaxAverage += cityTax;
 
             if (!(simCycle & 1)) {
@@ -1556,7 +1560,8 @@ void Micropolis::fireZone(const Position &pos, MapValue ch)
 
     ch = ch & LOMASK;
 
-    if (ch < PORTBASE) {
+    // The church tiles (956-1018) sit above PORTBASE but are 3x3 buildings.
+    if (ch < PORTBASE || (ch >= CHURCH1BASE && ch <= CHURCH7LAST)) {
         XYmax = 2;
     } else {
         if (ch == AIRPORT) {

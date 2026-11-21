@@ -64,6 +64,8 @@ static_assert(kSpecialBodyTile == SPECIAL_BODY, "body tile constant");
 static_assert(SPECIAL_DATACENTER_LOT == 873, "vacant data center lot tile");
 static_assert(SPECIAL_MICRONUKE == 874, "micro nuclear plant tile");
 static_assert(SPECIAL_DATACENTER == 875, "built data center tile");
+static_assert(kDataCenterPowerTiles == DATACENTER_POWER_MULTIPLIER * kZonePowerTiles,
+              "the power texts match the engine power scan");
 static_assert(SPECIAL_DATACENTER_LOT > LASTTINYEXP + 2 && SPECIAL_DATACENTER < TINYEXPLAST,
               "data center and micro plant ids sit in the free gap the bulldozer does not treat as rubble");
 
@@ -95,14 +97,16 @@ constexpr SpecialBuilding kBuildings[] = {
     {53, "Mayor's House", "mayor", "mayor", 100, 0, 3, 3, 6, 48,
      "Raises nearby land value, and a little across the city, while powered. Best near residential", 0, 0, 2000, 1,
      1, 1, 1, false, false, false, false, true, 0, 4},
-    {54, "Casino", "casino", "casino", 100, 300, 3, 3, 6, 96,
-     "Sharply raises nearby land value and local crime. Pays up to $300 a year with power, a road and 2,000 residents "
+    {54, "Casino", "casino", "casino", 450, 250, 3, 3, 6, 96,
+     "Sharply raises nearby land value and local crime. Pays up to $250 a year with power, a road and 2,000 residents "
      "within 16 tiles. Nearby attractions share them. A police station nearby matters",
      8, 100, 0, 2, 3},
     // Review nov18b #2: the same +48 as the other $100 landmarks; its
-    // income is what sets it apart.
-    {55, "Amusement Park", "amusement", "amusement", 100, 200, 3, 3, 6, 48,
-     "Raises nearby land value while powered. Pays up to $200 a year with power, a road and 2,000 residents within 16 "
+    // income is what sets it apart. Review nov21: the Casino and the Amusement
+    // Park cost $450 and pay up to $250 and $150 (they were $100, $300 and
+    // $200: three of them paid back in under half a year).
+    {55, "Amusement Park", "amusement", "amusement", 450, 150, 3, 3, 6, 48,
+     "Raises nearby land value while powered. Pays up to $150 a year with power, a road and 2,000 residents within 16 "
      "tiles. Nearby attractions share them", 0, 0, 0, 2, 3},
     // Prison: the land-value dip (-16 in 6 tiles) is smaller than the crime
     // cut (-40 in 8 tiles). Crime is 128 - land value + density - police,
@@ -129,10 +133,11 @@ constexpr SpecialBuilding kBuildings[] = {
     // Center is a zone, not a landmark: no land-value bump, no income.
     // The engine turns the lot into the built row once it has power and
     // counts a powered Data Center as one commercial plus one industrial
-    // zone (DATACENTER_ZONE_DENSITY each). Neither building pollutes. The
+    // zone (DATACENTER_ZONE_DENSITY each) and draws three times the power of
+    // an ordinary 3x3 zone (DATACENTER_POWER_MULTIPLIER, power.cpp). Neither building pollutes. The
     // micro plant is 1/9 of a nuclear plant and cannot melt down.
     {SPECIAL_DATACENTER_LOT, "Data Center", "datacenter", "datacenter-vacant", 400, 0, 3, 3, 0, 0,
-     "Vacant lot. Opens once it has power, then counts as 1 industrial + 1 commercial zone. No pollution", 0, 0, 0,
+     "Vacant lot. Opens once it has power, then counts as 1 industrial + 1 commercial zone. Draws 3x a zone's power. No pollution", 0, 0, 0,
      -1, 0, 1, 1, false, false, false, false, false},
     // $2,000 for 222 tiles is $9.01 a powered tile: about twice coal
     // ($3,000 / 700 = $4.29) and 3.6 times nuclear ($2.50). Coal stays the
@@ -141,7 +146,7 @@ constexpr SpecialBuilding kBuildings[] = {
      "Supplies 1/9 the power of a nuclear plant. Cannot melt down", 0, 0, 0, -1, 0, 0, 0, false, false, false, false,
      false},
     {SPECIAL_DATACENTER, "Data Center", "datacenter", "datacenter", 400, 0, 3, 3, 0, 0,
-     "Counts as 1 industrial + 1 commercial zone while powered. No pollution", 0, 0, 0, -1, 0, 1, 1, false, false,
+     "Counts as 1 industrial + 1 commercial zone while powered. Draws 3x a zone's power. No pollution", 0, 0, 0, -1, 0, 1, 1, false, false,
      false, false, false},
 };
 
@@ -1145,9 +1150,10 @@ int special_income_floor(const Micropolis *sim)
     if (sim == nullptr) {
         return kIncomeCapFloor;
     }
-    // Review nov19 #3: a flat $300 floor let one casino beat the whole tax
+    // Review nov19 #3: a flat floor let one casino beat the whole tax
     // roll of a small city (about half of all Medium income). The floor
-    // now grows with the city and reaches $300 at 30,000 people.
+    // now grows with the city and reaches one full casino, $250, at
+    // 25,000 people.
     const long long people = sim->cityPop < 0 ? 0 : static_cast<long long>(sim->cityPop);
     const long long grown = people / 1000 * kIncomeCapFloorPerThousand;
     return grown < kIncomeCapFloor ? static_cast<int>(grown) : kIncomeCapFloor;

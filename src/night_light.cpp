@@ -14,6 +14,12 @@ namespace night_light {
 
 Glow glow_for_tile(int tile)
 {
+    // The seven added church types (956-1018) sit above every other building
+    // tile. Their art has few window panes, so a powered church is also lit
+    // from within: a warm pool over the building, like the stadium's lamps.
+    if (tile >= CHURCH1BASE && tile <= CHURCH7LAST) {
+        return Glow::Church;
+    }
     if (tile >= FIREBASE && tile <= LASTFIRE) {
         return Glow::Fire;
     }
@@ -160,6 +166,9 @@ bool built_surface(std::uint32_t p)
 
 bool wants_windows(int tile)
 {
+    if (glow_for_tile(tile) == Glow::Church) {
+        return true;
+    }
     if (tile >= INDBASE2 || tile < HOUSE) {
         return false;
     }
@@ -170,6 +179,7 @@ bool wants_windows(int tile)
     case Glow::Civic:
     case Glow::Port:
     case Glow::Plant:
+    case Glow::Church:
         return true;
     default:
         return false;
@@ -432,6 +442,7 @@ void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int st
     const Rgb white = kWhite;
     const Rgb sodium{1.00f, 0.70f, 0.36f};
     const Rgb flame{1.00f, 0.45f, 0.12f};
+    const Rgb candle{1.00f, 0.74f, 0.40f};
     const bool with_glass = glass != nullptr && glass->size() == static_cast<std::size_t>(w * h * kTile);
     if (masks != nullptr || with_glass) {
         bloom.assign(static_cast<std::size_t>(lw * lh), 0.0f);
@@ -504,6 +515,11 @@ void build(const std::vector<int> &raw, int w, int h, unsigned char *out, int st
                     glow(bx + kPx * 3 / 2, by + kPx * 3 / 2, kPx * 3.2, white, 0.30f);
                 }
                 continue;
+            }
+            if (kind == Glow::Church && (word & ZONEBIT) != 0) {
+                // The centre of the 3x3 building: a candle-warm pool that
+                // covers it, on top of whatever panes the art has.
+                glow(bx + kPx / 2, by + kPx / 2, kPx * 2.4, candle, 0.34f);
             }
             if (masks == nullptr) {
                 continue;

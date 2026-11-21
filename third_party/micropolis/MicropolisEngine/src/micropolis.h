@@ -796,6 +796,17 @@ enum MapTileCharacters {
 static const int DATACENTER_ZONE_DENSITY = 2;
 
 /**
+ * Power a Data Center draws, as a multiple of an ordinary zone of the same
+ * 3x3 footprint. The power scan (power.cpp) spends one unit per step it
+ * takes through a conducting tile; every step on a Data Center tile (the
+ * vacant lot or the built center) costs this many units, so a Data Center
+ * draws three times what a standard zone draws in the same layout (27 against
+ * 9 in the plain case). Nothing is stored in a save: the draw is worked out
+ * from the map on every scan.
+ */
+static const int DATACENTER_POWER_MULTIPLIER = 3;
+
+/**
  * City population from a census: residents plus the workers of ordinary
  * commercial and industrial zones. dataCenter is the Data Centers' share of
  * comPop and indPop (dataCenterPop). A Data Center adds jobs to the tax base
@@ -2694,6 +2705,7 @@ private:
 
 
     void doPowerScan();
+    bool isDataCenterTile(const Position &pos) const;
 
     bool testForConductive(const Position &pos, Direction2 testDir);
 
@@ -2887,6 +2899,9 @@ public:
     short evalPreviewOrder[CVP_PROBLEM_COMPLAINTS];
 
     bool doInitialEval; ///< Need to perform initial city evaluation.
+    /// Set after a load whose save was taken partway through a cycle: the
+    /// cycle that restarts at phase 0 does not count the clock again.
+    bool holdClockOnce = false;
 
     int mapSerial; ///< The invalidateMaps method increases the map serial number every time the maps changes.
 

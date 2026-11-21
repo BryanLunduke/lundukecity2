@@ -281,6 +281,10 @@ struct SimulatorProbe {
     }
 
     static bool churchPending(const Micropolis &sim) { return sim.needChurch != 0; }
+
+    static void fire_zone(Micropolis &sim, int x, int y, int tile) { sim.fireZone(Position(x, y), tile); }
+
+    static void fire_in_zone(Micropolis &sim, int x, int y, int tile) { sim.startFireInZone(x, y, tile); }
 };
 
 void fill_dirt(Micropolis &sim)
@@ -421,6 +425,49 @@ int lunduke_city_test_all_churches()
     return 0;
 }
 
+// A burning church is a 3x3 building. The fire code once sized every tile
+// above the port as 4x4, which flagged the ring of tiles east and south of
+// a church as bulldozable and let a $1 bulldoze punch holes in the
+// neighbouring buildings.
+int lunduke_city_test_church_fire_footprint()
+{
+    for (int type = 0; type < 8; ++type) {
+        const int base = type == 0 ? CHURCH0BASE : CHURCH1BASE + (type - 1) * 9;
+        for (int route = 0; route < 2; ++route) {
+            Micropolis sim;
+            fill_dirt(sim);
+            for (int x = 15; x <= 25; ++x) {
+                for (int y = 15; y <= 25; ++y) {
+                    sim.map[x][y] = static_cast<unsigned short>(RESBASE + 1) | BURNBIT;
+                }
+            }
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    sim.map[20 + dx][20 + dy] = static_cast<unsigned short>(base + (dy + 1) * 3 + dx + 1) | BURNBIT;
+                }
+            }
+            sim.map[20][20] |= ZONEBIT;
+            const int centre = base + 4;
+            if (route == 0) {
+                SimulatorProbe::fire_zone(sim, 20, 20, centre);
+            } else {
+                SimulatorProbe::fire_in_zone(sim, 20, 20, centre);
+            }
+            for (int x = 15; x <= 25; ++x) {
+                for (int y = 15; y <= 25; ++y) {
+                    const bool inside = x >= 19 && x <= 21 && y >= 19 && y <= 21;
+                    const bool flagged = (sim.map[x][y] & BULLBIT) != 0;
+                    if (inside != flagged) {
+                        std::fprintf(stderr, "type %d route %d tile %d,%d flagged %d\n", type, route, x, y, flagged);
+                        return fail(27, "a burning church flagged the wrong tiles bulldozable");
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 int main()
 {
     if (const int code = lunduke_city_test_vote_problems()) {
@@ -445,6 +492,9 @@ int main()
         return code;
     }
     if (const int code = lunduke_city_test_all_churches()) {
+        return code;
+    }
+    if (const int code = lunduke_city_test_church_fire_footprint()) {
         return code;
     }
     return 0;

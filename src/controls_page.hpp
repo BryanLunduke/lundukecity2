@@ -70,7 +70,7 @@ inline std::vector<HowToPlaySection> how_to_play_sections()
         {"Special buildings",
          "Parks, the Zoo, the Library and the Marina raise land value. Casinos, Amusement Parks and Marinas also pay "
          "each year, but only with power, a road and residents nearby. A Prison cuts crime. A Data Center adds jobs "
-         "and taxes, not residents."},
+         "and taxes, not residents, and draws three times the power of a zone."},
         {"Finding your way",
          "A scenario names a goal and a deadline. Right-click the map, or press Q, to switch to Inspect, then click "
          "a tile for its card: power, road, and why it is or is not growing. The minimap jumps across the city."},

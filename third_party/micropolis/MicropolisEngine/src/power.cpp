@@ -108,6 +108,34 @@ bool Micropolis::testForConductive(const Position& pos, Direction2 testDir)
 
 
 /**
+ * Is the tile at \a pos part of a Data Center (vacant lot or built)? Its
+ * eight body tiles are the shared SPECIAL_BODY tile, so the answer comes from
+ * the centre tile among the nine around \a pos. A Data Center's centre keeps
+ * ZONEBIT; the tile is its own centre or one of the body tiles around it.
+ * @param pos Position to test.
+ */
+bool Micropolis::isDataCenterTile(const Position &pos) const
+{
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            const int x = pos.posX + dx;
+            const int y = pos.posY + dy;
+            if (!testBounds(x, y)) {
+                continue;
+            }
+            const MapValue value = map[x][y];
+            const MapTile tile = value & LOMASK;
+            if ((value & ZONEBIT) != 0 &&
+                (tile == SPECIAL_DATACENTER || tile == SPECIAL_DATACENTER_LOT)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+
+/**
  * Scan the map for powered tiles, and copy them to the Micropolis::powerGridMap
  * array.
  * Also warns the user about using too much power ('buy another power plant').
@@ -133,13 +161,17 @@ void Micropolis::doPowerScan()
         Position pos = pullPowerStack();
         anyDir = DIR2_INVALID;
         do {
-            numPower++;
+            if (anyDir != DIR2_INVALID) {
+                pos.move(anyDir);
+            }
+            // Each step the scan takes costs one unit, three on a Data
+            // Center tile (DATACENTER_POWER_MULTIPLIER): a Data Center draws
+            // that many times what a standard zone of the same 3x3 footprint
+            // draws, in whatever layout it stands.
+            numPower += isDataCenterTile(pos) ? DATACENTER_POWER_MULTIPLIER : 1;
             if (numPower > maxPower) {
                 sendMessage(MESSAGE_NOT_ENOUGH_POWER);
                 return;
-            }
-            if (anyDir != DIR2_INVALID) {
-                pos.move(anyDir);
             }
             powerGridMap.worldSet(pos.posX, pos.posY, 1);
             conNum = 0;

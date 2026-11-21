@@ -214,11 +214,13 @@ int main()
         }
     }
 
-    // A cleared zone reads as cleared on the meter.
-    CitySession cleared;
-    if (!cleared.load_scenario(SC_SEATTLE) || cleared.scenario_meter_short().find("Zone cleared") == std::string::npos ||
-        cleared.scenario_meter().find("no Autonomous Zone") == std::string::npos) {
-        return fail(21, "the meter does not say the zone is cleared");
+    // Before the zone forms the meter must not claim it is cleared.
+    CitySession fresh;
+    if (!fresh.load_scenario(SC_SEATTLE) || fresh.scenario_meter_short().find("Zone: not yet formed") == std::string::npos ||
+        fresh.scenario_meter().find("has not formed yet") == std::string::npos ||
+        fresh.scenario_meter_short().find("cleared") != std::string::npos ||
+        fresh.scenario_meter().find("no Autonomous Zone") != std::string::npos) {
+        return fail(21, "the meter does not say the zone has not formed yet: " + fresh.scenario_meter());
     }
     std::printf("seattle ok: zone formed after %lld weeks\n", formed);
     return 0;

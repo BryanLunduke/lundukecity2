@@ -190,6 +190,34 @@ test(
   ],
 )
 
+load_score = executable(
+  'load_score',
+  'load_score.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/city_events.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'load_score',
+  load_score,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+)
+
 if posix_host
   regressions = executable(
     'regressions',
@@ -715,6 +743,19 @@ datacenter_micro_test = executable(
 )
 
 test('datacenter_micro', datacenter_micro_test, timeout: 300)
+
+# A Data Center draws three times the power of a standard 3x3 zone.
+datacenter_power_test = executable(
+  'datacenter_power',
+  'datacenter_power.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  cpp_args: ['-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"'],
+)
+
+test('datacenter_power', datacenter_power_test, timeout: 120)
 
 # Thumbnails painted from the scenario files themselves.
 scenario_preview_test = executable(

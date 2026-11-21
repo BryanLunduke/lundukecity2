@@ -663,6 +663,10 @@ private:
         long long population = 0;
     };
     LoadedEval loaded_eval_;
+    // The city score and the simulator phase the sidecar kept (-1 when the
+    // file has none, as in a classic save or one from an older release).
+    int loaded_score_ = -1;
+    int loaded_phase_ = -1;
     void restore_loaded_eval();
     save_view::View save_view_;
     save_view::View loaded_view_;

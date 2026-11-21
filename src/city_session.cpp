@@ -171,12 +171,19 @@ std::string city2_scenario_dir(const std::string &filename)
     return path.substr(0, slash);
 }
 
+// The scenario's zone is raised by the engine's scenario disaster once its
+// wait runs out. Until then there is nothing to clear.
+bool seattle_zone_pending(const Micropolis &sim)
+{
+    return sim.disasterEvent == SC_SEATTLE && sim.disasterWait > 0;
+}
+
 // The Seattle meter's Autonomous Zone part.
 std::string seattle_zone_short(const Micropolis &sim)
 {
     const int blocks = sim.cityEvents.zoneCount;
     if (blocks <= 0) {
-        return "Zone cleared";
+        return seattle_zone_pending(sim) ? "Zone: not yet formed" : "Zone cleared";
     }
     return "Zone " + std::to_string(blocks) + (blocks == 1 ? " block" : " blocks");
 }
@@ -252,7 +259,7 @@ std::string seattle_zone_long(const Micropolis &sim)
 {
     const int blocks = sim.cityEvents.zoneCount;
     if (blocks <= 0) {
-        return "no Autonomous Zone";
+        return seattle_zone_pending(sim) ? "the Autonomous Zone has not formed yet" : "no Autonomous Zone";
     }
     return "Autonomous Zone holds " + std::to_string(blocks) + (blocks == 1 ? " block" : " blocks") +
            " → ring it with police stations";
@@ -1283,8 +1290,21 @@ bool CitySession::load_city(const std::string &path)
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
     read_scenario_sidecar(path);
+    // The simulator restarts at phase 0 and counts the clock first. A save
+    // taken in phases 1 to 10 had already counted this cycle but not yet run
+    // its tax year (9) or its progress check (10), so the restarted cycle
+    // keeps the clock where it is and does both on the same tick the saved
+    // game would have.
+    sim.holdClockOnce = loaded_phase_ >= 1 && loaded_phase_ <= 10;
     recount_population_from_map();
     refresh_loaded_meters();
+    // The refresh above re-scores a map whose traffic was cleared by the
+    // load. The saved score is the one the player had.
+    if (loaded_score_ >= 0) {
+        sim.cityScore = static_cast<short>(loaded_score_);
+    }
+    loaded_score_ = -1;
+    loaded_phase_ = -1;
     // Review nov19 #12: catch up after the recount, not before. A city with
     // no sidecar (a classic save, a copied .cty) used to catch up on a
     // stale census of 0, so the next month toasted Town and its first Year
@@ -3337,6 +3357,8 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
     if (index == special_datacenter_lot_index()) {
         notes.push_back("Vacant lot: the Data Center opens once it has power");
         notes.push_back("Then counts as 1 industrial + 1 commercial zone");
+        notes.push_back("Draws 3x the power of a zone (" + std::to_string(kDataCenterPowerTiles) + " tiles of plant power, a zone uses " +
+                        std::to_string(kZonePowerTiles) + ")");
         notes.push_back("No pollution");
     } else if (index == special_datacenter_index()) {
         int found = -1;
@@ -3349,6 +3371,8 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
             notes.push_back(powered ? "Counts as 1 industrial + 1 commercial zone"
                                     : "Counts as 1 industrial + 1 commercial zone with power");
         }
+        notes.push_back("Draws 3x the power of a zone (" + std::to_string(kDataCenterPowerTiles) + " tiles of plant power, a zone uses " +
+                        std::to_string(kZonePowerTiles) + ")");
         notes.push_back("No pollution");
     } else if (index == special_micro_nuclear_index()) {
         notes.push_back("Supplies 1/9 of a nuclear plant's power (about " +
@@ -3904,6 +3928,12 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     if (!news.empty()) {
         append_string("news", news);
     }
+    // The score and where in its 16-phase cycle the simulator stands. The
+    // .cty file keeps neither: the score used to be recomputed on load from a
+    // map with no traffic (so it jumped), and the restarted cycle counted the
+    // clock one step ahead of where the save was taken.
+    append_string("score", std::to_string(static_cast<int>(sim.cityScore)));
+    append_string("phase", std::to_string(static_cast<int>(sim.phaseCycle)));
     // The Evaluation window's yearly changes, so a recovered or reloaded
     // city does not show dashes until another year passes.
     const bool deltas_known = eval_deltas_ready_ || sim.cityTime >= eval_anchor_time_ + 48;
@@ -3918,6 +3948,8 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
 void CitySession::read_scenario_sidecar(const std::string &path)
 {
     loaded_eval_ = LoadedEval{};
+    loaded_score_ = -1;
+    loaded_phase_ = -1;
     loaded_view_ = save_view::View{};
     std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
@@ -4014,6 +4046,18 @@ void CitySession::read_scenario_sidecar(const std::string &path)
             }
         }
     }
+    // "score" and "phase" are whole numbers in quotes; anything else is ignored.
+    auto whole_value = [&string_value](const char *key, int low, int high) -> int {
+        const std::string raw = string_value(key);
+        if (raw.empty() || raw.size() > 6) {
+            return -1;
+        }
+        char *stop = nullptr;
+        const long value = std::strtol(raw.c_str(), &stop, 10);
+        return (stop != raw.c_str() && *stop == '\0' && value >= low && value <= high) ? static_cast<int>(value) : -1;
+    };
+    loaded_score_ = whole_value("score", 0, 1000);
+    loaded_phase_ = whole_value("phase", 0, 15);
     ScenarioClock clock;
     if (!scenario_sidecar_parse(text, clock)) {
         return;
