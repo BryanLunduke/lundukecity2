@@ -68,12 +68,13 @@ int main()
         return fail(1, "a landmark is missing from the table");
     }
     if (special_building(zoo).annual_income != 0 || special_building(mayor).annual_income != 0 ||
-        special_building(park).annual_income != 200 || special_building(casino).annual_income != 300 ||
-        special_building(mayor).cost != 100 || special_building(park).cost != 100) {
+        special_building(park).annual_income != 150 || special_building(casino).annual_income != 250 ||
+        special_building(mayor).cost != 100 || special_building(park).cost != 450 ||
+        special_building(casino).cost != 450) {
         return fail(2, "landmark prices or incomes do not match the City 2 rules");
     }
-    if (std::string(special_building(park).effect).find("$200") == std::string::npos ||
-        std::string(special_building(casino).effect).find("$300") == std::string::npos ||
+    if (std::string(special_building(park).effect).find("$150") == std::string::npos ||
+        std::string(special_building(casino).effect).find("$250") == std::string::npos ||
         std::string(special_building(casino).effect).find("crime") == std::string::npos ||
         std::string(special_building(mayor).effect).find("residential") == std::string::npos) {
         return fail(3, "query text does not describe the landmark");
@@ -124,7 +125,7 @@ int main()
 
     Micropolis books;
     arm(books, 0);
-    // A city of 30,000: the attraction cap's floor is the full $300.
+    // A city of 30,000: the attraction cap's floor is the full $250.
     books.cityPop = 30000;
     if (!place_special_building(&books, park, 10, 20, error) || !place_special_building(&books, casino, 20, 20, error)) {
         return fail(13, "park and casino could not be placed for the income check");
@@ -149,49 +150,50 @@ int main()
     }
     // One dense residential zone (40 census units, 800 people) within 16
     // tiles of both. Review nov18b #1: the two attractions share it, 400
-    // people each: 400 / 2,000 of the full income, $40 + $60.
+    // people each: 400 / 2,000 of the full income, $30 + $50.
     const unsigned short dense_home = static_cast<unsigned short>((RZB + 3 * 9) | ZONEBIT | PWRBIT);
     books.map[15][26] = dense_home;
-    if (special_residents_near(&books, 20, 20, kIncomeCatchmentRadius) != 800 || special_annual_income(&books) != 100) {
+    if (special_residents_near(&books, 20, 20, kIncomeCatchmentRadius) != 800 || special_annual_income(&books) != 80) {
         std::fprintf(stderr, "residents %d income %d\n", special_residents_near(&books, 20, 20, kIncomeCatchmentRadius),
                      special_annual_income(&books));
         return fail(23, "income did not scale with the residents nearby");
     }
     // A zone 17 tiles away is outside the catchment.
     books.map[10][38] = dense_home;
-    if (special_annual_income(&books) != 100) {
+    if (special_annual_income(&books) != 80) {
         return fail(24, "a zone outside the catchment counted");
     }
     // Five more dense zones: 4,800 shared residents, 2,400 each, is past
-    // the 2,000 for full income ($200 + $300 = $500). With no taxes yet
-    // collected the city-wide cap is its floor, $300 for a city of 30,000,
-    // so the pair is scaled to $120 + $180.
+    // the 2,000 for full income ($150 + $250 = $400). With no taxes yet
+    // collected the city-wide cap is its floor, $250 for a city of 30,000,
+    // so the pair is scaled to $93 + $156 (each share rounds down).
     books.map[10][26] = dense_home;
     books.map[20][26] = dense_home;
     books.map[25][26] = dense_home;
     books.map[5][26] = dense_home;
     books.map[12][30] = dense_home;
-    if (special_annual_income(&books) != 300 || !special_income_at(&books, 20, 20).capped ||
-        special_income_at(&books, 20, 20).dollars != 180 || special_income_at(&books, 10, 20).dollars != 120) {
+    if (special_annual_income(&books) != 249 || !special_income_at(&books, 20, 20).capped ||
+        special_income_at(&books, 20, 20).dollars != 156 || special_income_at(&books, 10, 20).dollars != 93) {
         std::fprintf(stderr, "capped income %d\n", special_annual_income(&books));
         return fail(92, "the attraction income cap did not hold at its floor");
     }
     // The floor grows with the city: $10 per 1,000 people, so a town of
-    // 5,000 caps the pair at $50 and a city of 45,000 still at $300.
+    // 5,000 caps the pair at $50 and a city of 45,000 still at $250. Each
+    // share rounds down, so the pair pays $49 and $249.
     books.cityPop = 5000;
-    if (special_income_floor(&books) != 50 || special_annual_income(&books) != 50 ||
+    if (special_income_floor(&books) != 50 || special_annual_income(&books) != 49 ||
         !special_income_at(&books, 20, 20).capped) {
         std::fprintf(stderr, "small floor %d income %d\n", special_income_floor(&books), special_annual_income(&books));
         return fail(96, "the attraction income floor did not scale down with a small city");
     }
     books.cityPop = 45000;
-    if (special_income_floor(&books) != kIncomeCapFloor || special_annual_income(&books) != 300) {
-        return fail(97, "the attraction income floor went past $300");
+    if (special_income_floor(&books) != kIncomeCapFloor || special_annual_income(&books) != 249) {
+        return fail(97, "the attraction income floor went past $250");
     }
     books.cityPop = 30000;
     // A $2,000 tax year lifts the cap to 40%, $800: both pay in full.
     books.taxFund = 2000;
-    if (special_annual_income(&books) != 500 || special_income_at(&books, 20, 20).capped) {
+    if (special_annual_income(&books) != 400 || special_income_at(&books, 20, 20).capped) {
         std::fprintf(stderr, "uncapped income %d\n", special_annual_income(&books));
         return fail(93, "the attraction income cap ignored the tax income");
     }
@@ -199,14 +201,14 @@ int main()
     const long before = static_cast<long>(books.totalFunds);
     books.taxFlag = false;
     books.collectTax();
-    // The census is empty, so the tax year is $0 and the cap stays at $300.
-    if (books.specialIncome != 300 || static_cast<long>(books.totalFunds) != before) {
+    // The census is empty, so the tax year is $0 and the cap stays at $250 (paid as $249).
+    if (books.specialIncome != 249 || static_cast<long>(books.totalFunds) != before) {
         std::fprintf(stderr, "income %ld funds %ld\n", static_cast<long>(books.specialIncome),
                      static_cast<long>(books.totalFunds));
-        return fail(14, "January did not record the capped $300 without paying it early");
+        return fail(14, "January did not record the capped $249 without paying it early");
     }
     books.commitBudgetPayment();
-    if (books.specialIncome != 0 || static_cast<long>(books.totalFunds) != before + 300) {
+    if (books.specialIncome != 0 || static_cast<long>(books.totalFunds) != before + 249) {
         std::fprintf(stderr, "paid %ld funds %ld\n", static_cast<long>(books.specialIncome),
                      static_cast<long>(books.totalFunds));
         return fail(15, "collecting the year did not pay the park and the casino");

@@ -140,7 +140,7 @@ int wire_special_buildings(Micropolis *sim);
 inline constexpr int kIncomeCatchmentRadius = 16;
 inline constexpr int kIncomeFullResidents = 2000;
 inline constexpr int kIncomeCapTaxPercent = 40;
-inline constexpr int kIncomeCapFloor = 300;
+inline constexpr int kIncomeCapFloor = 250;
 inline constexpr int kIncomeCapFloorPerThousand = 10;
 struct SpecialIncome {
     bool earns = false; // the row has an annual_income at all
