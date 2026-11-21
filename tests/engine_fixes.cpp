@@ -372,46 +372,50 @@ int lunduke_city_test_civic_gap_tiles()
     return 0;
 }
 
-int lunduke_city_test_classic_church()
+int lunduke_city_test_all_churches()
 {
-    // tiles.png is 256x960. Extra church types start at tile 960.
-    if (kShippedTileCount != 960 || CHURCH0 >= kShippedTileCount || CHURCH1 < kShippedTileCount ||
-        CHURCH7LAST < kShippedTileCount) {
-        return fail(22, "the shipped sheet length no longer matches the classic church");
+    // The church sheet draws 956-1019, so all eight types are drawable and
+    // the grown church is whichever type the roll picked.
+    if (kShippedTileCount != 1020 || CHURCH0BASE + 8 >= kShippedTileCount || CHURCH7LAST >= kShippedTileCount ||
+        kShippedTileCount > SPECIAL_ZOO) {
+        return fail(22, "the drawable tile range no longer covers every church");
     }
-    Micropolis rolls;
-    rolls.primeRandom(1);
-    bool other_type = false;
-    for (int i = 0; i < 64; ++i) {
-        const int church_type = rolls.rollRandom(7);
-        if (church_type > 0) {
-            other_type = true;
-        }
-    }
-    if (!other_type) {
-        return fail(23, "the church roll never left the classic type, so the test cannot see the bug");
-    }
-
     Micropolis sim;
     fill_dirt(sim);
     sim.primeRandom(1);
-    for (int i = 0; i < 64; ++i) {
+    bool seen[8] = {};
+    for (int i = 0; i < 256; ++i) {
         SimulatorProbe::askChurch(sim, 20, 20);
         if (SimulatorProbe::churchPending(sim)) {
             return fail(24, "a church request was left pending");
         }
-        if ((sim.map[20][20] & LOMASK) != CHURCH0) {
-            std::fprintf(stderr, "centre %u\n", sim.map[20][20]);
-            return fail(25, "a grown church was not the classic building");
+        const int centre = sim.map[20][20] & LOMASK;
+        int type = -1;
+        if (centre == CHURCH0) {
+            type = 0;
+        } else if (centre >= CHURCH1 && centre <= CHURCH7 && (centre - CHURCH1) % 9 == 0) {
+            type = 1 + (centre - CHURCH1) / 9;
         }
+        if (type < 0) {
+            std::fprintf(stderr, "centre %d\n", centre);
+            return fail(25, "a grown church centre is not a church type");
+        }
+        seen[type] = true;
+        const int base = type == 0 ? CHURCH0BASE : CHURCH1BASE + (type - 1) * 9;
         for (int dy = -1; dy <= 1; ++dy) {
             for (int dx = -1; dx <= 1; ++dx) {
                 const int tile = sim.map[20 + dx][20 + dy] & LOMASK;
-                if (tile < CHURCH0BASE || tile > CHURCH0BASE + 8 || tile >= kShippedTileCount) {
-                    std::fprintf(stderr, "church cell %d\n", tile);
-                    return fail(26, "a grown church used a tile the shipped sheet does not draw");
+                if (tile != base + (dy + 1) * 3 + (dx + 1) || tile >= kShippedTileCount) {
+                    std::fprintf(stderr, "church type %d cell %d\n", type, tile);
+                    return fail(26, "a grown church block is not its type's nine tiles");
                 }
             }
+        }
+    }
+    for (int type = 0; type < 8; ++type) {
+        if (!seen[type]) {
+            std::fprintf(stderr, "type %d\n", type);
+            return fail(23, "a church type never grew");
         }
     }
     return 0;
@@ -440,7 +444,7 @@ int main()
     if (const int code = lunduke_city_test_civic_gap_tiles()) {
         return code;
     }
-    if (const int code = lunduke_city_test_classic_church()) {
+    if (const int code = lunduke_city_test_all_churches()) {
         return code;
     }
     return 0;

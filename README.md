@@ -47,6 +47,8 @@ meson compile -C build
 
 Ship `lunduke-city-2` plus `share/lunduke-city-2/micropolis-assets` (or set `LUNDUKE_CITY_ASSETS` to that tree). Launch with `SteamDeck=1` for fullscreen. The system file portal is not available in the Deck session, so Load and Save use the in-window city list there.
 
+An official Steam Input layout that matches the in-game pad controls is in `packaging/steam/` (gamepad emulation, no Steamworks SDK); its README says how to set it up on the Steamworks partner site.
+
 ## Windows
 
 From Debian or Ubuntu, one script cross-builds the x86_64 exe, runs the test suite under Wine, and writes `build-windows/dist/lunduke-city-2-windows-x86_64.zip`:

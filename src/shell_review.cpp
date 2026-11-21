@@ -478,8 +478,8 @@ void Shell::run_review_checks()
     }
 
     // The Spooky sheet still builds and still changes the park tile and the
-    // night ground (blank tile 956 matches), but the player can no longer
-    // pick it: Spooky is SVGA on screen and in settings.
+    // night ground (blank tile 955 matches; 956 up is church art), but the
+    // player can no longer pick it: Spooky is SVGA on screen and in settings.
     {
         if (!tile_atlas().spooky_available() || !tile_atlas().set_look(1)) {
             fail("SVGA sheet was not ready for the Spooky compare");
@@ -490,7 +490,7 @@ void Shell::run_review_checks()
         unsigned char svga_blank[16 * 16 * 4];
         tile_atlas().blit(40, svga_park, 16 * 4);
         tile_atlas().blit(0, svga_dirt, 16 * 4);
-        tile_atlas().blit(956, svga_blank, 16 * 4);
+        tile_atlas().blit(955, svga_blank, 16 * 4);
         if (!tile_atlas().set_look(2) || !tile_atlas().use_spooky()) {
             fail("Spooky tiles did not load");
             return;
@@ -501,7 +501,7 @@ void Shell::run_review_checks()
         unsigned char spooky_blank[16 * 16 * 4];
         tile_atlas().blit(40, spooky_park, 16 * 4);
         tile_atlas().blit(0, spooky_dirt, 16 * 4);
-        tile_atlas().blit(956, spooky_blank, 16 * 4);
+        tile_atlas().blit(955, spooky_blank, 16 * 4);
         if (std::memcmp(svga_park, spooky_park, sizeof(svga_park)) == 0) {
             fail("Spooky look did not change the park tile");
             return;

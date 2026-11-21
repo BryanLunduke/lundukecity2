@@ -9,6 +9,7 @@
 
 #include <cairo.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -142,6 +143,45 @@ bool decode_png(const std::string &path, Sheet &sheet, OverviewSnap snap, int &c
     return true;
 }
 
+// Church types 1-7 use tiles 956-1018, past the 960 tiles of the shipped
+// atlas (956-959 there are blank). Their art is a separate sheet per look
+// under data/special-tiles/, 16 tiles a row, tile 956 + n at index n. It
+// replaces 956-959 and extends the sheet to kExtensionEnd when drawn; the
+// atlas PNGs on disk are not changed.
+constexpr int kExtensionFirst = 956;
+constexpr int kExtensionTiles = 64;
+constexpr int kExtensionEnd = kExtensionFirst + kExtensionTiles;
+
+bool decode_extension(const char *relative, Sheet &out, OverviewSnap snap)
+{
+    const std::string path = ui_data_file(relative);
+    if (path.empty()) {
+        return false;
+    }
+    int columns = 0;
+    int count = 0;
+    std::string error;
+    if (!decode_png(path, out, snap, columns, count, error) || columns != 16 || count != kExtensionTiles) {
+        std::cerr << "Church tiles unavailable:\n" << (error.empty() ? path : error) << "\n";
+        out = Sheet{};
+        return false;
+    }
+    return true;
+}
+
+// Copy the extension tiles over [kExtensionFirst, kExtensionEnd).
+void append_extension(Sheet &sheet, const Sheet &ext)
+{
+    constexpr std::size_t px16 = TileAtlas::kSize * TileAtlas::kSize;
+    constexpr std::size_t px8 = TileAtlas::kOverview * TileAtlas::kOverview;
+    sheet.pixels.resize(static_cast<std::size_t>(kExtensionEnd) * px16, 0);
+    sheet.overview.resize(static_cast<std::size_t>(kExtensionEnd) * px8, 0);
+    sheet.averages.resize(static_cast<std::size_t>(kExtensionEnd) * 3, 0);
+    std::copy(ext.pixels.begin(), ext.pixels.end(), sheet.pixels.begin() + kExtensionFirst * px16);
+    std::copy(ext.overview.begin(), ext.overview.end(), sheet.overview.begin() + kExtensionFirst * px8);
+    std::copy(ext.averages.begin(), ext.averages.end(), sheet.averages.begin() + kExtensionFirst * 3);
+}
+
 } // namespace
 
 TileAtlas &tile_atlas()
@@ -182,9 +222,21 @@ bool TileAtlas::ensure_loaded()
         return false;
     }
     columns_ = columns;
+    const int base_count = count;
+    // Church art for the tiles past the atlas. Without the Classic sheet no
+    // look gets it, so every sheet keeps the same tile count.
+    Sheet classic_ext;
+    const bool extended = count == 960 && columns == 16 &&
+                          decode_extension("special-tiles/churches.png", classic_ext, OverviewSnap::None);
+    if (extended) {
+        append_extension(sheets().classic, classic_ext);
+        count = kExtensionEnd;
+    }
     count_ = count;
     look_ = 0;
     bind_active();
+    Sheet svga_ext;
+    const bool have_svga_ext = extended && decode_extension("special-tiles/churches-svga.png", svga_ext, OverviewSnap::Svga);
 
     // A missing or unreadable optional sheet leaves Classic in place. It is
     // not an error: the game still runs. SVGA's 8px overview snaps to VGA
@@ -198,8 +250,19 @@ bool TileAtlas::ensure_loaded()
         int extra_columns = 0;
         int extra_count = 0;
         std::string extra_error;
-        if (decode_png(path, extra, snap, extra_columns, extra_count, extra_error) && extra_count == count_ &&
+        if (decode_png(path, extra, snap, extra_columns, extra_count, extra_error) && extra_count == base_count &&
             extra_columns == columns_) {
+            if (extended) {
+                // Spooky has its own night churches; it falls back to the
+                // SVGA ones, then to Classic.
+                Sheet own;
+                const bool spooky = &dest == &sheets().spooky;
+                if (spooky && decode_extension("special-tiles/churches-spooky.png", own, OverviewSnap::Vga)) {
+                    append_extension(extra, own);
+                } else {
+                    append_extension(extra, have_svga_ext ? svga_ext : classic_ext);
+                }
+            }
             dest = std::move(extra);
             ready = true;
         } else if (!extra_error.empty()) {

@@ -9,6 +9,8 @@
 
 // Classic 16-pixel Micropolis map tiles, indexed the same way as the engine
 // (low 10 bits of a map word). Loaded once from images/micropolisEngine/tiles.png.
+// Church types 1-7 (tiles 956-1018) draw from data/special-tiles/churches*.png,
+// which extends every look's sheet to 1020 tiles when the Classic one loads.
 class TileAtlas {
 public:
     static constexpr int kSize = 16;

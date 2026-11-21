@@ -240,3 +240,13 @@ bool special_center_needs_bolt(int raw, int index, int cell, bool blink_on);
 
 // True when (x, y) is inside a special. cell is the row-major sheet index.
 bool special_sheet_at(int x, int y, SpecialWordFn word_at, const void *ctx, int &index, int &cell);
+
+// The river edge tile for a shoreline cell whose west, south, east and north
+// neighbours are (true) or are not water: Micropolis::smoothRiver's table.
+// RIVER when water is on every side. An edge tile keeps its variant (+1).
+int shore_edge_tile(int tile, bool water_w, bool water_s, bool water_e, bool water_n);
+
+// The Marina basin: every sheet cell under the quay row (rows 1 and 2 of
+// the 3x3). It is water on the map: the open water beside it meets it with
+// no beach, it gets the water shimmer, and it casts no building shadow.
+bool special_basin_cell(int index, int cell);
