@@ -20,6 +20,7 @@
 #include "scene_fade.hpp"
 #include "side_widgets.hpp"
 #include "sound_player.hpp"
+#include "terrain_history.hpp"
 #include "tool_palette.hpp"
 #include "bindings.hpp"
 #include "controls_page.hpp"
@@ -235,6 +236,9 @@ private:
     // drops the painted map and returns true.
     bool confirm_drop_terrain(int id);
     void paint_terrain_line(int x0, int y0, int x1, int y1);
+    // Ctrl+Z (Cmd+Z on a Mac) and Ctrl+Y / Ctrl+Shift+Z: one brush stroke
+    // back or forward. False when there is nothing to undo or redo.
+    bool step_terrain_history(bool forward);
     void select_terrain_piece(int index);
     void set_terrain_brush(int size);
     bool on_terrain_hotspot(int id);
@@ -703,6 +707,10 @@ private:
     int terrain_brush_ = 1;
     // Map words changed since the editor opened; Cancel asks first when > 0.
     int terrain_changed_ = 0;
+    // Brush strokes to undo and redo, and the map as the editor opened it
+    // (an undo back to it leaves nothing for Cancel to ask about).
+    TerrainHistory terrain_history_;
+    std::vector<unsigned short> terrain_opened_;
     // A settings control that warned it would drop the painted map.
     int terrain_confirm_id_ = 0;
     // The game's view, put back when the editor closes.

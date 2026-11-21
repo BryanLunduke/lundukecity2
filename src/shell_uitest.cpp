@@ -1865,6 +1865,28 @@ void Shell::drive_ui_test()
             fail("a 3x3 water click turned " + std::to_string(wet) + " tiles wet (or touched the city)");
             return;
         }
+        // Ctrl+Z takes the water click back; Ctrl+Y lays it again.
+        {
+            const std::vector<unsigned short> wet_map = terrain_work_;
+            auto chord = [&](SDL_Keycode key) {
+                SDL_Event event{};
+                event.type = SDL_EVENT_KEY_DOWN;
+                event.key.key = key;
+                event.key.down = true;
+                event.key.mod = SDL_KMOD_LCTRL;
+                handle_event(event);
+            };
+            chord(SDLK_Z);
+            if (terrain_work_ != before || terrain_session_->terrain_tiles() != before || !terrain_edit_) {
+                fail("Ctrl+Z did not undo the last brush stroke");
+                return;
+            }
+            chord(SDLK_Y);
+            if (terrain_work_ != wet_map || terrain_session_->terrain_tiles() != wet_map || terrain_changed_ == 0) {
+                fail("Ctrl+Y did not redo the brush stroke");
+                return;
+            }
+        }
         key_down(SDLK_B);
         if (terrain_brush_ != terrain_paint::kBrushSmall) {
             fail("B did not switch the brush back to 1x1");

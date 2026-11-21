@@ -282,6 +282,8 @@ void Shell::open_terrain_editor()
     terrain_session_->set_sound_enabled(false);
     terrain_session_->new_city(spec);
     terrain_work_ = terrain_session_->terrain_tiles();
+    terrain_opened_ = terrain_work_;
+    terrain_history_.clear();
     terrain_land_ = land;
     terrain_changed_ = 0;
     terrain_confirm_id_ = 0;
@@ -334,6 +336,8 @@ void Shell::close_terrain_editor(bool apply)
     demand_.set_session(&session_);
     terrain_session_.reset();
     terrain_work_.clear();
+    terrain_opened_.clear();
+    terrain_history_.clear();
     overlay_on_ = terrain_saved_overlay_;
     select_tool(tool_index_);
     map_.set_tile_size(terrain_saved_tile_);
@@ -375,6 +379,12 @@ void Shell::paint_terrain_line(int x0, int y0, int x1, int y1)
     }
     const auto piece = static_cast<terrain_paint::Piece>(terrain_piece_);
     const int steps = std::max(std::abs(x1 - x0), std::abs(y1 - y0));
+    // The stroke's first change records the map before it, for undo.
+    const bool first = terrain_history_.wants_snapshot();
+    std::vector<unsigned short> before;
+    if (first) {
+        before = terrain_work_;
+    }
     int changed = 0;
     for (int i = 0; i <= steps; ++i) {
         const int tx = steps == 0 ? x1 : x0 + (x1 - x0) * i / steps;
@@ -383,9 +393,26 @@ void Shell::paint_terrain_line(int x0, int y0, int x1, int y1)
                                         terrain_brush_);
     }
     if (changed > 0) {
+        if (first) {
+            terrain_history_.record(std::move(before));
+        }
         terrain_changed_ += changed;
         terrain_session_->set_terrain_tiles(terrain_work_);
     }
+}
+
+bool Shell::step_terrain_history(bool forward)
+{
+    if (!terrain_edit_ || terrain_session_ == nullptr) {
+        return false;
+    }
+    if (!(forward ? terrain_history_.redo(terrain_work_) : terrain_history_.undo(terrain_work_))) {
+        return false;
+    }
+    terrain_session_->set_terrain_tiles(terrain_work_);
+    // Back at the map the editor opened with: Cancel has nothing to lose.
+    terrain_changed_ = terrain_work_ == terrain_opened_ ? 0 : std::max(1, terrain_changed_);
+    return true;
 }
 
 void Shell::select_terrain_piece(int index)

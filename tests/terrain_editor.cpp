@@ -7,6 +7,7 @@
 // a new city starts on.
 
 #include "city_session.hpp"
+#include "terrain_history.hpp"
 #include "terrain_paint.hpp"
 
 #include "micropolis.h"
@@ -234,6 +235,73 @@ int main()
         editor.set_terrain_tiles(std::vector<unsigned short>(3, DIRT));
         if (editor.terrain_tiles() != land) {
             return fail(44, "a wrong-size set_terrain_tiles was used");
+        }
+    }
+
+    // 6. Undo and redo, one step per brush stroke, the way the editor
+    // drives TerrainHistory: begin_stroke on button down, a snapshot before
+    // the stroke's first change, Ctrl+Z / Ctrl+Y.
+    {
+        std::vector<unsigned short> work(static_cast<std::size_t>(kW * kH), DIRT);
+        const std::vector<unsigned short> opened = work;
+        TerrainHistory history;
+        auto stroke = [&](int x0, int x1, int y, Piece piece, int size) {
+            history.begin_stroke();
+            for (int x = x0; x <= x1; ++x) {
+                const bool first = history.wants_snapshot();
+                std::vector<unsigned short> before;
+                if (first) {
+                    before = work;
+                }
+                if (terrain_paint::paint(work, kW, kH, x, y, piece, size) > 0 && first) {
+                    history.record(std::move(before));
+                }
+            }
+        };
+        stroke(10, 20, 30, Piece::Water, terrain_paint::kBrushLarge);
+        const std::vector<unsigned short> after_one = work;
+        stroke(40, 45, 50, Piece::Trees, terrain_paint::kBrushSmall);
+        const std::vector<unsigned short> after_two = work;
+        if (history.undo_steps() != 2 || after_one == opened || after_two == after_one) {
+            return fail(50, "two strokes did not make two undo steps");
+        }
+        // A click that changes nothing (water on water) is not a step.
+        stroke(15, 15, 30, Piece::Water, terrain_paint::kBrushSmall);
+        if (history.undo_steps() != 2 || work != after_two) {
+            return fail(51, "a stroke that changed nothing made an undo step");
+        }
+        if (!history.undo(work) || work != after_one || !history.undo(work) || work != opened) {
+            return fail(52, "undo did not put the map back stroke by stroke");
+        }
+        if (history.undo(work) || work != opened) {
+            return fail(53, "undo with nothing left changed the map");
+        }
+        if (!history.redo(work) || work != after_one || !history.redo(work) || work != after_two ||
+            history.redo(work)) {
+            return fail(54, "redo did not lay the strokes again");
+        }
+        // A new stroke after an undo drops what could be redone.
+        history.undo(work);
+        stroke(60, 62, 20, Piece::Channel, terrain_paint::kBrushSmall);
+        if (history.can_redo() || history.undo_steps() != 2) {
+            return fail(55, "a new stroke kept the redo steps");
+        }
+        // The stack is bounded: the oldest steps fall off.
+        TerrainHistory capped;
+        std::vector<unsigned short> map(static_cast<std::size_t>(kW * kH), DIRT);
+        for (int i = 0; i < 40; ++i) {
+            capped.begin_stroke();
+            std::vector<unsigned short> before = map;
+            terrain_paint::paint(map, kW, kH, 2 + i * 2, 2, Piece::Trees, terrain_paint::kBrushSmall);
+            capped.record(std::move(before));
+        }
+        int undone = 0;
+        while (capped.undo(map)) {
+            ++undone;
+        }
+        if (undone != static_cast<int>(TerrainHistory::kMaxSteps) || capped.undo_steps() != 0 ||
+            capped.redo_steps() != TerrainHistory::kMaxSteps) {
+            return fail(56, "the undo stack is not bounded at kMaxSteps");
         }
     }
     return 0;
