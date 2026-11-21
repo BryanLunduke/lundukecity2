@@ -210,7 +210,7 @@ std::string portland_fires_long(const Micropolis &sim)
     std::string text = sim.cityEvents.riotSteps > 0 ? "riot under way, " : "";
     if (fires > 0) {
         return text + std::to_string(fires) + (fires == 1 ? " riot fire burning" : " riot fires burning") +
-               " → put them out";
+               " → fire stations by them, bulldoze firebreaks";
     }
     return text + "all riot fires out";
 }
@@ -311,7 +311,8 @@ const ScenarioEntry kScenarios[] = {
     // Portland (data/scenarios/portland.cty, built by tools/portland_map.cpp).
     // It opens in mid-July 2020; in August a riot breaks out downtown.
     {{SC_PORTLAND, "Portland", 2020, "A riot sets downtown Portland on fire.",
-      "Put out the riot fires and bring average crime below " PORTLAND_CRIME_GOAL_TEXT " by summer 2021.",
+      "Put out the riot fires and bring average crime below " PORTLAND_CRIME_GOAL_TEXT
+      " by summer 2021. Build fire stations by the riot, and bulldoze firebreaks if it spreads.",
       PORTLAND_YEARS},
      "portland.cty", true},
     // San Diego (data/scenarios/sandiego.cty, built by tools/sandiego_map.cpp).
