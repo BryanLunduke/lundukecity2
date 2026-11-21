@@ -924,7 +924,7 @@ static const int PORTLAND_YEARS = 1;
  */
 static const int SANDIEGO_LION_WAIT = 5;
 static const int SANDIEGO_LION_CATCH_STEPS = 16;
-static const int SANDIEGO_POPULATION_GOAL = 120000;
+static const int SANDIEGO_POPULATION_GOAL = 100000;
 static const int SANDIEGO_YEARS = 2;
 
 

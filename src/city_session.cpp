@@ -139,7 +139,7 @@ const char *city_class_name(CityClass city_class)
 #define SEATTLE_CRIME_GOAL_TEXT "60"
 #define SF1962_CRIME_GOAL_TEXT "45"
 #define PORTLAND_CRIME_GOAL_TEXT "60"
-#define SANDIEGO_POPULATION_GOAL_TEXT "120,000"
+#define SANDIEGO_POPULATION_GOAL_TEXT "100,000"
 
 // The folder holding one of City 2's own scenario maps: the installed
 // share/lunduke-city-2/scenarios (or data/scenarios beside a build), else

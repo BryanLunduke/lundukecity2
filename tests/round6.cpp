@@ -37,7 +37,7 @@ int main()
         "Clear the Autonomous Zone and bring average crime below 60 by mid-2025.",
         "Round up the Alcatraz escapees and bring average crime below 45 by mid-1964.",
         "Put out the riot fires and bring average crime below 60 by summer 2021.",
-        "Have the police catch the lion within four months and keep at least 120,000 people by spring 2027.",
+        "Have the police catch the lion within four months and keep at least 100,000 people by spring 2027.",
     };
     static const int kYears[] = {30, 5, 5, 10, 5, 10, 5, 10, 5, 2, 1, 2};
     if (CitySession::kScenarioCount != 12) {
