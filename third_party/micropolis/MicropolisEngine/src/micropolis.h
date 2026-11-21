@@ -2887,6 +2887,9 @@ public:
     short evalPreviewOrder[CVP_PROBLEM_COMPLAINTS];
 
     bool doInitialEval; ///< Need to perform initial city evaluation.
+    /// Set after a load whose save was taken partway through a cycle: the
+    /// cycle that restarts at phase 0 does not count the clock again.
+    bool holdClockOnce = false;
 
     int mapSerial; ///< The invalidateMaps method increases the map serial number every time the maps changes.
 

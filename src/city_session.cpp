@@ -1283,8 +1283,21 @@ bool CitySession::load_city(const std::string &path)
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
     read_scenario_sidecar(path);
+    // The simulator restarts at phase 0 and counts the clock first. A save
+    // taken in phases 1 to 10 had already counted this cycle but not yet run
+    // its tax year (9) or its progress check (10), so the restarted cycle
+    // keeps the clock where it is and does both on the same tick the saved
+    // game would have.
+    sim.holdClockOnce = loaded_phase_ >= 1 && loaded_phase_ <= 10;
     recount_population_from_map();
     refresh_loaded_meters();
+    // The refresh above re-scores a map whose traffic was cleared by the
+    // load. The saved score is the one the player had.
+    if (loaded_score_ >= 0) {
+        sim.cityScore = static_cast<short>(loaded_score_);
+    }
+    loaded_score_ = -1;
+    loaded_phase_ = -1;
     // Review nov19 #12: catch up after the recount, not before. A city with
     // no sidecar (a classic save, a copied .cty) used to catch up on a
     // stale census of 0, so the next month toasted Town and its first Year
@@ -3904,6 +3917,12 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     if (!news.empty()) {
         append_string("news", news);
     }
+    // The score and where in its 16-phase cycle the simulator stands. The
+    // .cty file keeps neither: the score used to be recomputed on load from a
+    // map with no traffic (so it jumped), and the restarted cycle counted the
+    // clock one step ahead of where the save was taken.
+    append_string("score", std::to_string(static_cast<int>(sim.cityScore)));
+    append_string("phase", std::to_string(static_cast<int>(sim.phaseCycle)));
     // The Evaluation window's yearly changes, so a recovered or reloaded
     // city does not show dashes until another year passes.
     const bool deltas_known = eval_deltas_ready_ || sim.cityTime >= eval_anchor_time_ + 48;
@@ -3918,6 +3937,8 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
 void CitySession::read_scenario_sidecar(const std::string &path)
 {
     loaded_eval_ = LoadedEval{};
+    loaded_score_ = -1;
+    loaded_phase_ = -1;
     loaded_view_ = save_view::View{};
     std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
@@ -4014,6 +4035,18 @@ void CitySession::read_scenario_sidecar(const std::string &path)
             }
         }
     }
+    // "score" and "phase" are whole numbers in quotes; anything else is ignored.
+    auto whole_value = [&string_value](const char *key, int low, int high) -> int {
+        const std::string raw = string_value(key);
+        if (raw.empty() || raw.size() > 6) {
+            return -1;
+        }
+        char *stop = nullptr;
+        const long value = std::strtol(raw.c_str(), &stop, 10);
+        return (stop != raw.c_str() && *stop == '\0' && value >= low && value <= high) ? static_cast<int>(value) : -1;
+    };
+    loaded_score_ = whole_value("score", 0, 1000);
+    loaded_phase_ = whole_value("phase", 0, 15);
     ScenarioClock clock;
     if (!scenario_sidecar_parse(text, clock)) {
         return;

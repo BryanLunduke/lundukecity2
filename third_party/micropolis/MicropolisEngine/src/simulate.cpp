@@ -158,7 +158,11 @@ void Micropolis::simulate()
                 cityEvaluation();
             }
 
-            cityTime++;
+            if (holdClockOnce) {
+                holdClockOnce = false;
+            } else {
+                cityTime++;
+            }
             cityTaxAverage += cityTax;
 
             if (!(simCycle & 1)) {
