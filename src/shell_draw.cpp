@@ -6193,7 +6193,21 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         const double demand_w = dp(40);
         double w = pad + fw + sep + dw + sep + speed_w + sep + pw + sep + demand_w + pad;
         const double limit = mini_x_ - dp(16) - x;
-        const bool with_people = w <= limit;
+        // A scenario's goal sits in its own chip beside the pill: the short
+        // meter and the short clock. The population gives way first when the
+        // two do not fit side by side.
+        const std::string goal_clock = session_.scenario_clock_short();
+        std::string goal_text = session_.scenario_meter_short();
+        if (!goal_clock.empty()) {
+            goal_text += (goal_text.empty() ? "" : " \u00b7 ") + goal_clock;
+        }
+        const double goal_pad = dp(12);
+        const double goal_gap = dp(8);
+        const double goal_w = goal_text.empty() ? 0.0 : measure_text(cr, bold_font(), goal_text, -1).width + goal_pad * 2;
+        bool with_people = w <= limit;
+        if (with_people && goal_w > 0.0 && x + w + goal_gap + goal_w > mini_x_ - dp(16)) {
+            with_people = false;
+        }
         if (!with_people) {
             w -= pw + sep;
         }
@@ -6237,6 +6251,24 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             } else {
                 slate_fill(cr, bx, mid, dp(9), bar_h, kSlateBad);
             }
+        }
+        if (goal_w > 0.0) {
+            // Beside the pill when it fits, else on a row of its own under
+            // it, cut to the room left of the minimap.
+            double gx = x + w + goal_gap;
+            double gy = top;
+            double room = mini_x_ - dp(16) - gx;
+            if (room < goal_w && room < dp(220)) {
+                gx = dp(10);
+                gy = top + chip_h + dp(6);
+                room = mini_x_ - dp(16) - gx;
+            }
+            const double gw = std::min(goal_w, std::max(room, static_cast<double>(dp(120))));
+            slate_round(cr, gx, gy, gw, chip_h, dp(10), kSlateBand, 0.94);
+            const std::string shown = measure_text(cr, bold_font(), goal_text, -1).width + goal_pad * 2 <= gw
+                                          ? goal_text
+                                          : fit_text(cr, bold_font(), goal_text, static_cast<int>(gw - goal_pad * 2));
+            slate_text(cr, bold_font(), shown, gx + goal_pad, ty, kSlateInk);
         }
     }
     // Touch buttons on the right edge: zoom in, zoom out, centre.
