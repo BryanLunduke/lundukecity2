@@ -307,6 +307,9 @@ void Shell::advance_presentation(int elapsed_ms)
     }
     funds_tick_.observe(session_.funds(), city_generation_, motion_on() && city_chosen_ && !welcome_gate_);
     funds_tick_.advance(elapsed_ms);
+    const bool tick_ok = motion_on() && city_chosen_ && !welcome_gate_;
+    demand_tick_.observe(session_.res_demand(), session_.com_demand(), session_.ind_demand(), city_generation_, tick_ok);
+    demand_tick_.advance(elapsed_ms);
     if (reveal_ms_ >= 0) {
         if (reveal_fresh_) {
             reveal_fresh_ = false;
@@ -2982,6 +2985,26 @@ void Shell::on_hotspot(int id, double x, double y)
         if (id >= kSpeedPill && id < kSpeedPill + 4) {
             static const Action speeds[4] = {Action::SetPause, Action::Slow, Action::Medium, Action::Fast};
             apply_action(speeds[id - kSpeedPill]);
+            return;
+        }
+        if (id >= kDemandMeter && id < kDemandMeter + 3) {
+            const int which = id - kDemandMeter;
+            // kTools: 4 residential, 5 commercial, 6 industrial.
+            select_tool(4 + which);
+            const double value = which == 0 ? session_.res_demand() : (which == 1 ? session_.com_demand() : session_.ind_demand());
+            const char *zone = which == 0 ? "homes" : (which == 1 ? "shops" : "industry");
+            const char *tool = which == 0 ? "Residential" : (which == 1 ? "Commercial" : "Industrial");
+            std::string text;
+            if (value > 0.15) {
+                text = std::string("The city wants more ") + zone + ". The " + tool + " tool is selected.";
+            } else if (value < -0.15) {
+                text = std::string("There are already more ") + zone + " than the city wants. The " + tool + " tool is selected.";
+            } else {
+                text = std::string("Demand for ") + zone + " is steady. The " + tool + " tool is selected.";
+            }
+            shown_message_ = text;
+            shown_message_serial_ = session_.message_serial();
+            hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(4);
             return;
         }
         if (id >= kQuickTool && id < kQuickTool + kToolCount) {

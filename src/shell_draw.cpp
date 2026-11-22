@@ -5854,7 +5854,8 @@ void Shell::draw_info_band(cairo_t *cr)
             value_w = pill * 4 + pill_gap * 3;
         }
         if (k == Demand) {
-            value_w = dp(66);
+            // Wider, labeled meters at 960 and on a 1280 window.
+            value_w = dp(win_w_ <= 1000 ? 114 : 126);
         }
         widths[k] = std::max(label_w, value_w);
     }
@@ -5948,25 +5949,39 @@ void Shell::draw_info_band(cairo_t *cr)
             }
             break;
         case Demand: {
-            const double values_d[3] = {session_.res_demand(), session_.com_demand(), session_.ind_demand()};
             const SlateInk colors[3] = {{0x6C / 255.0, 0xCB / 255.0, 0x7A / 255.0},
                                         {0x5B / 255.0, 0x9B / 255.0, 0xE6 / 255.0},
                                         {0xE8 / 255.0, 0xC2 / 255.0, 0x4A / 255.0}};
-            const char *letters[3] = {"R", "C", "I"};
+            const char *letters[3] = {"Res", "Com", "Ind"};
             const double mid = value_y + dp(8);
+            const double col = (win_w_ <= 1000 ? dp(38) : dp(42));
+            const double bar_w = dp(12);
+            const double reach = dp(10);
             for (int i = 0; i < 3; ++i) {
-                const double bx = x + i * dp(23);
+                const double bx = x + i * col;
+                const double pulse = demand_tick_.pulse(i);
                 slate_text(cr, tag_font(), letters[i], bx, value_y + dp(1), kSlateDim);
-                const double bar_x = bx + dp(9);
-                slate_fill(cr, bar_x, mid - dp(8), dp(9), dp(16), kSlateEdge);
-                const double v = std::max(-1.0, std::min(1.0, values_d[i]));
-                const double bar_h = v == 0.0 ? 0.0 : std::max(2.0, std::fabs(v) * dp(8));
-                if (v >= 0) {
-                    slate_fill(cr, bar_x, mid - bar_h, dp(9), bar_h, colors[i]);
-                } else {
-                    slate_fill(cr, bar_x, mid, dp(9), bar_h, kSlateBad);
+                const double label_w = measure_text(cr, tag_font(), letters[i], -1).width;
+                const double bar_x = bx + label_w + dp(3);
+                if (pulse > 0.0) {
+                    slate_round(cr, bar_x - dp(3), mid - reach - dp(3), bar_w + dp(6), reach * 2 + dp(6), dp(4),
+                                colors[i], 0.28 * pulse);
                 }
-                slate_fill(cr, bar_x - 1, mid, dp(11), 1, kSlateDim);
+                slate_fill(cr, bar_x, mid - reach, bar_w, reach * 2, kSlateEdge);
+                const double v = std::max(-1.0, std::min(1.0, demand_tick_.shown(i)));
+                const double bar_h = v == 0.0 ? 0.0 : std::max(2.0, std::fabs(v) * reach);
+                if (v >= 0) {
+                    slate_fill(cr, bar_x, mid - bar_h, bar_w, bar_h, colors[i]);
+                } else {
+                    slate_fill(cr, bar_x, mid, bar_w, bar_h, kSlateBad);
+                }
+                slate_fill(cr, bar_x - 1, mid, bar_w + 2, 1, kSlateDim);
+                const int hid = kDemandMeter + i;
+                const bool hot = hover_id_ == hid && dialog_ == Dialog::None && !menu_.open();
+                if (hot) {
+                    slate_round(cr, bx - dp(2), value_y - dp(2), col - dp(2), dp(22), dp(4), kSlateEdge, 0.45);
+                }
+                push_hot(bx - dp(2), value_y - dp(2), col, dp(22), hid);
             }
             break;
         }
@@ -6277,7 +6292,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         const double dw = measure_text(cr, bold_font(), date, -1).width;
         const double pw = measure_text(cr, ui_font(), people, -1).width;
         const double speed_w = dp(22);
-        const double demand_w = dp(40);
+        const double demand_w = dp(84);
         double w = pad + fw + sep + dw + sep + speed_w + sep + pw + sep + demand_w + pad;
         const double limit = mini_x_ - dp(16) - x;
         // A scenario's goal sits in its own chip beside the pill: the short
@@ -6323,21 +6338,34 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             slate_text(cr, ui_font(), people, cx, ty, kSlateDim);
             cx += pw + sep;
         }
-        const double values_d[3] = {session_.res_demand(), session_.com_demand(), session_.ind_demand()};
         const SlateInk colors[3] = {{0x6C / 255.0, 0xCB / 255.0, 0x7A / 255.0},
                                     {0x5B / 255.0, 0x9B / 255.0, 0xE6 / 255.0},
                                     {0xE8 / 255.0, 0xC2 / 255.0, 0x4A / 255.0}};
+        const char *letters[3] = {"R", "C", "I"};
         const double mid = top + chip_h / 2.0;
+        const double col = dp(26);
+        const double bar_w = dp(10);
+        const double reach = dp(10);
         for (int i = 0; i < 3; ++i) {
-            const double bx = cx + i * dp(13);
-            slate_fill(cr, bx, mid - dp(10), dp(9), dp(20), kSlatePanel);
-            const double v = std::max(-1.0, std::min(1.0, values_d[i]));
-            const double bar_h = std::fabs(v) * dp(10);
-            if (v >= 0) {
-                slate_fill(cr, bx, mid - bar_h, dp(9), bar_h, colors[i]);
-            } else {
-                slate_fill(cr, bx, mid, dp(9), bar_h, kSlateBad);
+            const double bx = cx + i * col;
+            const double pulse = demand_tick_.pulse(i);
+            slate_text(cr, tag_font(), letters[i], bx, top + dp(4), kSlateDim);
+            const double label_w = measure_text(cr, tag_font(), letters[i], -1).width;
+            const double bar_x = bx + label_w + dp(2);
+            if (pulse > 0.0) {
+                slate_round(cr, bar_x - dp(2), mid - reach - dp(2), bar_w + dp(4), reach * 2 + dp(4), dp(3), colors[i],
+                            0.28 * pulse);
             }
+            slate_fill(cr, bar_x, mid - reach, bar_w, reach * 2, kSlatePanel);
+            const double v = std::max(-1.0, std::min(1.0, demand_tick_.shown(i)));
+            const double bar_h = v == 0.0 ? 0.0 : std::max(2.0, std::fabs(v) * reach);
+            if (v >= 0) {
+                slate_fill(cr, bar_x, mid - bar_h, bar_w, bar_h, colors[i]);
+            } else {
+                slate_fill(cr, bar_x, mid, bar_w, bar_h, kSlateBad);
+            }
+            slate_fill(cr, bar_x - 1, mid, bar_w + 2, 1, kSlateDim);
+            push_hot(bx - dp(2), top, col, chip_h, kDemandMeter + i);
         }
         if (goal_w > 0.0) {
             // Beside the pill when it fits, else on a row of its own under

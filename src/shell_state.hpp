@@ -6,6 +6,7 @@
 
 #include "chart.hpp"
 #include "hotspots.hpp"
+#include "demand_tick.hpp"
 #include "funds_tick.hpp"
 #include "look_fx.hpp"
 #include "pad_feel.hpp"
@@ -562,6 +563,7 @@ private:
     // The rolling Funds readout and its floating change; the band or the
     // handheld chip sets the float anchor each frame it draws.
     FundsTicker funds_tick_;
+    DemandTicker demand_tick_;
     double funds_float_x_ = -1.0;
     double funds_float_y_ = 0.0;
     unsigned save_generation_ = 0;
