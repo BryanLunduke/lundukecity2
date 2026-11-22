@@ -2569,7 +2569,7 @@ CitySession::CrisisReport CitySession::crisis_report() const
         out.event = "Autonomous Zone";
         out.sites.push_back(CrisisSite{events.zoneBlock[0][0], events.zoneBlock[0][1]});
     } else if (sim.disasterEvent > SC_NONE && sim.disasterEvent < SC_COUNT && sim.disasterWait > 0) {
-        const char *name = "Disaster";
+        const char *name = nullptr;
         switch (sim.disasterEvent) {
         case SC_SAN_FRANCISCO:
             name = "Earthquake";
@@ -2601,13 +2601,15 @@ CitySession::CrisisReport CitySession::crisis_report() const
         default:
             break;
         }
-        const int months = static_cast<int>(sim.disasterWait) / 4;
-        if (months <= 0) {
-            out.event = std::string(name) + " soon";
-        } else if (months == 1) {
-            out.event = std::string(name) + " in 1 month";
-        } else {
-            out.event = std::string(name) + " in " + std::to_string(months) + " months";
+        if (name != nullptr) {
+            const int months = static_cast<int>(sim.disasterWait) / 4;
+            if (months <= 0) {
+                out.event = std::string(name) + " soon";
+            } else if (months == 1) {
+                out.event = std::string(name) + " in 1 month";
+            } else {
+                out.event = std::string(name) + " in " + std::to_string(months) + " months";
+            }
         }
     }
     auto add = [&](const std::string &part) {

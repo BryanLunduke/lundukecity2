@@ -2321,43 +2321,71 @@ void Shell::draw_dialog(cairo_t *cr)
         const double col_gap = dp(24);
         const double avail = std::max(1.0, band_h - 2.0 * margin);
         const double chrome = dp(40) + margin + dp(16) + dp(36) + margin;
-        auto body_for = [&](bool split, double gap) {
-            const double col_w = split ? (inner - col_gap) / 2.0 : inner;
-            const std::size_t per_col = split ? (sections.size() + 1) / 2 : sections.size();
-            double tallest = 0;
-            for (std::size_t first = 0; first < sections.size(); first += per_col) {
-                double cy = 0;
-                const std::size_t last = std::min(sections.size(), first + per_col);
-                for (std::size_t i = first; i < last; ++i) {
-                    cy += line_height(bold_font(), sections[i].heading, col_w) + head_gap +
-                          line_height(body_font(), sections[i].body, col_w) + (i + 1 < last ? gap : 0.0);
-                }
-                tallest = std::max(tallest, cy);
+        auto stack_h = [&](std::size_t first, std::size_t last, double col_w, double gap) {
+            double cy = 0;
+            for (std::size_t i = first; i < last; ++i) {
+                cy += line_height(bold_font(), sections[i].heading, col_w) + head_gap +
+                      line_height(body_font(), sections[i].body, col_w) + (i + 1 < last ? gap : 0.0);
             }
-            return tallest;
+            return cy;
+        };
+        auto body_for = [&](bool split, double gap, std::size_t cut) {
+            const double col_w = split ? (inner - col_gap) / 2.0 : inner;
+            if (!split) {
+                return stack_h(0, sections.size(), col_w, gap);
+            }
+            return std::max(stack_h(0, cut, col_w, gap), stack_h(cut, sections.size(), col_w, gap));
+        };
+        auto best_cut = [&](double gap) {
+            std::size_t cut = (sections.size() + 1) / 2;
+            double best = 1e9;
+            const double col_w = (inner - col_gap) / 2.0;
+            for (std::size_t at = 1; at < sections.size(); ++at) {
+                const double h = std::max(stack_h(0, at, col_w, gap), stack_h(at, sections.size(), col_w, gap));
+                if (h < best) {
+                    best = h;
+                    cut = at;
+                }
+            }
+            return cut;
         };
         // Two columns as soon as they fit, and whenever one column would clip
-        // the Budget paragraph (960 and the Deck).
+        // the Budget paragraph (960 and the Deck). The split is the one that
+        // keeps both columns shortest, so Budget is not jammed under Demand.
         double section_gap = dp(14);
         bool split = inner >= dp(400);
-        double body_h = body_for(split, section_gap);
+        std::size_t cut = split ? best_cut(section_gap) : sections.size();
+        double body_h = body_for(split, section_gap, cut);
         if (!split && chrome + body_h > avail && inner >= dp(280)) {
             split = true;
-            body_h = body_for(true, section_gap);
+            cut = best_cut(section_gap);
+            body_h = body_for(true, section_gap, cut);
         }
         if (chrome + body_h > avail) {
-            section_gap = dp(8);
-            body_h = body_for(split, section_gap);
+            section_gap = dp(6);
+            if (split) {
+                cut = best_cut(section_gap);
+            }
+            body_h = body_for(split, section_gap, cut);
+        }
+        // The Budget paragraph is the longest first-column topic. On 960 and
+        // the Deck, start it at the top of the second column so it is not
+        // clipped under Demand.
+        if (split && sections.size() >= 4) {
+            // Always start Budget at the top of column two, even when that
+            // column is a little taller: a clipped Budget paragraph was the
+            // bug this dialog had to fix.
+            cut = 3;
+            body_h = body_for(true, section_gap, cut);
         }
         const double col_w = split ? (inner - col_gap) / 2.0 : inner;
-        const std::size_t per_col = split ? (sections.size() + 1) / 2 : sections.size();
         auto lay = [&](double x, double y, bool paint) {
+            const std::size_t marks[3] = {0, split ? cut : sections.size(), sections.size()};
             double tallest = 0;
-            for (std::size_t first = 0; first < sections.size(); first += per_col) {
-                const double cx = x + (first / per_col) * (col_w + col_gap);
+            for (int col = 0; col < (split ? 2 : 1); ++col) {
+                const double cx = x + col * (col_w + col_gap);
                 double cy = y;
-                const std::size_t last = std::min(sections.size(), first + per_col);
-                for (std::size_t i = first; i < last; ++i) {
+                for (std::size_t i = marks[col]; i < marks[col + 1]; ++i) {
                     const double head_h = line_height(bold_font(), sections[i].heading, col_w);
                     const double one_h = line_height(body_font(), sections[i].body, col_w);
                     if (paint) {
@@ -2365,7 +2393,7 @@ void Shell::draw_dialog(cairo_t *cr)
                         paint_text(cr, body_font(), sections[i].body, cx, cy + head_h + head_gap, theme::kTextR,
                                    theme::kTextG, theme::kTextB, static_cast<int>(col_w));
                     }
-                    cy += head_h + head_gap + one_h + (i + 1 < last ? section_gap : 0.0);
+                    cy += head_h + head_gap + one_h + (i + 1 < marks[col + 1] ? section_gap : 0.0);
                 }
                 tallest = std::max(tallest, cy - y);
             }
@@ -2375,14 +2403,15 @@ void Shell::draw_dialog(cairo_t *cr)
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "How to play");
         const double body_top = panel.y + dp(48);
-        const double body_bottom = panel.y + panel.h - margin - dp(36) - dp(8);
+        const double buttons_h = static_cast<double>(control_px(36, 44));
+        const double body_bottom = panel.y + panel.h - margin - buttons_h - dp(10);
         cairo_save(cr);
         cairo_rectangle(cr, panel.x + margin - 2, body_top - 2, panel.w - 2 * margin + 4,
                         std::max(1.0, body_bottom - body_top + 2));
         cairo_clip(cr);
         lay(panel.x + margin, body_top, true);
         cairo_restore(cr);
-        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kClose}});
+        buttons_at(panel.x, panel.w, panel.y + panel.h - margin - buttons_h, {{"_Close", kClose}});
         return;
     }
     if (dialog_ == Dialog::Recovery || dialog_ == Dialog::RecoveryDelete) {
@@ -6124,7 +6153,7 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
         news = staleness >= 2 ? std::string()
                               : latest.text + "   " + month_short(latest.month) + " " + std::to_string(latest.year);
     }
-    if (news.empty()) {
+    if (notices.empty() || news.empty()) {
         static const char *tips[] = {
             "Tip: Space runs the city. Press it again to pause.",
             "Tip: The Inspect tool (Q) says why a zone is or isn't growing.",
