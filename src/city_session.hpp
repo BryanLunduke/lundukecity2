@@ -566,6 +566,10 @@ public:
     // Raw map word (tile character in the low bits, flags above).
     int map_value(int x, int y) const;
     int layer_value(MapLayer layer, int x, int y) const;
+    // The busiest traffic-map cell (read-only). False when every cell is quiet.
+    bool worst_traffic(int &x, int &y, int &value) const;
+    // NEWS line for a traffic spike, with a place the mayor can jump to.
+    void note_traffic_spike(int tile_x, int tile_y);
     unsigned map_serial() const;
     // Cheap samples so the shell can skip a full repaint when the picture is still.
     unsigned tile_sample() const;

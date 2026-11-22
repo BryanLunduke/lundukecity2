@@ -4379,8 +4379,10 @@ void Shell::draw(cairo_t *cr)
         const int wrap = std::max(40, std::min(view_w_ / 2, dp(280)));
         const std::string legend = std::string(overlay_.title()) + "\n" + overlay_.legend();
         const TextMetrics metrics = measure_text(cr, ui_font(), legend, wrap);
-        const double lw = metrics.width + pad * 2;
-        const double lh = metrics.height + pad * 2 + dp(14);
+        const bool traffic_jump = overlay_.layer() == CitySession::MapLayer::Traffic;
+        const double jump_h = traffic_jump ? dp(28) : 0.0;
+        const double lw = std::max(static_cast<double>(metrics.width + pad * 2), traffic_jump ? static_cast<double>(dp(148)) : 0.0);
+        const double lh = metrics.height + pad * 2 + dp(14) + jump_h;
         const double lx = view_x_ + view_w_ - lw - pad - (handheld_ ? hud_right_ : 0);
         const double ly = view_y_ + pad + minimap_clearance();
         double legend_r = 0;
@@ -4465,6 +4467,9 @@ void Shell::draw(cairo_t *cr)
         } else {
             fill(cr, lx + pad, ramp_y, dp(14), dp(6), 16 / 255.0, 72 / 255.0, 16 / 255.0);
             fill(cr, lx + pad + dp(14), ramp_y, dp(28), dp(6), 186 / 255.0, 255 / 255.0, 64 / 255.0);
+        }
+        if (traffic_jump) {
+            button(cr, lx + pad, ly + lh - jump_h - pad / 2, lw - pad * 2, dp(24), "Jump to worst", kWorstTraffic, false);
         }
     }
     if ((gamepad_nav_ || key_cursor_) && dialog_ == Dialog::None) {

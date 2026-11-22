@@ -3708,6 +3708,44 @@ std::int64_t CitySession::population() const
     return people < 0 ? 0 : static_cast<std::int64_t>(people);
 }
 
+bool CitySession::worst_traffic(int &x, int &y, int &value) const
+{
+    x = 0;
+    y = 0;
+    value = 0;
+    if (!ready_) {
+        return false;
+    }
+    Micropolis &sim = engine_->sim;
+    int best = 0;
+    int bx = 0;
+    int by = 0;
+    const int mw = kWorldW / 2;
+    const int mh = kWorldH / 2;
+    for (int cx = 0; cx < mw; ++cx) {
+        for (int cy = 0; cy < mh; ++cy) {
+            const int density = sim.getTrafficDensity(cx, cy);
+            if (density > best) {
+                best = density;
+                bx = cx * 2;
+                by = cy * 2;
+            }
+        }
+    }
+    if (best <= 0) {
+        return false;
+    }
+    x = bx;
+    y = by;
+    value = best;
+    return true;
+}
+
+void CitySession::note_traffic_spike(int tile_x, int tile_y)
+{
+    remember_notice("Traffic is getting worse.", tile_x, tile_y, true);
+}
+
 int CitySession::layer_value(MapLayer layer, int x, int y) const
 {
     if (!ready_ || !Micropolis::testBounds(x, y)) {

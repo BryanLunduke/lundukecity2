@@ -310,6 +310,31 @@ void Shell::advance_presentation(int elapsed_ms)
     const bool tick_ok = motion_on() && city_chosen_ && !welcome_gate_;
     demand_tick_.observe(session_.res_demand(), session_.com_demand(), session_.ind_demand(), city_generation_, tick_ok);
     demand_tick_.advance(elapsed_ms);
+    if (city_chosen_ && !welcome_gate_) {
+        int tx = 0;
+        int ty = 0;
+        int peak = 0;
+        const bool have = session_.worst_traffic(tx, ty, peak);
+        if (traffic_peak_generation_ != city_generation_) {
+            traffic_peak_ = have ? peak : 0;
+            traffic_month_ = session_.game_month_index();
+            traffic_peak_generation_ = city_generation_;
+        } else if (have) {
+            const int month = session_.game_month_index();
+            if (month != traffic_month_) {
+                // A jump into heavy traffic (band 2, 128+) posts a NEWS line
+                // with a place the mayor can jump to. Display only.
+                if (peak >= 128 && peak > traffic_peak_ + 24) {
+                    session_.note_traffic_spike(tx, ty);
+                    shown_message_ = "Traffic is getting worse.";
+                    shown_message_serial_ = session_.message_serial();
+                    hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                }
+                traffic_peak_ = peak;
+                traffic_month_ = month;
+            }
+        }
+    }
     if (reveal_ms_ >= 0) {
         if (reveal_fresh_) {
             reveal_fresh_ = false;
@@ -2985,6 +3010,15 @@ void Shell::on_hotspot(int id, double x, double y)
         if (id >= kSpeedPill && id < kSpeedPill + 4) {
             static const Action speeds[4] = {Action::SetPause, Action::Slow, Action::Medium, Action::Fast};
             apply_action(speeds[id - kSpeedPill]);
+            return;
+        }
+        if (id == kWorstTraffic) {
+            int tx = 0;
+            int ty = 0;
+            int peak = 0;
+            if (session_.worst_traffic(tx, ty, peak)) {
+                begin_event_pan(tx, ty);
+            }
             return;
         }
         if (id == kCrisisStrip) {

@@ -565,6 +565,9 @@ private:
     FundsTicker funds_tick_;
     DemandTicker demand_tick_;
     int crisis_cycle_ = 0;
+    int traffic_peak_ = 0;
+    int traffic_month_ = -1;
+    unsigned traffic_peak_generation_ = 0;
     double funds_float_x_ = -1.0;
     double funds_float_y_ = 0.0;
     unsigned save_generation_ = 0;
