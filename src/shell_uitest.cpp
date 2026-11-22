@@ -1095,7 +1095,8 @@ void Shell::drive_ui_test()
             return;
         }
         if (find_hot(hot_, kWelcomeNew, 0) == nullptr || find_hot(hot_, kWelcomeLoad, 0) == nullptr ||
-            find_hot(hot_, kWelcomeScenario, 0) == nullptr || find_hot(hot_, kWelcomeQuit, 0) == nullptr) {
+            find_hot(hot_, kWelcomeScenario, 0) == nullptr || find_hot(hot_, kWelcomeHowTo, 0) == nullptr ||
+            find_hot(hot_, kWelcomeQuit, 0) == nullptr) {
             fail("the welcome screen is missing a button");
             return;
         }
@@ -1132,11 +1133,21 @@ void Shell::drive_ui_test()
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeScenario; });
+        if (focus_id_ != kWelcomeHowTo) {
+            fail("D-pad Down did not move to How to play");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeHowTo; });
         if (focus_id_ != kWelcomeQuit) {
             fail("D-pad Down did not move to Quit");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeQuit; });
+        if (focus_id_ != kWelcomeHowTo) {
+            fail("D-pad Up did not return to How to play");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeHowTo; });
         if (focus_id_ != kWelcomeScenario) {
             fail("D-pad Up did not return to Select a Scenario");
             return;
