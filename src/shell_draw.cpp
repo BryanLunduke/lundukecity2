@@ -6104,6 +6104,14 @@ void Shell::draw_hover_card(cairo_t *cr)
     const inspect_report::Report report = inspect_report::make(facts.facts);
     const bool power_line = card.power != "Power: —";
     const std::string next_line = report.next.empty() ? std::string() : "Next: " + report.next;
+    std::string pay_line;
+    for (const std::string &note : facts.notes) {
+        if (note.compare(0, 5, "Paid ") == 0 || note.compare(0, 12, "Not paying:") == 0 ||
+            note == "Not paying yet") {
+            pay_line = note;
+            break;
+        }
+    }
     // Wide enough for a short "Next:" line at 960 and on the Deck, without
     // covering the middle of the map.
     const double card_w = std::min(static_cast<double>(dp(handheld_ ? 250 : 260)),
@@ -6126,6 +6134,9 @@ void Shell::draw_hover_card(cairo_t *cr)
     }
     if (!next_line.empty()) {
         body_h += wrapped_h(ui_font(), next_line) + dp(2);
+    }
+    if (!pay_line.empty()) {
+        body_h += wrapped_h(ui_font(), pay_line) + dp(2);
     }
     if (card.offer_power) {
         body_h += dp(34);
@@ -6154,6 +6165,10 @@ void Shell::draw_hover_card(cairo_t *cr)
         }
         if (!next_line.empty()) {
             paint_text(cr, ui_font(), next_line, card_x + 10, line_y, dim_r, dim_g, dim_b, wrap);
+            line_y += wrapped_h(ui_font(), next_line) + dp(2);
+        }
+        if (!pay_line.empty()) {
+            paint_text(cr, ui_font(), pay_line, card_x + 10, line_y, dim_r, dim_g, dim_b, wrap);
         }
     };
     if (!dark) {

@@ -107,7 +107,7 @@ int check_idle_card()
         return fail(11, "the idle-check casino has no power or no road");
     }
     if (report.status != "Idle" || facts.notes.size() != 1 ||
-        facts.notes[0] != "No income: no residents within 16 tiles") {
+        facts.notes[0] != "Not paying: no residents within 16 tiles") {
         std::fprintf(stderr, "status '%s' notes %zu\n", report.status.c_str(), facts.notes.size());
         for (const std::string &note : facts.notes) {
             std::fprintf(stderr, "  note '%s'\n", note.c_str());

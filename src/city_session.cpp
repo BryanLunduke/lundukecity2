@@ -3491,20 +3491,20 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
         if (income.intact) {
             const std::string full = with_commas(income.full);
             if (!income.powered) {
-                notes.push_back("No income: needs power");
+                notes.push_back("Not paying: needs power");
             } else if (!income.road) {
-                notes.push_back("No income: needs a road next to it");
+                notes.push_back("Not paying: needs a road next to it");
             } else if (income.residents <= 0) {
                 // One line: "0 residents within 16 tiles" would only repeat it.
-                notes.push_back("No income: no residents within " + std::to_string(kIncomeCatchmentRadius) + " tiles");
+                notes.push_back("Not paying: no residents within " + std::to_string(kIncomeCatchmentRadius) + " tiles");
                 return notes;
             } else if (income.dollars <= 0) {
-                notes.push_back("No income yet");
+                notes.push_back("Not paying yet");
             } else {
                 // The bracket only when too few residents are the reason: at
                 // full pay it would repeat the number, and a capped payout
                 // has its own line below (review nov18b #10).
-                std::string line = "Earns " + with_commas(income.dollars) + " a year";
+                std::string line = "Paid " + with_commas(income.dollars) + " this year";
                 if (income.dollars < income.full && !income.capped) {
                     line += " (" + full + " at " + grouped_count(kIncomeFullResidents) + " residents)";
                 }
