@@ -300,6 +300,123 @@ void Micropolis::destroyAllSprites()
 }
 
 
+void Micropolis::applyPendingSpritesAfterLoad()
+{
+    if (!pendingSpritesValid) {
+        pendingSprites.clear();
+        return;
+    }
+    spriteCycle = pendingSpriteCycle;
+    // doSimInit already emptied the list. Build it again from the save,
+    // last record first, so prepending restores the original order.
+    // Do not call initSprite: that resets fields and can spend RNG
+    // (helicopter destinations), which would desync a reload.
+    destroyAllSprites();
+    for (int i = (int)pendingSprites.size() - 1; i >= 0; --i) {
+        const SavedSprite &rec = pendingSprites[static_cast<std::size_t>(i)];
+        if (rec.type <= SPRITE_NOTUSED || rec.type >= SPRITE_COUNT) {
+            continue;
+        }
+        SimSprite *sprite;
+        if (freeSprites) {
+            sprite = freeSprites;
+            freeSprites = sprite->next;
+        } else {
+            sprite = (SimSprite *)newPtr(sizeof(SimSprite));
+        }
+        sprite->name = (char *)newPtr(1);
+        sprite->name[0] = '\0';
+        sprite->type = rec.type;
+        sprite->frame = rec.frame;
+        sprite->x = rec.x;
+        sprite->y = rec.y;
+        sprite->width = rec.width;
+        sprite->height = rec.height;
+        sprite->xOffset = rec.xOffset;
+        sprite->yOffset = rec.yOffset;
+        sprite->xHot = rec.xHot;
+        sprite->yHot = rec.yHot;
+        sprite->origX = rec.origX;
+        sprite->origY = rec.origY;
+        sprite->destX = rec.destX;
+        sprite->destY = rec.destY;
+        sprite->count = rec.count;
+        sprite->soundCount = rec.soundCount;
+        sprite->dir = rec.dir;
+        sprite->newDir = rec.newDir;
+        sprite->step = rec.step;
+        sprite->flag = rec.flag;
+        sprite->control = rec.control;
+        sprite->turn = rec.turn;
+        sprite->accel = rec.accel;
+        sprite->speed = rec.speed;
+        sprite->next = spriteList;
+        spriteList = sprite;
+        if (rec.is_global) {
+            globalSprites[rec.type] = sprite;
+        }
+    }
+    pendingSprites.clear();
+    pendingSpritesValid = false;
+}
+
+
+bool Micropolis::spriteIsGlobal(const SimSprite *sprite) const
+{
+    if (sprite == NULL || sprite->type <= SPRITE_NOTUSED || sprite->type >= SPRITE_COUNT) {
+        return false;
+    }
+    return globalSprites[sprite->type] == sprite;
+}
+
+short Micropolis::spriteCycleValue() const
+{
+    return spriteCycle;
+}
+
+void Micropolis::setSpriteCycleValue(short value)
+{
+    spriteCycle = value;
+}
+
+
+void Micropolis::collectSpritesForSave(std::vector<SavedSprite> &out) const
+{
+    out.clear();
+    int guard = 0;
+    for (const SimSprite *sprite = spriteList; sprite != NULL && guard < 1024;
+         sprite = sprite->next, ++guard) {
+        SavedSprite rec;
+        rec.type = sprite->type;
+        rec.frame = sprite->frame;
+        rec.x = sprite->x;
+        rec.y = sprite->y;
+        rec.width = sprite->width;
+        rec.height = sprite->height;
+        rec.xOffset = sprite->xOffset;
+        rec.yOffset = sprite->yOffset;
+        rec.xHot = sprite->xHot;
+        rec.yHot = sprite->yHot;
+        rec.origX = sprite->origX;
+        rec.origY = sprite->origY;
+        rec.destX = sprite->destX;
+        rec.destY = sprite->destY;
+        rec.count = sprite->count;
+        rec.soundCount = sprite->soundCount;
+        rec.dir = sprite->dir;
+        rec.newDir = sprite->newDir;
+        rec.step = sprite->step;
+        rec.flag = sprite->flag;
+        rec.control = sprite->control;
+        rec.turn = sprite->turn;
+        rec.accel = sprite->accel;
+        rec.speed = sprite->speed;
+        rec.is_global = spriteIsGlobal(sprite);
+        out.push_back(rec);
+    }
+}
+
+
 /**
  * Destroy the sprite by taking it out of the active list.
  * @param sprite Sprite to destroy.

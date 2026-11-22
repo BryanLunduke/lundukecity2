@@ -4443,3 +4443,48 @@ std::vector<CitySession::SpriteDot> CitySession::sprites() const
     }
     return dots;
 }
+
+unsigned CitySession::sprite_signature() const
+{
+    unsigned hash = 2166136261u;
+    auto mix = [&](int value) {
+        hash ^= static_cast<unsigned>(value);
+        hash *= 16777619u;
+    };
+    if (!ready_) {
+        return 0;
+    }
+    int guard = 0;
+    for (const SimSprite *sprite = engine_->sim.spriteList; sprite != nullptr && guard < 4096;
+         sprite = sprite->next, ++guard) {
+        mix(sprite->type);
+        mix(sprite->frame);
+        mix(sprite->x);
+        mix(sprite->y);
+        mix(sprite->width);
+        mix(sprite->height);
+        mix(sprite->xOffset);
+        mix(sprite->yOffset);
+        mix(sprite->xHot);
+        mix(sprite->yHot);
+        mix(sprite->origX);
+        mix(sprite->origY);
+        mix(sprite->destX);
+        mix(sprite->destY);
+        mix(sprite->count);
+        mix(sprite->soundCount);
+        mix(sprite->dir);
+        mix(sprite->newDir);
+        mix(sprite->step);
+        mix(sprite->flag);
+        mix(sprite->control);
+        mix(sprite->turn);
+        mix(sprite->accel);
+        mix(sprite->speed);
+        mix(engine_->sim.spriteIsGlobal(sprite) ? 1 : 0);
+    }
+    mix(guard);
+    mix(engine_->sim.spriteCycleValue());
+    return hash;
+}
+

@@ -589,6 +589,8 @@ public:
     std::vector<unsigned short> terrain_tiles() const;
     void set_terrain_tiles(const std::vector<unsigned short> &tiles);
     std::vector<SpriteDot> sprites() const;
+    // All live sprite fields, for reload tests. 0 when the list is empty.
+    unsigned sprite_signature() const;
 
     const std::string &save_path() const { return save_path_; }
     void set_save_path(const std::string &path) { save_path_ = path; }

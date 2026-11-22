@@ -764,6 +764,9 @@ void Micropolis::init()
     editBlockedFn = NULL;
     std::memset(&cityEvents, 0, sizeof(cityEvents));
     pendingScanMapsValid = false;
+    pendingSpritesValid = false;
+    pendingSpriteCycle = 0;
+    pendingSprites.clear();
     specialIncome = 0;
 
     // void *callbackData;
