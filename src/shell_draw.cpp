@@ -1259,9 +1259,9 @@ void Shell::draw_dialog(cairo_t *cr)
         const double bh = dp(34);
         const double gap = dp(6);
         // The last city gets a card with its map, date, people and funds
-        // above the four plain choices.
+        // above the five plain choices.
         const double card_h = continued.empty() ? 0.0 : static_cast<double>(dp(92));
-        const int rows = 4;
+        const int rows = 5;
         const double plaque_h = dp(16) + (card_h > 0 ? card_h + dp(10) : 0.0) + rows * bh + (rows - 1) * gap + dp(14);
         const double plaque_w = std::min(static_cast<double>(card_h > 0 ? dp(480) : dp(420)),
                                          std::max(1.0, win_w_ - static_cast<double>(dp(48))));
@@ -1390,6 +1390,7 @@ void Shell::draw_dialog(cairo_t *cr)
             } rows_list[] = {{"_Start a new city", kWelcomeNew},
                              {"_Load a saved city", kWelcomeLoad},
                              {"Select a _scenario", kWelcomeScenario},
+                             {"How to _play", kWelcomeHowTo},
                              {"_Quit", kWelcomeQuit}};
             for (const auto &row : rows_list) {
                 push_hot(bx, by, bw, bh, row.id);
@@ -1423,6 +1424,8 @@ void Shell::draw_dialog(cairo_t *cr)
         button(cr, bx, by, bw, bh, "_Load a saved city", kWelcomeLoad, false);
         by += bh + gap;
         button(cr, bx, by, bw, bh, "Select a _scenario", kWelcomeScenario, false);
+        by += bh + gap;
+        button(cr, bx, by, bw, bh, "How to _play", kWelcomeHowTo, false);
         by += bh + gap;
         button(cr, bx, by, bw, bh, "_Quit", kWelcomeQuit, false);
         return;
@@ -2312,13 +2315,40 @@ void Shell::draw_dialog(cairo_t *cr)
         // A heading in the title colour over each topic, the same rule the
         // Controls window uses, so the two help windows read as a pair.
         const std::vector<HowToPlaySection> sections = how_to_play_sections();
-        const double width = message_width(win_w_, margin, dp(460), dp(880));
+        const double width = message_width(win_w_, margin, dp(400), std::max(static_cast<double>(dp(880)), win_w_ - 2 * margin));
         const double inner = width - 2 * margin;
         const double head_gap = dp(4);
-        const double section_gap = dp(14);
-        // Two columns when the window is wide enough, so it never needs to scroll.
-        const bool split = inner >= dp(640);
-        const double col_gap = dp(28);
+        const double col_gap = dp(24);
+        const double avail = std::max(1.0, band_h - 2.0 * margin);
+        const double chrome = dp(40) + margin + dp(16) + dp(36) + margin;
+        auto body_for = [&](bool split, double gap) {
+            const double col_w = split ? (inner - col_gap) / 2.0 : inner;
+            const std::size_t per_col = split ? (sections.size() + 1) / 2 : sections.size();
+            double tallest = 0;
+            for (std::size_t first = 0; first < sections.size(); first += per_col) {
+                double cy = 0;
+                const std::size_t last = std::min(sections.size(), first + per_col);
+                for (std::size_t i = first; i < last; ++i) {
+                    cy += line_height(bold_font(), sections[i].heading, col_w) + head_gap +
+                          line_height(body_font(), sections[i].body, col_w) + (i + 1 < last ? gap : 0.0);
+                }
+                tallest = std::max(tallest, cy);
+            }
+            return tallest;
+        };
+        // Two columns as soon as they fit, and whenever one column would clip
+        // the Budget paragraph (960 and the Deck).
+        double section_gap = dp(14);
+        bool split = inner >= dp(400);
+        double body_h = body_for(split, section_gap);
+        if (!split && chrome + body_h > avail && inner >= dp(280)) {
+            split = true;
+            body_h = body_for(true, section_gap);
+        }
+        if (chrome + body_h > avail) {
+            section_gap = dp(8);
+            body_h = body_for(split, section_gap);
+        }
         const double col_w = split ? (inner - col_gap) / 2.0 : inner;
         const std::size_t per_col = split ? (sections.size() + 1) / 2 : sections.size();
         auto lay = [&](double x, double y, bool paint) {
@@ -2329,23 +2359,29 @@ void Shell::draw_dialog(cairo_t *cr)
                 const std::size_t last = std::min(sections.size(), first + per_col);
                 for (std::size_t i = first; i < last; ++i) {
                     const double head_h = line_height(bold_font(), sections[i].heading, col_w);
-                    const double body_h = line_height(body_font(), sections[i].body, col_w);
+                    const double one_h = line_height(body_font(), sections[i].body, col_w);
                     if (paint) {
                         paint_text(cr, bold_font(), sections[i].heading, cx, cy, 0.45, 0.04, 0.02, static_cast<int>(col_w));
                         paint_text(cr, body_font(), sections[i].body, cx, cy + head_h + head_gap, theme::kTextR,
                                    theme::kTextG, theme::kTextB, static_cast<int>(col_w));
                     }
-                    cy += head_h + head_gap + body_h + (i + 1 < last ? section_gap : 0.0);
+                    cy += head_h + head_gap + one_h + (i + 1 < last ? section_gap : 0.0);
                 }
                 tallest = std::max(tallest, cy - y);
             }
             return tallest;
         };
-        const double body_h = lay(0, 0, false);
-        const double height = dp(40) + margin + body_h + dp(16) + dp(36) + margin;
+        const double height = chrome + body_h;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "How to play");
-        lay(panel.x + margin, panel.y + dp(48), true);
+        const double body_top = panel.y + dp(48);
+        const double body_bottom = panel.y + panel.h - margin - dp(36) - dp(8);
+        cairo_save(cr);
+        cairo_rectangle(cr, panel.x + margin - 2, body_top - 2, panel.w - 2 * margin + 4,
+                        std::max(1.0, body_bottom - body_top + 2));
+        cairo_clip(cr);
+        lay(panel.x + margin, body_top, true);
+        cairo_restore(cr);
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36), {{"_Close", kClose}});
         return;
     }

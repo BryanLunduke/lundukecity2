@@ -2513,6 +2513,10 @@ void Shell::on_dialog_button(int id)
             }
             return;
         }
+        if (id == kWelcomeHowTo) {
+            open_dialog(Dialog::HowToPlay);
+            return;
+        }
         // Quit, B, and Escape ask first. A second B from New City or the
         // scenario list must not leave the game.
         open_dialog(Dialog::QuitConfirm);
