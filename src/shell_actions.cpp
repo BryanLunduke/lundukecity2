@@ -2987,6 +2987,17 @@ void Shell::on_hotspot(int id, double x, double y)
             apply_action(speeds[id - kSpeedPill]);
             return;
         }
+        if (id == kCrisisStrip) {
+            const CitySession::CrisisReport crisis = session_.crisis_report();
+            if (!crisis.sites.empty()) {
+                crisis_cycle_ = (crisis_cycle_ % static_cast<int>(crisis.sites.size()) + static_cast<int>(crisis.sites.size())) %
+                                static_cast<int>(crisis.sites.size());
+                const CitySession::CrisisSite &site = crisis.sites[static_cast<std::size_t>(crisis_cycle_)];
+                begin_event_pan(site.x, site.y);
+                ++crisis_cycle_;
+            }
+            return;
+        }
         if (id >= kDemandMeter && id < kDemandMeter + 3) {
             const int which = id - kDemandMeter;
             // kTools: 4 residential, 5 commercial, 6 industrial.

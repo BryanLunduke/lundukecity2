@@ -5838,9 +5838,10 @@ void Shell::draw_info_band(cairo_t *cr)
         }
     }
     const std::int64_t flow = session_.plot_cash_flow(CitySession::HistoryScale::Short, 0);
-    enum Kind { City, Funds, Date, Speed, People, Demand, Goal, KindCount };
-    const char *labels[KindCount] = {"CITY", "FUNDS", "DATE", "SPEED", "POPULATION", "DEMAND", "GOAL"};
-    const std::string values[KindCount] = {name, funds, date, "", people, "", goal};
+    const CitySession::CrisisReport crisis = session_.crisis_report();
+    enum Kind { City, Funds, Date, Speed, People, Demand, Goal, Crisis, KindCount };
+    const char *labels[KindCount] = {"CITY", "FUNDS", "DATE", "SPEED", "POPULATION", "DEMAND", "GOAL", "ALERT"};
+    const std::string values[KindCount] = {name, funds, date, "", people, "", goal, crisis.text};
     const double pill = dp(26);
     const double pill_gap = dp(3);
     double widths[KindCount] = {};
@@ -5862,11 +5863,14 @@ void Shell::draw_info_band(cairo_t *cr)
     // Most useful first. The goal may be shortened to the room that is left;
     // the city name is the first to go on a narrow window.
     bool shown[KindCount] = {};
-    const int order[] = {Funds, Date, Speed, People, Demand, Goal, City};
+    const int order[] = {Funds, Date, Speed, Crisis, People, Demand, Goal, City};
     double used = dp(12);
     const double room = win_w_ - dp(12);
     for (int k : order) {
         if (k == Goal && values[Goal].empty()) {
+            continue;
+        }
+        if (k == Crisis && values[Crisis].empty()) {
             continue;
         }
         double need = widths[k] + gap * 2;
@@ -5983,6 +5987,16 @@ void Shell::draw_info_band(cairo_t *cr)
                 }
                 push_hot(bx - dp(2), value_y - dp(2), col, dp(22), hid);
             }
+            break;
+        }
+        case Crisis: {
+            const bool hot = hover_id_ == kCrisisStrip && dialog_ == Dialog::None && !menu_.open();
+            const std::string shown_crisis = fit_text(cr, bold_font(), crisis.text, static_cast<int>(std::max(1.0, w)));
+            if (hot) {
+                slate_round(cr, x - dp(4), value_y - dp(2), w + dp(8), dp(20), dp(5), kSlateEdge, 0.45);
+            }
+            slate_text(cr, bold_font(), shown_crisis, x, value_y, kSlateBad);
+            push_hot(x - dp(4), value_y - dp(2), w + dp(8), dp(22), kCrisisStrip);
             break;
         }
         case Goal: {
@@ -6384,6 +6398,28 @@ void Shell::draw_handheld_hud(cairo_t *cr)
                                           ? goal_text
                                           : fit_text(cr, bold_font(), goal_text, static_cast<int>(gw - goal_pad * 2));
             slate_text(cr, bold_font(), shown, gx + goal_pad, ty, kSlateInk);
+        }
+        const CitySession::CrisisReport crisis = session_.crisis_report();
+        if (!crisis.text.empty()) {
+            const double alert_pad = dp(10);
+            const std::string alert = crisis.text;
+            const double needed = measure_text(cr, bold_font(), alert, -1).width + alert_pad * 2;
+            double ax = dp(10);
+            double ay = top + chip_h + dp(6);
+            if (goal_w > 0.0) {
+                // Sit under the goal chip when that chip already took the
+                // second row, else under the main pill.
+                ay = top + chip_h + dp(6);
+            }
+            const double room = mini_x_ - dp(16) - ax;
+            const double aw = std::min(needed, std::max(room, static_cast<double>(dp(80))));
+            const std::string shown_alert = measure_text(cr, bold_font(), alert, -1).width + alert_pad * 2 <= aw
+                                                ? alert
+                                                : fit_text(cr, bold_font(), alert, static_cast<int>(aw - alert_pad * 2));
+            slate_round(cr, ax, ay, aw, chip_h, dp(10), kSlateBand, 0.94);
+            slate_text(cr, bold_font(), shown_alert, ax + alert_pad, ay + (chip_h - measure_text(cr, bold_font(), "Ag", -1).height) / 2.0,
+                       kSlateBad);
+            push_hot(ax, ay, aw, chip_h, kCrisisStrip);
         }
     }
     // Touch buttons on the right edge: zoom in, zoom out, centre.

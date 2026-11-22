@@ -423,6 +423,20 @@ public:
     std::vector<std::pair<int, int>> autonomous_zone_blocks() const;
     // Read-only view of the saved disaster state, for tests and the HUD.
     const CityEvents &events_state() const;
+    // Live unpowered zones and fires, plus a short line for a running or
+    // upcoming scenario event. Only reads the map and existing event state.
+    struct CrisisSite {
+        int x = 0;
+        int y = 0;
+    };
+    struct CrisisReport {
+        int unpowered = 0;
+        int fires = 0;
+        std::string event;
+        std::string text;
+        std::vector<CrisisSite> sites;
+    };
+    CrisisReport crisis_report() const;
     // Riot and prison crime now added (0 when none).
     int riot_crime() const;
 

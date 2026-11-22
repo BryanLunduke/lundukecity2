@@ -2534,6 +2534,102 @@ int CitySession::riot_crime() const
     return city_events::riot_crime_now(&engine_->sim);
 }
 
+CitySession::CrisisReport CitySession::crisis_report() const
+{
+    CrisisReport out;
+    if (!ready_) {
+        return out;
+    }
+    const Micropolis &sim = engine_->sim;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            const unsigned short raw = sim.map[x][y];
+            const int tile = raw & LOMASK;
+            if ((raw & ZONEBIT) != 0 && (raw & PWRBIT) == 0) {
+                ++out.unpowered;
+                out.sites.push_back(CrisisSite{x, y});
+            } else if (tile >= FIRE && tile <= LASTFIRE) {
+                ++out.fires;
+                out.sites.push_back(CrisisSite{x, y});
+            }
+        }
+    }
+    const CityEvents &events = sim.cityEvents;
+    if (events.riotSteps > 0) {
+        out.event = "Riot under way";
+    } else if (events.lionActive != 0) {
+        out.event = "Lion loose";
+        out.sites.push_back(CrisisSite{events.lionX / 16, events.lionY / 16});
+    } else if (events.prisonSteps > 0) {
+        out.event = "Prison escape";
+        if (events.prisonX != 0 || events.prisonY != 0) {
+            out.sites.push_back(CrisisSite{events.prisonX, events.prisonY});
+        }
+    } else if (events.zoneCount > 0) {
+        out.event = "Autonomous Zone";
+        out.sites.push_back(CrisisSite{events.zoneBlock[0][0], events.zoneBlock[0][1]});
+    } else if (sim.disasterEvent > SC_NONE && sim.disasterEvent < SC_COUNT && sim.disasterWait > 0) {
+        const char *name = "Disaster";
+        switch (sim.disasterEvent) {
+        case SC_SAN_FRANCISCO:
+            name = "Earthquake";
+            break;
+        case SC_HAMBURG:
+            name = "Fire bombs";
+            break;
+        case SC_TOKYO:
+            name = "Monster";
+            break;
+        case SC_BOSTON:
+            name = "Meltdown";
+            break;
+        case SC_RIO:
+            name = "Flood";
+            break;
+        case SC_SEATTLE:
+            name = "Autonomous Zone";
+            break;
+        case SC_SAN_FRANCISCO_1962:
+            name = "Prison escape";
+            break;
+        case SC_PORTLAND:
+            name = "Riot";
+            break;
+        case SC_SAN_DIEGO:
+            name = "Lion escape";
+            break;
+        default:
+            break;
+        }
+        const int months = static_cast<int>(sim.disasterWait) / 4;
+        if (months <= 0) {
+            out.event = std::string(name) + " soon";
+        } else if (months == 1) {
+            out.event = std::string(name) + " in 1 month";
+        } else {
+            out.event = std::string(name) + " in " + std::to_string(months) + " months";
+        }
+    }
+    auto add = [&](const std::string &part) {
+        if (part.empty()) {
+            return;
+        }
+        if (!out.text.empty()) {
+            out.text += ", ";
+        }
+        out.text += part;
+    };
+    if (out.unpowered > 0) {
+        add(std::to_string(out.unpowered) + " unpowered");
+    }
+    if (out.fires > 0) {
+        add(std::to_string(out.fires) + (out.fires == 1 ? " fire" : " fires"));
+    }
+    add(out.event);
+    return out;
+}
+
+
 void CitySession::on_event_frame()
 {
     if (scenario_disaster_pending_) {

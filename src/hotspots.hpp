@@ -115,6 +115,7 @@ enum HotspotId : int {
     kHudCenter = 9503,
     kSpeedPill = 9510, // + 0..3 (pause, slow, normal, fast)
     kDemandMeter = 9514, // + 0..2 (residential, commercial, industrial)
+    kCrisisStrip = 9517,
     // Terrain editor top bar and toolbar. Not dialog controls.
     kTerrainComplete = 9520,
     kTerrainCancel = 9521,
