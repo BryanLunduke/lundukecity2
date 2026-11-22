@@ -344,7 +344,7 @@ const ScenarioEntry kScenarios[] = {
     // San Francisco as it stood in 1962 (data/scenarios/sanfrancisco1962.cty,
     // built by tools/sf1962_map.cpp). It opens in May 1962; in June the
     // inmates break out of Alcatraz and come ashore at Fisherman's Wharf.
-    {{SC_SAN_FRANCISCO_1962, "San Francisco", 1962, "Inmates break out of Alcatraz.",
+    {{SC_SAN_FRANCISCO_1962, "San Francisco 1962", 1962, "Inmates break out of Alcatraz.",
       "Round up the Alcatraz escapees and bring average crime below " SF1962_CRIME_GOAL_TEXT
       " by mid-1964. Police stations by Fisherman's Wharf round them up sooner.",
       SF1962_YEARS},

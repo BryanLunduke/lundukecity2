@@ -70,7 +70,7 @@ int main()
 {
     // Catalog.
     const CitySession::ScenarioDef &def = CitySession::scenario_def(SC_SAN_FRANCISCO_1962 - 1);
-    if (def.id != SC_SAN_FRANCISCO_1962 || std::string(def.name) != "San Francisco" || def.year != 1962 ||
+    if (def.id != SC_SAN_FRANCISCO_1962 || std::string(def.name) != "San Francisco 1962" || def.year != 1962 ||
         def.years != SF1962_YEARS) {
         return fail(1, "San Francisco 1962 is not the tenth scenario in the catalog");
     }
@@ -88,7 +88,7 @@ int main()
     if (!session.load_scenario(SC_SAN_FRANCISCO_1962)) {
         return fail(4, "San Francisco did not load: " + session.message());
     }
-    if (session.city_name() != "San Francisco" || session.funds() != 20000 || session.city_year() != 1962 ||
+    if (session.city_name() != "San Francisco 1962" || session.funds() != 20000 || session.city_year() != 1962 ||
         static_cast<int>((session.city_time() % 48) / 4) != 4 || session.scenario_id() != SC_SAN_FRANCISCO_1962 ||
         session.scenario_years_left() != SF1962_YEARS) {
         return fail(5, "San Francisco did not open in May 1962 with $20,000 and two years to go");

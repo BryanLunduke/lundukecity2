@@ -2142,7 +2142,7 @@ bool Micropolis::loadScenario(Scenario s)
         case SC_SAN_FRANCISCO_1962:
             // Lunduke City 2's own map (data/scenarios/sanfrancisco1962.cty).
             // It opens at the start of May 1962; the escape is in June.
-            name = "San Francisco";
+            name = "San Francisco 1962";
             fname = "sanfrancisco1962.cty";
             which = SC_SAN_FRANCISCO_1962;
             funds = 20000;
