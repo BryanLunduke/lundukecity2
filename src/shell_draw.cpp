@@ -6080,13 +6080,26 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     std::string news = "No news yet.";
     const auto &notices = session_.notices();
     // Review nov19 #9: old news greys out after six months and gives way
-    // to "No recent news." after a year.
+    // to a rotating tip after a year.
     int staleness = 0;
     if (!notices.empty()) {
         const CitySession::CityNotice &latest = notices.front();
         staleness = news_staleness(session_.game_month_index() - (latest.year * 12 + latest.month));
-        news = staleness >= 2 ? std::string("No recent news.")
+        news = staleness >= 2 ? std::string()
                               : latest.text + "   " + month_short(latest.month) + " " + std::to_string(latest.year);
+    }
+    if (news.empty()) {
+        static const char *tips[] = {
+            "Tip: Space runs the city. Press it again to pause.",
+            "Tip: The Inspect tool (Q) says why a zone is or isn't growing.",
+            "Tip: Click the Res, Com, or Ind meter to zone that type.",
+            "Tip: The ALERT line jumps to unpowered zones and fires.",
+            "Tip: Open How to play from the Help menu for a short tour.",
+        };
+        const int n = static_cast<int>(sizeof(tips) / sizeof(tips[0]));
+        const int tick = static_cast<int>(SDL_GetTicks() / 8000) + session_.game_month_index();
+        news = tips[((tick % n) + n) % n];
+        staleness = 1;
     }
     std::string hint_line = hint;
     const int news_w = measure_text(cr, ui_font(), news, -1).width;
