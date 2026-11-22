@@ -443,9 +443,10 @@ void Micropolis::initSimMemory()
 
 
 /* comefrom: doSimInit */
-void Micropolis::simLoadInit()
+short Micropolis::disasterWaitAtStart(Scenario s)
 {
-    // Disaster delay table for each scenario
+    // Disaster delay for each scenario. Keep in step with the values
+    // simLoadInit() used to install on a fresh load.
     static const short disasterWaitTable[SC_COUNT] = {
         0,          // No scenario (free playing)
         2,          // Dullsville (boredom)
@@ -461,7 +462,14 @@ void Micropolis::simLoadInit()
         PORTLAND_RIOT_WAIT + 1, // Portland (Riot)
         SANDIEGO_LION_WAIT + 1, // San Diego (Zoo Escape)
     };
+    if (s <= SC_NONE || s >= SC_COUNT) {
+        return 0;
+    }
+    return disasterWaitTable[s];
+}
 
+void Micropolis::simLoadInit()
+{
     // Time to wait before score calculation for each scenario
     static const short scoreWaitTable[SC_COUNT] = {
         0,          // No scenario (free playing)
@@ -549,11 +557,10 @@ void Micropolis::simLoadInit()
     }
 
     if (scenario != SC_NONE) {
-        assert(LENGTH_OF(disasterWaitTable) == SC_COUNT);
         assert(LENGTH_OF(scoreWaitTable) == SC_COUNT);
 
         disasterEvent = scenario;
-        disasterWait = disasterWaitTable[disasterEvent];
+        disasterWait = disasterWaitAtStart(disasterEvent);
         scoreType = disasterEvent;
         scoreWait = scoreWaitTable[disasterEvent];
     } else {

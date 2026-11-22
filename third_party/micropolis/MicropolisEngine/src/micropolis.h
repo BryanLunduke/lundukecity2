@@ -2237,6 +2237,12 @@ public:
 
     bool loadScenario(Scenario s);
 
+    // Opening cityTime and disasterWait for a scenario, same values
+    // loadScenario() and simLoadInit() install. A save's sidecar can
+    // recompute a missing disaster timer from these and the current clock.
+    static Quad scenarioStartCityTime(Scenario s);
+    static short disasterWaitAtStart(Scenario s);
+
     void didLoadScenario();
 
     bool loadCity(const char *filename);
@@ -2530,6 +2536,13 @@ public:
     Byte pendingPollutionMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
     Byte pendingCrimeMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
     Byte pendingTerrainMap[((WORLD_W + 3) / 4) * ((WORLD_H + 3) / 4)];
+    // LCS1 version 2 also keeps traffic, population density, and the
+    // rate-of-growth map, so a reload does not start those from empty.
+    bool pendingTrafficMapsValid;
+    Byte pendingTrafficMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
+    Byte pendingPopDensityMap[((WORLD_W + 1) / 2) * ((WORLD_H + 1) / 2)];
+    short pendingRateOfGrowth[((WORLD_W + 7) / 8) * ((WORLD_H + 7) / 8)];
+    Byte pendingPowerGrid[WORLD_W * WORLD_H];
 
 
     /**
@@ -2748,7 +2761,27 @@ public:
     /** Simulator RNG state. A preview pass has to put this back. */
     UQuad randomState() const { return nextRandom; }
 
+    void setRandomState(UQuad state) { nextRandom = state; }
+
     void primeRandom(int seed) { seedRandom(seed); }
+
+    // Mid-cycle loads have to clear the live census after a full-map
+    // recount, or the remaining slices add to a finished count.
+    void resetLiveCensus() { clearCensus(); }
+
+    void restoreValves(short residential, short commercial, short industrial)
+    {
+        resValve = residential;
+        comValve = commercial;
+        indValve = industrial;
+    }
+
+    void currentValves(short &residential, short &commercial, short &industrial) const
+    {
+        residential = resValve;
+        commercial = comValve;
+        industrial = indValve;
+    }
 
     short rollRandom(short range) { return getRandom(range); }
 

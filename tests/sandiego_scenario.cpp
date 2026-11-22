@@ -110,9 +110,10 @@ int main()
     if (session.events_state().lionActive != 0 || session.events_state().lionSteps != 0) {
         return fail(6, "the lion is out before the scenario has run");
     }
-    if (session.scenario_meter_short().find("Lion in zoo") == std::string::npos ||
+    if (session.scenario_meter_short().find("Lion: not yet escaped") == std::string::npos ||
+        session.scenario_meter().find("has not escaped yet") == std::string::npos ||
         session.scenario_meter().find(kGoalText) == std::string::npos) {
-        return fail(6, "the goal meter does not show the zoo and the population goal: " + session.scenario_meter());
+        return fail(6, "the goal meter does not say the lion has not escaped yet: " + session.scenario_meter());
     }
 
     // The map: the Pacific, Mission Bay and San Diego Bay are water;

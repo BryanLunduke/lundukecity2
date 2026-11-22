@@ -22,6 +22,12 @@ struct ScenarioClock {
     int outcome = 0;
     int month = 0;
     int year = 1900;
+    // The scripted disaster timer. Missing on older sidecars; those can
+    // recompute the remaining wait from the scenario start when the event
+    // has not begun yet.
+    int disaster_event = 0;
+    int disaster_wait = 0;
+    bool disaster_present = false;
 };
 
 inline std::string scenario_sidecar_path(const std::string &city_path)
@@ -71,7 +77,9 @@ inline std::string scenario_sidecar_text(const ScenarioClock &clock)
     out += "  \"score_type\": " + std::to_string(clock.score_type) + ",\n";
     out += "  \"outcome\": " + std::to_string(clock.outcome) + ",\n";
     out += "  \"month\": " + std::to_string(clock.month) + ",\n";
-    out += "  \"year\": " + std::to_string(clock.year) + "\n";
+    out += "  \"year\": " + std::to_string(clock.year) + ",\n";
+    out += "  \"disaster_event\": " + std::to_string(clock.disaster_event) + ",\n";
+    out += "  \"disaster_wait\": " + std::to_string(clock.disaster_wait) + "\n";
     out += "}\n";
     return out;
 }
@@ -169,6 +177,11 @@ inline bool scenario_sidecar_parse(const std::string &text, ScenarioClock &clock
         parsed.outcome = sidecar_json_int(text, "outcome", outcome_ok);
         parsed.month = sidecar_json_int(text, "month", month_ok);
         parsed.year = sidecar_json_int(text, "year", year_ok);
+        bool disaster_event_ok = false;
+        bool disaster_wait_ok = false;
+        parsed.disaster_event = sidecar_json_int(text, "disaster_event", disaster_event_ok);
+        parsed.disaster_wait = sidecar_json_int(text, "disaster_wait", disaster_wait_ok);
+        parsed.disaster_present = disaster_event_ok && disaster_wait_ok;
         if (!scenario_ok && !wait_ok && !type_ok && !outcome_ok) {
             return false;
         }
@@ -180,6 +193,8 @@ inline bool scenario_sidecar_parse(const std::string &text, ScenarioClock &clock
     }
     ScenarioClock parsed;
     bool any = false;
+    bool disaster_event_ok = false;
+    bool disaster_wait_ok = false;
     std::string line;
     for (std::size_t i = 0; i <= text.size(); ++i) {
         if (i == text.size() || text[i] == '\n') {
@@ -209,6 +224,14 @@ inline bool scenario_sidecar_parse(const std::string &text, ScenarioClock &clock
                     parsed.month = value;
                 } else if (key == "year") {
                     parsed.year = value;
+                } else if (key == "disaster_event") {
+                    parsed.disaster_event = value;
+                    disaster_event_ok = true;
+                    any = true;
+                } else if (key == "disaster_wait") {
+                    parsed.disaster_wait = value;
+                    disaster_wait_ok = true;
+                    any = true;
                 }
             }
             line.clear();
@@ -219,6 +242,7 @@ inline bool scenario_sidecar_parse(const std::string &text, ScenarioClock &clock
     if (!any) {
         return false;
     }
+    parsed.disaster_present = disaster_event_ok && disaster_wait_ok;
     parsed.present = true;
     clock = parsed;
     return true;

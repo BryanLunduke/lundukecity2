@@ -178,6 +178,24 @@ bool seattle_zone_pending(const Micropolis &sim)
     return sim.disasterEvent == SC_SEATTLE && sim.disasterWait > 0;
 }
 
+bool sf1962_escape_pending(const Micropolis &sim)
+{
+    return sim.disasterEvent == SC_SAN_FRANCISCO_1962 && sim.disasterWait > 0 &&
+           sim.cityEvents.prisonSteps <= 0;
+}
+
+bool portland_riot_pending(const Micropolis &sim)
+{
+    return sim.disasterEvent == SC_PORTLAND && sim.disasterWait > 0 &&
+           sim.cityEvents.riotSteps <= 0 && sim.riotFiresBurning() == 0;
+}
+
+bool sandiego_lion_pending(const Micropolis &sim)
+{
+    return sim.disasterEvent == SC_SAN_DIEGO && sim.disasterWait > 0 &&
+           sim.cityEvents.lionActive == 0 && sim.cityEvents.lionSteps <= 0;
+}
+
 // The Seattle meter's Autonomous Zone part.
 std::string seattle_zone_short(const Micropolis &sim)
 {
@@ -191,11 +209,17 @@ std::string seattle_zone_short(const Micropolis &sim)
 // The San Francisco (1962) meter's escape part.
 std::string sf1962_escape_short(const Micropolis &sim)
 {
+    if (sf1962_escape_pending(sim)) {
+        return "Escape: not yet started";
+    }
     return sim.cityEvents.prisonSteps > 0 ? "Escapees loose" : "No escapees loose";
 }
 
 std::string sf1962_escape_long(const Micropolis &sim)
 {
+    if (sf1962_escape_pending(sim)) {
+        return "the Alcatraz escape has not started yet";
+    }
     return sim.cityEvents.prisonSteps > 0 ? "Alcatraz escapees at large → police by the Wharf round them up"
                                           : "no escapees at large";
 }
@@ -209,6 +233,9 @@ std::string portland_fires_short(const Micropolis &sim)
     if (fires > 0) {
         return text + std::to_string(fires) + (fires == 1 ? " riot fire" : " riot fires");
     }
+    if (portland_riot_pending(sim)) {
+        return "Riot: not yet started";
+    }
     return text + "Riot fires out";
 }
 
@@ -219,6 +246,9 @@ std::string portland_fires_long(const Micropolis &sim)
     if (fires > 0) {
         return text + std::to_string(fires) + (fires == 1 ? " riot fire burning" : " riot fires burning") +
                " → fire stations by them, bulldoze firebreaks";
+    }
+    if (portland_riot_pending(sim)) {
+        return "the riot has not started yet";
     }
     return text + "all riot fires out";
 }
@@ -231,7 +261,7 @@ std::string san_diego_lion_short(const Micropolis &sim)
         return "Lion loose";
     }
     if (e.lionSteps <= 0) {
-        return "Lion in zoo";
+        return sandiego_lion_pending(sim) ? "Lion: not yet escaped" : "Lion in zoo";
     }
     if (e.lionSteps <= SANDIEGO_LION_CATCH_STEPS) {
         return "Police caught lion";
@@ -246,7 +276,7 @@ std::string san_diego_lion_long(const Micropolis &sim)
         return "the lion is loose → police must catch it within four months";
     }
     if (e.lionSteps <= 0) {
-        return "the lion is in the zoo";
+        return sandiego_lion_pending(sim) ? "the lion has not escaped yet" : "the lion is in the zoo";
     }
     if (e.lionSteps <= SANDIEGO_LION_CATCH_STEPS) {
         return "the police caught the lion";
@@ -314,7 +344,7 @@ const ScenarioEntry kScenarios[] = {
     // San Francisco as it stood in 1962 (data/scenarios/sanfrancisco1962.cty,
     // built by tools/sf1962_map.cpp). It opens in May 1962; in June the
     // inmates break out of Alcatraz and come ashore at Fisherman's Wharf.
-    {{SC_SAN_FRANCISCO_1962, "San Francisco", 1962, "Inmates break out of Alcatraz.",
+    {{SC_SAN_FRANCISCO_1962, "San Francisco 1962", 1962, "Inmates break out of Alcatraz.",
       "Round up the Alcatraz escapees and bring average crime below " SF1962_CRIME_GOAL_TEXT
       " by mid-1964. Police stations by Fisherman's Wharf round them up sooner.",
       SF1962_YEARS},
@@ -1290,21 +1320,45 @@ bool CitySession::load_city(const std::string &path)
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
     read_scenario_sidecar(path);
-    // The simulator restarts at phase 0 and counts the clock first. A save
-    // taken in phases 1 to 10 had already counted this cycle but not yet run
-    // its tax year (9) or its progress check (10), so the restarted cycle
-    // keeps the clock where it is and does both on the same tick the saved
-    // game would have.
-    sim.holdClockOnce = loaded_phase_ >= 1 && loaded_phase_ <= 10;
+    // Restore the simulator's place in its 16-phase cycle. Older sidecars
+    // have no phase; those still restart at phase 0, holding the clock once
+    // when the save was mid-cycle so the tax year and score check still run.
+    if (loaded_phase_ >= 0 && loaded_phase_ <= 15) {
+        sim.phaseCycle = loaded_phase_;
+        sim.holdClockOnce = false;
+    } else {
+        sim.holdClockOnce = false;
+    }
     recount_population_from_map();
+    // Mid-cycle, the live census is only the slices already scanned this
+    // week (empty at phase 1, after phase 0's clearCensus). Recounting
+    // the whole map into the live counters would be counted again as the
+    // remaining slices run. The snapshot keeps the last finished census
+    // for the UI; the live counts start empty and fill in as they did.
+    if (loaded_phase_ >= 1 && loaded_phase_ <= 8) {
+        sim.resetLiveCensus();
+    }
     refresh_loaded_meters();
     // The refresh above re-scores a map whose traffic was cleared by the
     // load. The saved score is the one the player had.
     if (loaded_score_ >= 0) {
         sim.cityScore = static_cast<short>(loaded_score_);
     }
+    // miscHist stores the valves from before the last setValves() tick.
+    // The sidecar keeps the live values so a reload uses the same demand.
+    if (loaded_valves_valid_) {
+        sim.restoreValves(loaded_res_valve_, loaded_com_valve_, loaded_ind_valve_);
+    }
+    if (loaded_sim_cycle_ >= 0 && loaded_sim_cycle_ <= 1023) {
+        sim.simCycle = static_cast<short>(loaded_sim_cycle_);
+    }
+    if (loaded_rng_valid_) {
+        sim.setRandomState(static_cast<UQuad>(loaded_rng_));
+    }
     loaded_score_ = -1;
     loaded_phase_ = -1;
+    loaded_sim_cycle_ = -1;
+    loaded_rng_valid_ = false;
     // Review nov19 #12: catch up after the recount, not before. A city with
     // no sidecar (a classic save, a copied .cty) used to catch up on a
     // stale census of 0, so the next month toasted Town and its first Year
@@ -2604,6 +2658,22 @@ int CitySession::scenario_id() const
     return id;
 }
 
+int CitySession::disaster_event() const
+{
+    if (!ready_) {
+        return 0;
+    }
+    return static_cast<int>(engine_->sim.disasterEvent);
+}
+
+int CitySession::disaster_wait() const
+{
+    if (!ready_) {
+        return 0;
+    }
+    return static_cast<int>(engine_->sim.disasterWait);
+}
+
 int CitySession::scenario_years_left() const
 {
     const Micropolis &sim = engine_->sim;
@@ -3869,6 +3939,110 @@ void CitySession::arm_eval_baseline()
     sim.cityScoreDelta = 0;
 }
 
+namespace {
+
+// cityTime already includes this week's increment in phases 1..15, but
+// doDisasters() has not run yet, so the remaining wait is one week longer
+// than cityTime - start would suggest.
+int remaining_disaster_wait(const Micropolis &sim, int phase)
+{
+    const Scenario s = sim.scenario;
+    if (s <= SC_NONE || s >= SC_COUNT) {
+        return 0;
+    }
+    const long long start = static_cast<long long>(Micropolis::scenarioStartCityTime(s));
+    const int initial = static_cast<int>(Micropolis::disasterWaitAtStart(s));
+    long long elapsed = static_cast<long long>(sim.cityTime) - start;
+    if (phase >= 1 && phase <= 15) {
+        --elapsed;
+    }
+    if (elapsed < 0) {
+        elapsed = 0;
+    }
+    const long long left = static_cast<long long>(initial) - elapsed;
+    if (left <= 0) {
+        return 0;
+    }
+    if (left > 32767) {
+        return 32767;
+    }
+    return static_cast<int>(left);
+}
+
+// True when the scripted event has already begun, so an older sidecar
+// without a disaster timer must not re-arm it.
+bool scenario_scripted_event_started(const Micropolis &sim)
+{
+    const CityEvents &events = sim.cityEvents;
+    switch (sim.scenario) {
+        case SC_SEATTLE:
+            return events.zoneCount > 0 || events.zoneClock > 0;
+        case SC_SAN_FRANCISCO_1962:
+            return events.prisonSteps > 0;
+        case SC_PORTLAND:
+            return events.riotSteps > 0 || sim.riotFiresBurning() > 0;
+        case SC_SAN_DIEGO:
+            return events.lionActive != 0 || events.lionSteps > 0;
+        case SC_HAMBURG:
+        case SC_RIO:
+            // These fire on the first disaster tick (wait is a multiple of
+            // the wave period at the opening value). After that tick the
+            // remaining wait is already below the opening value.
+            return false;
+        default:
+            // One-shot or idle timers: remaining_disaster_wait() == 0 means
+            // the event has already been due. That is handled by the caller.
+            return false;
+    }
+}
+
+void restore_or_recompute_disaster_wait(Micropolis &sim, const ScenarioClock &clock, int phase)
+{
+    if (clock.disaster_present) {
+        const int wait = clamp_sidecar_score_wait(clock.disaster_wait);
+        int event = clock.disaster_event;
+        if (event == static_cast<int>(SC_NONE)) {
+            sim.disasterEvent = SC_NONE;
+            sim.disasterWait = static_cast<short>(wait);
+            return;
+        }
+        if (event != static_cast<int>(sim.scenario) || event < SC_DULLSVILLE || event >= SC_COUNT) {
+            event = static_cast<int>(sim.scenario);
+        }
+        if (event < SC_DULLSVILLE || event >= SC_COUNT) {
+            sim.disasterEvent = SC_NONE;
+            sim.disasterWait = 0;
+            return;
+        }
+        sim.disasterEvent = static_cast<Scenario>(event);
+        sim.disasterWait = static_cast<short>(wait);
+        return;
+    }
+
+    // Older sidecar: if the scripted event has not started, recompute the
+    // remaining wait from the scenario start and the current clock.
+    if (sim.scenario <= SC_NONE || sim.scenario >= SC_COUNT) {
+        return;
+    }
+    const int remaining = remaining_disaster_wait(sim, phase);
+    if (remaining <= 0) {
+        return;
+    }
+    const int initial = static_cast<int>(Micropolis::disasterWaitAtStart(sim.scenario));
+    if ((sim.scenario == SC_HAMBURG || sim.scenario == SC_RIO) && remaining < initial) {
+        // The first wave already went out. Do not try to reconstruct a
+        // mid-run wave timer from an old sidecar.
+        return;
+    }
+    if (scenario_scripted_event_started(sim)) {
+        return;
+    }
+    sim.disasterEvent = sim.scenario;
+    sim.disasterWait = static_cast<short>(remaining);
+}
+
+} // namespace
+
 void CitySession::clear_scenario_clock()
 {
     scenario_result_ = 0;
@@ -3886,6 +4060,9 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     clock.score_type = static_cast<int>(sim.scoreType);
     clock.outcome = scenario_result_;
     clock.month = static_cast<int>(sim.cityMonth);
+    clock.disaster_event = static_cast<int>(sim.disasterEvent);
+    clock.disaster_wait = static_cast<int>(sim.disasterWait);
+    clock.disaster_present = true;
     const long year = static_cast<long>(sim.cityYear);
     clock.year = static_cast<int>(year > 0 ? year : sim.startingYear);
     std::string text = scenario_sidecar_text(clock);
@@ -3934,6 +4111,15 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     // clock one step ahead of where the save was taken.
     append_string("score", std::to_string(static_cast<int>(sim.cityScore)));
     append_string("phase", std::to_string(static_cast<int>(sim.phaseCycle)));
+    append_string("sim_cycle", std::to_string(static_cast<int>(sim.simCycle)));
+    append_string("rng", std::to_string(static_cast<unsigned long long>(sim.randomState())));
+    {
+        short res_valve = 0, com_valve = 0, ind_valve = 0;
+        sim.currentValves(res_valve, com_valve, ind_valve);
+        append_string("valves", std::to_string(static_cast<int>(res_valve)) + "," +
+                                    std::to_string(static_cast<int>(com_valve)) + "," +
+                                    std::to_string(static_cast<int>(ind_valve)));
+    }
     // The Evaluation window's yearly changes, so a recovered or reloaded
     // city does not show dashes until another year passes.
     const bool deltas_known = eval_deltas_ready_ || sim.cityTime >= eval_anchor_time_ + 48;
@@ -3950,6 +4136,13 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     loaded_eval_ = LoadedEval{};
     loaded_score_ = -1;
     loaded_phase_ = -1;
+    loaded_rng_valid_ = false;
+    loaded_rng_ = 0;
+    loaded_sim_cycle_ = -1;
+    loaded_valves_valid_ = false;
+    loaded_res_valve_ = 0;
+    loaded_com_valve_ = 0;
+    loaded_ind_valve_ = 0;
     loaded_view_ = save_view::View{};
     std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
@@ -4058,6 +4251,49 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     };
     loaded_score_ = whole_value("score", 0, 1000);
     loaded_phase_ = whole_value("phase", 0, 15);
+    loaded_sim_cycle_ = whole_value("sim_cycle", 0, 1023);
+    {
+        const std::string raw = string_value("rng");
+        if (!raw.empty() && raw.size() <= 20) {
+            char *stop = nullptr;
+            errno = 0;
+            const unsigned long long value = std::strtoull(raw.c_str(), &stop, 10);
+            if (stop != raw.c_str() && *stop == '\0' && errno != ERANGE) {
+                loaded_rng_ = value;
+                loaded_rng_valid_ = true;
+            }
+        }
+    }
+    {
+        const std::string raw = string_value("valves");
+        int vals[3] = {0, 0, 0};
+        const char *cursor = raw.c_str();
+        bool ok = !raw.empty();
+        for (int i = 0; i < 3 && ok; ++i) {
+            if (i > 0) {
+                if (*cursor != ',') {
+                    ok = false;
+                    break;
+                }
+                ++cursor;
+            }
+            char *stop = nullptr;
+            errno = 0;
+            const long value = std::strtol(cursor, &stop, 10);
+            if (stop == cursor || errno == ERANGE || value < -32768 || value > 32767) {
+                ok = false;
+                break;
+            }
+            vals[i] = static_cast<int>(value);
+            cursor = stop;
+        }
+        if (ok && *cursor == '\0') {
+            loaded_res_valve_ = static_cast<short>(vals[0]);
+            loaded_com_valve_ = static_cast<short>(vals[1]);
+            loaded_ind_valve_ = static_cast<short>(vals[2]);
+            loaded_valves_valid_ = true;
+        }
+    }
     ScenarioClock clock;
     if (!scenario_sidecar_parse(text, clock)) {
         return;
@@ -4080,6 +4316,7 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     }
     sim.scoreType = static_cast<Scenario>(type);
     sim.scoreWait = static_cast<short>(clamp_sidecar_score_wait(clock.score_wait));
+    restore_or_recompute_disaster_wait(sim, clock, loaded_phase_);
 }
 
 bool CitySession::preview_terrain(int seed, int island, int rivers, int lakes, int trees,

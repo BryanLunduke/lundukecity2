@@ -1951,7 +1951,11 @@ void Shell::draw_dialog(cairo_t *cr)
             stroke_rect(cr, tx, ty, preview_w, preview_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
             const double text_x = tx + preview_w + dp(8);
             const double text_w = std::max(1.0, x + dp(8) + row_w - text_x - dp(6));
-            const std::string line = std::string(def.name) + " (" + std::to_string(def.year) + ")";
+            std::string line = def.name;
+            const std::string year = std::to_string(def.year);
+            if (line.find(year) == std::string::npos) {
+                line += " (" + year + ")";
+            }
             paint_text(cr, body_font(), line, text_x, ry + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(text_w));
             paint_text(cr, ui_font(), def.summary, text_x, ry + dp(28), theme::kAccelR, theme::kAccelG, theme::kAccelB,

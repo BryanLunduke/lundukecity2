@@ -970,14 +970,18 @@ static std::size_t events_span(const unsigned char *bytes, std::size_t avail)
 // Land value, pollution, crime and terrain density as they stood at save
 // time. Magic "LCS1", after LCD1 and before LCV1. Little-endian:
 //   char magic[4] = { 'L','C','S','1' }
-//   uint16 version = 1
+//   uint16 version = 1 or 2
 //   uint16 payload
 //   int16 crimeAverage, landValueAverage, pollutionAverage, reserved
 //   landValueMap, pollutionDensityMap, crimeRateMap (MapByte2, getBase order)
 //   terrainDensityMap (MapByte4, getBase order)
+//   version 2 also has trafficDensityMap, populationDensityMap (MapByte2)
+//   and rateOfGrowthMap (MapShort8, host byte order like the other maps).
 // A file without it (older saves) is settled again after load.
+// Version-1 files still load; the extra maps stay from doSimInit / empty.
 static const char kScanMapsMagic[4] = {'L', 'C', 'S', '1'};
-static const unsigned int kScanMapsVersion = 1;
+static const unsigned int kScanMapsVersion = 2;
+static const unsigned int kScanMapsVersionLegacy = 1;
 
 static unsigned scan_map2_bytes(const Micropolis *sim)
 {
@@ -989,11 +993,33 @@ static unsigned scan_map4_bytes(const Micropolis *sim)
     return (unsigned)(sim->terrainDensityMap.MAP_W * sim->terrainDensityMap.MAP_H);
 }
 
+static unsigned scan_growth_bytes(const Micropolis *sim)
+{
+    return (unsigned)(sim->rateOfGrowthMap.MAP_W * sim->rateOfGrowthMap.MAP_H * (int)sizeof(short));
+}
+
+static unsigned scan_power_bytes(const Micropolis *sim)
+{
+    return (unsigned)(sim->powerGridMap.MAP_W * sim->powerGridMap.MAP_H);
+}
+
+static unsigned scan_maps_payload(const Micropolis *sim, unsigned int version)
+{
+    const unsigned map2 = scan_map2_bytes(sim);
+    const unsigned map4 = scan_map4_bytes(sim);
+    unsigned payload = 8 + 3 * map2 + map4;
+    if (version >= 2) {
+        payload += 2 * map2 + scan_growth_bytes(sim) + scan_power_bytes(sim);
+    }
+    return payload;
+}
+
 static bool write_scan_maps(FILE *f, const Micropolis *sim)
 {
     const unsigned map2 = scan_map2_bytes(sim);
     const unsigned map4 = scan_map4_bytes(sim);
-    const unsigned payload = 8 + 3 * map2 + map4;
+    const unsigned growth = scan_growth_bytes(sim);
+    const unsigned payload = scan_maps_payload(sim, kScanMapsVersion);
     std::vector<unsigned char> bytes(8 + payload);
     for (int i = 0; i < 4; ++i) {
         bytes[i] = (unsigned char)kScanMapsMagic[i];
@@ -1009,7 +1035,11 @@ static bool write_scan_maps(FILE *f, const Micropolis *sim)
     std::memcpy(out, mut->landValueMap.getBase(), map2); out += map2;
     std::memcpy(out, mut->pollutionDensityMap.getBase(), map2); out += map2;
     std::memcpy(out, mut->crimeRateMap.getBase(), map2); out += map2;
-    std::memcpy(out, mut->terrainDensityMap.getBase(), map4);
+    std::memcpy(out, mut->terrainDensityMap.getBase(), map4); out += map4;
+    std::memcpy(out, mut->trafficDensityMap.getBase(), map2); out += map2;
+    std::memcpy(out, mut->populationDensityMap.getBase(), map2); out += map2;
+    std::memcpy(out, mut->rateOfGrowthMap.getBase(), growth); out += growth;
+    std::memcpy(out, mut->powerGridMap.getBase(), scan_power_bytes(sim));
     return fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
 }
 
@@ -1018,17 +1048,21 @@ static bool read_scan_maps(Micropolis *sim, const unsigned char *bytes, std::siz
     if (bytes == NULL || avail < 16 || std::memcmp(bytes, kScanMapsMagic, 4) != 0) {
         return false;
     }
-    if (read_le_u16(bytes + 4) != kScanMapsVersion) {
+    const unsigned int version = read_le_u16(bytes + 4);
+    if (version != kScanMapsVersion && version != kScanMapsVersionLegacy) {
         return false;
     }
     const unsigned int payload = read_le_u16(bytes + 6);
     const unsigned map2 = scan_map2_bytes(sim);
     const unsigned map4 = scan_map4_bytes(sim);
-    if (payload != 8 + 3 * map2 + map4 || avail < 8 + (std::size_t)payload) {
+    const unsigned growth = scan_growth_bytes(sim);
+    if (payload != scan_maps_payload(sim, version) || avail < 8 + (std::size_t)payload) {
         return false;
     }
     if (map2 != (unsigned)sizeof(sim->pendingLandValueMap) ||
-        map4 != (unsigned)sizeof(sim->pendingTerrainMap)) {
+        map4 != (unsigned)sizeof(sim->pendingTerrainMap) ||
+        growth != (unsigned)sizeof(sim->pendingRateOfGrowth) ||
+        (version >= 2 && scan_power_bytes(sim) != (unsigned)sizeof(sim->pendingPowerGrid))) {
         return false;
     }
     sim->pendingCrimeAverage = (short)read_le_u16(bytes + 8);
@@ -1038,8 +1072,16 @@ static bool read_scan_maps(Micropolis *sim, const unsigned char *bytes, std::siz
     std::memcpy(sim->pendingLandValueMap, in, map2); in += map2;
     std::memcpy(sim->pendingPollutionMap, in, map2); in += map2;
     std::memcpy(sim->pendingCrimeMap, in, map2); in += map2;
-    std::memcpy(sim->pendingTerrainMap, in, map4);
+    std::memcpy(sim->pendingTerrainMap, in, map4); in += map4;
     sim->pendingScanMapsValid = true;
+    sim->pendingTrafficMapsValid = false;
+    if (version >= 2) {
+        std::memcpy(sim->pendingTrafficMap, in, map2); in += map2;
+        std::memcpy(sim->pendingPopDensityMap, in, map2); in += map2;
+        std::memcpy(sim->pendingRateOfGrowth, in, growth); in += growth;
+        std::memcpy(sim->pendingPowerGrid, in, scan_power_bytes(sim));
+        sim->pendingTrafficMapsValid = true;
+    }
     return true;
 }
 
@@ -1289,6 +1331,7 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
     const std::size_t dock_at = trailer + wide_bytes;
     std::memset(&cityEvents, 0, sizeof(cityEvents));
     pendingScanMapsValid = false;
+    pendingTrafficMapsValid = false;
     if (data.size() > dock_at + format_bytes) {
         const std::size_t avail = data.size() - dock_at - format_bytes;
         read_marina_dock(this, data.data() + dock_at, avail);
@@ -1496,6 +1539,19 @@ bool Micropolis::loadFile(const char *filename)
 
     initFundingLevel();
 
+    // doSimInit() runs a full mapScan that can grow or shrink zones,
+    // and setValves() overwrites miscHist with valves computed from that
+    // scan. Keep the tiles and the saved valves.
+    std::vector<unsigned short> savedTiles((std::size_t)WORLD_W * (std::size_t)WORLD_H);
+    for (int x = 0; x < WORLD_W; x++) {
+        std::memcpy(&savedTiles[(std::size_t)x * WORLD_H], map[x], WORLD_H * sizeof(unsigned short));
+    }
+    const short savedResValve = miscHist[5];
+    const short savedComValve = miscHist[6];
+    const short savedIndValve = miscHist[7];
+    const short savedCrimeRamp = miscHist[10];
+    const short savedPollutionRamp = miscHist[11];
+
     // Set the scenario id to 0.
     initWillStuff();
     scenario = SC_NONE;
@@ -1503,6 +1559,25 @@ bool Micropolis::loadFile(const char *filename)
     doInitialEval = false;
     powerGridFresh = false; // the grid is still the previous city's
     doSimInit();
+
+    for (int x = 0; x < WORLD_W; x++) {
+        std::memcpy(map[x], &savedTiles[(std::size_t)x * WORLD_H], WORLD_H * sizeof(unsigned short));
+    }
+    // doSimInit() recomputed valves from a scan of the (mutated) map and
+    // left doInitialEval set, which would run a second evaluation the
+    // continued game would not have done. Put the saved valves back and
+    // rebuild the power grid from the restored tiles.
+    resValve = savedResValve;
+    comValve = savedComValve;
+    indValve = savedIndValve;
+    miscHist[5] = savedResValve;
+    miscHist[6] = savedComValve;
+    miscHist[7] = savedIndValve;
+    crimeRamp = savedCrimeRamp;
+    pollutionRamp = savedPollutionRamp;
+    doInitialEval = false;
+    // A fresh power scan can disagree with the last periodic one. The
+    // grid is restored from the LCS1 v2 trailer when the file has it.
 
     roadPercent = savedRoadPercent;
     policePercent = savedPolicePercent;
@@ -1959,6 +2034,42 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
  * @param s Scenario to load.
  * @note \a s cannot be \c SC_NONE.
  */
+Quad Micropolis::scenarioStartCityTime(Scenario s)
+{
+    switch (s) {
+        case SC_DULLSVILLE:
+            return ((1900 - 1900) * 48) + 2;
+        case SC_SAN_FRANCISCO:
+            return ((1906 - 1900) * 48) + 2;
+        case SC_HAMBURG:
+            return ((1944 - 1900) * 48) + 2;
+        case SC_BERN:
+            return ((1965 - 1900) * 48) + 2;
+        case SC_TOKYO:
+            return ((1957 - 1900) * 48) + 2;
+        case SC_DETROIT:
+            return ((1972 - 1900) * 48) + 2;
+        case SC_BOSTON:
+            return ((2010 - 1900) * 48) + 2;
+        case SC_RIO:
+            return ((2047 - 1900) * 48) + 2;
+        case SC_SEATTLE:
+            // Late May 2020; the Autonomous Zone forms in June.
+            return ((2020 - 1900) * 48) + 4 * 4 + 3;
+        case SC_SAN_FRANCISCO_1962:
+            // Start of May 1962; the escape is in June.
+            return ((1962 - 1900) * 48) + 4 * 4;
+        case SC_PORTLAND:
+            // Mid-July 2020; the riot is in August.
+            return ((2020 - 1900) * 48) + 6 * 4 + 2;
+        case SC_SAN_DIEGO:
+            // Start of March 2025; the lion gets out in April.
+            return ((2025 - 1900) * 48) + 2 * 4;
+        default:
+            return 0;
+    }
+}
+
 bool Micropolis::loadScenario(Scenario s)
 {
     const char *name = NULL;
@@ -1976,56 +2087,48 @@ bool Micropolis::loadScenario(Scenario s)
             name = "Dullsville";
             fname = "snro.111";
             which = SC_DULLSVILLE;
-            time = ((1900 - 1900) * 48) + 2;
             funds = 5000;
             break;
         case SC_SAN_FRANCISCO:
             name = "San Francisco";
             fname = "snro.222";
             which = SC_SAN_FRANCISCO;
-            time = ((1906 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_HAMBURG:
             name = "Hamburg";
             fname = "snro.333";
             which = SC_HAMBURG;
-            time = ((1944 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_BERN:
             name = "Bern";
             fname = "snro.444";
             which = SC_BERN;
-            time = ((1965 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_TOKYO:
             name = "Tokyo";
             fname = "snro.555";
             which = SC_TOKYO;
-            time = ((1957 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_DETROIT:
             name = "Detroit";
             fname = "snro.666";
             which = SC_DETROIT;
-            time = ((1972 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_BOSTON:
             name = "Boston";
             fname = "snro.777";
             which = SC_BOSTON;
-            time = ((2010 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_RIO:
             name = "Rio de Janeiro";
             fname = "snro.888";
             which = SC_RIO;
-            time = ((2047 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_SEATTLE:
@@ -2034,16 +2137,14 @@ bool Micropolis::loadScenario(Scenario s)
             name = "Seattle";
             fname = "seattle.cty";
             which = SC_SEATTLE;
-            time = ((2020 - 1900) * 48) + 4 * 4 + 3;
             funds = 20000;
             break;
         case SC_SAN_FRANCISCO_1962:
             // Lunduke City 2's own map (data/scenarios/sanfrancisco1962.cty).
             // It opens at the start of May 1962; the escape is in June.
-            name = "San Francisco";
+            name = "San Francisco 1962";
             fname = "sanfrancisco1962.cty";
             which = SC_SAN_FRANCISCO_1962;
-            time = ((1962 - 1900) * 48) + 4 * 4;
             funds = 20000;
             break;
         case SC_PORTLAND:
@@ -2052,7 +2153,6 @@ bool Micropolis::loadScenario(Scenario s)
             name = "Portland";
             fname = "portland.cty";
             which = SC_PORTLAND;
-            time = ((2020 - 1900) * 48) + 6 * 4 + 2;
             funds = 20000;
             break;
         case SC_SAN_DIEGO:
@@ -2061,7 +2161,6 @@ bool Micropolis::loadScenario(Scenario s)
             name = "San Diego";
             fname = "sandiego.cty";
             which = SC_SAN_DIEGO;
-            time = ((2025 - 1900) * 48) + 2 * 4;
             funds = 20000;
             break;
         default:
@@ -2077,6 +2176,7 @@ bool Micropolis::loadScenario(Scenario s)
     cityFileName = "";
     setGameLevel(LEVEL_EASY);
     scenario = which;
+    time = scenarioStartCityTime(which);
     cityTime = time;
     setFunds(funds);
     setCleanCityName(name);

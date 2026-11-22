@@ -344,12 +344,14 @@ int main()
         }
     }
 
-    // A city with no riot fires reads as riot fires out on the meter.
+    // Before the riot starts the meter must not claim the fires are already out.
     CitySession calm;
     if (!calm.load_scenario(SC_PORTLAND) ||
-        calm.scenario_meter_short().find("Riot fires out") == std::string::npos ||
-        calm.scenario_meter().find("all riot fires out") == std::string::npos) {
-        return fail(27, "the meter does not say the riot fires are out");
+        calm.scenario_meter_short().find("Riot: not yet started") == std::string::npos ||
+        calm.scenario_meter().find("has not started yet") == std::string::npos ||
+        calm.scenario_meter_short().find("Riot fires out") != std::string::npos ||
+        calm.scenario_meter().find("all riot fires out") != std::string::npos) {
+        return fail(27, "the meter does not say the riot has not started yet: " + calm.scenario_meter());
     }
     std::printf("portland ok: riot after %lld weeks, %d fires downtown\n", broke, fires);
     return 0;
