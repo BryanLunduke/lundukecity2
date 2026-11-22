@@ -3285,11 +3285,26 @@ void Shell::draw_dialog(cairo_t *cr)
         std::string advice_body;
         std::string advice_show;
         std::string advice_alt;
+        std::string advice_fact;
+        std::string advice_next;
         if (eval_why_ >= 0 && eval_why_ < problem_n && report.problems[static_cast<std::size_t>(eval_why_)].kind >= 0) {
-            const civic::Advice advice = civic::advice_for(report.problems[static_cast<std::size_t>(eval_why_)].kind);
+            const int kind = report.problems[static_cast<std::size_t>(eval_why_)].kind;
+            const civic::Advice advice = civic::advice_for(kind);
             advice_body = advice.body;
             advice_show = advice.show == nullptr ? "" : advice.show;
             advice_alt = advice.alt == nullptr ? "" : advice.alt;
+            advice_fact = inspect_report::complaint_fact(kind);
+            if (advice.tip != nullptr) {
+                advice_next = advice.tip;
+                const std::string prefix = "Tip: ";
+                if (advice_next.compare(0, prefix.size(), prefix) == 0) {
+                    advice_next = advice_next.substr(prefix.size());
+                }
+                if (!advice_next.empty()) {
+                    advice_next[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(advice_next[0])));
+                    advice_next = "Next: " + advice_next;
+                }
+            }
         }
         const double problem_row = static_cast<double>(dp(24));
         double problem_block = 0;
@@ -3300,8 +3315,17 @@ void Shell::draw_dialog(cairo_t *cr)
                 problem_block += line_height(body_font(), problem, col_w) + gap;
             }
         }
-        if (!advice_body.empty()) {
-            problem_block += line_height(ui_font(), advice_body, col_w) + gap + static_cast<double>(dp(32));
+        if (!advice_body.empty() || !advice_fact.empty() || !advice_next.empty()) {
+            if (!advice_fact.empty()) {
+                problem_block += line_height(bold_font(), advice_fact, col_w) + gap;
+            }
+            if (!advice_body.empty()) {
+                problem_block += line_height(ui_font(), advice_body, col_w) + gap;
+            }
+            if (!advice_next.empty()) {
+                problem_block += line_height(ui_font(), advice_next, col_w) + gap;
+            }
+            problem_block += static_cast<double>(dp(32));
         }
         std::vector<Row> right_rows = {{bold_font(), copy.problems_caption}};
         right_rows.push_back(Row{bold_font(), copy.stats_caption});
@@ -3423,10 +3447,22 @@ void Shell::draw_dialog(cairo_t *cr)
                     right_y += h + gap;
                 }
             }
-            if (!advice_body.empty()) {
-                const double h = place_line(ui_font(), advice_body, right_x, right_y, live_col, theme::kTextR, theme::kTextG,
-                                            theme::kTextB);
-                right_y += h + gap;
+            if (!advice_body.empty() || !advice_fact.empty() || !advice_next.empty()) {
+                if (!advice_fact.empty()) {
+                    const double h = place_line(bold_font(), advice_fact, right_x, right_y, live_col, theme::kTextR,
+                                                theme::kTextG, theme::kTextB);
+                    right_y += h + gap;
+                }
+                if (!advice_body.empty()) {
+                    const double h = place_line(ui_font(), advice_body, right_x, right_y, live_col, theme::kTextR,
+                                                theme::kTextG, theme::kTextB);
+                    right_y += h + gap;
+                }
+                if (!advice_next.empty()) {
+                    const double h = place_line(ui_font(), advice_next, right_x, right_y, live_col, theme::kTextR,
+                                                theme::kTextG, theme::kTextB);
+                    right_y += h + gap;
+                }
                 if (!advice_show.empty()) {
                     button(cr, right_x, right_y, std::min(live_col, static_cast<double>(dp(150))), dp(28), advice_show.c_str(),
                            kEvalShow, false);
@@ -3616,6 +3652,10 @@ void Shell::draw_dialog(cairo_t *cr)
         }
         if (!reasons_head.empty()) {
             height += line_height(tag_font(), reasons_head, inner) + dp(6) + reasons_h + dp(4);
+        }
+        const std::string next_line = report.next.empty() ? std::string() : "Next: " + report.next;
+        if (!next_line.empty()) {
+            height += line_height(ui_font(), next_line, inner) + dp(8);
         }
         height += dp(8) + bh + margin;
         double floor_y = static_cast<double>(win_h_ - status_h_) - margin;
@@ -3817,6 +3857,9 @@ void Shell::draw_dialog(cairo_t *cr)
             for (const std::string &reason : report.reasons) {
                 cy += place_line(ui_font(), "\u2022  " + reason, x + margin, cy, inner, ink_r, ink_g, ink_b) + dp(4);
             }
+        }
+        if (!next_line.empty()) {
+            cy += place_line(ui_font(), next_line, x + margin, cy, inner, ink_r, ink_g, ink_b) + dp(4);
         }
         if (facts.offer_power) {
             buttons_at(x, panel.w, y + panel.h - margin - bh, {{"Show _power", kInspectPower}, {"_Close", kClose}});
@@ -6057,34 +6100,67 @@ void Shell::draw_hover_card(cairo_t *cr)
     if (!card.valid) {
         return;
     }
-    const double card_w = std::min(static_cast<double>(dp(220)), std::max(80.0, view_w_ * 0.34));
-    // Water, roads and bare land have no power state: no "Power: —" line.
+    const CitySession::InspectFacts facts = session_.inspect_facts(hx, hy);
+    const inspect_report::Report report = inspect_report::make(facts.facts);
     const bool power_line = card.power != "Power: —";
-    const double card_h =
-        (card.offer_power ? dp(132) : dp(96)) - (card.access.empty() ? dp(18) : 0) - (power_line ? 0 : dp(18));
+    const std::string next_line = report.next.empty() ? std::string() : "Next: " + report.next;
+    // Wide enough for a short "Next:" line at 960 and on the Deck, without
+    // covering the middle of the map.
+    const double card_w = std::min(static_cast<double>(dp(handheld_ ? 250 : 260)),
+                                   std::max(110.0, view_w_ * (handheld_ ? 0.46 : 0.40)));
+    const int wrap = static_cast<int>(std::max(40.0, card_w - 20));
+    const bool dark = slate_ || handheld_;
+    double body_h = dp(26); // title
+    if (power_line) {
+        body_h += dp(18);
+    }
+    if (!card.access.empty()) {
+        body_h += dp(18);
+    }
+    auto wrapped_h = [&](const char *font, const std::string &text) {
+        const std::string shown = text.empty() ? std::string(" ") : text;
+        return static_cast<double>(std::max(1, measure_text(cr, font, shown, wrap).height));
+    };
+    if (!report.status.empty()) {
+        body_h += wrapped_h(bold_font(), report.status);
+    }
+    if (!next_line.empty()) {
+        body_h += wrapped_h(ui_font(), next_line) + dp(2);
+    }
+    if (card.offer_power) {
+        body_h += dp(34);
+    }
+    const double card_h = std::max(static_cast<double>(dp(72)), body_h + dp(16));
     inspect_card_shown_ = true;
     inspect_card_w_ = card_w;
     inspect_card_h_ = card_h;
     const double card_x = view_x_ + view_w_ - card_w - dp(12) - hud_right_;
     const double card_y = view_y_ + dp(8) + minimap_clearance();
-    const double first_y = card_y + (power_line ? dp(44) : dp(26));
-    if (!slate_ && !handheld_) {
-        fill(cr, card_x, card_y, card_w, card_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
-        stroke_rect(cr, card_x, card_y, card_w, card_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
-        paint_text(cr, bold_font(), card.name, card_x + 8, card_y + 6, theme::kTextR, theme::kTextG, theme::kTextB,
-                   static_cast<int>(card_w - 16));
+    auto paint_lines = [&](double name_r, double name_g, double name_b, double ink_r, double ink_g, double ink_b,
+                           double dim_r, double dim_g, double dim_b) {
+        paint_text(cr, bold_font(), card.name, card_x + 10, card_y + 7, name_r, name_g, name_b, wrap);
+        double line_y = card_y + dp(26);
         if (power_line) {
-            paint_text(cr, ui_font(), card.power, card_x + 8, card_y + dp(26), theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(card_w - 16));
-        }
-        double line_y = first_y;
-        if (!card.access.empty()) {
-            paint_text(cr, ui_font(), card.access, card_x + 8, line_y, theme::kTextR, theme::kTextG, theme::kTextB,
-                       static_cast<int>(card_w - 16));
+            paint_text(cr, ui_font(), card.power, card_x + 10, line_y, ink_r, ink_g, ink_b, wrap);
             line_y += dp(18);
         }
-        paint_text(cr, ui_font(), card.condition, card_x + 8, line_y, theme::kTextR, theme::kTextG, theme::kTextB,
-                   static_cast<int>(card_w - 16));
+        if (!card.access.empty()) {
+            paint_text(cr, ui_font(), card.access, card_x + 10, line_y, ink_r, ink_g, ink_b, wrap);
+            line_y += dp(18);
+        }
+        if (!report.status.empty()) {
+            paint_text(cr, bold_font(), report.status, card_x + 10, line_y, ink_r, ink_g, ink_b, wrap);
+            line_y += wrapped_h(bold_font(), report.status);
+        }
+        if (!next_line.empty()) {
+            paint_text(cr, ui_font(), next_line, card_x + 10, line_y, dim_r, dim_g, dim_b, wrap);
+        }
+    };
+    if (!dark) {
+        fill(cr, card_x, card_y, card_w, card_h, theme::kMenuBgR, theme::kMenuBgG, theme::kMenuBgB);
+        stroke_rect(cr, card_x, card_y, card_w, card_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+        paint_lines(theme::kTextR, theme::kTextG, theme::kTextB, theme::kTextR, theme::kTextG, theme::kTextB, 0.38, 0.36,
+                    0.32);
     } else {
         cairo_set_source_rgba(cr, 0, 0, 0, 0.35);
         round_dialog_rect(cr, card_x + 2, card_y + 3, card_w, card_h, dp(8));
@@ -6094,31 +6170,8 @@ void Shell::draw_hover_card(cairo_t *cr)
         cairo_set_source_rgb(cr, kSlateEdge.r, kSlateEdge.g, kSlateEdge.b);
         cairo_set_line_width(cr, 1.0);
         cairo_stroke(cr);
-        const int wrap = static_cast<int>(card_w - 20);
-        paint_text(cr, bold_font(), card.name, card_x + 10, card_y + 7, kSlateGold.r, kSlateGold.g, kSlateGold.b, wrap);
-        const bool off = card.power == "Power: off";
-        const bool on = card.power == "Power: on";
-        auto dot_line = [&](const std::string &text, double ly, int state) {
-            cairo_new_sub_path(cr);
-            cairo_arc(cr, card_x + 14, ly + dp(8), dp(3.5), 0, 6.2832);
-            const SlateInk &ink = state > 0 ? kSlateGood : (state == 0 ? kSlateBad : kSlateDim);
-            cairo_set_source_rgb(cr, ink.r, ink.g, ink.b);
-            cairo_fill(cr);
-            paint_text(cr, ui_font(), text, card_x + 24, ly, kSlateInk.r, kSlateInk.g, kSlateInk.b, wrap - 14);
-        };
-        if (power_line) {
-            dot_line(card.power, card_y + dp(26), on ? 1 : (off ? 0 : -1));
-        }
-        double line_y = first_y;
-        if (!card.access.empty()) {
-            // Green with a road, red when the building needs one, grey
-            // ("No road needed") for plants, the Data Center and landmarks.
-            const bool access = card.access == "Road access" || card.access == "Rail access";
-            dot_line(card.access, line_y, access ? 1 : (card.access == "No direct road" ? 0 : -1));
-            line_y += dp(18);
-        }
-        const SlateInk &cond_ink = card.damaged ? kSlateBad : kSlateDim;
-        paint_text(cr, ui_font(), card.condition, card_x + 10, line_y, cond_ink.r, cond_ink.g, cond_ink.b, wrap);
+        paint_lines(kSlateGold.r, kSlateGold.g, kSlateGold.b, kSlateInk.r, kSlateInk.g, kSlateInk.b, kSlateDim.r, kSlateDim.g,
+                    kSlateDim.b);
     }
     if (card.offer_power) {
         button(cr, card_x + 8, card_y + card_h - dp(34), card_w - 16, dp(26), "Show _power", kInspectPower, false);

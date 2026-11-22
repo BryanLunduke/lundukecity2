@@ -153,6 +153,7 @@ int main()
         const inspect_report::Report good = inspect_report::make(growing);
         check(good.status == "Growing" && good.tone == Tone::Good, "a powered, connected growing zone reads Growing");
         check(good.reasons.empty(), "a healthy growing zone lists no problems");
+        check(good.next.find("keep power and roads") != std::string::npos, "a growing zone names the next step");
 
         Facts stuck = growing;
         stuck.power = 0;
@@ -170,6 +171,7 @@ int main()
         check(has_reason(bad, "Heavy pollution"), "pollution is listed");
         check(has_reason(bad, "High crime"), "crime is listed");
         check(has_reason(bad, "Low land value"), "land value is listed");
+        check(bad.next == "Connect a power line", "the next step is the first fix");
 
         Facts factory = stuck;
         factory.kind = Kind::Industrial;
@@ -187,6 +189,8 @@ int main()
 
         Facts steady = growing;
         steady.growth = 0;
+        check(inspect_report::make(steady).next == "Nothing is holding it back this month",
+              "a steady zone says nothing is holding it back");
         check(inspect_report::make(steady).status == "Steady", "an untroubled zone with no growth reads Steady");
         steady.demand = -0.1;
         check(inspect_report::make(steady).status == "Not growing", "a zone held back by demand reads Not growing");
@@ -201,6 +205,10 @@ int main()
         Facts land;
         check(inspect_report::make(land).status == "Open land" && inspect_report::make(land).reasons.empty(),
               "open land has no complaints");
+        check(inspect_report::make(station).next == "Build a road that touches it",
+              "a building without a road says to add one");
+        check(std::string(inspect_report::complaint_fact(0)) == "High crime: add police",
+              "Evaluation Why? uses the Inspect crime phrase");
         check(inspect_report::band_of(255) == 3 && inspect_report::band_of(63) == 0, "bands follow the engine");
         check(inspect_report::land_band(29) == 0 && inspect_report::land_band(150) == 3, "land bands follow the engine");
     }

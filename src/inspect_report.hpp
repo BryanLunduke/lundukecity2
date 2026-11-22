@@ -50,6 +50,9 @@ struct Report {
     std::string status;
     Tone tone = Tone::Neutral;
     std::vector<std::string> reasons;
+    // The first thing a mayor can do, or a short line when the zone is fine.
+    // Hover, the Inspect modal, and Evaluation Why? all show this wording.
+    std::string next;
 };
 
 inline bool is_zone(Kind kind)
@@ -96,6 +99,81 @@ inline int land_band(int value)
         return 2;
     }
     return 3;
+}
+
+
+inline void fill_next(Report &report, const Facts &facts)
+{
+    const bool zone = is_zone(facts.kind);
+    if (facts.damaged) {
+        report.next = "Bulldoze and rebuild it";
+        return;
+    }
+    if (facts.power == 0) {
+        report.next = "Connect a power line";
+        return;
+    }
+    if (!facts.access && facts.needs_road && (zone || facts.kind == Kind::Building)) {
+        report.next = "Build a road that touches it";
+        return;
+    }
+    if (facts.idle) {
+        report.next = "Bring homes within reach";
+        return;
+    }
+    if (facts.kind == Kind::Hazard) {
+        report.next = "Bulldoze it";
+        return;
+    }
+    if (!report.reasons.empty()) {
+        const std::string &reason = report.reasons.front();
+        if (reason.find("Little ") == 0) {
+            report.next = "Zone more of the other types, or wait for demand";
+        } else if (reason.find("Heavy pollution") == 0) {
+            report.next = "Keep industry and plants away from this block";
+        } else if (reason.find("High crime") == 0) {
+            report.next = "Add a police station nearby";
+        } else if (reason.find("Low land value") == 0) {
+            report.next = "Add parks or water nearby";
+        } else if (reason.find("Heavy traffic") == 0) {
+            report.next = "Add roads or rail to spread the traffic";
+        } else {
+            report.next = reason;
+        }
+        return;
+    }
+    if (zone) {
+        if (report.status == "Growing" || report.status == "Booming") {
+            report.next = "It's growing \u2014 keep power and roads connected";
+        } else if (report.status == "Steady") {
+            report.next = "Nothing is holding it back this month";
+        } else if (report.status == "Declining") {
+            report.next = "Check demand, crime, pollution, and traffic";
+        } else {
+            report.next = "Check power, roads, and demand";
+        }
+        return;
+    }
+    if (facts.kind == Kind::Building && report.status == "Working") {
+        report.next = "It's working";
+    }
+}
+
+// A city-wide complaint, in the same words Inspect uses on a tile.
+inline const char *complaint_fact(int problem)
+{
+    switch (problem) {
+    case 0:
+        return "High crime: add police";
+    case 1:
+        return "Heavy pollution nearby";
+    case 2:
+        return "Little residential demand right now";
+    case 4:
+        return "Heavy traffic on nearby roads";
+    default:
+        return "";
+    }
 }
 
 // A 0..255 simulator map value as the percent the Inspect bars and the
@@ -157,6 +235,7 @@ inline Report make(const Facts &facts)
                 break;
             }
         }
+        fill_next(report, facts);
         return report;
     }
     if (facts.growth > 100) {
@@ -198,6 +277,7 @@ inline Report make(const Facts &facts)
         // Nothing holds it back; it is simply not changing this month.
         report.status = "Steady";
     }
+    fill_next(report, facts);
     return report;
 }
 
