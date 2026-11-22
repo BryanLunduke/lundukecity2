@@ -670,6 +670,15 @@ private:
     // file has none, as in a classic save or one from an older release).
     int loaded_score_ = -1;
     int loaded_phase_ = -1;
+    // The simulator's random generator and simCycle at save time. Restored
+    // after load init so a resumed game follows the same rolls.
+    bool loaded_rng_valid_ = false;
+    unsigned long long loaded_rng_ = 0;
+    int loaded_sim_cycle_ = -1;
+    bool loaded_valves_valid_ = false;
+    short loaded_res_valve_ = 0;
+    short loaded_com_valve_ = 0;
+    short loaded_ind_valve_ = 0;
     void restore_loaded_eval();
     save_view::View save_view_;
     save_view::View loaded_view_;

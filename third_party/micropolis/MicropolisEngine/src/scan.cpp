@@ -674,6 +674,19 @@ void Micropolis::applyOrSettleScanMapsAfterLoad()
         crimeAverage = pendingCrimeAverage;
         landValueAverage = pendingLandValueAverage;
         pollutionAverage = pendingPollutionAverage;
+        if (pendingTrafficMapsValid) {
+            if (trafficDensityMap.MAP_W * trafficDensityMap.MAP_H == (int)sizeof(pendingTrafficMap)) {
+                memcpy(trafficDensityMap.getBase(), pendingTrafficMap, sizeof(pendingTrafficMap));
+                memcpy(populationDensityMap.getBase(), pendingPopDensityMap, sizeof(pendingPopDensityMap));
+            }
+            if (rateOfGrowthMap.MAP_W * rateOfGrowthMap.MAP_H * (int)sizeof(short) == (int)sizeof(pendingRateOfGrowth)) {
+                memcpy(rateOfGrowthMap.getBase(), pendingRateOfGrowth, sizeof(pendingRateOfGrowth));
+            }
+            if (powerGridMap.MAP_W * powerGridMap.MAP_H == (int)sizeof(pendingPowerGrid)) {
+                memcpy(powerGridMap.getBase(), pendingPowerGrid, sizeof(pendingPowerGrid));
+            }
+            pendingTrafficMapsValid = false;
+        }
         pendingScanMapsValid = false;
         return;
     }

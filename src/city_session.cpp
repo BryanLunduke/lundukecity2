@@ -1320,21 +1320,45 @@ bool CitySession::load_city(const std::string &path)
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
     read_scenario_sidecar(path);
-    // The simulator restarts at phase 0 and counts the clock first. A save
-    // taken in phases 1 to 10 had already counted this cycle but not yet run
-    // its tax year (9) or its progress check (10), so the restarted cycle
-    // keeps the clock where it is and does both on the same tick the saved
-    // game would have.
-    sim.holdClockOnce = loaded_phase_ >= 1 && loaded_phase_ <= 10;
+    // Restore the simulator's place in its 16-phase cycle. Older sidecars
+    // have no phase; those still restart at phase 0, holding the clock once
+    // when the save was mid-cycle so the tax year and score check still run.
+    if (loaded_phase_ >= 0 && loaded_phase_ <= 15) {
+        sim.phaseCycle = loaded_phase_;
+        sim.holdClockOnce = false;
+    } else {
+        sim.holdClockOnce = false;
+    }
     recount_population_from_map();
+    // Mid-cycle, the live census is only the slices already scanned this
+    // week (empty at phase 1, after phase 0's clearCensus). Recounting
+    // the whole map into the live counters would be counted again as the
+    // remaining slices run. The snapshot keeps the last finished census
+    // for the UI; the live counts start empty and fill in as they did.
+    if (loaded_phase_ >= 1 && loaded_phase_ <= 8) {
+        sim.resetLiveCensus();
+    }
     refresh_loaded_meters();
     // The refresh above re-scores a map whose traffic was cleared by the
     // load. The saved score is the one the player had.
     if (loaded_score_ >= 0) {
         sim.cityScore = static_cast<short>(loaded_score_);
     }
+    // miscHist stores the valves from before the last setValves() tick.
+    // The sidecar keeps the live values so a reload uses the same demand.
+    if (loaded_valves_valid_) {
+        sim.restoreValves(loaded_res_valve_, loaded_com_valve_, loaded_ind_valve_);
+    }
+    if (loaded_sim_cycle_ >= 0 && loaded_sim_cycle_ <= 1023) {
+        sim.simCycle = static_cast<short>(loaded_sim_cycle_);
+    }
+    if (loaded_rng_valid_) {
+        sim.setRandomState(static_cast<UQuad>(loaded_rng_));
+    }
     loaded_score_ = -1;
     loaded_phase_ = -1;
+    loaded_sim_cycle_ = -1;
+    loaded_rng_valid_ = false;
     // Review nov19 #12: catch up after the recount, not before. A city with
     // no sidecar (a classic save, a copied .cty) used to catch up on a
     // stale census of 0, so the next month toasted Town and its first Year
@@ -4087,6 +4111,15 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     // clock one step ahead of where the save was taken.
     append_string("score", std::to_string(static_cast<int>(sim.cityScore)));
     append_string("phase", std::to_string(static_cast<int>(sim.phaseCycle)));
+    append_string("sim_cycle", std::to_string(static_cast<int>(sim.simCycle)));
+    append_string("rng", std::to_string(static_cast<unsigned long long>(sim.randomState())));
+    {
+        short res_valve = 0, com_valve = 0, ind_valve = 0;
+        sim.currentValves(res_valve, com_valve, ind_valve);
+        append_string("valves", std::to_string(static_cast<int>(res_valve)) + "," +
+                                    std::to_string(static_cast<int>(com_valve)) + "," +
+                                    std::to_string(static_cast<int>(ind_valve)));
+    }
     // The Evaluation window's yearly changes, so a recovered or reloaded
     // city does not show dashes until another year passes.
     const bool deltas_known = eval_deltas_ready_ || sim.cityTime >= eval_anchor_time_ + 48;
@@ -4103,6 +4136,13 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     loaded_eval_ = LoadedEval{};
     loaded_score_ = -1;
     loaded_phase_ = -1;
+    loaded_rng_valid_ = false;
+    loaded_rng_ = 0;
+    loaded_sim_cycle_ = -1;
+    loaded_valves_valid_ = false;
+    loaded_res_valve_ = 0;
+    loaded_com_valve_ = 0;
+    loaded_ind_valve_ = 0;
     loaded_view_ = save_view::View{};
     std::ifstream in(scenario_sidecar_path(path), std::ios::binary);
     if (!in) {
@@ -4211,6 +4251,49 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     };
     loaded_score_ = whole_value("score", 0, 1000);
     loaded_phase_ = whole_value("phase", 0, 15);
+    loaded_sim_cycle_ = whole_value("sim_cycle", 0, 1023);
+    {
+        const std::string raw = string_value("rng");
+        if (!raw.empty() && raw.size() <= 20) {
+            char *stop = nullptr;
+            errno = 0;
+            const unsigned long long value = std::strtoull(raw.c_str(), &stop, 10);
+            if (stop != raw.c_str() && *stop == '\0' && errno != ERANGE) {
+                loaded_rng_ = value;
+                loaded_rng_valid_ = true;
+            }
+        }
+    }
+    {
+        const std::string raw = string_value("valves");
+        int vals[3] = {0, 0, 0};
+        const char *cursor = raw.c_str();
+        bool ok = !raw.empty();
+        for (int i = 0; i < 3 && ok; ++i) {
+            if (i > 0) {
+                if (*cursor != ',') {
+                    ok = false;
+                    break;
+                }
+                ++cursor;
+            }
+            char *stop = nullptr;
+            errno = 0;
+            const long value = std::strtol(cursor, &stop, 10);
+            if (stop == cursor || errno == ERANGE || value < -32768 || value > 32767) {
+                ok = false;
+                break;
+            }
+            vals[i] = static_cast<int>(value);
+            cursor = stop;
+        }
+        if (ok && *cursor == '\0') {
+            loaded_res_valve_ = static_cast<short>(vals[0]);
+            loaded_com_valve_ = static_cast<short>(vals[1]);
+            loaded_ind_valve_ = static_cast<short>(vals[2]);
+            loaded_valves_valid_ = true;
+        }
+    }
     ScenarioClock clock;
     if (!scenario_sidecar_parse(text, clock)) {
         return;
