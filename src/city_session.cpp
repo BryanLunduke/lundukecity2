@@ -178,6 +178,24 @@ bool seattle_zone_pending(const Micropolis &sim)
     return sim.disasterEvent == SC_SEATTLE && sim.disasterWait > 0;
 }
 
+bool sf1962_escape_pending(const Micropolis &sim)
+{
+    return sim.disasterEvent == SC_SAN_FRANCISCO_1962 && sim.disasterWait > 0 &&
+           sim.cityEvents.prisonSteps <= 0;
+}
+
+bool portland_riot_pending(const Micropolis &sim)
+{
+    return sim.disasterEvent == SC_PORTLAND && sim.disasterWait > 0 &&
+           sim.cityEvents.riotSteps <= 0 && sim.riotFiresBurning() == 0;
+}
+
+bool sandiego_lion_pending(const Micropolis &sim)
+{
+    return sim.disasterEvent == SC_SAN_DIEGO && sim.disasterWait > 0 &&
+           sim.cityEvents.lionActive == 0 && sim.cityEvents.lionSteps <= 0;
+}
+
 // The Seattle meter's Autonomous Zone part.
 std::string seattle_zone_short(const Micropolis &sim)
 {
@@ -191,11 +209,17 @@ std::string seattle_zone_short(const Micropolis &sim)
 // The San Francisco (1962) meter's escape part.
 std::string sf1962_escape_short(const Micropolis &sim)
 {
+    if (sf1962_escape_pending(sim)) {
+        return "Escape: not yet started";
+    }
     return sim.cityEvents.prisonSteps > 0 ? "Escapees loose" : "No escapees loose";
 }
 
 std::string sf1962_escape_long(const Micropolis &sim)
 {
+    if (sf1962_escape_pending(sim)) {
+        return "the Alcatraz escape has not started yet";
+    }
     return sim.cityEvents.prisonSteps > 0 ? "Alcatraz escapees at large → police by the Wharf round them up"
                                           : "no escapees at large";
 }
@@ -209,6 +233,9 @@ std::string portland_fires_short(const Micropolis &sim)
     if (fires > 0) {
         return text + std::to_string(fires) + (fires == 1 ? " riot fire" : " riot fires");
     }
+    if (portland_riot_pending(sim)) {
+        return "Riot: not yet started";
+    }
     return text + "Riot fires out";
 }
 
@@ -219,6 +246,9 @@ std::string portland_fires_long(const Micropolis &sim)
     if (fires > 0) {
         return text + std::to_string(fires) + (fires == 1 ? " riot fire burning" : " riot fires burning") +
                " → fire stations by them, bulldoze firebreaks";
+    }
+    if (portland_riot_pending(sim)) {
+        return "the riot has not started yet";
     }
     return text + "all riot fires out";
 }
@@ -231,7 +261,7 @@ std::string san_diego_lion_short(const Micropolis &sim)
         return "Lion loose";
     }
     if (e.lionSteps <= 0) {
-        return "Lion in zoo";
+        return sandiego_lion_pending(sim) ? "Lion: not yet escaped" : "Lion in zoo";
     }
     if (e.lionSteps <= SANDIEGO_LION_CATCH_STEPS) {
         return "Police caught lion";
@@ -246,7 +276,7 @@ std::string san_diego_lion_long(const Micropolis &sim)
         return "the lion is loose → police must catch it within four months";
     }
     if (e.lionSteps <= 0) {
-        return "the lion is in the zoo";
+        return sandiego_lion_pending(sim) ? "the lion has not escaped yet" : "the lion is in the zoo";
     }
     if (e.lionSteps <= SANDIEGO_LION_CATCH_STEPS) {
         return "the police caught the lion";

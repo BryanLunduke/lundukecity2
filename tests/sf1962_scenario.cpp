@@ -96,6 +96,11 @@ int main()
     if (session.events_state().prisonSteps != 0) {
         return fail(6, "the escape is on before the scenario has run");
     }
+    if (session.scenario_meter_short().find("Escape: not yet started") == std::string::npos ||
+        session.scenario_meter().find("has not started yet") == std::string::npos ||
+        session.scenario_meter_short().find("No escapees loose") != std::string::npos) {
+        return fail(6, "the meter does not say the escape has not started yet: " + session.scenario_meter());
+    }
 
     // The map: the Golden Gate, the Bay, the Pacific and Lake Merced are
     // water; downtown, the Presidio, Treasure Island and Alcatraz are land.

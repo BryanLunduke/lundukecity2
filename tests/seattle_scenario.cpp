@@ -222,6 +222,17 @@ int main()
         fresh.scenario_meter().find("no Autonomous Zone") != std::string::npos) {
         return fail(21, "the meter does not say the zone has not formed yet: " + fresh.scenario_meter());
     }
+    const char *tmpdir = std::getenv("TMPDIR");
+    const std::string save = std::string(tmpdir ? tmpdir : "/tmp") + "/seattle_pending_reload.cty";
+    if (!fresh.save_city_as(save)) {
+        return fail(22, "Seattle did not save before the zone formed");
+    }
+    CitySession reloaded;
+    if (!reloaded.load_city(save) || reloaded.scenario_meter_short().find("Zone: not yet formed") == std::string::npos ||
+        reloaded.scenario_meter().find("has not formed yet") == std::string::npos ||
+        reloaded.scenario_meter_short().find("cleared") != std::string::npos) {
+        return fail(23, "a reload claimed the zone was already cleared: " + reloaded.scenario_meter());
+    }
     std::printf("seattle ok: zone formed after %lld weeks\n", formed);
     return 0;
 }
