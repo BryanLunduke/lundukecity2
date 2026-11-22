@@ -218,6 +218,36 @@ test(
   ],
 )
 
+# Save/load keeps the scenario disaster timer, including older sidecars.
+disaster_wait = executable(
+  'disaster_wait',
+  'disaster_wait.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/city_events.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'disaster_wait',
+  disaster_wait,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+  timeout: 180,
+)
+
 if posix_host
   regressions = executable(
     'regressions',

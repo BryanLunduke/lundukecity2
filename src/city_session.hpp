@@ -494,6 +494,9 @@ public:
     std::string scenario_outcome_text(bool won) const;
     // 0 when this city is not one of the scenarios.
     int scenario_id() const;
+    // The scripted disaster countdown (0 when none is armed).
+    int disaster_event() const;
+    int disaster_wait() const;
     // Whole years until the scenario is scored, rounded down. -1 when no
     // scenario is running. 0 when the deadline has already passed.
     int scenario_years_left() const;

@@ -2237,6 +2237,12 @@ public:
 
     bool loadScenario(Scenario s);
 
+    // Opening cityTime and disasterWait for a scenario, same values
+    // loadScenario() and simLoadInit() install. A save's sidecar can
+    // recompute a missing disaster timer from these and the current clock.
+    static Quad scenarioStartCityTime(Scenario s);
+    static short disasterWaitAtStart(Scenario s);
+
     void didLoadScenario();
 
     bool loadCity(const char *filename);

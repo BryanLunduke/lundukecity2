@@ -1959,6 +1959,42 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
  * @param s Scenario to load.
  * @note \a s cannot be \c SC_NONE.
  */
+Quad Micropolis::scenarioStartCityTime(Scenario s)
+{
+    switch (s) {
+        case SC_DULLSVILLE:
+            return ((1900 - 1900) * 48) + 2;
+        case SC_SAN_FRANCISCO:
+            return ((1906 - 1900) * 48) + 2;
+        case SC_HAMBURG:
+            return ((1944 - 1900) * 48) + 2;
+        case SC_BERN:
+            return ((1965 - 1900) * 48) + 2;
+        case SC_TOKYO:
+            return ((1957 - 1900) * 48) + 2;
+        case SC_DETROIT:
+            return ((1972 - 1900) * 48) + 2;
+        case SC_BOSTON:
+            return ((2010 - 1900) * 48) + 2;
+        case SC_RIO:
+            return ((2047 - 1900) * 48) + 2;
+        case SC_SEATTLE:
+            // Late May 2020; the Autonomous Zone forms in June.
+            return ((2020 - 1900) * 48) + 4 * 4 + 3;
+        case SC_SAN_FRANCISCO_1962:
+            // Start of May 1962; the escape is in June.
+            return ((1962 - 1900) * 48) + 4 * 4;
+        case SC_PORTLAND:
+            // Mid-July 2020; the riot is in August.
+            return ((2020 - 1900) * 48) + 6 * 4 + 2;
+        case SC_SAN_DIEGO:
+            // Start of March 2025; the lion gets out in April.
+            return ((2025 - 1900) * 48) + 2 * 4;
+        default:
+            return 0;
+    }
+}
+
 bool Micropolis::loadScenario(Scenario s)
 {
     const char *name = NULL;
@@ -1976,56 +2012,48 @@ bool Micropolis::loadScenario(Scenario s)
             name = "Dullsville";
             fname = "snro.111";
             which = SC_DULLSVILLE;
-            time = ((1900 - 1900) * 48) + 2;
             funds = 5000;
             break;
         case SC_SAN_FRANCISCO:
             name = "San Francisco";
             fname = "snro.222";
             which = SC_SAN_FRANCISCO;
-            time = ((1906 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_HAMBURG:
             name = "Hamburg";
             fname = "snro.333";
             which = SC_HAMBURG;
-            time = ((1944 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_BERN:
             name = "Bern";
             fname = "snro.444";
             which = SC_BERN;
-            time = ((1965 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_TOKYO:
             name = "Tokyo";
             fname = "snro.555";
             which = SC_TOKYO;
-            time = ((1957 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_DETROIT:
             name = "Detroit";
             fname = "snro.666";
             which = SC_DETROIT;
-            time = ((1972 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_BOSTON:
             name = "Boston";
             fname = "snro.777";
             which = SC_BOSTON;
-            time = ((2010 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_RIO:
             name = "Rio de Janeiro";
             fname = "snro.888";
             which = SC_RIO;
-            time = ((2047 - 1900) * 48) + 2;
             funds = 20000;
             break;
         case SC_SEATTLE:
@@ -2034,7 +2062,6 @@ bool Micropolis::loadScenario(Scenario s)
             name = "Seattle";
             fname = "seattle.cty";
             which = SC_SEATTLE;
-            time = ((2020 - 1900) * 48) + 4 * 4 + 3;
             funds = 20000;
             break;
         case SC_SAN_FRANCISCO_1962:
@@ -2043,7 +2070,6 @@ bool Micropolis::loadScenario(Scenario s)
             name = "San Francisco";
             fname = "sanfrancisco1962.cty";
             which = SC_SAN_FRANCISCO_1962;
-            time = ((1962 - 1900) * 48) + 4 * 4;
             funds = 20000;
             break;
         case SC_PORTLAND:
@@ -2052,7 +2078,6 @@ bool Micropolis::loadScenario(Scenario s)
             name = "Portland";
             fname = "portland.cty";
             which = SC_PORTLAND;
-            time = ((2020 - 1900) * 48) + 6 * 4 + 2;
             funds = 20000;
             break;
         case SC_SAN_DIEGO:
@@ -2061,7 +2086,6 @@ bool Micropolis::loadScenario(Scenario s)
             name = "San Diego";
             fname = "sandiego.cty";
             which = SC_SAN_DIEGO;
-            time = ((2025 - 1900) * 48) + 2 * 4;
             funds = 20000;
             break;
         default:
@@ -2077,6 +2101,7 @@ bool Micropolis::loadScenario(Scenario s)
     cityFileName = "";
     setGameLevel(LEVEL_EASY);
     scenario = which;
+    time = scenarioStartCityTime(which);
     cityTime = time;
     setFunds(funds);
     setCleanCityName(name);

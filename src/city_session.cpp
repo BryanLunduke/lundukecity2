@@ -2604,6 +2604,22 @@ int CitySession::scenario_id() const
     return id;
 }
 
+int CitySession::disaster_event() const
+{
+    if (!ready_) {
+        return 0;
+    }
+    return static_cast<int>(engine_->sim.disasterEvent);
+}
+
+int CitySession::disaster_wait() const
+{
+    if (!ready_) {
+        return 0;
+    }
+    return static_cast<int>(engine_->sim.disasterWait);
+}
+
 int CitySession::scenario_years_left() const
 {
     const Micropolis &sim = engine_->sim;
@@ -3869,6 +3885,110 @@ void CitySession::arm_eval_baseline()
     sim.cityScoreDelta = 0;
 }
 
+namespace {
+
+// cityTime already includes this week's increment in phases 1..15, but
+// doDisasters() has not run yet, so the remaining wait is one week longer
+// than cityTime - start would suggest.
+int remaining_disaster_wait(const Micropolis &sim, int phase)
+{
+    const Scenario s = sim.scenario;
+    if (s <= SC_NONE || s >= SC_COUNT) {
+        return 0;
+    }
+    const long long start = static_cast<long long>(Micropolis::scenarioStartCityTime(s));
+    const int initial = static_cast<int>(Micropolis::disasterWaitAtStart(s));
+    long long elapsed = static_cast<long long>(sim.cityTime) - start;
+    if (phase >= 1 && phase <= 15) {
+        --elapsed;
+    }
+    if (elapsed < 0) {
+        elapsed = 0;
+    }
+    const long long left = static_cast<long long>(initial) - elapsed;
+    if (left <= 0) {
+        return 0;
+    }
+    if (left > 32767) {
+        return 32767;
+    }
+    return static_cast<int>(left);
+}
+
+// True when the scripted event has already begun, so an older sidecar
+// without a disaster timer must not re-arm it.
+bool scenario_scripted_event_started(const Micropolis &sim)
+{
+    const CityEvents &events = sim.cityEvents;
+    switch (sim.scenario) {
+        case SC_SEATTLE:
+            return events.zoneCount > 0 || events.zoneClock > 0;
+        case SC_SAN_FRANCISCO_1962:
+            return events.prisonSteps > 0;
+        case SC_PORTLAND:
+            return events.riotSteps > 0 || sim.riotFiresBurning() > 0;
+        case SC_SAN_DIEGO:
+            return events.lionActive != 0 || events.lionSteps > 0;
+        case SC_HAMBURG:
+        case SC_RIO:
+            // These fire on the first disaster tick (wait is a multiple of
+            // the wave period at the opening value). After that tick the
+            // remaining wait is already below the opening value.
+            return false;
+        default:
+            // One-shot or idle timers: remaining_disaster_wait() == 0 means
+            // the event has already been due. That is handled by the caller.
+            return false;
+    }
+}
+
+void restore_or_recompute_disaster_wait(Micropolis &sim, const ScenarioClock &clock, int phase)
+{
+    if (clock.disaster_present) {
+        const int wait = clamp_sidecar_score_wait(clock.disaster_wait);
+        int event = clock.disaster_event;
+        if (event == static_cast<int>(SC_NONE)) {
+            sim.disasterEvent = SC_NONE;
+            sim.disasterWait = static_cast<short>(wait);
+            return;
+        }
+        if (event != static_cast<int>(sim.scenario) || event < SC_DULLSVILLE || event >= SC_COUNT) {
+            event = static_cast<int>(sim.scenario);
+        }
+        if (event < SC_DULLSVILLE || event >= SC_COUNT) {
+            sim.disasterEvent = SC_NONE;
+            sim.disasterWait = 0;
+            return;
+        }
+        sim.disasterEvent = static_cast<Scenario>(event);
+        sim.disasterWait = static_cast<short>(wait);
+        return;
+    }
+
+    // Older sidecar: if the scripted event has not started, recompute the
+    // remaining wait from the scenario start and the current clock.
+    if (sim.scenario <= SC_NONE || sim.scenario >= SC_COUNT) {
+        return;
+    }
+    const int remaining = remaining_disaster_wait(sim, phase);
+    if (remaining <= 0) {
+        return;
+    }
+    const int initial = static_cast<int>(Micropolis::disasterWaitAtStart(sim.scenario));
+    if ((sim.scenario == SC_HAMBURG || sim.scenario == SC_RIO) && remaining < initial) {
+        // The first wave already went out. Do not try to reconstruct a
+        // mid-run wave timer from an old sidecar.
+        return;
+    }
+    if (scenario_scripted_event_started(sim)) {
+        return;
+    }
+    sim.disasterEvent = sim.scenario;
+    sim.disasterWait = static_cast<short>(remaining);
+}
+
+} // namespace
+
 void CitySession::clear_scenario_clock()
 {
     scenario_result_ = 0;
@@ -3886,6 +4006,9 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     clock.score_type = static_cast<int>(sim.scoreType);
     clock.outcome = scenario_result_;
     clock.month = static_cast<int>(sim.cityMonth);
+    clock.disaster_event = static_cast<int>(sim.disasterEvent);
+    clock.disaster_wait = static_cast<int>(sim.disasterWait);
+    clock.disaster_present = true;
     const long year = static_cast<long>(sim.cityYear);
     clock.year = static_cast<int>(year > 0 ? year : sim.startingYear);
     std::string text = scenario_sidecar_text(clock);
@@ -4080,6 +4203,7 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     }
     sim.scoreType = static_cast<Scenario>(type);
     sim.scoreWait = static_cast<short>(clamp_sidecar_score_wait(clock.score_wait));
+    restore_or_recompute_disaster_wait(sim, clock, loaded_phase_);
 }
 
 bool CitySession::preview_terrain(int seed, int island, int rivers, int lakes, int trees,
