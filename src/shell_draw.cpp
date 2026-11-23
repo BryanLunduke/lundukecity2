@@ -254,7 +254,8 @@ void Shell::layout()
         // 27 even slots were about 42px on a Steam Deck.
         quick_h_ = std::min(dp(56), std::max(dp(44), (win_w_ - dp(96)) / 12));
         quick_y_ = win_h_ - hint_h_ - quick_h_ - dp(6);
-        hud_top_ = dp(54);
+        // Taller than the info chip so overlays sit below the demand bars.
+        hud_top_ = dp(108);
         hud_bottom_ = win_h_ - quick_y_ + dp(6);
         hud_right_ = dp(70);
         mini_w_ = std::min(dp(200), std::max(dp(120), win_w_ / 6));
@@ -6410,6 +6411,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
     // left a sliver (a red demand bar) peeking out underneath.
     const double top = dp(10);
     const double chip_h = dp(52);
+    const double demand_chip_h = dp(88);
     double x = dp(10);
     const bool menu_up = menu_.open();
     if (!menu_up) {
@@ -6436,9 +6438,10 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         const double dw = measure_text(cr, bold_font(), date, -1).width;
         const double pw = measure_text(cr, ui_font(), people, -1).width;
         const double speed_w = dp(22);
-        const double demand_w = dp(132);
-        double w = pad + fw + sep + dw + sep + speed_w + sep + pw + sep + demand_w + pad;
-        const double limit = mini_x_ - dp(16) - x;
+        const double demand_w = dp(156);
+        // Demand has its own taller chip, so the text pill does not include it.
+        double w = pad + fw + sep + dw + sep + speed_w + sep + pw + pad;
+        const double limit = mini_x_ - dp(16) - x - demand_w - dp(8);
         // A scenario's goal sits in its own chip beside the pill: the short
         // meter and the short clock. The population gives way first when the
         // two do not fit side by side.
@@ -6491,45 +6494,52 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             slate_text(cr, ui_font(), people, cx, ty, kSlateDim);
             cx += pw + sep;
         }
+        const double demand_x = x + w + dp(8);
         const SlateInk colors[3] = {{0x6C / 255.0, 0xCB / 255.0, 0x7A / 255.0},
                                     {0x5B / 255.0, 0x9B / 255.0, 0xE6 / 255.0},
                                     {0xE8 / 255.0, 0xC2 / 255.0, 0x4A / 255.0}};
         const char *letters[3] = {"Res", "Com", "Ind"};
-        const double mid = top + chip_h / 2.0;
-        const double col = dp(42);
-        const double bar_w = dp(10);
-        const double reach = dp(16);
-        for (int i = 0; i < 3; ++i) {
-            const double bx = cx + i * col;
-            const double pulse = demand_tick_.pulse(i);
-            const double label_w = measure_text(cr, tag_font(), letters[i], -1).width;
-            const double letter_h = measure_text(cr, tag_font(), letters[i], -1).height;
-            slate_text(cr, tag_font(), letters[i], bx, mid - letter_h / 2.0, kSlateDim);
-            const double bar_x = bx + label_w + dp(3);
-            if (pulse > 0.0) {
-                slate_round(cr, bar_x - dp(2), mid - reach - dp(2), bar_w + dp(4), reach * 2 + dp(4), dp(3), colors[i],
-                            0.28 * pulse);
+        slate_round(cr, demand_x, top, demand_w, demand_chip_h, dp(10), kSlateBand, 0.94);
+        {
+            const double letter_h = measure_text(cr, tag_font(), "Res", -1).height;
+            const double label_y = top + demand_chip_h - letter_h - dp(5);
+            const double meter_top = top + dp(6);
+            const double meter_bot = label_y - dp(3);
+            const double mid = (meter_top + meter_bot) / 2.0;
+            const double col = demand_w / 3.0;
+            const double bar_w = dp(16);
+            const double reach = std::max(22.0, (meter_bot - meter_top) / 2.0 - 1.0);
+            for (int i = 0; i < 3; ++i) {
+                const double bx = demand_x + i * col;
+                const double pulse = demand_tick_.pulse(i);
+                const double label_w = measure_text(cr, tag_font(), letters[i], -1).width;
+                const double bar_x = bx + (col - bar_w) / 2.0;
+                slate_text(cr, tag_font(), letters[i], bx + (col - label_w) / 2.0, label_y, kSlateDim);
+                if (pulse > 0.0) {
+                    slate_round(cr, bar_x - dp(3), mid - reach - dp(3), bar_w + dp(6), reach * 2 + dp(6), dp(4),
+                                colors[i], 0.28 * pulse);
+                }
+                slate_fill(cr, bar_x, mid - reach, bar_w, reach * 2, kSlatePanel);
+                const double v = std::max(-1.0, std::min(1.0, demand_tick_.shown(i)));
+                const double bar_h = v == 0.0 ? 0.0 : std::max(2.0, std::fabs(v) * reach);
+                if (v >= 0) {
+                    slate_fill(cr, bar_x, mid - bar_h, bar_w, bar_h, colors[i]);
+                } else {
+                    slate_fill(cr, bar_x, mid, bar_w, bar_h, kSlateBad);
+                }
+                slate_fill(cr, bar_x - 1, mid, bar_w + 2, 1, kSlateDim);
+                push_hot(bx, top, col, demand_chip_h, kDemandMeter + i);
             }
-            slate_fill(cr, bar_x, mid - reach, bar_w, reach * 2, kSlatePanel);
-            const double v = std::max(-1.0, std::min(1.0, demand_tick_.shown(i)));
-            const double bar_h = v == 0.0 ? 0.0 : std::max(2.0, std::fabs(v) * reach);
-            if (v >= 0) {
-                slate_fill(cr, bar_x, mid - bar_h, bar_w, bar_h, colors[i]);
-            } else {
-                slate_fill(cr, bar_x, mid, bar_w, bar_h, kSlateBad);
-            }
-            slate_fill(cr, bar_x - 1, mid, bar_w + 2, 1, kSlateDim);
-            push_hot(bx - dp(2), top, col, chip_h, kDemandMeter + i);
         }
         if (goal_w > 0.0) {
-            // Beside the pill when it fits, else on a row of its own under
-            // it, cut to the room left of the minimap.
-            double gx = x + w + goal_gap;
+            // Beside the demand chip when it fits, else on a row of its own
+            // under the pills, cut to the room left of the minimap.
+            double gx = demand_x + demand_w + goal_gap;
             double gy = top;
             double room = mini_x_ - dp(16) - gx;
             if (room < goal_w && room < dp(220)) {
                 gx = dp(10);
-                gy = top + chip_h + dp(6);
+                gy = top + demand_chip_h + dp(6);
                 room = mini_x_ - dp(16) - gx;
             }
             const double gw = std::min(goal_w, std::max(room, static_cast<double>(dp(120))));
@@ -6545,11 +6555,11 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             const std::string alert = crisis.text;
             const double needed = measure_text(cr, bold_font(), alert, -1).width + alert_pad * 2;
             double ax = dp(10);
-            double ay = top + chip_h + dp(6);
+            double ay = top + demand_chip_h + dp(6);
             if (goal_w > 0.0) {
                 // Sit under the goal chip when that chip already took the
-                // second row, else under the main pill.
-                ay = top + chip_h + dp(6);
+                // second row, else under the demand chip.
+                ay = top + demand_chip_h + dp(6);
             }
             const double room = mini_x_ - dp(16) - ax;
             const double aw = std::min(needed, std::max(room, static_cast<double>(dp(80))));
