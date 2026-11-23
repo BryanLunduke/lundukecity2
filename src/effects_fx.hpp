@@ -191,7 +191,7 @@ inline Drop weather_drop(int weather, int index, double ms, double w, double h, 
     // Wind from the left: streaks lean right as they fall.
     const double lean = weather == Storm ? 0.34 : 0.22;
     drop.x = std::fmod(hx * (w + h * lean) + drop.y * lean, w + h * lean) - h * lean * 0.5;
-    drop.alpha = 0.30 + 0.25 * hs;
+    drop.alpha = 0.40 + 0.25 * hs;
     return drop;
 }
 

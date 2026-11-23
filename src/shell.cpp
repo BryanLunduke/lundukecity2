@@ -1261,7 +1261,7 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
     reasons.motion = scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                     puff_on_ || pop_on_ || flash_on_ || ceremony_ms_ >= 0 || map_.fx_frame_due() || map_.ui_animating() ||
+                     puff_on_ || pop_on_ || flash_on_ || ceremony_ms_ >= 0 || weather_frame_due() || map_.fx_frame_due() || map_.ui_animating() ||
                      funds_tick_.active() || demand_tick_.active();
     return reasons;
 }
@@ -1320,6 +1320,10 @@ void Shell::loop()
                 const int until_sim = std::max(1, 100 - sim_acc);
                 const int until_blink = std::max(1, map_.blink_remaining_ms());
                 timeout = std::max(1, std::min(until_sim, until_blink));
+                if (weather_live_ || map_.fx_fast()) {
+                    // Rain, snow and the disaster particles step at 20 Hz.
+                    timeout = std::min(timeout, 50);
+                }
             }
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);

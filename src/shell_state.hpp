@@ -598,6 +598,16 @@ private:
     int ceremony_ms_ = -1;
     bool ceremony_won_ = false;
     void draw_ceremony(cairo_t *cr, double x, double y, double w, double h);
+    // Weather over the map view: rain, snow or a storm for the city's
+    // month (effects_fx::weather_for). Cosmetic, on the ambient clock.
+    void draw_weather(cairo_t *cr);
+    int weather_kind_ = 0;
+    int weather_prev_ = 0;
+    int weather_since_ = 0;
+    int weather_stamp_ = -1;
+    bool weather_live_ = false;
+    int weather_drawn_step_ = -1;
+    bool weather_frame_due() const { return weather_live_ && map_.fx_ms() / 50 != weather_drawn_step_; }
     // The last toast chime; a burst of notices chimes once.
     std::chrono::steady_clock::time_point toast_cue_at_{};
     std::vector<int> card_queue_;

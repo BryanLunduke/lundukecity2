@@ -1885,7 +1885,10 @@ void MapView::advance_fx(int elapsed_ms, bool running, int speed)
 
 bool MapView::fx_frame_due() const
 {
-    return fx_animated_ && look_fx::motion_allowed(effects_) && fx_ms_ / kFxStepMs != fx_drawn_step_;
+    if (!look_fx::motion_allowed(effects_)) {
+        return false;
+    }
+    return (fx_animated_ && fx_ms_ / kFxStepMs != fx_drawn_step_) || (fx_fast_ && fx_ms_ / 50 != fx_fast_drawn_);
 }
 
 bool MapView::classic_fx() const

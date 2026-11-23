@@ -4325,6 +4325,7 @@ void Shell::draw(cairo_t *cr)
         }
     }
     cairo_restore(cr);
+    draw_weather(cr);
     if (flash_on_) {
         const double edge = std::max(4.0, static_cast<double>(dp(6)));
         paint_dim_plate(cr, view_x_, view_y_, view_w_, edge, 0.75, 0.05, 0.04);
@@ -6410,6 +6411,120 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     }
     const std::string shown_news = fit_text(cr, ui_font(), news, static_cast<int>(right - news_x));
     slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() || staleness > 0 ? kSlateDim : kSlateInk);
+}
+
+void Shell::draw_weather(cairo_t *cr)
+{
+    weather_live_ = false;
+    // The month's weather. Only the date and the city's name pick it, so it
+    // is the same on every replay and reload, and the simulator never sees it.
+    const int stamp = session_.city_year() * 12 + session_.city_month();
+    const int fx = map_.fx_ms();
+    if (stamp != weather_stamp_) {
+        const int next = effects_fx::weather_for(session_.city_year(), session_.city_month(),
+                                                 effects_fx::weather_salt(session_.city_name().c_str()));
+        if (weather_stamp_ < 0) {
+            weather_prev_ = next;
+            weather_since_ = fx - 100000;
+        } else if (next != weather_kind_) {
+            weather_prev_ = weather_kind_;
+            weather_since_ = fx;
+        }
+        weather_kind_ = next;
+        weather_stamp_ = stamp;
+    }
+    map_.set_wind(weather_kind_ == effects_fx::Storm ? 1.7 : 1.0);
+    if (!look_fx::ambient_allowed(map_.effects()) || terrain_edit_ || overlay_on_ || view_w_ < 8 || view_h_ < 8) {
+        return;
+    }
+    const double fade = effects_fx::weather_fade(static_cast<double>(fx - weather_since_));
+    const bool classic = tile_atlas().look() == 0;
+    const double unit = std::max(1.0, dp(100) / 100.0);
+    const double w = view_w_;
+    const double h = view_h_;
+    cairo_save(cr);
+    cairo_rectangle(cr, view_x_, view_y_, w, h);
+    cairo_clip(cr);
+    cairo_translate(cr, view_x_, view_y_);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    bool drew = false;
+    auto layer = [&](int kind, double amount) {
+        if (kind == effects_fx::Clear || amount <= 0.01) {
+            return;
+        }
+        drew = true;
+        if (!classic) {
+            // A light wash for the sky: grey-blue rain, a darker storm,
+            // a cool haze of snow.
+            if (kind == effects_fx::Storm) {
+                cairo_set_source_rgba(cr, 0.05, 0.07, 0.15, 0.17 * amount);
+            } else if (kind == effects_fx::Rain) {
+                cairo_set_source_rgba(cr, 0.20, 0.26, 0.38, 0.09 * amount);
+            } else {
+                cairo_set_source_rgba(cr, 0.92, 0.95, 1.0, 0.08 * amount);
+            }
+            cairo_paint(cr);
+        }
+        const int count = effects_fx::weather_particles(kind, w, h, unit);
+        if (kind == effects_fx::Snow) {
+            const double flake = std::max(2.0, std::round(2.0 * unit));
+            for (int i = 0; i < count; ++i) {
+                const effects_fx::Drop drop = effects_fx::weather_drop(kind, i, fx, w, h, unit);
+                const double x = std::round(drop.x);
+                const double y = std::round(drop.y);
+                cairo_set_source_rgba(cr, 0.98, 0.98, 1.0, classic ? 1.0 : drop.alpha * amount);
+                if (i % 4 == 0) {
+                    // A bigger flake: a plus of three by three.
+                    cairo_rectangle(cr, x - flake / 2.0, y, flake * 2.0, flake);
+                    cairo_rectangle(cr, x, y - flake / 2.0, flake, flake * 2.0);
+                } else {
+                    cairo_rectangle(cr, x, y, flake, flake);
+                }
+                cairo_fill(cr);
+            }
+            return;
+        }
+        const double lean = effects_fx::rain_lean(kind);
+        const double len = 9.0 * unit;
+        const double thick = std::max(1.0, std::round(unit));
+        cairo_set_line_width(cr, thick);
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+        for (int i = 0; i < count; ++i) {
+            const effects_fx::Drop drop = effects_fx::weather_drop(kind, i, fx, w, h, unit);
+            cairo_set_source_rgba(cr, 0.80, 0.88, 0.98, classic ? 1.0 : drop.alpha * amount);
+            cairo_move_to(cr, std::round(drop.x - lean * len) + 0.5, std::round(drop.y - len));
+            cairo_line_to(cr, std::round(drop.x) + 0.5, std::round(drop.y));
+            cairo_stroke(cr);
+        }
+        // Splashes: a short dash that fades where a drop lands.
+        const int splashes = count / 6;
+        for (int i = 0; i < splashes; ++i) {
+            const double life = 380.0;
+            const double age = effects_fx::puff_age(static_cast<std::uint32_t>(i * 7907 + 3), fx, life);
+            const int slot = static_cast<int>((fx / life) + look_fx::hash01(static_cast<std::uint32_t>(i * 7907 + 3)));
+            const std::uint32_t seed = static_cast<std::uint32_t>(i * 131 + slot * 977);
+            const double sx = std::round(look_fx::hash01(seed) * w);
+            const double sy = std::round(look_fx::hash01(seed ^ 0x99u) * h);
+            const double spread = std::round((1.0 + age * 3.0) * unit);
+            cairo_set_source_rgba(cr, 0.86, 0.92, 1.0, classic ? (age < 0.5 ? 1.0 : 0.0) : 0.55 * (1.0 - age) * amount);
+            cairo_rectangle(cr, sx - spread, sy, thick, thick);
+            cairo_rectangle(cr, sx + spread, sy, thick, thick);
+            cairo_rectangle(cr, sx - thick, sy + thick, thick * 2.0, thick);
+            cairo_fill(cr);
+        }
+        if (kind == effects_fx::Storm && !classic) {
+            const double flash = effects_fx::storm_flash(fx, effects_fx::weather_salt(session_.city_name().c_str()));
+            if (flash > 0.0) {
+                cairo_set_source_rgba(cr, 0.95, 0.97, 1.0, flash * amount);
+                cairo_paint(cr);
+            }
+        }
+    };
+    layer(weather_prev_, 1.0 - fade);
+    layer(weather_kind_, fade);
+    cairo_restore(cr);
+    weather_live_ = drew && speed_ > 0 && !dialog_pauses();
+    weather_drawn_step_ = fx / 50;
 }
 
 void Shell::draw_ceremony(cairo_t *cr, double x, double y, double w, double h)

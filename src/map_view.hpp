@@ -100,8 +100,14 @@ public:
     void advance_fx(int elapsed_ms, bool running, int speed = 2);
     // Milliseconds of cloud drift: elapsed city time times the speed factor.
     double cloud_ms() const { return cloud_ms_; }
+    // The ambient clock itself (ms, runs only while the city runs).
+    int fx_ms() const { return fx_ms_; }
+    // Storm wind for the swaying park trees (1 is a calm day).
+    void set_wind(double wind) { wind_ = wind; }
     // A new ambient step is due and the last frame had something moving.
     bool fx_frame_due() const;
+    // The last frame drew 20 Hz particles (disasters, brownouts, parks).
+    bool fx_fast() const { return fx_fast_; }
     // Feedback animation (the placement snap pulse) runs on wall time,
     // paused or not. True while one still has frames to show.
     void advance_ui(int elapsed_ms);
@@ -212,6 +218,9 @@ private:
     bool classic_fx() const;
     int effects_ = 0;
     int fx_ms_ = 0;
+    double wind_ = 1.0;
+    bool fx_fast_ = false;
+    mutable int fx_fast_drawn_ = -1;
     // Cloud shadow clock: elapsed time times the speed factor, so Fast clouds
     // cross the map twice as quickly without speeding up the water.
     double cloud_ms_ = 0.0;
