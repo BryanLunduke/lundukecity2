@@ -1906,8 +1906,9 @@ void Shell::draw_dialog(cairo_t *cr)
             {
                 bool seed_ok = true;
                 const char *live = city_seed_live_message(field_b_, seed_ok);
-                const char *help = city_seed_rule_help();
-                const std::string shown = (!dialog_error_.empty() && !seed_ok) ? dialog_error_ : live;
+                // A typo's live line already names New terrain, so do not
+                // stack the rule under it and squeeze out the map at 960.
+                const std::string shown = live;
                 const double help_r = seed_ok ? theme::kAccelR : 0.6;
                 const double help_g = seed_ok ? theme::kAccelG : 0.1;
                 const double help_b = seed_ok ? theme::kAccelB : 0.1;
@@ -1915,14 +1916,6 @@ void Shell::draw_dialog(cairo_t *cr)
                 paint_text(cr, ui_font(), shown, cols_x, seed_y + row_h + dp(4), help_r, help_g, help_b, help_w);
                 preview_y += std::max(static_cast<double>(dp(22)),
                                       static_cast<double>(measure_text(cr, ui_font(), shown, help_w).height) + dp(8));
-                // The rule stays visible under a typo so New terrain is
-                // still the obvious way out.
-                if (!seed_ok) {
-                    paint_text(cr, ui_font(), help, cols_x, preview_y, theme::kAccelR, theme::kAccelG, theme::kAccelB,
-                               help_w);
-                    preview_y += std::max(static_cast<double>(dp(18)),
-                                          static_cast<double>(measure_text(cr, ui_font(), help, help_w).height) + dp(6));
-                }
                 if (!dialog_error_.empty() && seed_ok) {
                     paint_text(cr, ui_font(), dialog_error_, cols_x, preview_y, 0.6, 0.1, 0.1, help_w);
                     preview_y += dp(22);
