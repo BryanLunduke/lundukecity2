@@ -24,6 +24,7 @@
 #include "tool_groups.hpp"
 #include "list_scroll.hpp"
 #include "mayor_notes.hpp"
+#include "toast_queue.hpp"
 #include "messages.hpp"
 #include "notice_bar.hpp"
 #include "present.hpp"
@@ -4893,15 +4894,16 @@ void Shell::sync_toasts(std::chrono::steady_clock::time_point now)
             const auto until = now + std::chrono::milliseconds(kToastMs);
             if (!toasts_.empty() && toasts_.back().text == shown_message_) {
                 toasts_.back().until = until;
+                toasts_.back().priority = toast_priority_for(shown_message_, toasts_.back().disaster);
                 if (mayor_note_is(shown_message_)) {
                     toasts_.back().jump_kind = mayor_note_kind_;
                 }
             } else {
+                const bool disaster = notice_is_disaster(shown_message_);
                 const int jump = mayor_note_is(shown_message_) ? mayor_note_kind_ : -1;
-                toasts_.push_back(Toast{shown_message_, notice_is_disaster(shown_message_), until, jump});
-                if (toasts_.size() > kToastMax) {
-                    toasts_.erase(toasts_.begin());
-                }
+                Toast toast{shown_message_, disaster, until, jump, toast_priority_for(shown_message_, disaster)};
+                toasts_.push_back(toast);
+                toast_trim(toasts_, kToastMax);
             }
         } else if (!toasts_.empty() && toasts_.back().text == toast_last_text_) {
             toasts_.pop_back();
@@ -5026,20 +5028,21 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
             notice_bar_h_ = h;
         }
     }
-    for (auto it = toasts_.rbegin(); it != toasts_.rend(); ++it) {
+    const std::vector<std::size_t> order = toast_draw_order(toasts_);
+    for (std::size_t slot : order) {
+        const Toast &toast = toasts_[slot];
         const double left_ms =
-            static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(it->until - now).count());
+            static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(toast.until - now).count());
         const double alpha = std::max(0.0, std::min(1.0, left_ms / kToastFadeMs));
         if (alpha <= 0.0) {
             continue;
         }
-        const BannerColors colors = message_bar_colors(it->disaster, look);
-        if (!plate(it->text, colors, 0, 0, 0, it->disaster, alpha, x, y, w, h)) {
+        const BannerColors colors = message_bar_colors(toast.disaster, look);
+        if (!plate(toast.text, colors, 0, 0, 0, toast.disaster, alpha, x, y, w, h)) {
             break;
         }
-        if (it->jump_kind >= 0) {
-            const int index = static_cast<int>(std::distance(toasts_.begin(), it.base()) - 1);
-            push_hot(x, y, w, h, kToastItem + index);
+        if (toast.jump_kind >= 0) {
+            push_hot(x, y, w, h, kToastItem + static_cast<int>(slot));
         }
     }
     cairo_restore(cr);

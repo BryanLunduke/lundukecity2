@@ -838,13 +838,16 @@ private:
     double notice_bar_h_ = 0;
     // Alerts in the bottom-right corner of the map. Each one lasts about five
     // seconds and fades out. A repeat of the newest refreshes it instead of
-    // stacking, and at most three stack at once.
+    // stacking, and at most three stack at once. When the stack is full,
+    // priority beats age so a disaster, pause, briefing, or "Playing …"
+    // notice stays visible.
     struct Toast {
         std::string text;
         bool disaster = false;
         std::chrono::steady_clock::time_point until{};
         // civic::advice_for kind to jump to when the toast is clicked. -1 = none.
         int jump_kind = -1;
+        int priority = 0;
     };
     std::vector<Toast> toasts_;
     // Last mid-year mayor's note: stamp is year*12+month. -1 = none yet.

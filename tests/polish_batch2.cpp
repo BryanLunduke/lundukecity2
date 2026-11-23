@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "city_seed.hpp"
+#include "toast_queue.hpp"
 #include "mayor_notes.hpp"
 #include "scenario_briefing.hpp"
 #include "scenario_scorebook.hpp"
@@ -251,6 +252,44 @@ int main()
         if (std::string(city_seed_rule_help()).find("New terrain") == std::string::npos) {
             remove_temp_dir(dir);
             return fail("the inline rule should mention New terrain");
+        }
+    }
+
+    // Toast stack: priority beats age, so a disaster stays when a later
+    // ordinary hint would have pushed it off.
+    {
+        struct Item {
+            int priority = 0;
+            const char *name = "";
+        };
+        std::vector<Item> stack;
+        stack.push_back({toast_priority_for("Traffic is getting worse.", false), "traffic"});
+        stack.push_back({toast_priority_for("Playing Dullsville.", false), "playing"});
+        stack.push_back({toast_priority_for("Game paused. Press Space to run the city.", false), "pause"});
+        stack.push_back({toast_priority_for("A fire has been reported.", true), "fire"});
+        toast_trim(stack, 3);
+        if (stack.size() != 3) {
+            remove_temp_dir(dir);
+            return fail("toast trim should keep three");
+        }
+        // The oldest low-priority traffic hint is dropped; fire, pause, and
+        // Playing stay, even though fire arrived last.
+        if (stack[0].name != std::string("playing") || stack[1].name != std::string("pause") ||
+            stack[2].name != std::string("fire")) {
+            remove_temp_dir(dir);
+            std::fprintf(stderr, "kept %s %s %s\n", stack[0].name, stack[1].name, stack[2].name);
+            return fail("toast trim should drop the lowest priority, not the oldest");
+        }
+        const auto order = toast_draw_order(stack);
+        if (order.size() != 3 || stack[order[0]].name != std::string("fire") ||
+            stack[order[1]].name != std::string("pause") || stack[order[2]].name != std::string("playing")) {
+            remove_temp_dir(dir);
+            return fail("toast draw order should put the highest priority nearest the corner");
+        }
+        if (toast_priority_for("5 years left. Keep the city score above 500 until 1962.", false) !=
+            kToastPriorityBriefing) {
+            remove_temp_dir(dir);
+            return fail("goal briefing should outrank an ordinary hint");
         }
     }
 
