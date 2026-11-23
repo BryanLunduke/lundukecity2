@@ -47,6 +47,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include "effects_fx.hpp"
+#include "ui_sounds.hpp"
+
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -477,6 +480,7 @@ void Shell::save_window_settings()
     stored.auto_goto = pref_auto_goto_ >= 0 ? pref_auto_goto_ : (session_.auto_goto() ? 1 : 0);
     stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
     stored.wheel_zoom = wheel_zooms_ ? 1 : 0;
+    stored.screen_shake = screen_shake_ ? 1 : 0;
     // The drawn sheet may be Classic because an optional file is missing.
     // That is not the player's choice, so it is not what gets stored.
     stored.look = look_pref_.setting();
@@ -542,6 +546,9 @@ void Shell::apply_loaded_settings()
     }
     if (stored.wheel_zoom >= 0) {
         wheel_zooms_ = stored.wheel_zoom != 0;
+    }
+    if (stored.screen_shake >= 0) {
+        screen_shake_ = stored.screen_shake != 0;
     }
     set_look_preference(look_from_setting(stored.look));
     if (stored.milestone_notes >= 0) {
@@ -1258,7 +1265,7 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
     reasons.motion = scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                     puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due() || map_.ui_animating() ||
+                     puff_on_ || pop_on_ || flash_on_ || ceremony_ms_ >= 0 || weather_frame_due() || welcome_frame_due() || map_.fx_frame_due() || map_.ui_animating() ||
                      funds_tick_.active() || demand_tick_.active();
     return reasons;
 }
@@ -1317,12 +1324,17 @@ void Shell::loop()
                 const int until_sim = std::max(1, 100 - sim_acc);
                 const int until_blink = std::max(1, map_.blink_remaining_ms());
                 timeout = std::max(1, std::min(until_sim, until_blink));
+                if (weather_live_ || welcome_live_ || map_.fx_fast()) {
+                    // Rain, snow and the disaster particles step at 20 Hz.
+                    timeout = std::min(timeout, 50);
+                }
             }
             if (dialog_ == Dialog::FileWait) {
                 timeout = std::min(timeout, 30);
             }
             if (scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                puff_on_ || pop_on_ || flash_on_ || map_.ui_animating() || funds_tick_.active() || demand_tick_.active()) {
+                puff_on_ || pop_on_ || flash_on_ || ceremony_ms_ >= 0 || map_.ui_animating() || funds_tick_.active() ||
+                demand_tick_.active()) {
                 timeout = std::min(timeout, 16);
             }
             if (menu_.open() && menu_edge_dir_ != 0) {
@@ -1373,6 +1385,7 @@ void Shell::loop()
             end_mini_drag();
         }
         map_.advance_ui(elapsed);
+        welcome_ms_ = (welcome_ms_ + std::max(0, std::min(elapsed, 500))) % 7200000;
         palette_.advance(elapsed);
         if (hover_id_ != tracked_hover_) {
             tracked_hover_ = hover_id_;
@@ -1403,6 +1416,12 @@ void Shell::loop()
                 dwell_ms_ = 0;
             }
         }
+        if (ceremony_ms_ >= 0) {
+            ceremony_ms_ += elapsed;
+            if (ceremony_ms_ >= effects_fx::kCeremonyMs) {
+                ceremony_ms_ = -1;
+            }
+        }
         if (card_id_ >= 0 && dialog_ == Dialog::None && !map_.dragging()) {
             card_ms_ += elapsed;
             if (card_ms_ > 3200) {
@@ -1414,6 +1433,10 @@ void Shell::loop()
             card_id_ = card_queue_.front();
             card_queue_.erase(card_queue_.begin());
             card_ms_ = 0;
+            ceremony_won_ = false;
+            ceremony_ms_ = motion_on() && effects_fx::ceremony_for_milestone(card_id_, civic::Town, civic::Megalopolis) ? 0 : -1;
+            play_cue(card_id_ >= civic::Town && card_id_ <= civic::Megalopolis ? ui_sounds::Milestone
+                                                                               : ui_sounds::Toast);
         }
         absorb_placement_note();
         while (sim_acc >= 100) {
@@ -1500,14 +1523,20 @@ void Shell::loop()
                     std::chrono::duration_cast<std::chrono::milliseconds>(now_wall - quake_started_).count());
                 const int amp = std::max(2, quake_strength_ / 80);
                 const int step = gone / 50;
-                map_.set_shake((step % 2 == 0) ? amp : -amp, ((step / 2) % 2 == 0) ? (amp / 2) : -(amp / 2));
+                // The dust still rises with shake off; only the view stays put.
+                if (effects_fx::shake_allowed(screen_shake_, effects_)) {
+                    map_.set_shake((step % 2 == 0) ? amp : -amp, ((step / 2) % 2 == 0) ? (amp / 2) : -(amp / 2));
+                } else {
+                    map_.set_shake(0, 0);
+                }
             } else {
                 quake_strength_ = 0;
                 map_.set_shake(0, 0);
             }
         }
         for (const std::string &name : session_.take_sounds()) {
-            if (!sound_.muted()) {
+            // "UhUh" and "Sorry" are the refusal the stroke's own cue already says.
+            if (!sound_.muted() && !ui_sounds::replaced_engine_sound(name)) {
                 sound_.play(name);
             }
         }
@@ -1544,6 +1573,9 @@ void Shell::loop()
                                   session_.city_month(), session_.generated_seed());
             if (dialog_ == Dialog::None) {
                 info_title_ = outcome > 0 ? "Scenario won" : "Scenario lost";
+                play_cue(outcome > 0 ? ui_sounds::Milestone : ui_sounds::Error);
+                ceremony_won_ = outcome > 0;
+                ceremony_ms_ = outcome > 0 && motion_on() ? 0 : -1;
                 info_body_ = session_.scenario_outcome_text(outcome > 0);
                 const int resume = session_.outcome_resume_speed();
                 if (resume > 0) {
@@ -1563,6 +1595,7 @@ void Shell::loop()
             quake_started_ = std::chrono::steady_clock::now();
             const int milliseconds = std::max(400, std::min(strength, 1200));
             quake_until_ = quake_started_ + std::chrono::milliseconds(milliseconds);
+            map_.set_quake(milliseconds);
         }
         note_message();
         note_disaster_fx();

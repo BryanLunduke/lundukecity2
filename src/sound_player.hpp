@@ -97,6 +97,9 @@ public:
     // engine_name is the Micropolis sound id, for example "Siren".
     // Returns false when muted, unknown, or no device. Never throws.
     bool play(const std::string &engine_name);
+    // One of City 2's synthesized interface cues (ui_sounds::Cue). Same
+    // mute, volume, voice cap and repeat cooldown as play().
+    bool play_cue(int cue);
 
 private:
     struct Mixer;

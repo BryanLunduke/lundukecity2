@@ -40,6 +40,8 @@
 #include "side_widgets.hpp"
 #include "special_buildings.hpp"
 #include "tool_keys.hpp"
+#include "effects_fx.hpp"
+#include "ui_sounds.hpp"
 #include "placement_hint.hpp"
 #include "tools.hpp"
 #include "version.hpp"
@@ -2785,6 +2787,15 @@ void Shell::draw_dialog(cairo_t *cr)
         label(cr, body_font(), info_body_, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
                    {{"Stay _paused", kStay}, {"_Scenario list", kScenarioList}, {"_Keep playing", kKeep}});
+        if (info_title_ == "Scenario won") {
+            // A gold rule under the title, and the ceremony's burst over it.
+            cairo_set_source_rgb(cr, 0.96, 0.78, 0.22);
+            cairo_rectangle(cr, panel.x + margin, panel.y + dp(40), panel.w - 2 * margin, std::max(1, dp(2)));
+            cairo_fill(cr);
+            if (ceremony_won_ && ceremony_ms_ >= 0) {
+                draw_ceremony(cr, panel.x, panel.y, panel.w, dp(44));
+            }
+        }
         return;
     }
     if (dialog_ == Dialog::Settings) {
@@ -2795,11 +2806,11 @@ void Shell::draw_dialog(cairo_t *cr)
         const double stack_gap = static_cast<double>(dp(12));
         const SettingsStack volume_row = settings_stack(0, text_h, bar_h, stack_gap);
         const SettingsStack scale_row = settings_stack(volume_row.next_caption, text_h, bar_h, stack_gap);
-        // Nine switches in one column when the window is tall enough, else
-        // two columns (four and five) so the dialog still fits a 960x600 window.
-        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 9.0 + dp(8) + bh + margin;
+        // Ten switches in one column when the window is tall enough, else
+        // two columns (five and five) so the dialog still fits a 960x600 window.
+        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 10.0 + dp(8) + bh + margin;
         const bool paired = one_column > win_h_ - 2.0 * margin;
-        const double toggles = (bh + stack_gap) * (paired ? 5.0 : 9.0);
+        const double toggles = (bh + stack_gap) * (paired ? 5.0 : 10.0);
         const double rows = scale_row.next_caption + toggles;
         const double height = dp(48) + margin + rows + dp(8) + bh + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, paired ? dp(760) : dp(640), height, margin);
@@ -2909,6 +2920,8 @@ void Shell::draw_dialog(cairo_t *cr)
             autosave_state = autosave_owned.c_str();
         }
         left_row("Autosave", autosave_state, kAutosave, sy);
+        sy += bh + stack_gap;
+        left_row("Screen shake", screen_shake_ ? "On" : "Off", kShakeBox, sy);
         sy += bh + stack_gap;
         std::string layout_state = layout_mode::choice_label(layout_pref_);
         if (layout_mode::clamp_choice(layout_pref_) == layout_mode::Auto) {
@@ -3389,18 +3402,31 @@ void Shell::draw_dialog(cairo_t *cr)
         const int legend_rows = series_rows + 1;
         const double legend_h = legend_rows * static_cast<double>(dp(20));
         const double width = std::min(static_cast<double>(dp(640)), std::max(1.0, win_w_ - 2.0 * margin));
-        const double height = dp(86) + dp(220) + dp(8) + legend_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        const double height = graph_rolled_ ? dp(92) :
+            dp(86) + dp(220) + dp(8) + legend_h + dp(32) + dp(36) + margin;
+        DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        if (graph_rolled_) {
+            // Rolled up, the strip sits at the top of the map, out of the city's way.
+            panel.y = view_y_ + dp(8);
+        }
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         const double dh = panel.h;
         frame_panel(cr, x, y, dw, dh, "Graphs");
+        button(cr, x + dw - margin - dp(132), y + dp(6), dp(132), dp(30),
+               graph_rolled_ ? "Expand" : "Roll up", kGraphRoll, false);
+        if (graph_rolled_) {
+            paint_text(cr, ui_font(), "Graphs rolled up — city keeps running", x + margin, y + dp(54),
+                       theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(110)));
+            button(cr, x + dw - margin - dp(96), y + dp(48), dp(96), dp(32), "Close", kClose, false);
+            return;
+        }
         button(cr, x + margin, y + dp(46), dp(140), dp(32), "10 year", kShortScale, false, !graphs_long_);
         button(cr, x + margin + dp(148), y + dp(46), dp(140), dp(32), "120 year", kLongScale, false, graphs_long_);
         const double legend_row_h = dp(20);
         const double button_top = y + dh - margin - dp(36);
-        const double legend_top = button_top - dp(12) - legend_h;
+        const double legend_top = button_top - dp(32) - legend_h;
         const double chart_top = y + dp(86);
         const double chart_h = std::max(static_cast<double>(dp(64)), legend_top - dp(8) - chart_top);
         {
@@ -3461,6 +3487,8 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, ui_font(), "Dashed line: middle of each series", nx + dp(24), note_y, theme::kTextR,
                        theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(24)));
         }
+        paint_text(cr, ui_font(), "Click a series to solo; click it again for all.", x + margin,
+                   button_top - dp(20), theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin));
         buttons_at(x, dw, button_top, {{"_Close", kClose}});
         return;
     }
@@ -4299,6 +4327,7 @@ void Shell::draw(cairo_t *cr)
         }
     }
     cairo_restore(cr);
+    draw_weather(cr);
     if (flash_on_) {
         const double edge = std::max(4.0, static_cast<double>(dp(6)));
         paint_dim_plate(cr, view_x_, view_y_, view_w_, edge, 0.75, 0.05, 0.04);
@@ -4337,6 +4366,13 @@ void Shell::draw(cairo_t *cr)
             // gives the alerts stacked above this card.
             card_y -= dp(44);
         }
+        const bool grand = effects_fx::ceremony_for_milestone(card_id_, civic::Town, civic::Megalopolis);
+        const int pop_ms = grand && !ceremony_won_ ? ceremony_ms_ : -1;
+        const double pop = effects_fx::ceremony_scale(pop_ms);
+        cairo_save(cr);
+        cairo_translate(cr, card_x + card_w / 2.0, card_y + card_h / 2.0);
+        cairo_scale(cr, pop, pop);
+        cairo_translate(cr, -(card_x + card_w / 2.0), -(card_y + card_h / 2.0));
         if (slate_ || handheld_) {
             draw_slate_milestone(cr, card_x, card_y, card_w, card_h);
         } else {
@@ -4347,6 +4383,18 @@ void Shell::draw(cairo_t *cr)
                        static_cast<int>(card_w - 28));
             paint_text(cr, ui_font(), civic::milestone_card(card_id_), card_x + 8, card_y + dp(28), 0, 0, 0,
                        static_cast<int>(card_w - 16));
+        }
+        if (grand) {
+            // A population milestone wears a gold double rule, even with
+            // the Effects off; the burst and the shine are the motion.
+            cairo_set_source_rgb(cr, 0.96, 0.78, 0.22);
+            cairo_set_line_width(cr, std::max(1.0, static_cast<double>(dp(2))));
+            cairo_rectangle(cr, card_x + dp(3), card_y + dp(3), card_w - dp(6), card_h - dp(6));
+            cairo_stroke(cr);
+        }
+        cairo_restore(cr);
+        if (pop_ms >= 0) {
+            draw_ceremony(cr, card_x, card_y, card_w, card_h);
         }
         push_hot(card_x + card_w - dp(22), card_y + 4, dp(18), dp(18), kCardDismiss);
     }
@@ -4897,6 +4945,12 @@ void Shell::sync_toasts(std::chrono::steady_clock::time_point now)
                 Toast toast{shown_message_, disaster, until, jump, toast_priority_for(shown_message_, disaster)};
                 toasts_.push_back(toast);
                 toast_trim(toasts_, kToastMax);
+                // Disasters bring their own siren; pause notes stay quiet.
+                if (!disaster && toast.priority != kToastPriorityPause &&
+                    now - toast_cue_at_ > std::chrono::milliseconds(1200)) {
+                    toast_cue_at_ = now;
+                    play_cue(ui_sounds::Toast);
+                }
             }
         } else if (!toasts_.empty() && toasts_.back().text == toast_last_text_) {
             toasts_.pop_back();
@@ -5290,7 +5344,126 @@ void Shell::draw_welcome_background(cairo_t *cr)
     cairo_set_source_surface(cr, image, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
     cairo_paint(cr);
+    welcome_live_ = false;
+    if (motion_on() && look_fx::ambient_allowed(effects_)) {
+        draw_welcome_life(cr);
+    }
     cairo_restore(cr);
+}
+
+void Shell::draw_welcome_life(cairo_t *cr)
+{
+    // cr is in the art's own pixels. Masks are built once from the art:
+    // sky (bright clear blue above the skyline) and sea (deep blue down the
+    // left edge, kept as a bit map for the glints). Nothing is drawn where the art has a cloud, the title, a
+    // building or a boat, so what drifts passes behind them.
+    cairo_surface_t *image = welcome_art();
+    const int iw = cairo_image_surface_get_width(image);
+    const int ih = cairo_image_surface_get_height(image);
+    static cairo_surface_t *sky = nullptr;
+    static std::vector<unsigned char> sea_bits;
+    if (sky == nullptr) {
+        cairo_surface_flush(image);
+        const unsigned char *src = cairo_image_surface_get_data(image);
+        const int sstride = cairo_image_surface_get_stride(image);
+        sky = cairo_image_surface_create(CAIRO_FORMAT_A8, iw, ih);
+        unsigned char *sk = cairo_image_surface_get_data(sky);
+        const int kstride = cairo_image_surface_get_stride(sky);
+        sea_bits.assign(static_cast<std::size_t>(iw) * ih, 0);
+        for (int y = 0; y < ih; ++y) {
+            const std::uint32_t *row = reinterpret_cast<const std::uint32_t *>(src + y * sstride);
+            for (int x = 0; x < iw; ++x) {
+                const std::uint32_t v = row[x];
+                const int r = (v >> 16) & 255;
+                const int g = (v >> 8) & 255;
+                const int b = v & 255;
+                const bool blue = b > 150 && b > r + 90 && b > g + 40;
+                if (blue && y < 440) {
+                    sk[y * kstride + x] = 255;
+                }
+                if (blue && y >= 440 && x < 330 && r < 80) {
+                    sea_bits[static_cast<std::size_t>(y) * iw + x] = 1;
+                }
+            }
+        }
+        cairo_surface_mark_dirty(sky);
+    }
+    const int ms = welcome_ms_;
+    welcome_live_ = true;
+    welcome_drawn_step_ = ms / 66;
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    // Clouds: chunky puffs of white over a pale blue underside, in 8px blocks
+    // like the art's own pixels, behind everything solid.
+    cairo_push_group(cr);
+    for (int k = 0; k < effects_fx::kWelcomeClouds; ++k) {
+        const double cx = std::round(effects_fx::welcome_cloud_x(k, ms, iw) / 8.0) * 8.0;
+        const double cy = 40.0 + std::round((70.0 + 300.0 * look_fx::hash01(static_cast<std::uint32_t>(k * 41 + 4))) / 8.0) * 8.0;
+        // A cumulus built from discs: a blue-grey underside shifted down and
+        // a white top, each disc snapped to the 4px grid.
+        const int puffs = 5 + k % 3;
+        for (int pass = 0; pass < 2; ++pass) {
+            for (int b = 0; b < puffs; ++b) {
+                const double t = puffs > 1 ? static_cast<double>(b) / (puffs - 1) : 0.5;
+                const double hump = std::sin(look_fx::kPi * t);
+                const double r = 12.0 + 20.0 * hump * (0.7 + 0.5 * look_fx::hash01(static_cast<std::uint32_t>(k * 19 + b)));
+                const double px = std::round((cx + t * 130.0) / 4.0) * 4.0;
+                const double py = std::round((cy - hump * 14.0 + (pass == 0 ? 7.0 : 0.0)) / 4.0) * 4.0;
+                cairo_new_path(cr);
+                cairo_arc(cr, px, py, std::round(r / 4.0) * 4.0, 0, 2 * look_fx::kPi);
+                if (pass == 0) {
+                    cairo_set_source_rgb(cr, 0.70, 0.80, 0.93);
+                } else {
+                    cairo_set_source_rgb(cr, 0.98, 0.99, 1.0);
+                }
+                cairo_fill(cr);
+            }
+        }
+    }
+    cairo_pop_group_to_source(cr);
+    cairo_mask_surface(cr, sky, 0, 0);
+    // Aircraft warning lights on the spire tips.
+    static const int kTips[6][2] = {{551, 277}, {750, 227}, {863, 223}, {977, 218}, {1178, 263}, {1246, 312}};
+    for (int k = 0; k < 6; ++k) {
+        const double a = effects_fx::welcome_light(k, ms);
+        if (a <= 0.05) {
+            continue;
+        }
+        cairo_set_source_rgba(cr, 1.0, 0.18, 0.12, 0.35 * a);
+        cairo_rectangle(cr, kTips[k][0] - 9, kTips[k][1] - 9, 18, 18);
+        cairo_fill(cr);
+        cairo_set_source_rgba(cr, 1.0, 0.25, 0.18, a);
+        cairo_rectangle(cr, kTips[k][0] - 4, kTips[k][1] - 4, 8, 8);
+        cairo_fill(cr);
+        cairo_set_source_rgba(cr, 1.0, 0.9, 0.8, a);
+        cairo_rectangle(cr, kTips[k][0] - 2, kTips[k][1] - 2, 4, 4);
+        cairo_fill(cr);
+    }
+    // Glints on the sea, only where the art is open water.
+    for (int k = 0; k < 40; ++k) {
+        double gx = 0;
+        double gy = 0;
+        double a = 0;
+        effects_fx::welcome_glint(k, ms, 0.0, 470.0, 330.0, 680.0, gx, gy, a);
+        const int px = static_cast<int>(gx);
+        const int py = static_cast<int>(gy);
+        if (a < 0.1 || px < 4 || py < 4 || px >= iw - 12 || py >= ih - 6) {
+            continue;
+        }
+        bool open_water = true;
+        for (int dy = -3; dy <= 3 && open_water; dy += 3) {
+            for (int dx = -3; dx <= 11 && open_water; dx += 7) {
+                open_water = sea_bits[static_cast<std::size_t>(py + dy) * iw + (px + dx)] != 0;
+            }
+        }
+        if (!open_water) {
+            continue;
+        }
+        cairo_set_source_rgba(cr, 0.85, 0.96, 1.0, 0.85 * a);
+        cairo_rectangle(cr, px, py, 10, 3);
+        cairo_fill(cr);
+        cairo_rectangle(cr, px + 3, py - 3, 4, 3);
+        cairo_fill(cr);
+    }
 }
 
 void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
@@ -6359,6 +6532,166 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     }
     const std::string shown_news = fit_text(cr, ui_font(), news, static_cast<int>(right - news_x));
     slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() || staleness > 0 ? kSlateDim : kSlateInk);
+}
+
+void Shell::draw_weather(cairo_t *cr)
+{
+    weather_live_ = false;
+    // The month's weather. Only the date and the city's name pick it, so it
+    // is the same on every replay and reload, and the simulator never sees it.
+    const int stamp = session_.city_year() * 12 + session_.city_month();
+    const int fx = map_.fx_ms();
+    if (stamp != weather_stamp_) {
+        const int next = effects_fx::weather_for(session_.city_year(), session_.city_month(),
+                                                 effects_fx::weather_salt(session_.city_name().c_str()));
+        if (weather_stamp_ < 0) {
+            weather_prev_ = next;
+            weather_since_ = fx - 100000;
+        } else if (next != weather_kind_) {
+            weather_prev_ = weather_kind_;
+            weather_since_ = fx;
+        }
+        weather_kind_ = next;
+        weather_stamp_ = stamp;
+    }
+    map_.set_wind(weather_kind_ == effects_fx::Storm ? 1.7 : 1.0);
+    if (!look_fx::ambient_allowed(map_.effects()) || terrain_edit_ || overlay_on_ || view_w_ < 8 || view_h_ < 8) {
+        return;
+    }
+    const double fade = effects_fx::weather_fade(static_cast<double>(fx - weather_since_));
+    const bool classic = tile_atlas().look() == 0;
+    const double unit = std::max(1.0, dp(100) / 100.0);
+    const double w = view_w_;
+    const double h = view_h_;
+    cairo_save(cr);
+    cairo_rectangle(cr, view_x_, view_y_, w, h);
+    cairo_clip(cr);
+    cairo_translate(cr, view_x_, view_y_);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    bool drew = false;
+    auto layer = [&](int kind, double amount) {
+        if (kind == effects_fx::Clear || amount <= 0.01) {
+            return;
+        }
+        drew = true;
+        if (!classic) {
+            // A light wash for the sky: grey-blue rain, a darker storm,
+            // a cool haze of snow.
+            if (kind == effects_fx::Storm) {
+                cairo_set_source_rgba(cr, 0.05, 0.07, 0.15, 0.17 * amount);
+            } else if (kind == effects_fx::Rain) {
+                cairo_set_source_rgba(cr, 0.20, 0.26, 0.38, 0.09 * amount);
+            } else {
+                cairo_set_source_rgba(cr, 0.92, 0.95, 1.0, 0.08 * amount);
+            }
+            cairo_paint(cr);
+        }
+        const int count = effects_fx::weather_particles(kind, w, h, unit);
+        if (kind == effects_fx::Snow) {
+            const double flake = std::max(2.0, std::round(2.0 * unit));
+            for (int i = 0; i < count; ++i) {
+                const effects_fx::Drop drop = effects_fx::weather_drop(kind, i, fx, w, h, unit);
+                const double x = std::round(drop.x);
+                const double y = std::round(drop.y);
+                cairo_set_source_rgba(cr, 0.98, 0.98, 1.0, classic ? 1.0 : drop.alpha * amount);
+                if (i % 4 == 0) {
+                    // A bigger flake: a plus of three by three.
+                    cairo_rectangle(cr, x - flake / 2.0, y, flake * 2.0, flake);
+                    cairo_rectangle(cr, x, y - flake / 2.0, flake, flake * 2.0);
+                } else {
+                    cairo_rectangle(cr, x, y, flake, flake);
+                }
+                cairo_fill(cr);
+            }
+            return;
+        }
+        const double lean = effects_fx::rain_lean(kind);
+        const double len = 9.0 * unit;
+        const double thick = std::max(1.0, std::round(unit));
+        cairo_set_line_width(cr, thick);
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+        for (int i = 0; i < count; ++i) {
+            const effects_fx::Drop drop = effects_fx::weather_drop(kind, i, fx, w, h, unit);
+            cairo_set_source_rgba(cr, 0.80, 0.88, 0.98, classic ? 1.0 : drop.alpha * amount);
+            cairo_move_to(cr, std::round(drop.x - lean * len) + 0.5, std::round(drop.y - len));
+            cairo_line_to(cr, std::round(drop.x) + 0.5, std::round(drop.y));
+            cairo_stroke(cr);
+        }
+        // Splashes: a short dash that fades where a drop lands.
+        const int splashes = count / 6;
+        for (int i = 0; i < splashes; ++i) {
+            const double life = 380.0;
+            const double age = effects_fx::puff_age(static_cast<std::uint32_t>(i * 7907 + 3), fx, life);
+            const int slot = static_cast<int>((fx / life) + look_fx::hash01(static_cast<std::uint32_t>(i * 7907 + 3)));
+            const std::uint32_t seed = static_cast<std::uint32_t>(i * 131 + slot * 977);
+            const double sx = std::round(look_fx::hash01(seed) * w);
+            const double sy = std::round(look_fx::hash01(seed ^ 0x99u) * h);
+            const double spread = std::round((1.0 + age * 3.0) * unit);
+            cairo_set_source_rgba(cr, 0.86, 0.92, 1.0, classic ? (age < 0.5 ? 1.0 : 0.0) : 0.55 * (1.0 - age) * amount);
+            cairo_rectangle(cr, sx - spread, sy, thick, thick);
+            cairo_rectangle(cr, sx + spread, sy, thick, thick);
+            cairo_rectangle(cr, sx - thick, sy + thick, thick * 2.0, thick);
+            cairo_fill(cr);
+        }
+        if (kind == effects_fx::Storm && !classic) {
+            const double flash = effects_fx::storm_flash(fx, effects_fx::weather_salt(session_.city_name().c_str()));
+            if (flash > 0.0) {
+                cairo_set_source_rgba(cr, 0.95, 0.97, 1.0, flash * amount);
+                cairo_paint(cr);
+            }
+        }
+    };
+    layer(weather_prev_, 1.0 - fade);
+    layer(weather_kind_, fade);
+    cairo_restore(cr);
+    weather_live_ = drew && speed_ > 0 && !dialog_pauses();
+    weather_drawn_step_ = fx / 50;
+}
+
+void Shell::draw_ceremony(cairo_t *cr, double x, double y, double w, double h)
+{
+    // The milestone ceremony over a card or the Scenario won box: a light
+    // sweep across the title, then a burst of square confetti from the
+    // top edge that falls and fades. Hard-edged pieces on whole pixels.
+    const int ms = ceremony_ms_;
+    if (ms < 0) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    const double shine = effects_fx::ceremony_shine(ms);
+    if (shine >= 0.0) {
+        cairo_save(cr);
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_clip(cr);
+        const double band = std::max(10.0, static_cast<double>(dp(18)));
+        const double bx = x - band * 2.0 + shine * (w + band * 3.0);
+        cairo_move_to(cr, bx, y + h);
+        cairo_line_to(cr, bx + band, y + h);
+        cairo_line_to(cr, bx + band * 2.0, y);
+        cairo_line_to(cr, bx + band, y);
+        cairo_close_path(cr);
+        cairo_set_source_rgba(cr, 1.0, 0.97, 0.80, 0.38 * std::sin(look_fx::kPi * shine));
+        cairo_fill(cr);
+        cairo_restore(cr);
+    }
+    const double unit = std::max(1.0, std::round(dp(1) * 1.5));
+    const double spread = std::max(40.0, w * 0.34);
+    const double ox = x + w / 2.0;
+    const double oy = y + std::max(2.0, static_cast<double>(dp(4)));
+    for (int i = 0; i < effects_fx::kConfettiCount; ++i) {
+        const effects_fx::Confetto piece = effects_fx::confetto(i, ms, spread);
+        if (piece.alpha <= 0.0) {
+            continue;
+        }
+        const double *rgb = effects_fx::kConfettiRgb[piece.color];
+        const double pw = (piece.tall ? 2.0 : 4.0) * unit;
+        const double ph = (piece.tall ? 4.0 : 2.0) * unit;
+        cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], piece.alpha);
+        cairo_rectangle(cr, std::round(ox + piece.x - pw / 2.0), std::round(oy + piece.y - ph / 2.0), pw, ph);
+        cairo_fill(cr);
+    }
+    cairo_restore(cr);
 }
 
 void Shell::draw_slate_milestone(cairo_t *cr, double card_x, double card_y, double card_w, double card_h)

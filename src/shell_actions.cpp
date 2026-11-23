@@ -3,6 +3,8 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "graph_solo.hpp"
+#include "ui_sounds.hpp"
 #include "assets.hpp"
 #include "layout_mode.hpp"
 
@@ -612,6 +614,7 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     } else if (dialog == Dialog::Settings) {
         open_volume_ = volume_;
         open_wheel_zooms_ = wheel_zooms_;
+        open_screen_shake_ = screen_shake_;
         open_fullscreen_ = window_ != nullptr && (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;
         open_scale_percent_ = user_scale_ <= 0.05f ? 0 : static_cast<int>(std::lround(user_scale_ * 100.0f));
         if (open_scale_percent_ < 0) {
@@ -2328,6 +2331,13 @@ void Shell::on_dialog_button(int id)
             wheel_zooms_ = !wheel_zooms_;
             return;
         }
+        if (id == kShakeBox) {
+            screen_shake_ = !screen_shake_;
+            if (!screen_shake_) {
+                map_.set_shake(0, 0);
+            }
+            return;
+        }
         if (id == kSkinBox) {
             slate_ = !slate_;
             apply_skin();
@@ -2361,6 +2371,7 @@ void Shell::on_dialog_button(int id)
             scale_percent_ = open_scale_percent_;
             pause_unfocused_ = open_pause_unfocused_;
             wheel_zooms_ = open_wheel_zooms_;
+            screen_shake_ = open_screen_shake_;
             autosave_seconds_ = open_autosave_;
             if (slate_ != open_slate_ || layout_pref_ != open_layout_pref_) {
                 slate_ = open_slate_;
@@ -3253,8 +3264,14 @@ void Shell::on_hotspot(int id, double x, double y)
         }
         return;
     }
+    if (id == kGraphRoll && dialog_ == Dialog::Graphs) {
+        graph_rolled_ = !graph_rolled_;
+        graph_pointer_x_ = -1;
+        focus_id_ = kGraphRoll;
+        return;
+    }
     if (id >= kGraphSeries && id < kGraphSeries + 16 && dialog_ == Dialog::Graphs) {
-        graph_mask_ ^= 1 << (id - kGraphSeries);
+        graph_mask_ = graph_solo_mask(graph_mask_, id - kGraphSeries);
         focus_id_ = id;
         return;
     }
@@ -4870,6 +4887,7 @@ void Shell::absorb_placement_note()
         return;
     }
     const ToolFootprint foot = tool_footprint(note.tool);
+    play_cue(ui_sounds::cue_for_stroke(note.ok, note.tool == TOOL_BULLDOZER, short_build_reason(note.reason)));
     receipt_on_ = true;
     receipt_ok_ = note.ok;
     if (motion_on() && note.ok) {
@@ -5134,4 +5152,11 @@ void Shell::refresh_place_cue()
         }
     }
     map_.set_cue(cue);
+}
+
+void Shell::play_cue(int cue)
+{
+    if (!sound_.muted()) {
+        sound_.play_cue(cue);
+    }
 }

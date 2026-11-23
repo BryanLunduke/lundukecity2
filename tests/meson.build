@@ -1320,3 +1320,34 @@ polish_batch2 = executable(
 )
 
 test('polish_batch2', polish_batch2)
+
+# Batch 3: effects and sound helpers, graph solo, and a determinism check that
+# runs the same city with and without the effect code beside it.
+effects_batch3 = executable(
+  'effects_batch3',
+  'effects_batch3.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/city_events.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'effects_batch3',
+  effects_batch3,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+  timeout: 180,
+)

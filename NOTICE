@@ -216,3 +216,12 @@ License: Bitstream-Vera
  program, provided that copyright, trademark, and permission notices stay
  with the fonts. A copy of the fonts may not be sold by itself. Modified
  fonts must be renamed so they do not use the words Bitstream or Vera.
+
+Files: src/ui_sounds.hpp
+Copyright: 2026, Bryan Lunduke
+License: GPL-3+
+Comment:
+ The interface cues (place, bulldoze, can't build, not enough funds,
+ notice chime, milestone fanfare) are synthesized at start-up from the
+ note tables in this file. No sample files or third-party recordings are
+ used for them.

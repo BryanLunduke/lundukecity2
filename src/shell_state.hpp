@@ -144,6 +144,13 @@ private:
     void draw_menu_dropdown(cairo_t *cr);
     void draw_dialog(cairo_t *cr);
     void draw_welcome_background(cairo_t *cr);
+    // Clouds, aircraft lights and sea glints over the title art. The art is
+    // never edited; masks built from its pixels keep them to the sky and sea.
+    void draw_welcome_life(cairo_t *cr);
+    int welcome_ms_ = 0;
+    bool welcome_live_ = false;
+    int welcome_drawn_step_ = -1;
+    bool welcome_frame_due() const { return welcome_live_ && welcome_ms_ / 66 != welcome_drawn_step_; }
     void draw_year_cover(cairo_t *cr, double margin, double band_h);
     civic::YearDigest year_digest() const;
     std::string welcome_continue_label() const;
@@ -340,6 +347,8 @@ private:
     void paint_vga_veil(cairo_t *cr);
     void refresh_place_cue();
     void absorb_placement_note();
+    // A synthesized interface cue (ui_sounds::Cue), unless sound is off.
+    void play_cue(int cue);
     void show_problem_on_map(int kind, bool alternate);
     void queue_milestones(const std::vector<int> &ids);
     void note_civic_month();
@@ -591,6 +600,23 @@ private:
     bool milestone_notes_ = true;
     int card_id_ = -1;
     int card_ms_ = 0;
+    // Milestone ceremony (effects_fx): ms since it began, -1 when idle.
+    // ceremony_won_ puts it on the Scenario won box instead of the card.
+    int ceremony_ms_ = -1;
+    bool ceremony_won_ = false;
+    void draw_ceremony(cairo_t *cr, double x, double y, double w, double h);
+    // Weather over the map view: rain, snow or a storm for the city's
+    // month (effects_fx::weather_for). Cosmetic, on the ambient clock.
+    void draw_weather(cairo_t *cr);
+    int weather_kind_ = 0;
+    int weather_prev_ = 0;
+    int weather_since_ = 0;
+    int weather_stamp_ = -1;
+    bool weather_live_ = false;
+    int weather_drawn_step_ = -1;
+    bool weather_frame_due() const { return weather_live_ && map_.fx_ms() / 50 != weather_drawn_step_; }
+    // The last toast chime; a burst of notices chimes once.
+    std::chrono::steady_clock::time_point toast_cue_at_{};
     std::vector<int> card_queue_;
     int hover_edge_ms_ = 0;
     int tracked_hover_ = -1;
@@ -659,6 +685,7 @@ private:
     int fire_ = 100;
     bool graphs_long_ = false;
     int graph_mask_ = 0x7f;
+    bool graph_rolled_ = false;
     int graph_pointer_x_ = -1;
     double graph_chart_x_ = 0;
     double graph_chart_y_ = 0;
@@ -668,6 +695,9 @@ private:
     bool overlay_on_ = false;
     bool wheel_zooms_ = false;
     bool open_wheel_zooms_ = false;
+    // Screen shake for quakes and other disasters (Settings).
+    bool screen_shake_ = true;
+    bool open_screen_shake_ = true;
     bool open_fullscreen_ = false;
     int controls_page_ = 0;
     int controls_scroll_ = 0;
