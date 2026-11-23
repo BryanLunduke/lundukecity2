@@ -281,6 +281,8 @@ struct StoredSettings {
     int pause_unfocused = -1;
     // -1 absent, 0 scroll, 1 zoom.
     int wheel_zoom = -1;
+    // -1 absent (shake on), 0 off, 1 on.
+    int screen_shake = -1;
     // -1 absent (SVGA default), 0 Classic, 1 SVGA. 2 (Spooky) loads as SVGA.
     int look = -1;
     // -1 absent (show milestone notes), 0 off, 1 on.
@@ -326,6 +328,7 @@ inline std::string settings_text(const StoredSettings &settings)
     put("auto_goto", settings.auto_goto);
     put("pause_unfocused", settings.pause_unfocused);
     put("wheel_zoom", settings.wheel_zoom);
+    put("screen_shake", settings.screen_shake);
     put("look", settings.look);
     put("milestone_notes", settings.milestone_notes);
     put("autosave", settings.autosave);
@@ -476,6 +479,9 @@ inline StoredSettings settings_parse(const std::string &text)
         } else if (key == "wheel_zoom") {
             bool saw = false;
             as_int(settings.wheel_zoom, saw);
+        } else if (key == "screen_shake") {
+            bool saw = false;
+            as_int(settings.screen_shake, saw);
         } else if (key == "look") {
             bool saw = false;
             as_int(settings.look, saw);

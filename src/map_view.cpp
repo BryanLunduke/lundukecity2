@@ -1556,6 +1556,7 @@ void MapView::draw(cairo_t *cr)
         // overview zoom where a tile is a few pixels.
         const TileSpan span = visible_tiles(cr, source, 2);
         draw_fire(cr, source, span, dusk);
+        draw_disaster_fx(cr, source, span, dusk, sprite_to_source);
     }
     cairo_restore(cr);
     draw_rises(cr);
@@ -2232,6 +2233,227 @@ void MapView::draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk
     cairo_restore(cr);
 }
 
+void MapView::draw_disaster_fx(cairo_t *cr, int source, const TileSpan &span, bool dusk, double sprite_to_source)
+{
+    if (cached_raw_.empty() || !look_fx::motion_allowed(effects_)) {
+        // Effects Off keeps the disasters to their tile art.
+        return;
+    }
+    const bool classic = classic_fx();
+    const double px = static_cast<double>(source);
+    const double u = px / 16.0; // one art pixel
+    const int ms = fx_ms_;
+    const int W = CitySession::kWorldW;
+    const int H = CitySession::kWorldH;
+    auto tile_at = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= W || y >= H) {
+            return -1;
+        }
+        const int raw = cached_raw_[static_cast<std::size_t>(y * W + x)];
+        return raw < 0 ? -1 : (raw & LOMASK);
+    };
+    auto is_flood = [&](int t) { return t >= FLOOD && t <= LASTFLOOD; };
+    auto is_fire = [&](int t) { return t >= FIREBASE && t <= LASTFIRE; };
+    auto speck = [&](double x, double y, double size, double r, double g, double b, double a) {
+        cairo_new_path(cr);
+        cairo_rectangle(cr, std::round(x), std::round(y), std::max(1.0, std::round(size)), std::max(1.0, std::round(size)));
+        look_fx::fill_fx(cr, r, g, b, classic ? std::min(1.0, a * 1.6) : a, classic && a < 0.9);
+    };
+    const double night = dusk ? 0.55 : 1.0;
+    bool any = false;
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    int fires = 0;
+    for (int y = span.y0; y < span.y1; ++y) {
+        for (int x = span.x0; x < span.x1; ++x) {
+            fires += is_fire(tile_at(x, y)) ? 1 : 0;
+        }
+    }
+    for (int y = span.y0; y < span.y1; ++y) {
+        for (int x = span.x0; x < span.x1; ++x) {
+            const int t = tile_at(x, y);
+            const double ox = x * px;
+            const double oy = y * px;
+            const std::uint32_t seed = static_cast<std::uint32_t>(x * 7919 + y * 104729);
+            if (is_flood(t)) {
+                any = true;
+                // Rings spreading on the flood water and foam where it laps
+                // at dry land.
+                const double age = effects_fx::puff_age(seed, ms, 1400.0);
+                const double cx = ox + px * (0.25 + 0.5 * look_fx::hash01(seed ^ 0x33u));
+                const double cy = oy + px * (0.25 + 0.5 * look_fx::hash01(seed ^ 0x77u));
+                const double rx = u * (1.0 + 5.0 * age);
+                cairo_new_path(cr);
+                cairo_save(cr);
+                cairo_translate(cr, cx, cy);
+                cairo_scale(cr, 1.0, 0.55);
+                cairo_arc(cr, 0, 0, rx, 0, 2 * look_fx::kPi);
+                cairo_restore(cr);
+                cairo_set_line_width(cr, std::max(1.0, u));
+                cairo_set_source_rgba(cr, 0.80 * night, 0.90 * night, 1.0 * night, classic ? 0.8 * (1.0 - age) : 0.55 * (1.0 - age));
+                cairo_stroke(cr);
+                static const int kSide[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+                for (int side = 0; side < 4; ++side) {
+                    const int nt = tile_at(x + kSide[side][0], y + kSide[side][1]);
+                    if (nt < 0 || is_flood(nt) || (nt >= RIVER && nt <= LASTRIVEDGE)) {
+                        continue;
+                    }
+                    for (int k = 0; k < 4; ++k) {
+                        const double along = std::fmod(k * 0.27 + look_fx::hash01(seed + side * 13 + k) + ms / 3000.0, 1.0);
+                        const double lap = 0.5 + 0.5 * std::sin(ms / 260.0 + k * 1.7 + side);
+                        const double inset = u * (1.0 + 1.5 * lap);
+                        double fx = ox + along * px;
+                        double fy = oy + along * px;
+                        if (side == 0) fy = oy + inset;
+                        if (side == 2) fy = oy + px - inset - u;
+                        if (side == 1) fx = ox + px - inset - u;
+                        if (side == 3) fx = ox + inset;
+                        speck(fx, fy, u, 0.95 * night, 0.98 * night, 1.0 * night, 0.85);
+                    }
+                }
+            } else if (quake_ms_ >= 0 &&
+                       ((t >= RUBBLE && t <= LASTRUBBLE) ||
+                        (t >= RESBASE && t < PORTBASE && look_fx::hash01(seed ^ 0x5eedu) < 0.18))) {
+                any = true;
+                // Quake dust: tan puffs swelling up off the rubble.
+                const double fade = quake_ms_ < quake_len_ - 1200 ? 1.0 : std::max(0.0, (quake_len_ - quake_ms_) / 1200.0);
+                for (int k = 0; k < 2; ++k) {
+                    const double age = effects_fx::puff_age(seed + k * 97, quake_ms_, 900.0 + 300.0 * k);
+                    const double cx = ox + px * (0.3 + 0.4 * look_fx::hash01(seed + k * 5)) + age * u * 4.0;
+                    const double cy = oy + px * 0.6 - age * px * 0.9;
+                    const double r = u * (2.5 + 5.0 * age);
+                    const double a = 0.85 * (1.0 - age * age) * fade;
+                    // A shaded underside and a lit top, so the cloud reads
+                    // on tan ground as well as on roofs.
+                    cairo_new_path(cr);
+                    cairo_arc(cr, std::round(cx), std::round(cy), std::round(r), 0, 2 * look_fx::kPi);
+                    look_fx::fill_fx(cr, 0.50 * night, 0.42 * night, 0.32 * night, a, classic);
+                    cairo_new_path(cr);
+                    cairo_arc(cr, std::round(cx - u), std::round(cy - u), std::round(std::max(u, r - u)), 0, 2 * look_fx::kPi);
+                    look_fx::fill_fx(cr, 0.86 * night, 0.79 * night, 0.66 * night, a, classic);
+                }
+                if (quake_ms_ < quake_len_ - 1600) {
+                    // Chips of debris hopping on the rubble while it shakes.
+                    for (int k = 0; k < 3; ++k) {
+                        const double hop = std::fabs(std::sin(quake_ms_ / 90.0 + k * 2.1 + look_fx::hash01(seed + k) * 6.0));
+                        const double dx = px * (0.2 + 0.6 * look_fx::hash01(seed ^ (k * 911u)));
+                        speck(ox + dx, oy + px * 0.7 - hop * u * 3.0, u, 0.30 * night, 0.26 * night, 0.22 * night, 1.0);
+                    }
+                }
+            } else if (is_fire(t) && fires <= 120) {
+                any = true;
+                // Sparks: bright points lifting well above the flames and
+                // winking out, a few per fire.
+                for (int k = 0; k < 3; ++k) {
+                    const std::uint32_t s = seed + static_cast<std::uint32_t>(k * 6151);
+                    const double age = effects_fx::puff_age(s, ms, 650.0 + 350.0 * look_fx::hash01(s ^ 0x2u));
+                    const double sx = ox + px * (0.2 + 0.6 * look_fx::hash01(s ^ 0x9u)) + std::sin(age * 7.0 + k) * u * 2.0;
+                    const double sy = oy + px * 0.2 - age * px * 1.6;
+                    const double a = (1.0 - age) * (age < 0.08 ? age / 0.08 : 1.0);
+                    speck(sx, sy, u, 1.0, age < 0.4 ? 0.95 : 0.62, age < 0.4 ? 0.55 : 0.12, a);
+                }
+            }
+        }
+    }
+    if (session_ != nullptr) {
+        for (const auto &dot : session_->sprites()) {
+            if (dot.type != SPRITE_TORNADO) {
+                continue;
+            }
+            any = true;
+            // Shadow and a dust skirt at the funnel's foot, and debris
+            // circling it, lifted to different heights.
+            const double fx = (dot.x + dot.x_offset + dot.width * 0.5) * sprite_to_source;
+            const double fy = (dot.y + dot.y_offset + dot.height * 0.92) * sprite_to_source;
+            cairo_new_path(cr);
+            cairo_save(cr);
+            cairo_translate(cr, fx, fy);
+            cairo_scale(cr, 1.0, 0.4);
+            cairo_arc(cr, 0, 0, u * 13.0, 0, 2 * look_fx::kPi);
+            cairo_restore(cr);
+            look_fx::fill_fx(cr, 0.0, 0.0, 0.0, 0.30, classic);
+            for (int k = 0; k < 14; ++k) {
+                const std::uint32_t s = static_cast<std::uint32_t>(k * 2654435761u);
+                const double age = effects_fx::puff_age(s, ms, 700.0);
+                const double ang = 2.0 * look_fx::kPi * (k / 14.0) + ms / 300.0;
+                const double r = u * (6.0 + 9.0 * age);
+                cairo_new_path(cr);
+                cairo_arc(cr, std::round(fx + std::cos(ang) * r), std::round(fy + std::sin(ang) * r * 0.4 - age * u * 4.0),
+                          std::round(u * (1.5 + 2.0 * age)), 0, 2 * look_fx::kPi);
+                look_fx::fill_fx(cr, 0.66 * night, 0.58 * night, 0.46 * night, 0.7 * (1.0 - age), classic);
+            }
+            for (int k = 0; k < effects_fx::kTornadoDebris; ++k) {
+                double dx = 0;
+                double dy = 0;
+                double lift = 0;
+                effects_fx::tornado_debris(k, ms, dx, dy, lift);
+                // Pieces on the far side of the funnel are hidden by it.
+                const bool behind = dy < 0.0;
+                if (behind && std::fabs(dx) < 5.0) {
+                    continue;
+                }
+                const double shade = behind ? 0.6 : 1.0;
+                const double size = (k % 3 == 0) ? 3.0 : 2.0;
+                const bool board = k % 4 == 1;
+                speck(fx + dx * u, fy + dy * u - lift * u, u * size, (board ? 0.55 : 0.28) * shade * night,
+                      (board ? 0.38 : 0.24) * shade * night, (board ? 0.22 : 0.20) * shade * night, 1.0);
+            }
+        }
+        const CityEvents &events = session_->events_state();
+        if (events.riotSteps > 0) {
+            // The riot: a pale haze of tear gas drifting off the burning
+            // blocks, things thrown in short arcs, and police lights.
+            int lit = 0;
+            for (int y = span.y0; y < span.y1; ++y) {
+                for (int x = span.x0; x < span.x1; ++x) {
+                    if (events.riotFire[x][y] == 0) {
+                        continue;
+                    }
+                    any = true;
+                    const std::uint32_t seed = static_cast<std::uint32_t>(x * 3571 + y * 7741);
+                    const double ox = x * px;
+                    const double oy = y * px;
+                    for (int k = 0; k < 2; ++k) {
+                        const double age = effects_fx::puff_age(seed + k * 41, ms, 2600.0);
+                        const double cx = ox + px * (0.5 + 1.4 * age) + std::sin(age * 5.0 + k) * u * 3.0;
+                        const double cy = oy + px * (0.9 - 0.5 * age) + k * u * 4.0;
+                        cairo_new_path(cr);
+                        cairo_arc(cr, std::round(cx), std::round(cy), std::round(u * (3.0 + 6.0 * age)), 0, 2 * look_fx::kPi);
+                        look_fx::fill_fx(cr, 0.80 * night, 0.86 * night, 0.72 * night, 0.45 * std::sin(look_fx::kPi * age), classic);
+                    }
+                    for (int k = 0; k < 2; ++k) {
+                        const double age = effects_fx::puff_age(seed + 900 + k * 13, ms, 800.0 + 200.0 * k);
+                        const double dir = look_fx::hash01(seed + k) < 0.5 ? -1.0 : 1.0;
+                        const double sx = ox + px * 0.5 + dir * (age - 0.5) * px * 1.6;
+                        const double sy = oy + px * 0.6 - std::sin(look_fx::kPi * age) * px * 0.7;
+                        speck(sx, sy, u, 0.20, 0.18, 0.16, 1.0);
+                    }
+                    if (lit < 6 && (look_fx::hash32(seed) & 3u) == 0) {
+                        ++lit;
+                        // A patrol car's bar one tile down the street.
+                        const double lx = ox + px * 0.5;
+                        const double ly = oy + px * 1.35;
+                        const bool red = effects_fx::riot_light_red(x, y, ms);
+                        speck(lx - u * 2.0, ly, u * 2.0, red ? 1.0 : 0.15, red ? 0.12 : 0.35, red ? 0.10 : 1.0, 1.0);
+                        speck(lx + u * 0.5, ly, u * 2.0, red ? 0.15 : 1.0, red ? 0.35 : 0.12, red ? 1.0 : 0.10, 1.0);
+                        if (!classic) {
+                            cairo_new_path(cr);
+                            cairo_arc(cr, lx, ly, u * 6.0, 0, 2 * look_fx::kPi);
+                            cairo_set_source_rgba(cr, red ? 1.0 : 0.2, 0.2, red ? 0.2 : 1.0, 0.16);
+                            cairo_fill(cr);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    cairo_restore(cr);
+    if (any) {
+        fx_animated_ = true;
+        fx_fast_ = true;
+    }
+}
+
 namespace {
 
 int luma(std::uint32_t rgb)
@@ -2787,8 +3009,21 @@ bool ghost_tiles(int tool, int &base, int &size)
 
 } // namespace
 
+void MapView::set_quake(int ms)
+{
+    quake_ms_ = 0;
+    quake_len_ = std::max(0, ms) + 1600;
+}
+
 void MapView::advance_ui(int elapsed_ms)
 {
+    if (quake_ms_ >= 0) {
+        quake_ms_ += std::max(0, elapsed_ms);
+        if (quake_ms_ >= quake_len_) {
+            quake_ms_ = -1;
+            ui_tail_ = true;
+        }
+    }
     for (Rise &rise : rises_) {
         rise.ms += std::max(0, elapsed_ms);
     }
@@ -2809,7 +3044,7 @@ void MapView::advance_ui(int elapsed_ms)
 
 bool MapView::ui_animating() const
 {
-    return pulse_ms_ >= 0 || !rises_.empty() || ui_tail_;
+    return pulse_ms_ >= 0 || !rises_.empty() || ui_tail_ || quake_ms_ >= 0;
 }
 
 void MapView::draw_ghost(cairo_t *cr, double x, double y, double w, double h) const
@@ -3121,3 +3356,4 @@ bool MapView::fx_water_cell(std::size_t index) const
     }
     return is_water_tile(cached_raw_[index]);
 }
+

@@ -480,6 +480,7 @@ void Shell::save_window_settings()
     stored.auto_goto = pref_auto_goto_ >= 0 ? pref_auto_goto_ : (session_.auto_goto() ? 1 : 0);
     stored.pause_unfocused = pause_unfocused_ ? 1 : 0;
     stored.wheel_zoom = wheel_zooms_ ? 1 : 0;
+    stored.screen_shake = screen_shake_ ? 1 : 0;
     // The drawn sheet may be Classic because an optional file is missing.
     // That is not the player's choice, so it is not what gets stored.
     stored.look = look_pref_.setting();
@@ -545,6 +546,9 @@ void Shell::apply_loaded_settings()
     }
     if (stored.wheel_zoom >= 0) {
         wheel_zooms_ = stored.wheel_zoom != 0;
+    }
+    if (stored.screen_shake >= 0) {
+        screen_shake_ = stored.screen_shake != 0;
     }
     set_look_preference(look_from_setting(stored.look));
     if (stored.milestone_notes >= 0) {
@@ -1518,7 +1522,12 @@ void Shell::loop()
                     std::chrono::duration_cast<std::chrono::milliseconds>(now_wall - quake_started_).count());
                 const int amp = std::max(2, quake_strength_ / 80);
                 const int step = gone / 50;
-                map_.set_shake((step % 2 == 0) ? amp : -amp, ((step / 2) % 2 == 0) ? (amp / 2) : -(amp / 2));
+                // The dust still rises with shake off; only the view stays put.
+                if (effects_fx::shake_allowed(screen_shake_, effects_)) {
+                    map_.set_shake((step % 2 == 0) ? amp : -amp, ((step / 2) % 2 == 0) ? (amp / 2) : -(amp / 2));
+                } else {
+                    map_.set_shake(0, 0);
+                }
             } else {
                 quake_strength_ = 0;
                 map_.set_shake(0, 0);
@@ -1585,6 +1594,7 @@ void Shell::loop()
             quake_started_ = std::chrono::steady_clock::now();
             const int milliseconds = std::max(400, std::min(strength, 1200));
             quake_until_ = quake_started_ + std::chrono::milliseconds(milliseconds);
+            map_.set_quake(milliseconds);
         }
         note_message();
         note_disaster_fx();

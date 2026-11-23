@@ -2806,11 +2806,11 @@ void Shell::draw_dialog(cairo_t *cr)
         const double stack_gap = static_cast<double>(dp(12));
         const SettingsStack volume_row = settings_stack(0, text_h, bar_h, stack_gap);
         const SettingsStack scale_row = settings_stack(volume_row.next_caption, text_h, bar_h, stack_gap);
-        // Nine switches in one column when the window is tall enough, else
-        // two columns (four and five) so the dialog still fits a 960x600 window.
-        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 9.0 + dp(8) + bh + margin;
+        // Ten switches in one column when the window is tall enough, else
+        // two columns (five and five) so the dialog still fits a 960x600 window.
+        const double one_column = dp(48) + margin + scale_row.next_caption + (bh + stack_gap) * 10.0 + dp(8) + bh + margin;
         const bool paired = one_column > win_h_ - 2.0 * margin;
-        const double toggles = (bh + stack_gap) * (paired ? 5.0 : 9.0);
+        const double toggles = (bh + stack_gap) * (paired ? 5.0 : 10.0);
         const double rows = scale_row.next_caption + toggles;
         const double height = dp(48) + margin + rows + dp(8) + bh + margin;
         const DialogRect panel = place_dialog(win_w_, band_h, paired ? dp(760) : dp(640), height, margin);
@@ -2920,6 +2920,8 @@ void Shell::draw_dialog(cairo_t *cr)
             autosave_state = autosave_owned.c_str();
         }
         left_row("Autosave", autosave_state, kAutosave, sy);
+        sy += bh + stack_gap;
+        left_row("Screen shake", screen_shake_ ? "On" : "Off", kShakeBox, sy);
         sy += bh + stack_gap;
         std::string layout_state = layout_mode::choice_label(layout_pref_);
         if (layout_mode::clamp_choice(layout_pref_) == layout_mode::Auto) {

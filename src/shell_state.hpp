@@ -688,6 +688,9 @@ private:
     bool overlay_on_ = false;
     bool wheel_zooms_ = false;
     bool open_wheel_zooms_ = false;
+    // Screen shake for quakes and other disasters (Settings).
+    bool screen_shake_ = true;
+    bool open_screen_shake_ = true;
     bool open_fullscreen_ = false;
     int controls_page_ = 0;
     int controls_scroll_ = 0;

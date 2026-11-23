@@ -104,6 +104,9 @@ public:
     int fx_ms() const { return fx_ms_; }
     // Storm wind for the swaying park trees (1 is a calm day).
     void set_wind(double wind) { wind_ = wind; }
+    // A quake is shaking for about ms: dust rises from the rubble while it
+    // does and for a moment after. Cosmetic only, on the UI clock.
+    void set_quake(int ms);
     // A new ambient step is due and the last frame had something moving.
     bool fx_frame_due() const;
     // The last frame drew 20 Hz particles (disasters, brownouts, parks).
@@ -156,6 +159,9 @@ private:
     };
     TileSpan visible_tiles(cairo_t *cr, int source, int pad) const;
     void draw_fire(cairo_t *cr, int source, const TileSpan &span, bool dusk);
+    // Floods, tornado debris, quake dust, riot haze and fire sparks over the
+    // map. Reads only map words, sprites and event state; no sim random.
+    void draw_disaster_fx(cairo_t *cr, int source, const TileSpan &span, bool dusk, double sprite_to_source);
     bool draw_water(cairo_t *cr, const TileSpan &span);
     void draw_clouds(cairo_t *cr, const TileSpan &span);
     // Unpowered buildings: a steady dim, and with Full effects a brief,
@@ -175,6 +181,8 @@ private:
     mutable int ghost_generation_ = -1;
     // Snap pulse when the footprint moves to a new cell; -1 is idle.
     int pulse_ms_ = -1;
+    int quake_ms_ = -1;
+    int quake_len_ = 0;
     // One more frame after a feedback animation ends, to clear its last look.
     mutable bool ui_tail_ = false;
     struct Rise {
