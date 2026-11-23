@@ -4,6 +4,7 @@
 
 #include "shell_state.hpp"
 #include "graph_solo.hpp"
+#include "ui_sounds.hpp"
 #include "assets.hpp"
 #include "layout_mode.hpp"
 
@@ -4877,6 +4878,7 @@ void Shell::absorb_placement_note()
         return;
     }
     const ToolFootprint foot = tool_footprint(note.tool);
+    play_cue(ui_sounds::cue_for_stroke(note.ok, note.tool == TOOL_BULLDOZER, short_build_reason(note.reason)));
     receipt_on_ = true;
     receipt_ok_ = note.ok;
     if (motion_on() && note.ok) {
@@ -5141,4 +5143,11 @@ void Shell::refresh_place_cue()
         }
     }
     map_.set_cue(cue);
+}
+
+void Shell::play_cue(int cue)
+{
+    if (!sound_.muted()) {
+        sound_.play_cue(cue);
+    }
 }

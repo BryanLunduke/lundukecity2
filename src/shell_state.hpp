@@ -340,6 +340,8 @@ private:
     void paint_vga_veil(cairo_t *cr);
     void refresh_place_cue();
     void absorb_placement_note();
+    // A synthesized interface cue (ui_sounds::Cue), unless sound is off.
+    void play_cue(int cue);
     void show_problem_on_map(int kind, bool alternate);
     void queue_milestones(const std::vector<int> &ids);
     void note_civic_month();
@@ -591,6 +593,8 @@ private:
     bool milestone_notes_ = true;
     int card_id_ = -1;
     int card_ms_ = 0;
+    // The last toast chime; a burst of notices chimes once.
+    std::chrono::steady_clock::time_point toast_cue_at_{};
     std::vector<int> card_queue_;
     int hover_edge_ms_ = 0;
     int tracked_hover_ = -1;

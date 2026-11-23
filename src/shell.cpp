@@ -47,6 +47,8 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include "ui_sounds.hpp"
+
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -1414,6 +1416,8 @@ void Shell::loop()
             card_id_ = card_queue_.front();
             card_queue_.erase(card_queue_.begin());
             card_ms_ = 0;
+            play_cue(card_id_ >= civic::Town && card_id_ <= civic::Megalopolis ? ui_sounds::Milestone
+                                                                               : ui_sounds::Toast);
         }
         absorb_placement_note();
         while (sim_acc >= 100) {
@@ -1507,7 +1511,8 @@ void Shell::loop()
             }
         }
         for (const std::string &name : session_.take_sounds()) {
-            if (!sound_.muted()) {
+            // "UhUh" and "Sorry" are the refusal the stroke's own cue already says.
+            if (!sound_.muted() && !ui_sounds::replaced_engine_sound(name)) {
                 sound_.play(name);
             }
         }
@@ -1544,6 +1549,7 @@ void Shell::loop()
                                   session_.city_month(), session_.generated_seed());
             if (dialog_ == Dialog::None) {
                 info_title_ = outcome > 0 ? "Scenario won" : "Scenario lost";
+                play_cue(outcome > 0 ? ui_sounds::Milestone : ui_sounds::Error);
                 info_body_ = session_.scenario_outcome_text(outcome > 0);
                 const int resume = session_.outcome_resume_speed();
                 if (resume > 0) {

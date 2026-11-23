@@ -40,6 +40,7 @@
 #include "side_widgets.hpp"
 #include "special_buildings.hpp"
 #include "tool_keys.hpp"
+#include "ui_sounds.hpp"
 #include "placement_hint.hpp"
 #include "tools.hpp"
 #include "version.hpp"
@@ -4912,6 +4913,12 @@ void Shell::sync_toasts(std::chrono::steady_clock::time_point now)
                 Toast toast{shown_message_, disaster, until, jump, toast_priority_for(shown_message_, disaster)};
                 toasts_.push_back(toast);
                 toast_trim(toasts_, kToastMax);
+                // Disasters bring their own siren; pause notes stay quiet.
+                if (!disaster && toast.priority != kToastPriorityPause &&
+                    now - toast_cue_at_ > std::chrono::milliseconds(1200)) {
+                    toast_cue_at_ = now;
+                    play_cue(ui_sounds::Toast);
+                }
             }
         } else if (!toasts_.empty() && toasts_.back().text == toast_last_text_) {
             toasts_.pop_back();

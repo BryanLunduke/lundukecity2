@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "sound_player.hpp"
+#include "ui_sounds.hpp"
 
 #include "assets.hpp"
 
@@ -570,6 +571,14 @@ void SoundPlayer::ensure_mixer()
         return;
     }
     mixer_->started = true;
+    {
+        // The interface cues are synthesized once, before the worker starts.
+        std::lock_guard<std::mutex> lock(mixer_->clip_mu);
+        for (int cue = 0; cue < ui_sounds::CueCount; ++cue) {
+            auto samples = std::make_shared<const std::vector<std::int16_t>>(ui_sounds::cue_samples(cue, kMixRate));
+            mixer_->clips.emplace(ui_sounds::cue_key(cue), std::move(samples));
+        }
+    }
     mixer_->muted = muted_.load();
     mixer_->gain.store(volume_.load());
     Mixer *mixer = mixer_.get();
@@ -603,5 +612,23 @@ bool SoundPlayer::play(const std::string &engine_name)
     }
     ensure_mixer();
     mixer_->request(found->second);
+    return true;
+}
+
+bool SoundPlayer::play_cue(int cue)
+{
+    if (muted_.load() || cue < 0 || cue >= ui_sounds::CueCount) {
+        return false;
+    }
+    if (const char *driver = SDL_GetCurrentAudioDriver()) {
+        if (std::strcmp(driver, "dummy") == 0) {
+            return false;
+        }
+    }
+    if (!probe() || !device_ok_) {
+        return false;
+    }
+    ensure_mixer();
+    mixer_->request(ui_sounds::cue_key(cue));
     return true;
 }
