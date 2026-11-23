@@ -593,6 +593,11 @@ private:
     bool milestone_notes_ = true;
     int card_id_ = -1;
     int card_ms_ = 0;
+    // Milestone ceremony (effects_fx): ms since it began, -1 when idle.
+    // ceremony_won_ puts it on the Scenario won box instead of the card.
+    int ceremony_ms_ = -1;
+    bool ceremony_won_ = false;
+    void draw_ceremony(cairo_t *cr, double x, double y, double w, double h);
     // The last toast chime; a burst of notices chimes once.
     std::chrono::steady_clock::time_point toast_cue_at_{};
     std::vector<int> card_queue_;

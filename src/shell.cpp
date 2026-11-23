@@ -47,6 +47,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include "effects_fx.hpp"
 #include "ui_sounds.hpp"
 
 #include <iostream>
@@ -1260,7 +1261,7 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.stamp_changed = visual_stamp() != visual_stamp_;
     reasons.exposed = window_exposed_;
     reasons.motion = scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                     puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due() || map_.ui_animating() ||
+                     puff_on_ || pop_on_ || flash_on_ || ceremony_ms_ >= 0 || map_.fx_frame_due() || map_.ui_animating() ||
                      funds_tick_.active() || demand_tick_.active();
     return reasons;
 }
@@ -1324,7 +1325,8 @@ void Shell::loop()
                 timeout = std::min(timeout, 30);
             }
             if (scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                puff_on_ || pop_on_ || flash_on_ || map_.ui_animating() || funds_tick_.active() || demand_tick_.active()) {
+                puff_on_ || pop_on_ || flash_on_ || ceremony_ms_ >= 0 || map_.ui_animating() || funds_tick_.active() ||
+                demand_tick_.active()) {
                 timeout = std::min(timeout, 16);
             }
             if (menu_.open() && menu_edge_dir_ != 0) {
@@ -1405,6 +1407,12 @@ void Shell::loop()
                 dwell_ms_ = 0;
             }
         }
+        if (ceremony_ms_ >= 0) {
+            ceremony_ms_ += elapsed;
+            if (ceremony_ms_ >= effects_fx::kCeremonyMs) {
+                ceremony_ms_ = -1;
+            }
+        }
         if (card_id_ >= 0 && dialog_ == Dialog::None && !map_.dragging()) {
             card_ms_ += elapsed;
             if (card_ms_ > 3200) {
@@ -1416,6 +1424,8 @@ void Shell::loop()
             card_id_ = card_queue_.front();
             card_queue_.erase(card_queue_.begin());
             card_ms_ = 0;
+            ceremony_won_ = false;
+            ceremony_ms_ = motion_on() && effects_fx::ceremony_for_milestone(card_id_, civic::Town, civic::Megalopolis) ? 0 : -1;
             play_cue(card_id_ >= civic::Town && card_id_ <= civic::Megalopolis ? ui_sounds::Milestone
                                                                                : ui_sounds::Toast);
         }
@@ -1550,6 +1560,8 @@ void Shell::loop()
             if (dialog_ == Dialog::None) {
                 info_title_ = outcome > 0 ? "Scenario won" : "Scenario lost";
                 play_cue(outcome > 0 ? ui_sounds::Milestone : ui_sounds::Error);
+                ceremony_won_ = outcome > 0;
+                ceremony_ms_ = outcome > 0 && motion_on() ? 0 : -1;
                 info_body_ = session_.scenario_outcome_text(outcome > 0);
                 const int resume = session_.outcome_resume_speed();
                 if (resume > 0) {

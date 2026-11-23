@@ -40,6 +40,7 @@
 #include "side_widgets.hpp"
 #include "special_buildings.hpp"
 #include "tool_keys.hpp"
+#include "effects_fx.hpp"
 #include "ui_sounds.hpp"
 #include "placement_hint.hpp"
 #include "tools.hpp"
@@ -2786,6 +2787,15 @@ void Shell::draw_dialog(cairo_t *cr)
         label(cr, body_font(), info_body_, panel.x + margin, panel.y + dp(48), static_cast<int>(panel.w - 2 * margin));
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - dp(36),
                    {{"Stay _paused", kStay}, {"_Scenario list", kScenarioList}, {"_Keep playing", kKeep}});
+        if (info_title_ == "Scenario won") {
+            // A gold rule under the title, and the ceremony's burst over it.
+            cairo_set_source_rgb(cr, 0.96, 0.78, 0.22);
+            cairo_rectangle(cr, panel.x + margin, panel.y + dp(40), panel.w - 2 * margin, std::max(1, dp(2)));
+            cairo_fill(cr);
+            if (ceremony_won_ && ceremony_ms_ >= 0) {
+                draw_ceremony(cr, panel.x, panel.y, panel.w, dp(44));
+            }
+        }
         return;
     }
     if (dialog_ == Dialog::Settings) {
@@ -4353,6 +4363,13 @@ void Shell::draw(cairo_t *cr)
             // gives the alerts stacked above this card.
             card_y -= dp(44);
         }
+        const bool grand = effects_fx::ceremony_for_milestone(card_id_, civic::Town, civic::Megalopolis);
+        const int pop_ms = grand && !ceremony_won_ ? ceremony_ms_ : -1;
+        const double pop = effects_fx::ceremony_scale(pop_ms);
+        cairo_save(cr);
+        cairo_translate(cr, card_x + card_w / 2.0, card_y + card_h / 2.0);
+        cairo_scale(cr, pop, pop);
+        cairo_translate(cr, -(card_x + card_w / 2.0), -(card_y + card_h / 2.0));
         if (slate_ || handheld_) {
             draw_slate_milestone(cr, card_x, card_y, card_w, card_h);
         } else {
@@ -4363,6 +4380,18 @@ void Shell::draw(cairo_t *cr)
                        static_cast<int>(card_w - 28));
             paint_text(cr, ui_font(), civic::milestone_card(card_id_), card_x + 8, card_y + dp(28), 0, 0, 0,
                        static_cast<int>(card_w - 16));
+        }
+        if (grand) {
+            // A population milestone wears a gold double rule, even with
+            // the Effects off; the burst and the shine are the motion.
+            cairo_set_source_rgb(cr, 0.96, 0.78, 0.22);
+            cairo_set_line_width(cr, std::max(1.0, static_cast<double>(dp(2))));
+            cairo_rectangle(cr, card_x + dp(3), card_y + dp(3), card_w - dp(6), card_h - dp(6));
+            cairo_stroke(cr);
+        }
+        cairo_restore(cr);
+        if (pop_ms >= 0) {
+            draw_ceremony(cr, card_x, card_y, card_w, card_h);
         }
         push_hot(card_x + card_w - dp(22), card_y + 4, dp(18), dp(18), kCardDismiss);
     }
@@ -6381,6 +6410,52 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     }
     const std::string shown_news = fit_text(cr, ui_font(), news, static_cast<int>(right - news_x));
     slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() || staleness > 0 ? kSlateDim : kSlateInk);
+}
+
+void Shell::draw_ceremony(cairo_t *cr, double x, double y, double w, double h)
+{
+    // The milestone ceremony over a card or the Scenario won box: a light
+    // sweep across the title, then a burst of square confetti from the
+    // top edge that falls and fades. Hard-edged pieces on whole pixels.
+    const int ms = ceremony_ms_;
+    if (ms < 0) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    const double shine = effects_fx::ceremony_shine(ms);
+    if (shine >= 0.0) {
+        cairo_save(cr);
+        cairo_rectangle(cr, x, y, w, h);
+        cairo_clip(cr);
+        const double band = std::max(10.0, static_cast<double>(dp(18)));
+        const double bx = x - band * 2.0 + shine * (w + band * 3.0);
+        cairo_move_to(cr, bx, y + h);
+        cairo_line_to(cr, bx + band, y + h);
+        cairo_line_to(cr, bx + band * 2.0, y);
+        cairo_line_to(cr, bx + band, y);
+        cairo_close_path(cr);
+        cairo_set_source_rgba(cr, 1.0, 0.97, 0.80, 0.38 * std::sin(look_fx::kPi * shine));
+        cairo_fill(cr);
+        cairo_restore(cr);
+    }
+    const double unit = std::max(1.0, std::round(dp(1) * 1.5));
+    const double spread = std::max(40.0, w * 0.34);
+    const double ox = x + w / 2.0;
+    const double oy = y + std::max(2.0, static_cast<double>(dp(4)));
+    for (int i = 0; i < effects_fx::kConfettiCount; ++i) {
+        const effects_fx::Confetto piece = effects_fx::confetto(i, ms, spread);
+        if (piece.alpha <= 0.0) {
+            continue;
+        }
+        const double *rgb = effects_fx::kConfettiRgb[piece.color];
+        const double pw = (piece.tall ? 2.0 : 4.0) * unit;
+        const double ph = (piece.tall ? 4.0 : 2.0) * unit;
+        cairo_set_source_rgba(cr, rgb[0], rgb[1], rgb[2], piece.alpha);
+        cairo_rectangle(cr, std::round(ox + piece.x - pw / 2.0), std::round(oy + piece.y - ph / 2.0), pw, ph);
+        cairo_fill(cr);
+    }
+    cairo_restore(cr);
 }
 
 void Shell::draw_slate_milestone(cairo_t *cr, double card_x, double card_y, double card_w, double card_h)
