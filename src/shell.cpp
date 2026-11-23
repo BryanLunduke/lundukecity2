@@ -3000,11 +3000,22 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
             if (!menu_.open() && dialog_ == Dialog::None) {
-                cycle_tool(dir);
-                shoulder_hold_dir_ = dir;
-                shoulder_hold_fresh_ = true;
-                shoulder_hold_ms_ = 0;
-                shoulder_hold_steps_ = 0;
+                if (terrain_edit_) {
+                    cycle_tool(dir);
+                } else {
+                    int preview = tool_index_ + dir;
+                    if (preview < 0) {
+                        preview = kToolCount - 1;
+                    }
+                    if (preview >= kToolCount) {
+                        preview = 0;
+                    }
+                    shoulder_preview_ = preview;
+                    shoulder_hold_dir_ = dir;
+                    shoulder_hold_fresh_ = true;
+                    shoulder_hold_ms_ = 0;
+                    shoulder_hold_steps_ = 0;
+                }
             }
             break;
         }
@@ -3033,10 +3044,14 @@ void Shell::handle_event(const SDL_Event &event)
         {
             const int up_act = pad_act_for_button(binds_, static_cast<int>(button));
             if ((up_act == PadPrevTool && shoulder_hold_dir_ < 0) || (up_act == PadNextTool && shoulder_hold_dir_ > 0)) {
+                if (shoulder_preview_ >= 0 && dialog_ == Dialog::None && !menu_.open() && !terrain_edit_) {
+                    select_tool(shoulder_preview_);
+                }
                 shoulder_hold_dir_ = 0;
                 shoulder_hold_fresh_ = false;
                 shoulder_hold_ms_ = 0;
                 shoulder_hold_steps_ = 0;
+                shoulder_preview_ = -1;
             }
         }
         if (pad_act_for_button(binds_, static_cast<int>(button)) == PadPause) {

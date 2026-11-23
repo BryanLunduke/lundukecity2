@@ -1219,12 +1219,15 @@ void Shell::service_gamepad(int elapsed_ms)
     } else if (shoulder_hold_dir_ != 0) {
         if (dialog_ != Dialog::None || menu_.open()) {
             shoulder_hold_dir_ = 0;
+            shoulder_preview_ = -1;
         } else {
             shoulder_hold_ms_ += elapsed_ms;
             // First section jump after 450 ms, then one every 300 ms.
+            // The current tool stays put until the shoulder is released.
             const int due = 450 + shoulder_hold_steps_ * 300;
             if (shoulder_hold_ms_ >= due) {
-                select_tool(tool_groups::section_jump(tool_index_, shoulder_hold_dir_, kToolCount));
+                const int from = shoulder_preview_ >= 0 ? shoulder_preview_ : tool_index_;
+                shoulder_preview_ = tool_groups::section_jump(from, shoulder_hold_dir_, kToolCount);
                 ++shoulder_hold_steps_;
             }
         }

@@ -6706,9 +6706,15 @@ void Shell::draw_handheld_hud(cairo_t *cr)
     if (!menu_.open()) {
         const int count = kToolCount;
         int shown_tool = palette_.focus() >= 0 ? palette_.focus() : tool_index_;
+        if (shoulder_hold_dir_ != 0 && shoulder_preview_ >= 0 && shoulder_preview_ < count) {
+            shown_tool = shoulder_preview_;
+        }
         if (shown_tool < 0 || shown_tool >= count) {
             shown_tool = -1;
         }
+        const int label_tool = (shoulder_hold_dir_ != 0 && shoulder_preview_ >= 0 && shoulder_preview_ < count)
+                                   ? shoulder_preview_
+                                   : tool_index_;
         double xs[kToolCount] = {};
         double ws[kToolCount] = {};
         const double big = static_cast<double>(quick_h_);
@@ -6741,7 +6747,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         }
         for (int i = 0; i < count; ++i) {
             const double slot = ws[i];
-            const bool chosen = i == tool_index_;
+            const bool chosen = i == label_tool;
             const double sx = xs[i];
             // Smaller slots sit on the bar's middle line.
             const double sy = quick_y_ + dp(4) + (big - slot) / 2.0 - (chosen ? lift : 0);
@@ -6833,9 +6839,13 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             slate_round(cr, bar_x + bar_w + dp(8), ky, kw, m.height + dp(6), dp(4), kSlatePanel, 0.95);
             slate_text(cr, tag_font(), next, bar_x + bar_w + dp(8) + dp(6), ky + dp(3), kSlateInk);
         }
-        // Tool name and price above the raised slot.
-        if (tool_index_ >= 0 && tool_index_ < count && !open_ui) {
-            const ToolDef *tool = tool_by_index(tool_index_);
+        // Tool name and price above the raised slot. While L1/R1 is held,
+        // this is the previewed tool (and its section); releasing picks it.
+        if (label_tool >= 0 && label_tool < count && !open_ui) {
+            const ToolDef *tool = tool_by_index(label_tool);
+            const int group = tool_groups::group_of(label_tool);
+            const char *section = group >= 0 ? tool_groups::groups()[group].title
+                                             : (label_tool == kToolCount - 1 ? "INSPECT" : nullptr);
             std::string caption = tool != nullptr ? tool->name : "";
             if (tool != nullptr && tool->cost > 0) {
                 caption += "  " + civic::dollars(tool->cost);
@@ -6862,15 +6872,25 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             const TextMetrics m = measure_text(cr, bold_font(), caption, -1);
             const int about_room = static_cast<int>(std::max(1.0, std::min(win_w_ - dp(32) * 1.0, dp(560) * 1.0)));
             const TextMetrics am = about.empty() ? TextMetrics{} : measure_text(cr, ui_font(), about, about_room);
-            const double cw = std::max(static_cast<double>(m.width), static_cast<double>(am.width)) + dp(16);
-            const double ch = m.height + (about.empty() ? 0.0 : am.height + dp(2)) + dp(8);
-            double cx = xs[tool_index_] + ws[tool_index_] / 2.0 - cw / 2.0;
+            const bool show_section = shoulder_hold_dir_ != 0 && section != nullptr && section[0] != '\0';
+            const TextMetrics sm = show_section ? measure_text(cr, tag_font(), section, -1) : TextMetrics{};
+            const double cw = std::max(std::max(static_cast<double>(m.width), static_cast<double>(am.width)),
+                                       static_cast<double>(sm.width)) +
+                              dp(16);
+            const double ch = (show_section ? sm.height + dp(2) : 0.0) + m.height +
+                              (about.empty() ? 0.0 : am.height + dp(2)) + dp(8);
+            double cx = xs[label_tool] + ws[label_tool] / 2.0 - cw / 2.0;
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
-            slate_text(cr, bold_font(), caption, cx + dp(8), cy + dp(4), kSlateGold);
+            double text_y = cy + dp(4);
+            if (show_section) {
+                slate_text(cr, tag_font(), section, cx + dp(8), text_y, kSlateGoldDim);
+                text_y += sm.height + dp(2);
+            }
+            slate_text(cr, bold_font(), caption, cx + dp(8), text_y, kSlateGold);
             if (!about.empty()) {
-                paint_text(cr, ui_font(), about, cx + dp(8), cy + dp(4) + m.height + dp(2), kSlateInk.r, kSlateInk.g,
+                paint_text(cr, ui_font(), about, cx + dp(8), text_y + m.height + dp(2), kSlateInk.r, kSlateInk.g,
                            kSlateInk.b, about_room);
             }
         }

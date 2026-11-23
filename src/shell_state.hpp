@@ -914,12 +914,14 @@ private:
     bool y_hold_fresh_ = false;
     int y_hold_ms_ = 0;
     bool y_hold_fired_ = false;
-    // L1/R1 held: after a short wait the tool jumps a whole toolbar section
-    // at a time (tool_groups::section_jump) instead of one slot.
+    // L1/R1 held: the preview tool is shown (section, name, and price) and
+    // only selected when the shoulder is released. After a short wait the
+    // preview jumps a whole toolbar section (tool_groups::section_jump).
     int shoulder_hold_dir_ = 0;
     bool shoulder_hold_fresh_ = false;
     int shoulder_hold_ms_ = 0;
     int shoulder_hold_steps_ = 0;
+    int shoulder_preview_ = -1;
     bool nav_repeat_fresh_ = false;
     bool budget_was_dirty_ = false;
     float raw_lx_ = 0.0f;
