@@ -161,6 +161,13 @@ private:
     // Unpowered buildings: a steady dim, and with Full effects a brief,
     // irregular dip per zone (effects_fx::brownout_dim).
     void draw_brownout(cairo_t *cr, int source, const TileSpan &span);
+    // Parks, fountains and the Marina: canopies sway a pixel in the wind,
+    // the fountain jets spray, and boats bob on their berths. Drawn over
+    // the map from the map's own pixels; the sheets are never changed.
+    void draw_living(cairo_t *cr, const TileSpan &span, bool dusk);
+    // Table row * 16 + sheet cell + 1 for a landmark cell, 0 elsewhere.
+    std::vector<int> special_slot_;
+    cairo_surface_t *bob_patch_ = nullptr;
     void draw_ghost(cairo_t *cr, double x, double y, double w, double h) const;
     // The tool's own tiles from the drawn sheet, for the placement ghost.
     mutable cairo_surface_t *ghost_pixels_ = nullptr;

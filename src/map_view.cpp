@@ -81,6 +81,10 @@ MapView::~MapView()
         cairo_surface_destroy(dirt_pixels_);
         dirt_pixels_ = nullptr;
     }
+    if (bob_patch_ != nullptr) {
+        cairo_surface_destroy(bob_patch_);
+        bob_patch_ = nullptr;
+    }
 }
 
 bool MapView::tick(int elapsed_ms)
@@ -269,6 +273,9 @@ void MapView::ensure_surface()
     }
     if (special_cell_.size() != cells) {
         special_cell_.assign(cells, 0);
+    }
+    if (special_slot_.size() != cells) {
+        special_slot_.assign(cells, 0);
     }
 }
 
@@ -919,6 +926,7 @@ void MapView::sync()
             const int special_key = special_display_key(session_, x, y, special_index, special_cell);
             if (special_cell_.size() == cached_raw_.size()) {
                 special_cell_[index] = special_key == 0 ? 0 : special_basin_cell(special_index, special_cell) ? 2 : 1;
+                special_slot_[index] = special_key == 0 ? 0 : special_index * 16 + special_cell + 1;
             }
             if (special_key != 0) {
                 const bool bolt = special_center_needs_bolt(raw, special_index, special_cell, blink_on_);
@@ -1510,6 +1518,9 @@ void MapView::draw(cairo_t *cr)
     }
 
     fx_fast_ = false;
+    if (!night_hold_ && source == TileAtlas::kSize && look_fx::ambient_allowed(effects_)) {
+        draw_living(cr, visible_tiles(cr, source, 0), dusk);
+    }
     if (!night_hold_) {
         draw_brownout(cr, source, visible_tiles(cr, source, 1));
     }
@@ -1553,6 +1564,145 @@ void MapView::draw(cairo_t *cr)
     cairo_restore(cr);
     if (fx_fast_) {
         fx_fast_drawn_ = fx_ms_ / 50;
+    }
+}
+
+void MapView::draw_living(cairo_t *cr, const TileSpan &span, bool dusk)
+{
+    if (cached_raw_.empty() || special_slot_.size() != cached_raw_.size()) {
+        return;
+    }
+    cairo_surface_t *base = dusk && night_pixels_ != nullptr ? night_pixels_ : map_pixels_;
+    const int kTile = TileAtlas::kSize;
+    const int art_w = CitySession::kWorldW * kTile;
+    const int ms = fx_ms_;
+    const bool classic = classic_fx();
+    int park_row = -1;
+    int fountain_row = -1;
+    for (int i = 0; i < special_building_count(); ++i) {
+        if (special_building(i).center_tile == 1021) {
+            park_row = i;
+        } else if (special_building(i).center_tile == SPECIAL_FOUNTAIN) {
+            fountain_row = i;
+        }
+    }
+    bool moved = false;
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    cairo_surface_flush(base);
+    const unsigned char *pixels = cairo_image_surface_get_data(base);
+    const int stride = cairo_image_surface_get_stride(base);
+    for (int y = span.y0; y < span.y1; ++y) {
+        for (int x = span.x0; x < span.x1; ++x) {
+            const std::size_t index = static_cast<std::size_t>(y * CitySession::kWorldW + x);
+            const int raw = cached_raw_[index];
+            const int tile = raw < 0 ? -1 : (raw & LOMASK);
+            const int slot = special_slot_[index];
+            const int row = slot > 0 ? (slot - 1) / 16 : -1;
+            const int cell = slot > 0 ? (slot - 1) % 16 : -1;
+            const double ox = x * static_cast<double>(kTile);
+            const double oy = y * static_cast<double>(kTile);
+            const bool park_tree = slot == 0 && tile >= WOODS2 && tile <= WOODS5;
+            const bool big_tree = row == park_row && (cell == 0 || cell == 2 || cell == 6 || cell == 8);
+            if (park_tree || big_tree) {
+                // The canopy (top 11 rows) leans a pixel with the gust;
+                // trunks and the ground stay put.
+                const int dx = effects_fx::sway_dx(x, y, ms, wind_);
+                moved = true;
+                if (dx != 0) {
+                    cairo_save(cr);
+                    cairo_rectangle(cr, ox, oy, kTile, 11);
+                    cairo_clip(cr);
+                    cairo_set_source_surface(cr, base, dx, 0);
+                    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+                    cairo_paint(cr);
+                    cairo_restore(cr);
+                }
+                continue;
+            }
+            const bool jet = (row == fountain_row && fountain_row >= 0 && cell == 0) ||
+                             (row == park_row && park_row >= 0 && cell == 4);
+            if (jet) {
+                // Spray from the jet: light droplets rising and falling
+                // back into the basin, and a flickering crest.
+                // Jet over the middle of each basin in the special art.
+                const double jx = ox + (row == fountain_row ? 9.0 : 11.5);
+                const double jy = oy + (row == fountain_row ? 7.5 : 5.5);
+                const double radius = row == fountain_row ? 3.2 : 4.0;
+                for (int k = 0; k < effects_fx::kSprayDrops; ++k) {
+                    double dx = 0;
+                    double dy = 0;
+                    double alpha = 0;
+                    effects_fx::spray_drop(k, ms, radius, dx, dy, alpha);
+                    if (alpha <= 0.05) {
+                        continue;
+                    }
+                    cairo_new_path(cr);
+                    cairo_rectangle(cr, std::round(jx + dx), std::round(jy + dy), 1, 1);
+                    look_fx::fill_fx(cr, 0.93, 0.98, 1.0, classic ? 1.0 : alpha, false);
+                }
+                const int crest = (ms / 120) % 3;
+                cairo_new_path(cr);
+                cairo_rectangle(cr, std::round(jx), std::round(jy) - 2 - crest, 1, 2);
+                look_fx::fill_fx(cr, 1.0, 1.0, 1.0, classic ? 1.0 : 0.9, false);
+                moved = true;
+                continue;
+            }
+            if (special_cell_[index] == 2) {
+                // Marina berth: the light hull pixels drop a pixel on the
+                // swell and the water closes over where they were.
+                moved = true;
+                if (effects_fx::bob_dy(x, y, ms) == 0 || pix_class_.empty()) {
+                    continue;
+                }
+                if (bob_patch_ == nullptr) {
+                    bob_patch_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, kTile, kTile);
+                }
+                cairo_surface_flush(bob_patch_);
+                unsigned char *patch = cairo_image_surface_get_data(bob_patch_);
+                const int pstride = cairo_image_surface_get_stride(bob_patch_);
+                auto src_px = [&](int r, int c) {
+                    return *reinterpret_cast<const std::uint32_t *>(pixels + (y * kTile + r) * stride + (x * kTile + c) * 4);
+                };
+                auto hull = [&](int r, int c) {
+                    const std::size_t at = static_cast<std::size_t>(y * kTile + r) * art_w + static_cast<std::size_t>(x * kTile + c);
+                    if (at >= pix_class_.size() || (pix_class_[at] & 31u) != 0) {
+                        return false;
+                    }
+                    const std::uint32_t v = src_px(r, c);
+                    const int light = static_cast<int>(((v >> 16) & 255u) * 3 + ((v >> 8) & 255u) * 6 + (v & 255u));
+                    return light > 1300;
+                };
+                for (int c = 0; c < kTile; ++c) {
+                    std::uint32_t water = water_rgb_.empty() ? 0xff203870u : (0xff000000u | water_rgb_.front());
+                    for (int r = 0; r < kTile; ++r) {
+                        const std::size_t at = static_cast<std::size_t>(y * kTile + r) * art_w + static_cast<std::size_t>(x * kTile + c);
+                        if (at < pix_class_.size() && (pix_class_[at] & 31u) != 0) {
+                            water = src_px(r, c);
+                            break;
+                        }
+                    }
+                    for (int r = 0; r < kTile; ++r) {
+                        std::uint32_t out = src_px(r, c);
+                        if (r > 0 && hull(r - 1, c)) {
+                            out = src_px(r - 1, c);
+                        } else if (hull(r, c)) {
+                            out = water;
+                        }
+                        *reinterpret_cast<std::uint32_t *>(patch + r * pstride + c * 4) = out | 0xff000000u;
+                    }
+                }
+                cairo_surface_mark_dirty(bob_patch_);
+                cairo_set_source_surface(cr, bob_patch_, ox, oy);
+                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+                cairo_rectangle(cr, ox, oy, kTile, kTile);
+                cairo_fill(cr);
+            }
+        }
+    }
+    cairo_restore(cr);
+    if (moved) {
+        fx_animated_ = true;
     }
 }
 
