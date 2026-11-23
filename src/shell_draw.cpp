@@ -23,6 +23,7 @@
 #include "layout_mode.hpp"
 #include "tool_groups.hpp"
 #include "list_scroll.hpp"
+#include "mayor_notes.hpp"
 #include "messages.hpp"
 #include "notice_bar.hpp"
 #include "present.hpp"
@@ -4800,8 +4801,12 @@ void Shell::sync_toasts(std::chrono::steady_clock::time_point now)
             const auto until = now + std::chrono::milliseconds(kToastMs);
             if (!toasts_.empty() && toasts_.back().text == shown_message_) {
                 toasts_.back().until = until;
+                if (mayor_note_is(shown_message_)) {
+                    toasts_.back().jump_kind = mayor_note_kind_;
+                }
             } else {
-                toasts_.push_back(Toast{shown_message_, notice_is_disaster(shown_message_), until});
+                const int jump = mayor_note_is(shown_message_) ? mayor_note_kind_ : -1;
+                toasts_.push_back(Toast{shown_message_, notice_is_disaster(shown_message_), until, jump});
                 if (toasts_.size() > kToastMax) {
                     toasts_.erase(toasts_.begin());
                 }
@@ -4939,6 +4944,10 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
         const BannerColors colors = message_bar_colors(it->disaster, look);
         if (!plate(it->text, colors, 0, 0, 0, it->disaster, alpha, x, y, w, h)) {
             break;
+        }
+        if (it->jump_kind >= 0) {
+            const int index = static_cast<int>(std::distance(toasts_.begin(), it.base()) - 1);
+            push_hot(x, y, w, h, kToastItem + index);
         }
     }
     cairo_restore(cr);

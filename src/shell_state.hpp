@@ -343,6 +343,7 @@ private:
     void show_problem_on_map(int kind, bool alternate);
     void queue_milestones(const std::vector<int> &ids);
     void note_civic_month();
+    void maybe_mayor_note();
     bool return_from_overlay();
     const char *glyph(SDL_GamepadButton button) const;
     const char *glyph_for(int pad_act) const;
@@ -842,8 +843,14 @@ private:
         std::string text;
         bool disaster = false;
         std::chrono::steady_clock::time_point until{};
+        // civic::advice_for kind to jump to when the toast is clicked. -1 = none.
+        int jump_kind = -1;
     };
     std::vector<Toast> toasts_;
+    // Last mid-year mayor's note: stamp is year*12+month. -1 = none yet.
+    int mayor_note_checked_ = -1;
+    int mayor_note_last_ = -1;
+    int mayor_note_kind_ = -1;
     std::chrono::steady_clock::time_point toast_seen_until_{};
     std::string toast_last_text_;
     static constexpr int kToastMs = 5000;

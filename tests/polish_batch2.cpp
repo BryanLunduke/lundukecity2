@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
+#include "mayor_notes.hpp"
 #include "scenario_briefing.hpp"
 #include "scenario_scorebook.hpp"
 
@@ -195,6 +196,28 @@ int main()
     if (scenario_years_label(1) != "1 year" || scenario_years_label(30) != "30 years") {
         remove_temp_dir(dir);
         return fail("years label");
+    }
+
+    // Mid-year mayor's notes: one per quarter, and only a real top complaint.
+    if (mayor_note_stamp(1901, 3) != 1901 * 12 + 3) {
+        remove_temp_dir(dir);
+        return fail("mayor note stamp");
+    }
+    if (!mayor_note_due(100, -1) || mayor_note_due(100, 98) || !mayor_note_due(100, 97)) {
+        remove_temp_dir(dir);
+        return fail("mayor note should wait about a quarter");
+    }
+    if (mayor_note_has_complaint(0, 9, false) || mayor_note_has_complaint(0, 10, true) ||
+        mayor_note_has_complaint(-1, 40, false) || !mayor_note_has_complaint(0, 10, false)) {
+        remove_temp_dir(dir);
+        return fail("mayor note should need a real top complaint");
+    }
+    const std::string note = mayor_note_text(0);
+    if (!mayor_note_is(note) || note.find("Crime") == std::string::npos ||
+        note.find("Tip: put police stations near homes.") == std::string::npos) {
+        remove_temp_dir(dir);
+        std::fprintf(stderr, "note: %s\n", note.c_str());
+        return fail("mayor note should reuse civic advice_for copy");
     }
 
     remove_temp_dir(dir);

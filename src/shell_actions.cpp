@@ -16,6 +16,7 @@
 #include "text_edit.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
+#include "mayor_notes.hpp"
 #include "messages.hpp"
 #include "present.hpp"
 #include "special_buildings.hpp"
@@ -3007,6 +3008,13 @@ void Shell::on_hotspot(int id, double x, double y)
     if (on_terrain_hotspot(id)) {
         return;
     }
+    if (dialog_ == Dialog::None && !menu_.open() && id >= kToastItem && id < kToastItem + 8) {
+        const int index = id - kToastItem;
+        if (index >= 0 && index < static_cast<int>(toasts_.size()) && toasts_[static_cast<std::size_t>(index)].jump_kind >= 0) {
+            show_problem_on_map(toasts_[static_cast<std::size_t>(index)].jump_kind, false);
+        }
+        return;
+    }
     if (dialog_ == Dialog::NewCity && id != terrain_confirm_id_) {
         // A warning that a control would drop the painted map holds only
         // until something else is pressed.
@@ -4925,6 +4933,36 @@ void Shell::queue_milestones(const std::vector<int> &ids)
 void Shell::note_civic_month()
 {
     queue_milestones(session_.note_civic_month(true));
+    maybe_mayor_note();
+}
+
+void Shell::maybe_mayor_note()
+{
+    if (!city_chosen_ || welcome_gate_ || terrain_edit_ || dialog_ != Dialog::None || menu_.open()) {
+        return;
+    }
+    const int stamp = mayor_note_stamp(session_.city_year(), session_.city_month());
+    if (stamp == mayor_note_checked_) {
+        return;
+    }
+    mayor_note_checked_ = stamp;
+    if (!mayor_note_due(stamp, mayor_note_last_)) {
+        return;
+    }
+    session_.update_evaluation();
+    const CitySession::Evaluation report = session_.evaluation();
+    if (report.problems.empty()) {
+        return;
+    }
+    const CitySession::Problem &top = report.problems[0];
+    if (!mayor_note_has_complaint(top.kind, top.votes, report.no_residents)) {
+        return;
+    }
+    shown_message_ = mayor_note_text(top.kind);
+    shown_message_serial_ = session_.message_serial();
+    hint_until_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kToastMs);
+    mayor_note_kind_ = top.kind;
+    mayor_note_last_ = stamp;
 }
 
 bool Shell::return_from_overlay()
