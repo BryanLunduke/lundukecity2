@@ -3389,18 +3389,31 @@ void Shell::draw_dialog(cairo_t *cr)
         const int legend_rows = series_rows + 1;
         const double legend_h = legend_rows * static_cast<double>(dp(20));
         const double width = std::min(static_cast<double>(dp(640)), std::max(1.0, win_w_ - 2.0 * margin));
-        const double height = dp(86) + dp(220) + dp(8) + legend_h + dp(12) + dp(36) + margin;
-        const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        const double height = graph_rolled_ ? dp(92) :
+            dp(86) + dp(220) + dp(8) + legend_h + dp(32) + dp(36) + margin;
+        DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
+        if (graph_rolled_) {
+            // Rolled up, the strip sits at the top of the map, out of the city's way.
+            panel.y = view_y_ + dp(8);
+        }
         const double x = panel.x;
         const double y = panel.y;
         const double dw = panel.w;
         const double dh = panel.h;
         frame_panel(cr, x, y, dw, dh, "Graphs");
+        button(cr, x + dw - margin - dp(132), y + dp(6), dp(132), dp(30),
+               graph_rolled_ ? "Expand" : "Roll up", kGraphRoll, false);
+        if (graph_rolled_) {
+            paint_text(cr, ui_font(), "Graphs rolled up — city keeps running", x + margin, y + dp(54),
+                       theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(110)));
+            button(cr, x + dw - margin - dp(96), y + dp(48), dp(96), dp(32), "Close", kClose, false);
+            return;
+        }
         button(cr, x + margin, y + dp(46), dp(140), dp(32), "10 year", kShortScale, false, !graphs_long_);
         button(cr, x + margin + dp(148), y + dp(46), dp(140), dp(32), "120 year", kLongScale, false, graphs_long_);
         const double legend_row_h = dp(20);
         const double button_top = y + dh - margin - dp(36);
-        const double legend_top = button_top - dp(12) - legend_h;
+        const double legend_top = button_top - dp(32) - legend_h;
         const double chart_top = y + dp(86);
         const double chart_h = std::max(static_cast<double>(dp(64)), legend_top - dp(8) - chart_top);
         {
@@ -3461,6 +3474,8 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, ui_font(), "Dashed line: middle of each series", nx + dp(24), note_y, theme::kTextR,
                        theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(24)));
         }
+        paint_text(cr, ui_font(), "Click a series to solo; click it again for all.", x + margin,
+                   button_top - dp(20), theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin));
         buttons_at(x, dw, button_top, {{"_Close", kClose}});
         return;
     }

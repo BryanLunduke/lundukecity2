@@ -98,6 +98,7 @@ enum HotspotId : int {
 
     // The history chart. Left and right read a value. It is not a button.
     kGraphPlot = 180,
+    kGraphRoll = 181,
 
     kMenuItem = 1000,
     kRecentItem = 2000,

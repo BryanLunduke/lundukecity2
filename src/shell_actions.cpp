@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "graph_solo.hpp"
 #include "assets.hpp"
 #include "layout_mode.hpp"
 
@@ -3253,8 +3254,14 @@ void Shell::on_hotspot(int id, double x, double y)
         }
         return;
     }
+    if (id == kGraphRoll && dialog_ == Dialog::Graphs) {
+        graph_rolled_ = !graph_rolled_;
+        graph_pointer_x_ = -1;
+        focus_id_ = kGraphRoll;
+        return;
+    }
     if (id >= kGraphSeries && id < kGraphSeries + 16 && dialog_ == Dialog::Graphs) {
-        graph_mask_ ^= 1 << (id - kGraphSeries);
+        graph_mask_ = graph_solo_mask(graph_mask_, id - kGraphSeries);
         focus_id_ = id;
         return;
     }

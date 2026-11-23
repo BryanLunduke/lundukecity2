@@ -659,6 +659,7 @@ private:
     int fire_ = 100;
     bool graphs_long_ = false;
     int graph_mask_ = 0x7f;
+    bool graph_rolled_ = false;
     int graph_pointer_x_ = -1;
     double graph_chart_x_ = 0;
     double graph_chart_y_ = 0;
