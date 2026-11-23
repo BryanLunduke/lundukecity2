@@ -702,6 +702,10 @@ void Shell::draw_menubar(cairo_t *cr)
     }
 }
 
+void paint_glance_swatch(cairo_t *cr, const CityGlance &glance, double x, double y, double tw, double th);
+std::string city_file_title(const std::string &path);
+std::string glance_stats_line(const CityGlance &glance);
+
 void Shell::draw_menu_dropdown(cairo_t *cr)
 {
     struct Ink {
@@ -1012,11 +1016,21 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         consider("No recent cities");
     }
     for (const std::string &shown : recent_) {
-        const auto slash = shown.find_last_of("/\\");
-        consider(slash == std::string::npos ? shown : shown.substr(slash + 1));
+        consider(city_file_title(shown));
+        const CityGlance glance = city_glance(shown);
+        if (glance.ok) {
+            consider(glance_stats_line(glance));
+        }
     }
-    const DialogRect sub = place_submenu(drop_x, drop_w, have_recent_row ? recent_row_y : menu_h_ + 4, row_h, rows,
-                                         label_w + dp(28), win_w_, win_h_, dp(180));
+    const double portrait_w = dp(72);
+    const double portrait_h = dp(60);
+    double recent_row = std::max(row_h, portrait_h + dp(8));
+    const double recent_extra = portrait_w + dp(20);
+    if (rows * recent_row + 8.0 > win_h_ - 8.0) {
+        recent_row = std::max(dp(40) * 1.0, (win_h_ - 16.0) / std::max(1, rows));
+    }
+    const DialogRect sub = place_submenu(drop_x, drop_w, have_recent_row ? recent_row_y : menu_h_ + 4, recent_row, rows,
+                                         label_w + recent_extra + dp(28), win_w_, win_h_, dp(280));
     cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
     cairo_rectangle(cr, sub.x + 3, sub.y + 3, sub.w, sub.h);
     cairo_fill(cr);
@@ -1029,17 +1043,80 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         return;
     }
     for (int i = 0; i < static_cast<int>(recent_.size()); ++i) {
-        const double ry = sub.y + 4 + i * row_h;
+        const double ry = sub.y + 4 + i * recent_row;
         const int id = kRecentItem + i;
-        push_hot(sub.x + 2, ry, std::max(1.0, sub.w - 4), row_h, id);
+        push_hot(sub.x + 2, ry, std::max(1.0, sub.w - 4), recent_row, id);
         if (menu_.recent_cursor == i || hover_id_ == id) {
-            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), row_h, ink_hover.r, ink_hover.g, ink_hover.b);
+            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), recent_row, ink_hover.r, ink_hover.g, ink_hover.b);
         }
         const std::string shown = recent_[static_cast<std::size_t>(i)];
-        const auto slash = shown.find_last_of("/\\");
-        paint_text(cr, menu_font(), slash == std::string::npos ? shown : shown.substr(slash + 1), sub.x + 10, ry + 7,
-                   ink_text.r, ink_text.g, ink_text.b, text_w);
+        const CityGlance glance = city_glance(shown);
+        const double thumb_h = std::min(portrait_h, recent_row - dp(6));
+        const double thumb_w = std::floor(thumb_h * 1.2);
+        double text_x = sub.x + 10;
+        if (glance.ok && !glance.swatch.empty()) {
+            paint_glance_swatch(cr, glance, sub.x + 8, ry + (recent_row - thumb_h) / 2.0, thumb_w, thumb_h);
+            text_x = sub.x + 8 + thumb_w + 8;
+        }
+        const int name_w = static_cast<int>(std::max(40.0, sub.x + sub.w - dp(8) - text_x));
+        paint_text(cr, menu_font(), city_file_title(shown), text_x, ry + dp(6), ink_text.r, ink_text.g, ink_text.b,
+                   name_w);
+        if (glance.ok || !glance.summary.empty()) {
+            paint_text(cr, ui_font(), glance_stats_line(glance), text_x, ry + dp(26), ink_accel.r, ink_accel.g,
+                       ink_accel.b, name_w);
+        }
     }
+}
+
+void paint_glance_swatch(cairo_t *cr, const CityGlance &glance, double x, double y, double tw, double th)
+{
+    if (!glance.ok || glance.swatch.size() != static_cast<std::size_t>(120 * 100) || tw < 2 || th < 2) {
+        return;
+    }
+    cairo_surface_t *swatch = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 120, 100);
+    unsigned char *pixels = cairo_image_surface_get_data(swatch);
+    const int stride = cairo_image_surface_get_stride(swatch);
+    for (int sy = 0; sy < 100; ++sy) {
+        for (int sx = 0; sx < 120; ++sx) {
+            const std::uint32_t rgb = glance.swatch[static_cast<std::size_t>(sy * 120 + sx)];
+            auto *pixel = reinterpret_cast<std::uint32_t *>(pixels + sy * stride + sx * 4);
+            *pixel = rgb;
+        }
+    }
+    cairo_surface_mark_dirty(swatch);
+    cairo_save(cr);
+    cairo_rectangle(cr, x, y, tw, th);
+    cairo_clip(cr);
+    cairo_translate(cr, x, y);
+    cairo_scale(cr, tw / 120.0, th / 100.0);
+    cairo_set_source_surface(cr, swatch, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    cairo_surface_destroy(swatch);
+    stroke_rect(cr, x, y, tw, th, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+}
+
+std::string city_file_title(const std::string &path)
+{
+    const auto slash = path.find_last_of("/\\");
+    std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
+    if (name.size() > 4) {
+        const std::string tail = name.substr(name.size() - 4);
+        if (tail == ".cty" || tail == ".CTY") {
+            name = name.substr(0, name.size() - 4);
+        }
+    }
+    return name;
+}
+
+std::string glance_stats_line(const CityGlance &glance)
+{
+    if (!glance.ok) {
+        return glance.summary;
+    }
+    return std::string(city_glance_month(glance.month)) + " " + std::to_string(glance.year) + "    " +
+           civic::dollars(glance.funds) + "    Pop " + grouped_number(glance.population);
 }
 
 void paint_dim_plate(cairo_t *cr, double x, double y, double w, double h, double red, double green, double blue)
@@ -2569,7 +2646,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double osk_y = name_y - dp(8) - osk_h;
         const double list_bottom = (osk_h > 0 ? osk_y : name_y) - dp(8);
         const double list_h = std::max(static_cast<double>(dp(40)), list_bottom - list_top);
-        const int row_px = dp(56);
+        const int row_px = dp(72);
         const int visible = std::max(1, static_cast<int>(list_h / row_px));
         files_visible_ = visible;
         const int count = static_cast<int>(files_.size());
@@ -2618,35 +2695,19 @@ void Shell::draw_dialog(cairo_t *cr)
                 const double sub_r = theme::kAccelR;
                 const double sub_g = theme::kAccelG;
                 const double sub_b = theme::kAccelB;
-                if (!glance.ok && !glance.summary.empty()) {
-                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, sub_r, sub_g, sub_b,
-                               static_cast<int>(row_w - (text_x - x)));
-                } else if (glance.ok && !glance.swatch.empty()) {
-                    const int tw = 48;
-                    const int th = 40;
-                    cairo_surface_t *swatch = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 120, 100);
-                    unsigned char *pixels = cairo_image_surface_get_data(swatch);
-                    const int stride = cairo_image_surface_get_stride(swatch);
-                    for (int sy = 0; sy < 100; ++sy) {
-                        for (int sx = 0; sx < 120; ++sx) {
-                            const std::uint32_t rgb = glance.swatch[static_cast<std::size_t>(sy * 120 + sx)];
-                            auto *pixel = reinterpret_cast<std::uint32_t *>(pixels + sy * stride + sx * 4);
-                            *pixel = rgb;
-                        }
-                    }
-                    cairo_surface_mark_dirty(swatch);
-                    cairo_save(cr);
-                    cairo_translate(cr, x + 16, ry + 4);
-                    cairo_scale(cr, tw / 120.0, th / 100.0);
-                    cairo_set_source_surface(cr, swatch, 0, 0);
-                    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-                    cairo_paint(cr);
-                    cairo_restore(cr);
-                    cairo_surface_destroy(swatch);
-                    text_x = x + 16 + tw + 8;
-                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, sub_r, sub_g, sub_b,
-                               static_cast<int>(row_w - (text_x - x)));
+                const double thumb_h = std::min(dp(60) * 1.0, row_h - 8);
+                const double thumb_w = std::floor(thumb_h * 1.2);
+                if (glance.ok && !glance.swatch.empty()) {
+                    paint_glance_swatch(cr, glance, x + 16, ry + (row_h - thumb_h) / 2.0, thumb_w, thumb_h);
+                    text_x = x + 16 + thumb_w + 8;
                 }
+                const int info_w = static_cast<int>(std::max(1.0, x + 12 + row_w - text_x - 8));
+                paint_text(cr, body_font(), city_file_title(name), text_x, ry + 4, theme::kTextR, theme::kTextG,
+                           theme::kTextB, info_w);
+                if (glance.ok || !glance.summary.empty()) {
+                    paint_text(cr, ui_font(), glance_stats_line(glance), text_x, ry + 28, sub_r, sub_g, sub_b, info_w);
+                }
+                continue;
             }
             paint_text(cr, body_font(), name, text_x, ry + 4, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(std::max(1.0, x + 12 + row_w - text_x - 8)));
