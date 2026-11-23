@@ -238,8 +238,8 @@ inline double weather_fade(double ms_since_change)
 // always; with motion, each zone also dips now and then, on its own clock,
 // for about 100 ms (and sometimes twice), never in step with its
 // neighbours and never faster than about once a second.
-inline constexpr double kBrownoutBase = 0.16;
-inline constexpr double kBrownoutDip = 0.38;
+inline constexpr double kBrownoutBase = 0.22;
+inline constexpr double kBrownoutDip = 0.46;
 inline double brownout_dim(int x, int y, int ms, bool moving)
 {
     if (!moving) {

@@ -6,6 +6,7 @@
 #include "night_light.hpp"
 
 #include "dither_mask.hpp"
+#include "effects_fx.hpp"
 #include "look_fx.hpp"
 
 #include "assets.hpp"
@@ -1508,6 +1509,10 @@ void MapView::draw(cairo_t *cr)
         draw_shadows(cr);
     }
 
+    fx_fast_ = false;
+    if (!night_hold_) {
+        draw_brownout(cr, source, visible_tiles(cr, source, 1));
+    }
     if (session_ != nullptr) {
         for (const auto &dot : session_->sprites()) {
             cairo_surface_t *image = sprite_frame(dot.type, dot.frame);
@@ -1546,6 +1551,49 @@ void MapView::draw(cairo_t *cr)
     draw_dust(cr);
     draw_footprint(cr);
     cairo_restore(cr);
+    if (fx_fast_) {
+        fx_fast_drawn_ = fx_ms_ / 50;
+    }
+}
+
+void MapView::draw_brownout(cairo_t *cr, int source, const TileSpan &span)
+{
+    if (cached_raw_.empty()) {
+        return;
+    }
+    // A zone centre without PWRBIT is a building the grid is not reaching.
+    // Empty lots have nothing to light, and plants are their own supply.
+    const bool flicker = look_fx::ambient_allowed(effects_);
+    const bool classic = classic_fx();
+    const double px = static_cast<double>(source);
+    bool any = false;
+    cairo_save(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    for (int y = std::max(1, span.y0); y < std::min(CitySession::kWorldH - 1, span.y1); ++y) {
+        for (int x = std::max(1, span.x0); x < std::min(CitySession::kWorldW - 1, span.x1); ++x) {
+            const std::size_t index = static_cast<std::size_t>(y * CitySession::kWorldW + x);
+            const int raw = cached_raw_[index];
+            if (raw < 0 || (raw & ZONEBIT) == 0 || (raw & PWRBIT) != 0) {
+                continue;
+            }
+            const int tile = raw & LOMASK;
+            if (tile < RESBASE || tile >= PORTBASE || tile == FREEZ || tile == COMBASE + 4 || tile == INDBASE + 4) {
+                continue;
+            }
+            if (!special_cell_.empty() && special_cell_[index] != 0) {
+                continue;
+            }
+            const double dim = effects_fx::brownout_dim(x, y, fx_ms_, flicker);
+            cairo_new_path(cr);
+            cairo_rectangle(cr, (x - 1) * px, (y - 1) * px, px * 3.0, px * 3.0);
+            look_fx::fill_fx(cr, 0.02, 0.02, 0.06, classic ? std::round(dim * 16.0) / 16.0 : dim, classic);
+            any = true;
+        }
+    }
+    cairo_restore(cr);
+    if (any && flicker) {
+        fx_fast_ = true;
+    }
 }
 
 void MapView::set_night(bool on)
