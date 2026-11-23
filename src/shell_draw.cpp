@@ -5344,7 +5344,126 @@ void Shell::draw_welcome_background(cairo_t *cr)
     cairo_set_source_surface(cr, image, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BEST);
     cairo_paint(cr);
+    welcome_live_ = false;
+    if (motion_on() && look_fx::ambient_allowed(effects_)) {
+        draw_welcome_life(cr);
+    }
     cairo_restore(cr);
+}
+
+void Shell::draw_welcome_life(cairo_t *cr)
+{
+    // cr is in the art's own pixels. Masks are built once from the art:
+    // sky (bright clear blue above the skyline) and sea (deep blue down the
+    // left edge, kept as a bit map for the glints). Nothing is drawn where the art has a cloud, the title, a
+    // building or a boat, so what drifts passes behind them.
+    cairo_surface_t *image = welcome_art();
+    const int iw = cairo_image_surface_get_width(image);
+    const int ih = cairo_image_surface_get_height(image);
+    static cairo_surface_t *sky = nullptr;
+    static std::vector<unsigned char> sea_bits;
+    if (sky == nullptr) {
+        cairo_surface_flush(image);
+        const unsigned char *src = cairo_image_surface_get_data(image);
+        const int sstride = cairo_image_surface_get_stride(image);
+        sky = cairo_image_surface_create(CAIRO_FORMAT_A8, iw, ih);
+        unsigned char *sk = cairo_image_surface_get_data(sky);
+        const int kstride = cairo_image_surface_get_stride(sky);
+        sea_bits.assign(static_cast<std::size_t>(iw) * ih, 0);
+        for (int y = 0; y < ih; ++y) {
+            const std::uint32_t *row = reinterpret_cast<const std::uint32_t *>(src + y * sstride);
+            for (int x = 0; x < iw; ++x) {
+                const std::uint32_t v = row[x];
+                const int r = (v >> 16) & 255;
+                const int g = (v >> 8) & 255;
+                const int b = v & 255;
+                const bool blue = b > 150 && b > r + 90 && b > g + 40;
+                if (blue && y < 440) {
+                    sk[y * kstride + x] = 255;
+                }
+                if (blue && y >= 440 && x < 330 && r < 80) {
+                    sea_bits[static_cast<std::size_t>(y) * iw + x] = 1;
+                }
+            }
+        }
+        cairo_surface_mark_dirty(sky);
+    }
+    const int ms = welcome_ms_;
+    welcome_live_ = true;
+    welcome_drawn_step_ = ms / 66;
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    // Clouds: chunky puffs of white over a pale blue underside, in 8px blocks
+    // like the art's own pixels, behind everything solid.
+    cairo_push_group(cr);
+    for (int k = 0; k < effects_fx::kWelcomeClouds; ++k) {
+        const double cx = std::round(effects_fx::welcome_cloud_x(k, ms, iw) / 8.0) * 8.0;
+        const double cy = 40.0 + std::round((70.0 + 300.0 * look_fx::hash01(static_cast<std::uint32_t>(k * 41 + 4))) / 8.0) * 8.0;
+        // A cumulus built from discs: a blue-grey underside shifted down and
+        // a white top, each disc snapped to the 4px grid.
+        const int puffs = 5 + k % 3;
+        for (int pass = 0; pass < 2; ++pass) {
+            for (int b = 0; b < puffs; ++b) {
+                const double t = puffs > 1 ? static_cast<double>(b) / (puffs - 1) : 0.5;
+                const double hump = std::sin(look_fx::kPi * t);
+                const double r = 12.0 + 20.0 * hump * (0.7 + 0.5 * look_fx::hash01(static_cast<std::uint32_t>(k * 19 + b)));
+                const double px = std::round((cx + t * 130.0) / 4.0) * 4.0;
+                const double py = std::round((cy - hump * 14.0 + (pass == 0 ? 7.0 : 0.0)) / 4.0) * 4.0;
+                cairo_new_path(cr);
+                cairo_arc(cr, px, py, std::round(r / 4.0) * 4.0, 0, 2 * look_fx::kPi);
+                if (pass == 0) {
+                    cairo_set_source_rgb(cr, 0.70, 0.80, 0.93);
+                } else {
+                    cairo_set_source_rgb(cr, 0.98, 0.99, 1.0);
+                }
+                cairo_fill(cr);
+            }
+        }
+    }
+    cairo_pop_group_to_source(cr);
+    cairo_mask_surface(cr, sky, 0, 0);
+    // Aircraft warning lights on the spire tips.
+    static const int kTips[6][2] = {{551, 277}, {750, 227}, {863, 223}, {977, 218}, {1178, 263}, {1246, 312}};
+    for (int k = 0; k < 6; ++k) {
+        const double a = effects_fx::welcome_light(k, ms);
+        if (a <= 0.05) {
+            continue;
+        }
+        cairo_set_source_rgba(cr, 1.0, 0.18, 0.12, 0.35 * a);
+        cairo_rectangle(cr, kTips[k][0] - 9, kTips[k][1] - 9, 18, 18);
+        cairo_fill(cr);
+        cairo_set_source_rgba(cr, 1.0, 0.25, 0.18, a);
+        cairo_rectangle(cr, kTips[k][0] - 4, kTips[k][1] - 4, 8, 8);
+        cairo_fill(cr);
+        cairo_set_source_rgba(cr, 1.0, 0.9, 0.8, a);
+        cairo_rectangle(cr, kTips[k][0] - 2, kTips[k][1] - 2, 4, 4);
+        cairo_fill(cr);
+    }
+    // Glints on the sea, only where the art is open water.
+    for (int k = 0; k < 40; ++k) {
+        double gx = 0;
+        double gy = 0;
+        double a = 0;
+        effects_fx::welcome_glint(k, ms, 0.0, 470.0, 330.0, 680.0, gx, gy, a);
+        const int px = static_cast<int>(gx);
+        const int py = static_cast<int>(gy);
+        if (a < 0.1 || px < 4 || py < 4 || px >= iw - 12 || py >= ih - 6) {
+            continue;
+        }
+        bool open_water = true;
+        for (int dy = -3; dy <= 3 && open_water; dy += 3) {
+            for (int dx = -3; dx <= 11 && open_water; dx += 7) {
+                open_water = sea_bits[static_cast<std::size_t>(py + dy) * iw + (px + dx)] != 0;
+            }
+        }
+        if (!open_water) {
+            continue;
+        }
+        cairo_set_source_rgba(cr, 0.85, 0.96, 1.0, 0.85 * a);
+        cairo_rectangle(cr, px, py, 10, 3);
+        cairo_fill(cr);
+        cairo_rectangle(cr, px + 3, py - 3, 4, 3);
+        cairo_fill(cr);
+    }
 }
 
 void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)

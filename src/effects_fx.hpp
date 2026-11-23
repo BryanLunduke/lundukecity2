@@ -304,6 +304,38 @@ inline void spray_drop(int k, int ms, double radius, double &dx, double &dy, dou
     alpha = t < 0.85 ? 1.0 : (1.0 - t) / 0.15;
 }
 
+// ---- Welcome screen -----------------------------------------------------
+// All in the title art's own pixels (1712 wide), on the wall clock.
+
+inline constexpr int kWelcomeClouds = 6;
+// Left edge of drifting cloud k, in art pixels; wraps past both sides.
+inline double welcome_cloud_x(int k, int ms, int art_w)
+{
+    const double speed = 5.0 + 4.0 * look_fx::hash01(static_cast<std::uint32_t>(k * 17 + 3));
+    const double span = art_w + 520.0;
+    return std::fmod(look_fx::hash01(static_cast<std::uint32_t>(k * 31 + 7)) * span + ms * speed / 1000.0, span) - 260.0;
+}
+
+// Aircraft warning light k: a slow red blink, each on its own beat.
+inline double welcome_light(int k, int ms)
+{
+    const double period = 1900.0 + 260.0 * look_fx::hash01(static_cast<std::uint32_t>(k * 29 + 1));
+    const double phase = std::fmod(ms / period + look_fx::hash01(static_cast<std::uint32_t>(k * 53 + 9)), 1.0);
+    return phase < 0.30 ? std::sin(look_fx::kPi * phase / 0.30) : 0.0;
+}
+
+// A glint k of the sea: a new spot in the box each cycle, fading in and out.
+inline void welcome_glint(int k, int ms, double bx, double by, double bw, double bh, double &x, double &y, double &alpha)
+{
+    const double cycle = 1300.0 + 500.0 * look_fx::hash01(static_cast<std::uint32_t>(k * 13 + 5));
+    const double t = ms / cycle + look_fx::hash01(static_cast<std::uint32_t>(k * 71 + 2));
+    const int n = static_cast<int>(t);
+    const double f = t - n;
+    x = bx + bw * look_fx::hash01(static_cast<std::uint32_t>(k * 977 + n * 131 + 11));
+    y = by + bh * look_fx::hash01(static_cast<std::uint32_t>(k * 613 + n * 193 + 17));
+    alpha = std::sin(look_fx::kPi * f);
+}
+
 // ---- Disasters ----------------------------------------------------------
 
 // Debris piece k circling a tornado's foot, in map pixels from the foot.
