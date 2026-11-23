@@ -6,6 +6,7 @@
 
 #include "chart.hpp"
 #include "hotspots.hpp"
+#include "demand_tick.hpp"
 #include "funds_tick.hpp"
 #include "look_fx.hpp"
 #include "pad_feel.hpp"
@@ -562,6 +563,11 @@ private:
     // The rolling Funds readout and its floating change; the band or the
     // handheld chip sets the float anchor each frame it draws.
     FundsTicker funds_tick_;
+    DemandTicker demand_tick_;
+    int crisis_cycle_ = 0;
+    int traffic_peak_ = 0;
+    int traffic_month_ = -1;
+    unsigned traffic_peak_generation_ = 0;
     double funds_float_x_ = -1.0;
     double funds_float_y_ = 0.0;
     unsigned save_generation_ = 0;
@@ -672,6 +678,10 @@ private:
     int license_scroll_ = 0;
     int license_scroll_max_ = 0;
     int license_view_h_ = 0;
+    // How to play: pixel scroll when the two columns are taller than the window.
+    int howto_scroll_ = 0;
+    int howto_scroll_max_ = 0;
+    int howto_view_h_ = 0;
     double license_view_x_ = 0;
     double license_view_y_ = 0;
     double license_view_w_ = 0;

@@ -2699,8 +2699,9 @@ void Shell::run_review_checks()
             }
             return false;
         };
-        if (!has_hot(kWelcomeNew) || !has_hot(kWelcomeLoad) || !has_hot(kWelcomeScenario) || !has_hot(kWelcomeQuit)) {
-            fail("the welcome screen dropped one of the four choices");
+        if (!has_hot(kWelcomeNew) || !has_hot(kWelcomeLoad) || !has_hot(kWelcomeScenario) || !has_hot(kWelcomeHowTo) ||
+            !has_hot(kWelcomeQuit)) {
+            fail("the welcome screen dropped one of the five choices");
             return;
         }
         begin_scene_fade();

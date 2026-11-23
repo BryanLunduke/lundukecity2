@@ -307,6 +307,34 @@ void Shell::advance_presentation(int elapsed_ms)
     }
     funds_tick_.observe(session_.funds(), city_generation_, motion_on() && city_chosen_ && !welcome_gate_);
     funds_tick_.advance(elapsed_ms);
+    const bool tick_ok = motion_on() && city_chosen_ && !welcome_gate_;
+    demand_tick_.observe(session_.res_demand(), session_.com_demand(), session_.ind_demand(), city_generation_, tick_ok);
+    demand_tick_.advance(elapsed_ms);
+    if (city_chosen_ && !welcome_gate_) {
+        int tx = 0;
+        int ty = 0;
+        int peak = 0;
+        const bool have = session_.worst_traffic(tx, ty, peak);
+        if (traffic_peak_generation_ != city_generation_) {
+            traffic_peak_ = have ? peak : 0;
+            traffic_month_ = session_.game_month_index();
+            traffic_peak_generation_ = city_generation_;
+        } else if (have) {
+            const int month = session_.game_month_index();
+            if (month != traffic_month_) {
+                // A jump into heavy traffic (band 2, 128+) posts a NEWS line
+                // with a place the mayor can jump to. Display only.
+                if (peak >= 128 && peak > traffic_peak_ + 24) {
+                    session_.note_traffic_spike(tx, ty);
+                    shown_message_ = "Traffic is getting worse.";
+                    shown_message_serial_ = session_.message_serial();
+                    hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                }
+                traffic_peak_ = peak;
+                traffic_month_ = month;
+            }
+        }
+    }
     if (reveal_ms_ >= 0) {
         if (reveal_fresh_) {
             reveal_fresh_ = false;
@@ -566,6 +594,8 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         list_index_ = 0;
         list_scroll_ = 0;
     } else if (dialog == Dialog::HowToPlay || dialog == Dialog::About) {
+        howto_scroll_ = 0;
+        howto_scroll_max_ = 0;
         focus_id_ = kClose;
     } else if (dialog == Dialog::License) {
         // Read the files each time the viewer opens; they are small.
@@ -2485,6 +2515,10 @@ void Shell::on_dialog_button(int id)
             }
             return;
         }
+        if (id == kWelcomeHowTo) {
+            open_dialog(Dialog::HowToPlay);
+            return;
+        }
         // Quit, B, and Escape ask first. A second B from New City or the
         // scenario list must not leave the game.
         open_dialog(Dialog::QuitConfirm);
@@ -2982,6 +3016,46 @@ void Shell::on_hotspot(int id, double x, double y)
         if (id >= kSpeedPill && id < kSpeedPill + 4) {
             static const Action speeds[4] = {Action::SetPause, Action::Slow, Action::Medium, Action::Fast};
             apply_action(speeds[id - kSpeedPill]);
+            return;
+        }
+        if (id == kWorstTraffic) {
+            int tx = 0;
+            int ty = 0;
+            int peak = 0;
+            if (session_.worst_traffic(tx, ty, peak)) {
+                begin_event_pan(tx, ty);
+            }
+            return;
+        }
+        if (id == kCrisisStrip) {
+            const CitySession::CrisisReport crisis = session_.crisis_report();
+            if (!crisis.sites.empty()) {
+                crisis_cycle_ = (crisis_cycle_ % static_cast<int>(crisis.sites.size()) + static_cast<int>(crisis.sites.size())) %
+                                static_cast<int>(crisis.sites.size());
+                const CitySession::CrisisSite &site = crisis.sites[static_cast<std::size_t>(crisis_cycle_)];
+                begin_event_pan(site.x, site.y);
+                ++crisis_cycle_;
+            }
+            return;
+        }
+        if (id >= kDemandMeter && id < kDemandMeter + 3) {
+            const int which = id - kDemandMeter;
+            // kTools: 4 residential, 5 commercial, 6 industrial.
+            select_tool(4 + which);
+            const double value = which == 0 ? session_.res_demand() : (which == 1 ? session_.com_demand() : session_.ind_demand());
+            const char *zone = which == 0 ? "homes" : (which == 1 ? "shops" : "industry");
+            const char *tool = which == 0 ? "Residential" : (which == 1 ? "Commercial" : "Industrial");
+            std::string text;
+            if (value > 0.15) {
+                text = std::string("The city wants more ") + zone + ". The " + tool + " tool is selected.";
+            } else if (value < -0.15) {
+                text = std::string("There are already more ") + zone + " than the city wants. The " + tool + " tool is selected.";
+            } else {
+                text = std::string("Demand for ") + zone + " is steady. The " + tool + " tool is selected.";
+            }
+            shown_message_ = text;
+            shown_message_serial_ = session_.message_serial();
+            hint_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(4);
             return;
         }
         if (id >= kQuickTool && id < kQuickTool + kToolCount) {

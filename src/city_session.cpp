@@ -55,6 +55,23 @@ std::string grouped_count(std::int64_t value)
     return grouped;
 }
 
+// Short population figures for a narrow goal meter: 18,080 becomes "18k".
+std::string compact_count(std::int64_t value)
+{
+    const bool neg = value < 0;
+    const std::int64_t mag = neg ? -value : value;
+    std::string text;
+    if (mag >= 10000) {
+        text = std::to_string((mag + 500) / 1000) + "k";
+    } else {
+        text = grouped_count(mag);
+    }
+    if (neg) {
+        text.insert(text.begin(), '-');
+    }
+    return text;
+}
+
 // Funds, taxes, and department costs. The sign sits in front of the dollar.
 std::string with_commas(std::int64_t value)
 {
@@ -2534,6 +2551,104 @@ int CitySession::riot_crime() const
     return city_events::riot_crime_now(&engine_->sim);
 }
 
+CitySession::CrisisReport CitySession::crisis_report() const
+{
+    CrisisReport out;
+    if (!ready_) {
+        return out;
+    }
+    const Micropolis &sim = engine_->sim;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            const unsigned short raw = sim.map[x][y];
+            const int tile = raw & LOMASK;
+            if ((raw & ZONEBIT) != 0 && (raw & PWRBIT) == 0) {
+                ++out.unpowered;
+                out.sites.push_back(CrisisSite{x, y});
+            } else if (tile >= FIRE && tile <= LASTFIRE) {
+                ++out.fires;
+                out.sites.push_back(CrisisSite{x, y});
+            }
+        }
+    }
+    const CityEvents &events = sim.cityEvents;
+    if (events.riotSteps > 0) {
+        out.event = "Riot under way";
+    } else if (events.lionActive != 0) {
+        out.event = "Lion loose";
+        out.sites.push_back(CrisisSite{events.lionX / 16, events.lionY / 16});
+    } else if (events.prisonSteps > 0) {
+        out.event = "Prison escape";
+        if (events.prisonX != 0 || events.prisonY != 0) {
+            out.sites.push_back(CrisisSite{events.prisonX, events.prisonY});
+        }
+    } else if (events.zoneCount > 0) {
+        out.event = "Autonomous Zone";
+        out.sites.push_back(CrisisSite{events.zoneBlock[0][0], events.zoneBlock[0][1]});
+    } else if (sim.disasterEvent > SC_NONE && sim.disasterEvent < SC_COUNT && sim.disasterWait > 0) {
+        const char *name = nullptr;
+        switch (sim.disasterEvent) {
+        case SC_SAN_FRANCISCO:
+            name = "Earthquake";
+            break;
+        case SC_HAMBURG:
+            name = "Fire bombs";
+            break;
+        case SC_TOKYO:
+            name = "Monster";
+            break;
+        case SC_BOSTON:
+            name = "Meltdown";
+            break;
+        case SC_RIO:
+            name = "Flood";
+            break;
+        case SC_SEATTLE:
+            name = "Autonomous Zone";
+            break;
+        case SC_SAN_FRANCISCO_1962:
+            name = "Prison escape";
+            break;
+        case SC_PORTLAND:
+            name = "Riot";
+            break;
+        case SC_SAN_DIEGO:
+            name = "Lion escape";
+            break;
+        default:
+            break;
+        }
+        if (name != nullptr) {
+            const int months = static_cast<int>(sim.disasterWait) / 4;
+            if (months <= 0) {
+                out.event = std::string(name) + " soon";
+            } else if (months == 1) {
+                out.event = std::string(name) + " in 1 month";
+            } else {
+                out.event = std::string(name) + " in " + std::to_string(months) + " months";
+            }
+        }
+    }
+    auto add = [&](const std::string &part) {
+        if (part.empty()) {
+            return;
+        }
+        if (!out.text.empty()) {
+            out.text += ", ";
+        }
+        out.text += part;
+    };
+    if (out.unpowered > 0) {
+        add(std::to_string(out.unpowered) + " unpowered");
+    }
+    if (out.fires > 0) {
+        add(std::to_string(out.fires) + (out.fires == 1 ? " fire" : " fires"));
+    }
+    add(out.event);
+    return out;
+}
+
+
 void CitySession::on_event_frame()
 {
     if (scenario_disaster_pending_) {
@@ -2732,6 +2847,27 @@ std::string CitySession::scenario_clock_short() const
     return std::to_string(years) + "y " + std::to_string(months) + "m left";
 }
 
+std::string CitySession::scenario_clock_compact() const
+{
+    const Micropolis &sim = engine_->sim;
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+        return {};
+    }
+    if (sim.scoreWait <= 0) {
+        return "Time up";
+    }
+    const int cycles = static_cast<int>(sim.scoreWait);
+    const int years = cycles / 48;
+    const int months = (cycles % 48) / 4;
+    if (years <= 0) {
+        return std::to_string(months) + "m";
+    }
+    if (months <= 0) {
+        return std::to_string(years) + "y";
+    }
+    return std::to_string(years) + "y" + std::to_string(months) + "m";
+}
+
 bool CitySession::traffic_measured() const
 {
     // The engine runs cityEvaluation (and so getTrafficAverage) with each
@@ -2779,6 +2915,44 @@ std::string CitySession::scenario_meter_short() const
         return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + " → >500";
     }
     return grouped_count(people > 0 ? people : 0) + " → 100,000";
+}
+
+std::string CitySession::scenario_meter_compact() const
+{
+    const int id = scenario_id();
+    if (id == 0 || scenario_years_left() < 0) {
+        return {};
+    }
+    const Micropolis &sim = engine_->sim;
+    const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
+    if (id == SC_DETROIT) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + "→<60";
+    }
+    if (id == SC_SEATTLE) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + "→<" +
+               std::to_string(SEATTLE_CRIME_GOAL) + " " + seattle_zone_short(sim);
+    }
+    if (id == SC_SAN_FRANCISCO_1962) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + "→<" +
+               std::to_string(SF1962_CRIME_GOAL) + " " + sf1962_escape_short(sim);
+    }
+    if (id == SC_PORTLAND) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + "→<" +
+               std::to_string(PORTLAND_CRIME_GOAL) + " " + portland_fires_short(sim);
+    }
+    if (id == SC_SAN_DIEGO) {
+        return compact_count(people > 0 ? people : 0) + "→≥" + compact_count(SANDIEGO_POPULATION_GOAL) + " " +
+               san_diego_lion_short(sim);
+    }
+    if (id == SC_BERN) {
+        const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
+        return "T" + traffic + "→<" + std::to_string(BERN_TRAFFIC_GOAL) + " " +
+               compact_count(people > 0 ? people : 0) + "→≥" + compact_count(BERN_POPULATION_GOAL);
+    }
+    if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
+        return "Score " + compact_count(static_cast<std::int64_t>(sim.cityScore)) + "→>500";
+    }
+    return compact_count(people > 0 ? people : 0) + "→100k";
 }
 
 std::string CitySession::scenario_progress() const
@@ -3491,20 +3665,20 @@ std::vector<std::string> CitySession::special_inspect_notes(int x, int y) const
         if (income.intact) {
             const std::string full = with_commas(income.full);
             if (!income.powered) {
-                notes.push_back("No income: needs power");
+                notes.push_back("Not paying: needs power");
             } else if (!income.road) {
-                notes.push_back("No income: needs a road next to it");
+                notes.push_back("Not paying: needs a road next to it");
             } else if (income.residents <= 0) {
                 // One line: "0 residents within 16 tiles" would only repeat it.
-                notes.push_back("No income: no residents within " + std::to_string(kIncomeCatchmentRadius) + " tiles");
+                notes.push_back("Not paying: no residents within " + std::to_string(kIncomeCatchmentRadius) + " tiles");
                 return notes;
             } else if (income.dollars <= 0) {
-                notes.push_back("No income yet");
+                notes.push_back("Not paying yet");
             } else {
                 // The bracket only when too few residents are the reason: at
                 // full pay it would repeat the number, and a capped payout
                 // has its own line below (review nov18b #10).
-                std::string line = "Earns " + with_commas(income.dollars) + " a year";
+                std::string line = "Paid " + with_commas(income.dollars) + " this year";
                 if (income.dollars < income.full && !income.capped) {
                     line += " (" + full + " at " + grouped_count(kIncomeFullResidents) + " residents)";
                 }
@@ -3610,6 +3784,44 @@ std::int64_t CitySession::population() const
     }
     const Quad people = live_population_count(engine_->sim);
     return people < 0 ? 0 : static_cast<std::int64_t>(people);
+}
+
+bool CitySession::worst_traffic(int &x, int &y, int &value) const
+{
+    x = 0;
+    y = 0;
+    value = 0;
+    if (!ready_) {
+        return false;
+    }
+    Micropolis &sim = engine_->sim;
+    int best = 0;
+    int bx = 0;
+    int by = 0;
+    const int mw = kWorldW / 2;
+    const int mh = kWorldH / 2;
+    for (int cx = 0; cx < mw; ++cx) {
+        for (int cy = 0; cy < mh; ++cy) {
+            const int density = sim.getTrafficDensity(cx, cy);
+            if (density > best) {
+                best = density;
+                bx = cx * 2;
+                by = cy * 2;
+            }
+        }
+    }
+    if (best <= 0) {
+        return false;
+    }
+    x = bx;
+    y = by;
+    value = best;
+    return true;
+}
+
+void CitySession::note_traffic_spike(int tile_x, int tile_y)
+{
+    remember_notice("Traffic is getting worse.", tile_x, tile_y, true);
 }
 
 int CitySession::layer_value(MapLayer layer, int x, int y) const
@@ -4443,3 +4655,48 @@ std::vector<CitySession::SpriteDot> CitySession::sprites() const
     }
     return dots;
 }
+
+unsigned CitySession::sprite_signature() const
+{
+    unsigned hash = 2166136261u;
+    auto mix = [&](int value) {
+        hash ^= static_cast<unsigned>(value);
+        hash *= 16777619u;
+    };
+    if (!ready_) {
+        return 0;
+    }
+    int guard = 0;
+    for (const SimSprite *sprite = engine_->sim.spriteList; sprite != nullptr && guard < 4096;
+         sprite = sprite->next, ++guard) {
+        mix(sprite->type);
+        mix(sprite->frame);
+        mix(sprite->x);
+        mix(sprite->y);
+        mix(sprite->width);
+        mix(sprite->height);
+        mix(sprite->xOffset);
+        mix(sprite->yOffset);
+        mix(sprite->xHot);
+        mix(sprite->yHot);
+        mix(sprite->origX);
+        mix(sprite->origY);
+        mix(sprite->destX);
+        mix(sprite->destY);
+        mix(sprite->count);
+        mix(sprite->soundCount);
+        mix(sprite->dir);
+        mix(sprite->newDir);
+        mix(sprite->step);
+        mix(sprite->flag);
+        mix(sprite->control);
+        mix(sprite->turn);
+        mix(sprite->accel);
+        mix(sprite->speed);
+        mix(engine_->sim.spriteIsGlobal(sprite) ? 1 : 0);
+    }
+    mix(guard);
+    mix(engine_->sim.spriteCycleValue());
+    return hash;
+}
+

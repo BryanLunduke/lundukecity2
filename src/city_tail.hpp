@@ -1,8 +1,8 @@
 #pragma once
 // Classic Micropolis cities are exactly 27,120 bytes. City 2 appends three
 // trailers: LCN1 (name), LCF1 (cash flow), LCW1 (wide funds), then the
-// optional LCM1 (marina dock), LCD1 (lasting disasters), LCS1 (scan maps)
-// and LCV1 (format). A file that stops in the middle of that tail still has
+// optional LCM1 (marina dock), LCD1 (lasting disasters), LCS1 (scan maps),
+// LCP1 (sprites) and LCV1 (format). A file that stops in the middle of that tail still has
 // a usable classic body, but the player should hear that part of the save
 // is missing. An all-zero body is not a city.
 
@@ -130,6 +130,15 @@ inline CityFileKind classify_city_bytes(const unsigned char *data, std::size_t s
     // Optional land/crime/pollution/terrain maps (LCS1): 8-byte header,
     // then the payload length it names.
     if (avail() >= 8 && at()[0] == 'L' && at()[1] == 'C' && at()[2] == 'S' && at()[3] == '1') {
+        const std::size_t payload = static_cast<std::size_t>(at()[6]) | (static_cast<std::size_t>(at()[7]) << 8);
+        if (avail() < 8 + payload) {
+            return CityFileKind::Incomplete;
+        }
+        off += 8 + payload;
+    }
+    // Optional sprites (LCP1): 8-byte header, then the payload length it names
+    // (count, spriteCycle, then one record per sprite).
+    if (avail() >= 8 && at()[0] == 'L' && at()[1] == 'C' && at()[2] == 'P' && at()[3] == '1') {
         const std::size_t payload = static_cast<std::size_t>(at()[6]) | (static_cast<std::size_t>(at()[7]) << 8);
         if (avail() < 8 + payload) {
             return CityFileKind::Incomplete;

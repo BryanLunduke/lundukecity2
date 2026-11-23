@@ -94,6 +94,7 @@ enum HotspotId : int {
     kEditTerrain = 162,
     // About: opens the License viewer.
     kViewLicense = 163,
+    kWelcomeHowTo = 164,
 
     // The history chart. Left and right read a value. It is not a button.
     kGraphPlot = 180,
@@ -114,6 +115,9 @@ enum HotspotId : int {
     kHudZoomOut = 9502,
     kHudCenter = 9503,
     kSpeedPill = 9510, // + 0..3 (pause, slow, normal, fast)
+    kDemandMeter = 9514, // + 0..2 (residential, commercial, industrial)
+    kCrisisStrip = 9517,
+    kWorstTraffic = 9518,
     // Terrain editor top bar and toolbar. Not dialog controls.
     kTerrainComplete = 9520,
     kTerrainCancel = 9521,
@@ -124,7 +128,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kViewLicense;
+    return id >= kCancel && id <= kWelcomeHowTo;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

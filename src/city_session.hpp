@@ -423,6 +423,20 @@ public:
     std::vector<std::pair<int, int>> autonomous_zone_blocks() const;
     // Read-only view of the saved disaster state, for tests and the HUD.
     const CityEvents &events_state() const;
+    // Live unpowered zones and fires, plus a short line for a running or
+    // upcoming scenario event. Only reads the map and existing event state.
+    struct CrisisSite {
+        int x = 0;
+        int y = 0;
+    };
+    struct CrisisReport {
+        int unpowered = 0;
+        int fires = 0;
+        std::string event;
+        std::string text;
+        std::vector<CrisisSite> sites;
+    };
+    CrisisReport crisis_report() const;
     // Riot and prison crime now added (0 when none).
     int riot_crime() const;
 
@@ -511,6 +525,9 @@ public:
     // "Traffic 62 → <40 · 92,140 → ≥90,000".
     std::string scenario_clock_short() const;
     std::string scenario_meter_short() const;
+    // Tight forms for a 960-pixel band: "18k→100k · 30y".
+    std::string scenario_clock_compact() const;
+    std::string scenario_meter_compact() const;
 
     // Public-opinion and score data from the last cityEvaluation().
     // update_evaluation() runs that pass; evaluation() only reads it.
@@ -552,6 +569,10 @@ public:
     // Raw map word (tile character in the low bits, flags above).
     int map_value(int x, int y) const;
     int layer_value(MapLayer layer, int x, int y) const;
+    // The busiest traffic-map cell (read-only). False when every cell is quiet.
+    bool worst_traffic(int &x, int &y, int &value) const;
+    // NEWS line for a traffic spike, with a place the mayor can jump to.
+    void note_traffic_spike(int tile_x, int tile_y);
     unsigned map_serial() const;
     // Cheap samples so the shell can skip a full repaint when the picture is still.
     unsigned tile_sample() const;
@@ -589,6 +610,8 @@ public:
     std::vector<unsigned short> terrain_tiles() const;
     void set_terrain_tiles(const std::vector<unsigned short> &tiles);
     std::vector<SpriteDot> sprites() const;
+    // All live sprite fields, for reload tests. 0 when the list is empty.
+    unsigned sprite_signature() const;
 
     const std::string &save_path() const { return save_path_; }
     void set_save_path(const std::string &path) { save_path_ = path; }

@@ -1085,6 +1085,147 @@ static bool read_scan_maps(Micropolis *sim, const unsigned char *bytes, std::siz
     return true;
 }
 
+// Trains, ships, planes, helicopters, monsters, tornados, explosions and
+// buses as they stood at save time. Magic "LCP1", after LCS1 and before
+// LCV1. Little-endian:
+//   char magic[4] = { 'L','C','P','1' }
+//   uint16 version = 1
+//   uint16 payload
+//   uint16 count, uint16 reserved
+//   count records, 26 int32 fields each (type through speed, then
+//   is_global as 0 or 1, then a reserved 0).
+// A file without it (older saves) loads with an empty sprite list, as
+// before. The reserved header word holds spriteCycle so movement stays
+// in phase even when no sprite is on the map. Older builds skip
+// the chunk: they read LCS1 by its payload length and still find LCV1
+// at the end of the file.
+static const char kSpritesMagic[4] = {'L', 'C', 'P', '1'};
+static const unsigned int kSpritesVersion = 1;
+static const unsigned int kSpritesFields = 26;
+static const unsigned int kSpritesRecordBytes = kSpritesFields * 4;
+static const unsigned int kSpritesMaxCount = 1024;
+
+static unsigned sprites_payload(unsigned count)
+{
+    return 4u + count * kSpritesRecordBytes;
+}
+
+static std::size_t sprites_span(const unsigned char *bytes, std::size_t avail)
+{
+    if (bytes == NULL || avail < 8 || std::memcmp(bytes, kSpritesMagic, 4) != 0) {
+        return 0;
+    }
+    const std::size_t span = 8 + (std::size_t)read_le_u16(bytes + 6);
+    return span <= avail ? span : 0;
+}
+
+static std::size_t scan_maps_span(const unsigned char *bytes, std::size_t avail)
+{
+    if (bytes == NULL || avail < 8 || std::memcmp(bytes, kScanMapsMagic, 4) != 0) {
+        return 0;
+    }
+    const std::size_t span = 8 + (std::size_t)read_le_u16(bytes + 6);
+    return span <= avail ? span : 0;
+}
+
+static bool write_sprites(FILE *f, const Micropolis *sim)
+{
+    std::vector<SavedSprite> list;
+    sim->collectSpritesForSave(list);
+    if (list.size() > kSpritesMaxCount) {
+        list.resize(kSpritesMaxCount);
+    }
+    const unsigned count = (unsigned)list.size();
+    const unsigned payload = sprites_payload(count);
+    std::vector<unsigned char> bytes(8 + payload);
+    for (int i = 0; i < 4; ++i) {
+        bytes[i] = (unsigned char)kSpritesMagic[i];
+    }
+    write_le_u16(bytes.data() + 4, kSpritesVersion);
+    write_le_u16(bytes.data() + 6, payload);
+    write_le_u16(bytes.data() + 8, count);
+    write_le_u16(bytes.data() + 10, (unsigned short)sim->spriteCycleValue());
+    unsigned char *out = bytes.data() + 12;
+    for (const SavedSprite &rec : list) {
+        const int fields[kSpritesFields] = {
+            rec.type, rec.frame, rec.x, rec.y, rec.width, rec.height,
+            rec.xOffset, rec.yOffset, rec.xHot, rec.yHot, rec.origX, rec.origY,
+            rec.destX, rec.destY, rec.count, rec.soundCount, rec.dir, rec.newDir,
+            rec.step, rec.flag, rec.control, rec.turn, rec.accel, rec.speed,
+            rec.is_global ? 1 : 0, 0,
+        };
+        for (unsigned i = 0; i < kSpritesFields; ++i) {
+            write_le_i32(out + i * 4, fields[i]);
+        }
+        out += kSpritesRecordBytes;
+    }
+    return fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+}
+
+static bool read_sprites(Micropolis *sim, const unsigned char *bytes, std::size_t avail)
+{
+    sim->pendingSpritesValid = false;
+    sim->pendingSprites.clear();
+    const std::size_t span = sprites_span(bytes, avail);
+    if (span == 0) {
+        return false;
+    }
+    const unsigned int version = read_le_u16(bytes + 4);
+    if (version != kSpritesVersion) {
+        return false;
+    }
+    const unsigned int payload = read_le_u16(bytes + 6);
+    if (span < 12 || payload != (unsigned)(span - 8)) {
+        return false;
+    }
+    const unsigned count = read_le_u16(bytes + 8);
+    if (count > kSpritesMaxCount || payload != sprites_payload(count)) {
+        return false;
+    }
+    sim->pendingSpriteCycle = (short)read_le_u16(bytes + 10);
+    const unsigned char *in = bytes + 12;
+    sim->pendingSprites.reserve(count);
+    for (unsigned i = 0; i < count; ++i) {
+        int fields[kSpritesFields];
+        for (unsigned f = 0; f < kSpritesFields; ++f) {
+            fields[f] = read_le_i32(in + f * 4);
+        }
+        in += kSpritesRecordBytes;
+        if (fields[0] <= SPRITE_NOTUSED || fields[0] >= SPRITE_COUNT) {
+            continue;
+        }
+        SavedSprite rec;
+        rec.type = fields[0];
+        rec.frame = fields[1];
+        rec.x = fields[2];
+        rec.y = fields[3];
+        rec.width = fields[4];
+        rec.height = fields[5];
+        rec.xOffset = fields[6];
+        rec.yOffset = fields[7];
+        rec.xHot = fields[8];
+        rec.yHot = fields[9];
+        rec.origX = fields[10];
+        rec.origY = fields[11];
+        rec.destX = fields[12];
+        rec.destY = fields[13];
+        rec.count = fields[14];
+        rec.soundCount = fields[15];
+        rec.dir = fields[16];
+        rec.newDir = fields[17];
+        rec.step = fields[18];
+        rec.flag = fields[19];
+        rec.control = fields[20];
+        rec.turn = fields[21];
+        rec.accel = fields[22];
+        rec.speed = fields[23];
+        rec.is_global = fields[24] != 0;
+        sim->pendingSprites.push_back(rec);
+    }
+    sim->pendingSpritesValid = true;
+    return true;
+}
+
 // Save-format marker (C1), always the last 12 bytes of a City 2 save:
 // "LCV1", u16 format version, u16 flags, u16 original corner tile, u16 0.
 // Format 1 is every save before the marker; format 2 adds the Data Center
@@ -1332,6 +1473,9 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
     std::memset(&cityEvents, 0, sizeof(cityEvents));
     pendingScanMapsValid = false;
     pendingTrafficMapsValid = false;
+    pendingSpritesValid = false;
+    pendingSpriteCycle = 0;
+    pendingSprites.clear();
     if (data.size() > dock_at + format_bytes) {
         const std::size_t avail = data.size() - dock_at - format_bytes;
         read_marina_dock(this, data.data() + dock_at, avail);
@@ -1344,8 +1488,16 @@ bool Micropolis::loadFileDir(const char *filename, const char *dir)
             }
         }
         const std::size_t scan_at = dock_bytes + ev_bytes;
+        std::size_t scan_bytes = 0;
         if (avail > scan_at) {
-            read_scan_maps(this, data.data() + dock_at + scan_at, avail - scan_at);
+            scan_bytes = scan_maps_span(data.data() + dock_at + scan_at, avail - scan_at);
+            if (scan_bytes > 0) {
+                read_scan_maps(this, data.data() + dock_at + scan_at, avail - scan_at);
+            }
+        }
+        const std::size_t spr_at = scan_at + scan_bytes;
+        if (avail > spr_at) {
+            read_sprites(this, data.data() + dock_at + spr_at, avail - spr_at);
         }
     }
 
@@ -1605,6 +1757,7 @@ bool Micropolis::loadFile(const char *filename)
     // pollution, so crime reads too high until the next scan. Put the saved
     // maps back (or settle them, on a file from before LCS1).
     applyOrSettleScanMapsAfterLoad();
+    applyPendingSpritesAfterLoad();
 
     restoreEnableDisasters();
     invalidateMaps();
@@ -1971,6 +2124,7 @@ bool Micropolis::saveFile(const char *requestedFilename, bool commitPending)
         write_marina_dock(f, this) &&
         write_city_events(f, this) &&
         write_scan_maps(f, this) &&
+        write_sprites(f, this) &&
         write_city_format(f, format_guard, corner);
 
     int ioerr = 0;
@@ -2172,6 +2326,11 @@ bool Micropolis::loadScenario(Scenario s)
     if (!loadFileDir(fname, resourceDir.c_str())) {
         return false;
     }
+    // A scenario is a fresh start. Mid-game sprites in a custom file must
+    // not come back after doSimInit.
+    pendingSpritesValid = false;
+    pendingSpriteCycle = 0;
+    pendingSprites.clear();
 
     cityFileName = "";
     setGameLevel(LEVEL_EASY);

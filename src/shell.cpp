@@ -1258,7 +1258,7 @@ redraw::Reasons Shell::redraw_reasons() const
     reasons.exposed = window_exposed_;
     reasons.motion = scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
                      puff_on_ || pop_on_ || flash_on_ || map_.fx_frame_due() || map_.ui_animating() ||
-                     funds_tick_.active();
+                     funds_tick_.active() || demand_tick_.active();
     return reasons;
 }
 
@@ -1321,7 +1321,7 @@ void Shell::loop()
                 timeout = std::min(timeout, 30);
             }
             if (scene_fade_.active() || dialog_anim_ms_ >= 0 || reveal_ms_ >= 0 || event_pan_on_ || marker_on_ || year_stamp_.visible() ||
-                puff_on_ || pop_on_ || flash_on_ || map_.ui_animating() || funds_tick_.active()) {
+                puff_on_ || pop_on_ || flash_on_ || map_.ui_animating() || funds_tick_.active() || demand_tick_.active()) {
                 timeout = std::min(timeout, 16);
             }
             if (menu_.open() && menu_edge_dir_ != 0) {
@@ -2405,6 +2405,12 @@ void Shell::handle_event(const SDL_Event &event)
             }
             break;
         }
+        if (dialog_ == Dialog::HowToPlay && !ctrl) {
+            if (notches != 0 && howto_scroll_max_ > 0) {
+                howto_scroll_ = std::max(0, std::min(howto_scroll_max_, howto_scroll_ - notches * dp(48)));
+            }
+            break;
+        }
         if (dialog_ == Dialog::Controls && !ctrl) {
             if (notches == 0) {
                 break;
@@ -2558,6 +2564,23 @@ void Shell::handle_event(const SDL_Event &event)
             }
             if (key == SDLK_HOME || key == SDLK_END) {
                 license_scroll_ = key == SDLK_HOME ? 0 : license_scroll_max_;
+                break;
+            }
+        }
+        if (dialog_ == Dialog::HowToPlay && howto_scroll_max_ > 0 && accel != AccelKey::Escape &&
+            accel != AccelKey::Return && accel != AccelKey::Space && key != SDLK_TAB && accel != AccelKey::Left &&
+            accel != AccelKey::Right) {
+            const int page = std::max(dp(40), howto_view_h_ - dp(40));
+            if (accel == AccelKey::Up || accel == AccelKey::Down) {
+                howto_scroll_ = std::max(0, std::min(howto_scroll_max_, howto_scroll_ + (accel == AccelKey::Up ? -dp(40) : dp(40))));
+                break;
+            }
+            if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+                howto_scroll_ = std::max(0, std::min(howto_scroll_max_, howto_scroll_ + (key == SDLK_PAGEUP ? -page : page)));
+                break;
+            }
+            if (key == SDLK_HOME || key == SDLK_END) {
+                howto_scroll_ = key == SDLK_HOME ? 0 : howto_scroll_max_;
                 break;
             }
         }
@@ -2958,6 +2981,12 @@ void Shell::handle_event(const SDL_Event &event)
         if ((pact == PadPrevTool || pact == PadNextTool) && dialog_ == Dialog::License && !menu_.open()) {
             const int page = std::max(dp(40), license_view_h_ - dp(40));
             scroll_license(pact == PadPrevTool ? -page : page);
+            break;
+        }
+        if ((pact == PadPrevTool || pact == PadNextTool) && dialog_ == Dialog::HowToPlay && howto_scroll_max_ > 0 &&
+            !menu_.open()) {
+            const int page = std::max(dp(40), howto_view_h_ - dp(40));
+            howto_scroll_ = std::max(0, std::min(howto_scroll_max_, howto_scroll_ + (pact == PadPrevTool ? -page : page)));
             break;
         }
         if (pact == PadPrevTool || pact == PadNextTool) {

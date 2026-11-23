@@ -1250,6 +1250,34 @@ public:
     int speed;
 };
 
+// One sprite as stored in the LCP1 city-file trailer (no list pointer).
+struct SavedSprite {
+    int type;
+    int frame;
+    int x;
+    int y;
+    int width;
+    int height;
+    int xOffset;
+    int yOffset;
+    int xHot;
+    int yHot;
+    int origX;
+    int origY;
+    int destX;
+    int destY;
+    int count;
+    int soundCount;
+    int dir;
+    int newDir;
+    int step;
+    int flag;
+    int control;
+    int turn;
+    int accel;
+    int speed;
+    bool is_global;
+};
 
 /**
  * Main simulator class
@@ -2029,6 +2057,14 @@ public:
     // terrain density back to the values that were saved, or recompute them
     // when the file is from before those maps were saved.
     void applyOrSettleScanMapsAfterLoad();
+    // After loading a saved city, put trains, ships, planes, helicopters,
+    // monsters, tornados, explosions and buses back from the LCP1 trailer.
+    // A file from before that trailer has no sprites, as today.
+    void applyPendingSpritesAfterLoad();
+    void collectSpritesForSave(std::vector<SavedSprite> &out) const;
+    bool spriteIsGlobal(const SimSprite *sprite) const;
+    short spriteCycleValue() const;
+    void setSpriteCycleValue(short value);
     void paintServiceCoverage();
 
     /**
@@ -2544,6 +2580,11 @@ public:
     short pendingRateOfGrowth[((WORLD_W + 7) / 8) * ((WORLD_H + 7) / 8)];
     Byte pendingPowerGrid[WORLD_W * WORLD_H];
 
+    // Sprites from a save's LCP1 trailer, applied after doSimInit.
+    // Old files have no trailer; the list stays empty.
+    bool pendingSpritesValid;
+    short pendingSpriteCycle;
+    std::vector<SavedSprite> pendingSprites;
 
     /**
      * LCW1 trailer decoded by loadFileDir and applied by loadFile after
