@@ -1540,8 +1540,8 @@ void Shell::loop()
         if (const int outcome = session_.take_scenario_outcome()) {
             session_.update_evaluation();
             scorebook_record_file(city_config_dir(), session_.scenario_id(), outcome > 0,
-                                  session_.evaluation().score, session_.calendar_year(),
-                                  session_.calendar_month(), session_.generated_seed());
+                                  session_.evaluation().score, session_.city_year(),
+                                  session_.city_month(), session_.generated_seed());
             if (dialog_ == Dialog::None) {
                 info_title_ = outcome > 0 ? "Scenario won" : "Scenario lost";
                 info_body_ = session_.scenario_outcome_text(outcome > 0);

@@ -444,6 +444,7 @@ public:
     std::string funds_text() const;
     std::string date_text() const;
     int city_year() const;
+    int city_month() const;
     // January of a new year reviews the year that just finished.
     int review_year() const;
     struct CensusMix {

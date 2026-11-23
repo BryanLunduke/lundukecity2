@@ -2715,6 +2715,11 @@ int CitySession::city_year() const
     return static_cast<int>(engine_->sim.startingYear);
 }
 
+int CitySession::city_month() const
+{
+    return calendar_month();
+}
+
 std::string CitySession::message() const
 {
     return message_;
