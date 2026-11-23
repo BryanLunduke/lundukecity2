@@ -4399,6 +4399,11 @@ void Shell::arm_smoke_pad()
         pushed.gbutton.button = SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER;
         pushed.gbutton.down = true;
         handle_event(pushed);
+        // The tool is chosen when the shoulder is released, so a down
+        // event alone is not enough.
+        pushed.type = SDL_EVENT_GAMEPAD_BUTTON_UP;
+        pushed.gbutton.down = false;
+        handle_event(pushed);
     }
     if (tool_index_ == before) {
         ran_ok_ = false;
