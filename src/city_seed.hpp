@@ -164,3 +164,28 @@ inline unsigned terrain_preview_key(int seed, int island, int rivers, int lakes,
     const auto bits = [](int value) { return static_cast<unsigned>(value); };
     return bits(seed) ^ (bits(island) << 8) ^ (bits(rivers) << 12) ^ (bits(lakes) << 16) ^ (bits(trees) << 20);
 }
+
+// Short rule under the New City seed field. Kept next to "New terrain"
+// so a typo has an obvious way out.
+inline const char *city_seed_rule_help()
+{
+    return "Blank or auto picks a seed. Type a whole number from 0 to 999999999, or use New terrain.";
+}
+
+// Status shown as the player types. ok is true for blank, "auto", or a
+// whole number in range. A typo explains the rule in place instead of
+// waiting for Generate.
+inline const char *city_seed_live_message(const std::string &raw, bool &ok)
+{
+    CitySeedParse parsed;
+    if (parse_city_seed(raw, parsed)) {
+        ok = true;
+        if (parsed.from_clock) {
+            return "A new seed will be chosen. Use New terrain to roll another.";
+        }
+        return "This seed will be used. New terrain rolls a fresh one.";
+    }
+    ok = false;
+    return "Use a whole number, auto, or leave this blank. New terrain rolls a fresh seed.";
+}
+

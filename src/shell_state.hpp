@@ -343,6 +343,7 @@ private:
     void show_problem_on_map(int kind, bool alternate);
     void queue_milestones(const std::vector<int> &ids);
     void note_civic_month();
+    void maybe_mayor_note();
     bool return_from_overlay();
     const char *glyph(SDL_GamepadButton button) const;
     const char *glyph_for(int pad_act) const;
@@ -837,13 +838,22 @@ private:
     double notice_bar_h_ = 0;
     // Alerts in the bottom-right corner of the map. Each one lasts about five
     // seconds and fades out. A repeat of the newest refreshes it instead of
-    // stacking, and at most three stack at once.
+    // stacking, and at most three stack at once. When the stack is full,
+    // priority beats age so a disaster, pause, briefing, or "Playing …"
+    // notice stays visible.
     struct Toast {
         std::string text;
         bool disaster = false;
         std::chrono::steady_clock::time_point until{};
+        // civic::advice_for kind to jump to when the toast is clicked. -1 = none.
+        int jump_kind = -1;
+        int priority = 0;
     };
     std::vector<Toast> toasts_;
+    // Last mid-year mayor's note: stamp is year*12+month. -1 = none yet.
+    int mayor_note_checked_ = -1;
+    int mayor_note_last_ = -1;
+    int mayor_note_kind_ = -1;
     std::chrono::steady_clock::time_point toast_seen_until_{};
     std::string toast_last_text_;
     static constexpr int kToastMs = 5000;
@@ -907,12 +917,14 @@ private:
     bool y_hold_fresh_ = false;
     int y_hold_ms_ = 0;
     bool y_hold_fired_ = false;
-    // L1/R1 held: after a short wait the tool jumps a whole toolbar section
-    // at a time (tool_groups::section_jump) instead of one slot.
+    // L1/R1 held: the preview tool is shown (section, name, and price) and
+    // only selected when the shoulder is released. After a short wait the
+    // preview jumps a whole toolbar section (tool_groups::section_jump).
     int shoulder_hold_dir_ = 0;
     bool shoulder_hold_fresh_ = false;
     int shoulder_hold_ms_ = 0;
     int shoulder_hold_steps_ = 0;
+    int shoulder_preview_ = -1;
     bool nav_repeat_fresh_ = false;
     bool budget_was_dirty_ = false;
     float raw_lx_ = 0.0f;

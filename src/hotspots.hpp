@@ -124,6 +124,7 @@ enum HotspotId : int {
     kTerrainBrush = 9530, // + 0 (1x1) or 1 (3x3)
     kTerrainPiece = 9540, // + terrain_paint::Piece (0..3)
     kQuickTool = 9600, // + tool index 0..26 (26 = Inspect)
+    kToastItem = 9700, // + stacked toast index (0 = lowest / first drawn)
 };
 
 inline bool is_dialog_button(int id)

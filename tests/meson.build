@@ -1311,3 +1311,12 @@ test(
     'SDL_AUDIO_DRIVER=dummy',
   ],
 )
+
+# Batch 2: scenario scorebook, seed validation, and toast priority.
+polish_batch2 = executable(
+  'polish_batch2',
+  'polish_batch2.cpp',
+  include_directories: include_directories('../src'),
+)
+
+test('polish_batch2', polish_batch2)

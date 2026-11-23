@@ -23,6 +23,8 @@
 #include "layout_mode.hpp"
 #include "tool_groups.hpp"
 #include "list_scroll.hpp"
+#include "mayor_notes.hpp"
+#include "toast_queue.hpp"
 #include "messages.hpp"
 #include "notice_bar.hpp"
 #include "present.hpp"
@@ -32,6 +34,9 @@
 #include "theme.hpp"
 #include "tile_atlas.hpp"
 #include "scenario_preview.hpp"
+#include "scenario_briefing.hpp"
+#include "scenario_scorebook.hpp"
+#include "platform.hpp"
 #include "side_widgets.hpp"
 #include "special_buildings.hpp"
 #include "tool_keys.hpp"
@@ -698,6 +703,10 @@ void Shell::draw_menubar(cairo_t *cr)
     }
 }
 
+void paint_glance_swatch(cairo_t *cr, const CityGlance &glance, double x, double y, double tw, double th);
+std::string city_file_title(const std::string &path);
+std::string glance_stats_line(const CityGlance &glance);
+
 void Shell::draw_menu_dropdown(cairo_t *cr)
 {
     struct Ink {
@@ -1008,11 +1017,21 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         consider("No recent cities");
     }
     for (const std::string &shown : recent_) {
-        const auto slash = shown.find_last_of("/\\");
-        consider(slash == std::string::npos ? shown : shown.substr(slash + 1));
+        consider(city_file_title(shown));
+        const CityGlance glance = city_glance(shown);
+        if (glance.ok) {
+            consider(glance_stats_line(glance));
+        }
     }
-    const DialogRect sub = place_submenu(drop_x, drop_w, have_recent_row ? recent_row_y : menu_h_ + 4, row_h, rows,
-                                         label_w + dp(28), win_w_, win_h_, dp(180));
+    const double portrait_w = dp(72);
+    const double portrait_h = dp(60);
+    double recent_row = std::max(row_h, portrait_h + dp(8));
+    const double recent_extra = portrait_w + dp(20);
+    if (rows * recent_row + 8.0 > win_h_ - 8.0) {
+        recent_row = std::max(dp(40) * 1.0, (win_h_ - 16.0) / std::max(1, rows));
+    }
+    const DialogRect sub = place_submenu(drop_x, drop_w, have_recent_row ? recent_row_y : menu_h_ + 4, recent_row, rows,
+                                         label_w + recent_extra + dp(28), win_w_, win_h_, dp(280));
     cairo_set_source_rgba(cr, 0, 0, 0, 0.18);
     cairo_rectangle(cr, sub.x + 3, sub.y + 3, sub.w, sub.h);
     cairo_fill(cr);
@@ -1025,17 +1044,80 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         return;
     }
     for (int i = 0; i < static_cast<int>(recent_.size()); ++i) {
-        const double ry = sub.y + 4 + i * row_h;
+        const double ry = sub.y + 4 + i * recent_row;
         const int id = kRecentItem + i;
-        push_hot(sub.x + 2, ry, std::max(1.0, sub.w - 4), row_h, id);
+        push_hot(sub.x + 2, ry, std::max(1.0, sub.w - 4), recent_row, id);
         if (menu_.recent_cursor == i || hover_id_ == id) {
-            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), row_h, ink_hover.r, ink_hover.g, ink_hover.b);
+            fill(cr, sub.x + 3, ry, std::max(1.0, sub.w - 6), recent_row, ink_hover.r, ink_hover.g, ink_hover.b);
         }
         const std::string shown = recent_[static_cast<std::size_t>(i)];
-        const auto slash = shown.find_last_of("/\\");
-        paint_text(cr, menu_font(), slash == std::string::npos ? shown : shown.substr(slash + 1), sub.x + 10, ry + 7,
-                   ink_text.r, ink_text.g, ink_text.b, text_w);
+        const CityGlance glance = city_glance(shown);
+        const double thumb_h = std::min(portrait_h, recent_row - dp(6));
+        const double thumb_w = std::floor(thumb_h * 1.2);
+        double text_x = sub.x + 10;
+        if (glance.ok && !glance.swatch.empty()) {
+            paint_glance_swatch(cr, glance, sub.x + 8, ry + (recent_row - thumb_h) / 2.0, thumb_w, thumb_h);
+            text_x = sub.x + 8 + thumb_w + 8;
+        }
+        const int name_w = static_cast<int>(std::max(40.0, sub.x + sub.w - dp(8) - text_x));
+        paint_text(cr, menu_font(), city_file_title(shown), text_x, ry + dp(6), ink_text.r, ink_text.g, ink_text.b,
+                   name_w);
+        if (glance.ok || !glance.summary.empty()) {
+            paint_text(cr, ui_font(), glance_stats_line(glance), text_x, ry + dp(26), ink_accel.r, ink_accel.g,
+                       ink_accel.b, name_w);
+        }
     }
+}
+
+void paint_glance_swatch(cairo_t *cr, const CityGlance &glance, double x, double y, double tw, double th)
+{
+    if (!glance.ok || glance.swatch.size() != static_cast<std::size_t>(120 * 100) || tw < 2 || th < 2) {
+        return;
+    }
+    cairo_surface_t *swatch = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 120, 100);
+    unsigned char *pixels = cairo_image_surface_get_data(swatch);
+    const int stride = cairo_image_surface_get_stride(swatch);
+    for (int sy = 0; sy < 100; ++sy) {
+        for (int sx = 0; sx < 120; ++sx) {
+            const std::uint32_t rgb = glance.swatch[static_cast<std::size_t>(sy * 120 + sx)];
+            auto *pixel = reinterpret_cast<std::uint32_t *>(pixels + sy * stride + sx * 4);
+            *pixel = rgb;
+        }
+    }
+    cairo_surface_mark_dirty(swatch);
+    cairo_save(cr);
+    cairo_rectangle(cr, x, y, tw, th);
+    cairo_clip(cr);
+    cairo_translate(cr, x, y);
+    cairo_scale(cr, tw / 120.0, th / 100.0);
+    cairo_set_source_surface(cr, swatch, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    cairo_surface_destroy(swatch);
+    stroke_rect(cr, x, y, tw, th, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+}
+
+std::string city_file_title(const std::string &path)
+{
+    const auto slash = path.find_last_of("/\\");
+    std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
+    if (name.size() > 4) {
+        const std::string tail = name.substr(name.size() - 4);
+        if (tail == ".cty" || tail == ".CTY") {
+            name = name.substr(0, name.size() - 4);
+        }
+    }
+    return name;
+}
+
+std::string glance_stats_line(const CityGlance &glance)
+{
+    if (!glance.ok) {
+        return glance.summary;
+    }
+    return std::string(city_glance_month(glance.month)) + " " + std::to_string(glance.year) + "    " +
+           civic::dollars(glance.funds) + "    Pop " + grouped_number(glance.population);
 }
 
 void paint_dim_plate(cairo_t *cr, double x, double y, double w, double h, double red, double green, double blue)
@@ -1646,6 +1728,11 @@ void Shell::draw_dialog(cairo_t *cr)
         if (!dialog_error_.empty()) {
             want_h += dp(22);
         }
+        // The seed field explains its rule as you type, so the land page
+        // always reserves a line (or two, when the help wraps).
+        if (new_page_ == 1) {
+            want_h += dp(36);
+        }
         const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
         const double x = panel.x;
         const double y = panel.y;
@@ -1731,8 +1818,14 @@ void Shell::draw_dialog(cairo_t *cr)
             // rolls a new seed, sits in the third on the same row.
             const double seed_x = cols_x;
             const double seed_w = choice_w * 2.0 + col_gap;
+            bool seed_field_ok = true;
+            city_seed_live_message(field_b_, seed_field_ok);
             fill(cr, seed_x, seed_y, seed_w, dp(32), 1, 1, 1);
-            stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+            if (seed_field_ok) {
+                stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+            } else {
+                stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), 0.7, 0.15, 0.12);
+            }
             push_hot(seed_x, seed_y, seed_w, dp(32), kFieldSeed);
             push_focus(kFieldSeed);
             // One line, clipped to the box. A long seed used to wrap onto
@@ -1810,10 +1903,23 @@ void Shell::draw_dialog(cairo_t *cr)
                 }
             }
             double preview_y = seed_y + row_step;
-            if (!dialog_error_.empty()) {
-                paint_text(cr, ui_font(), dialog_error_, cols_x, seed_y + row_h + dp(4), 0.6, 0.1, 0.1,
-                           static_cast<int>(cols_w));
-                preview_y += dp(22);
+            {
+                bool seed_ok = true;
+                const char *live = city_seed_live_message(field_b_, seed_ok);
+                // A typo's live line already names New terrain, so do not
+                // stack the rule under it and squeeze out the map at 960.
+                const std::string shown = live;
+                const double help_r = seed_ok ? theme::kAccelR : 0.6;
+                const double help_g = seed_ok ? theme::kAccelG : 0.1;
+                const double help_b = seed_ok ? theme::kAccelB : 0.1;
+                const int help_w = static_cast<int>(cols_w);
+                paint_text(cr, ui_font(), shown, cols_x, seed_y + row_h + dp(4), help_r, help_g, help_b, help_w);
+                preview_y += std::max(static_cast<double>(dp(22)),
+                                      static_cast<double>(measure_text(cr, ui_font(), shown, help_w).height) + dp(8));
+                if (!dialog_error_.empty() && seed_ok) {
+                    paint_text(cr, ui_font(), dialog_error_, cols_x, preview_y, 0.6, 0.1, 0.1, help_w);
+                    preview_y += dp(22);
+                }
             }
             const double buttons_y = y + dh - margin - dp(36);
             const double summary_y = buttons_y - dp(10) - dp(20);
@@ -1862,7 +1968,9 @@ void Shell::draw_dialog(cairo_t *cr)
     }
     if (dialog_ == Dialog::Scenario) {
         const int count = CitySession::kScenarioCount;
-        const double row_h = dp(76);
+        // Taller rows leave room for a larger preview, the years, a
+        // difficulty tag, and the scorebook line on every row.
+        const double row_h = dp(96);
         const double header = dp(70);
         const double footer = margin + dp(36) + dp(12);
         const double max_list = std::max(row_h, band_h - 2.0 * margin - header - footer);
@@ -1874,7 +1982,7 @@ void Shell::draw_dialog(cairo_t *cr)
             want_rows = count;
         }
         const double want_h = header + footer + want_rows * row_h;
-        const double want_w = std::min(static_cast<double>(dp(680)), std::max(1.0, win_w_ - 2.0 * margin));
+        const double want_w = std::min(static_cast<double>(dp(740)), std::max(1.0, win_w_ - 2.0 * margin));
         const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
         const double x = panel.x;
         const double y = panel.y;
@@ -1887,9 +1995,9 @@ void Shell::draw_dialog(cairo_t *cr)
               static_cast<int>(dw - 2 * margin));
         const double list_top = y + header;
         const double buttons_y = y + dh - margin - dp(36);
-        // Room for the chosen scenario's goal: two lines, or more when the
-        // longest goal (with its hint) wraps further at a large UI scale.
-        // The longest, so the list does not change length as you scroll.
+        // Room for the chosen scenario's full goal: never folded or
+        // ellipsized. Height is reserved for the longest goal so the list
+        // does not change length as you scroll.
         double goal_h = 0;
         for (int i = 0; i < count; ++i) {
             goal_h = std::max(goal_h, static_cast<double>(measure_text(cr, ui_font(), CitySession::scenario_def(i).goal,
@@ -1917,8 +2025,9 @@ void Shell::draw_dialog(cairo_t *cr)
         align_list_focus();
         const double track_w = dp(12);
         const double row_w = dw - margin - track_w - dp(16);
-        const int preview_w = dp(72);
+        const int preview_w = dp(96);
         const int preview_h = std::max(1, preview_w * CitySession::kWorldH / CitySession::kWorldW);
+        const std::vector<ScenarioScore> book = load_scorebook(city_config_dir());
         for (int row = 0; row < visible; ++row) {
             const int i = list_scroll_ + row;
             if (i < 0 || i >= count) {
@@ -1959,19 +2068,49 @@ void Shell::draw_dialog(cairo_t *cr)
             stroke_rect(cr, tx, ty, preview_w, preview_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
             const double text_x = tx + preview_w + dp(8);
             const double text_w = std::max(1.0, x + dp(8) + row_w - text_x - dp(6));
+            const ScenarioDifficulty difficulty = scenario_difficulty_from(def.years, def.goal);
+            const char *tag = scenario_difficulty_tag(difficulty);
+            const TextMetrics tag_m = measure_text(cr, ui_font(), tag, -1);
+            const double tag_pad_x = dp(6);
+            const double tag_pad_y = dp(2);
+            const double tag_w = tag_m.width + tag_pad_x * 2;
+            const double tag_h = tag_m.height + tag_pad_y * 2;
+            const double tag_x = text_x + std::max(0.0, text_w - tag_w);
+            const double tag_y = ry + dp(6);
+            double tag_r = 0.22;
+            double tag_g = 0.45;
+            double tag_b = 0.22;
+            if (difficulty == ScenarioDifficulty::Medium) {
+                tag_r = 0.50;
+                tag_g = 0.36;
+                tag_b = 0.08;
+            } else if (difficulty == ScenarioDifficulty::Hard) {
+                tag_r = 0.58;
+                tag_g = 0.16;
+                tag_b = 0.14;
+            }
+            fill(cr, tag_x, tag_y, tag_w, tag_h, tag_r, tag_g, tag_b);
+            paint_text(cr, ui_font(), tag, tag_x + tag_pad_x, tag_y + tag_pad_y, 1, 1, 1, -1);
             std::string line = def.name;
             const std::string year = std::to_string(def.year);
             if (line.find(year) == std::string::npos) {
                 line += " (" + year + ")";
             }
-            paint_text(cr, body_font(), line, text_x, ry + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
+            const int name_w = std::max(1, static_cast<int>(tag_x - text_x - dp(6)));
+            paint_text(cr, body_font(), line, text_x, ry + dp(6), theme::kTextR, theme::kTextG, theme::kTextB, name_w);
+            const std::string years_line = scenario_years_label(def.years);
+            paint_text(cr, ui_font(), years_line, text_x, ry + dp(28), theme::kAccelR, theme::kAccelG, theme::kAccelB,
                        static_cast<int>(text_w));
-            paint_text(cr, ui_font(), def.summary, text_x, ry + dp(28), theme::kAccelR, theme::kAccelG, theme::kAccelB,
+            const ScenarioScore entry = scorebook_find(book, def.id);
+            const std::string book_line = scorebook_summary(entry);
+            paint_text(cr, ui_font(), book_line, text_x, ry + dp(50), theme::kAccelR, theme::kAccelG, theme::kAccelB,
                        static_cast<int>(text_w));
         }
         {
             const CitySession::ScenarioDef &chosen = CitySession::scenario_def(scenario_index_);
             const double dy = buttons_y - detail_h;
+            // Full goal, always visible: the reserved height is the longest
+            // wrapped goal, so this is never folded or cut mid-sentence.
             paint_text(cr, ui_font(), chosen.goal, x + margin, dy, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 2 * margin));
         }
@@ -2501,7 +2640,7 @@ void Shell::draw_dialog(cairo_t *cr)
         const double osk_y = name_y - dp(8) - osk_h;
         const double list_bottom = (osk_h > 0 ? osk_y : name_y) - dp(8);
         const double list_h = std::max(static_cast<double>(dp(40)), list_bottom - list_top);
-        const int row_px = dp(56);
+        const int row_px = dp(72);
         const int visible = std::max(1, static_cast<int>(list_h / row_px));
         files_visible_ = visible;
         const int count = static_cast<int>(files_.size());
@@ -2550,35 +2689,19 @@ void Shell::draw_dialog(cairo_t *cr)
                 const double sub_r = theme::kAccelR;
                 const double sub_g = theme::kAccelG;
                 const double sub_b = theme::kAccelB;
-                if (!glance.ok && !glance.summary.empty()) {
-                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, sub_r, sub_g, sub_b,
-                               static_cast<int>(row_w - (text_x - x)));
-                } else if (glance.ok && !glance.swatch.empty()) {
-                    const int tw = 48;
-                    const int th = 40;
-                    cairo_surface_t *swatch = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 120, 100);
-                    unsigned char *pixels = cairo_image_surface_get_data(swatch);
-                    const int stride = cairo_image_surface_get_stride(swatch);
-                    for (int sy = 0; sy < 100; ++sy) {
-                        for (int sx = 0; sx < 120; ++sx) {
-                            const std::uint32_t rgb = glance.swatch[static_cast<std::size_t>(sy * 120 + sx)];
-                            auto *pixel = reinterpret_cast<std::uint32_t *>(pixels + sy * stride + sx * 4);
-                            *pixel = rgb;
-                        }
-                    }
-                    cairo_surface_mark_dirty(swatch);
-                    cairo_save(cr);
-                    cairo_translate(cr, x + 16, ry + 4);
-                    cairo_scale(cr, tw / 120.0, th / 100.0);
-                    cairo_set_source_surface(cr, swatch, 0, 0);
-                    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-                    cairo_paint(cr);
-                    cairo_restore(cr);
-                    cairo_surface_destroy(swatch);
-                    text_x = x + 16 + tw + 8;
-                    paint_text(cr, ui_font(), glance.summary, text_x, ry + 26, sub_r, sub_g, sub_b,
-                               static_cast<int>(row_w - (text_x - x)));
+                const double thumb_h = std::min(dp(60) * 1.0, row_h - 8);
+                const double thumb_w = std::floor(thumb_h * 1.2);
+                if (glance.ok && !glance.swatch.empty()) {
+                    paint_glance_swatch(cr, glance, x + 16, ry + (row_h - thumb_h) / 2.0, thumb_w, thumb_h);
+                    text_x = x + 16 + thumb_w + 8;
                 }
+                const int info_w = static_cast<int>(std::max(1.0, x + 12 + row_w - text_x - 8));
+                paint_text(cr, body_font(), city_file_title(name), text_x, ry + 4, theme::kTextR, theme::kTextG,
+                           theme::kTextB, info_w);
+                if (glance.ok || !glance.summary.empty()) {
+                    paint_text(cr, ui_font(), glance_stats_line(glance), text_x, ry + 28, sub_r, sub_g, sub_b, info_w);
+                }
+                continue;
             }
             paint_text(cr, body_font(), name, text_x, ry + 4, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(std::max(1.0, x + 12 + row_w - text_x - 8)));
@@ -4764,11 +4887,16 @@ void Shell::sync_toasts(std::chrono::steady_clock::time_point now)
             const auto until = now + std::chrono::milliseconds(kToastMs);
             if (!toasts_.empty() && toasts_.back().text == shown_message_) {
                 toasts_.back().until = until;
-            } else {
-                toasts_.push_back(Toast{shown_message_, notice_is_disaster(shown_message_), until});
-                if (toasts_.size() > kToastMax) {
-                    toasts_.erase(toasts_.begin());
+                toasts_.back().priority = toast_priority_for(shown_message_, toasts_.back().disaster);
+                if (mayor_note_is(shown_message_)) {
+                    toasts_.back().jump_kind = mayor_note_kind_;
                 }
+            } else {
+                const bool disaster = notice_is_disaster(shown_message_);
+                const int jump = mayor_note_is(shown_message_) ? mayor_note_kind_ : -1;
+                Toast toast{shown_message_, disaster, until, jump, toast_priority_for(shown_message_, disaster)};
+                toasts_.push_back(toast);
+                toast_trim(toasts_, kToastMax);
             }
         } else if (!toasts_.empty() && toasts_.back().text == toast_last_text_) {
             toasts_.pop_back();
@@ -4893,16 +5021,21 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
             notice_bar_h_ = h;
         }
     }
-    for (auto it = toasts_.rbegin(); it != toasts_.rend(); ++it) {
+    const std::vector<std::size_t> order = toast_draw_order(toasts_);
+    for (std::size_t slot : order) {
+        const Toast &toast = toasts_[slot];
         const double left_ms =
-            static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(it->until - now).count());
+            static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(toast.until - now).count());
         const double alpha = std::max(0.0, std::min(1.0, left_ms / kToastFadeMs));
         if (alpha <= 0.0) {
             continue;
         }
-        const BannerColors colors = message_bar_colors(it->disaster, look);
-        if (!plate(it->text, colors, 0, 0, 0, it->disaster, alpha, x, y, w, h)) {
+        const BannerColors colors = message_bar_colors(toast.disaster, look);
+        if (!plate(toast.text, colors, 0, 0, 0, toast.disaster, alpha, x, y, w, h)) {
             break;
+        }
+        if (toast.jump_kind >= 0) {
+            push_hot(x, y, w, h, kToastItem + static_cast<int>(slot));
         }
     }
     cairo_restore(cr);
@@ -6630,9 +6763,15 @@ void Shell::draw_handheld_hud(cairo_t *cr)
     if (!menu_.open()) {
         const int count = kToolCount;
         int shown_tool = palette_.focus() >= 0 ? palette_.focus() : tool_index_;
+        if (shoulder_hold_dir_ != 0 && shoulder_preview_ >= 0 && shoulder_preview_ < count) {
+            shown_tool = shoulder_preview_;
+        }
         if (shown_tool < 0 || shown_tool >= count) {
             shown_tool = -1;
         }
+        const int label_tool = (shoulder_hold_dir_ != 0 && shoulder_preview_ >= 0 && shoulder_preview_ < count)
+                                   ? shoulder_preview_
+                                   : tool_index_;
         double xs[kToolCount] = {};
         double ws[kToolCount] = {};
         const double big = static_cast<double>(quick_h_);
@@ -6665,7 +6804,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         }
         for (int i = 0; i < count; ++i) {
             const double slot = ws[i];
-            const bool chosen = i == tool_index_;
+            const bool chosen = i == label_tool;
             const double sx = xs[i];
             // Smaller slots sit on the bar's middle line.
             const double sy = quick_y_ + dp(4) + (big - slot) / 2.0 - (chosen ? lift : 0);
@@ -6757,9 +6896,13 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             slate_round(cr, bar_x + bar_w + dp(8), ky, kw, m.height + dp(6), dp(4), kSlatePanel, 0.95);
             slate_text(cr, tag_font(), next, bar_x + bar_w + dp(8) + dp(6), ky + dp(3), kSlateInk);
         }
-        // Tool name and price above the raised slot.
-        if (tool_index_ >= 0 && tool_index_ < count && !open_ui) {
-            const ToolDef *tool = tool_by_index(tool_index_);
+        // Tool name and price above the raised slot. While L1/R1 is held,
+        // this is the previewed tool (and its section); releasing picks it.
+        if (label_tool >= 0 && label_tool < count && !open_ui) {
+            const ToolDef *tool = tool_by_index(label_tool);
+            const int group = tool_groups::group_of(label_tool);
+            const char *section = group >= 0 ? tool_groups::groups()[group].title
+                                             : (label_tool == kToolCount - 1 ? "INSPECT" : nullptr);
             std::string caption = tool != nullptr ? tool->name : "";
             if (tool != nullptr && tool->cost > 0) {
                 caption += "  " + civic::dollars(tool->cost);
@@ -6786,15 +6929,25 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             const TextMetrics m = measure_text(cr, bold_font(), caption, -1);
             const int about_room = static_cast<int>(std::max(1.0, std::min(win_w_ - dp(32) * 1.0, dp(560) * 1.0)));
             const TextMetrics am = about.empty() ? TextMetrics{} : measure_text(cr, ui_font(), about, about_room);
-            const double cw = std::max(static_cast<double>(m.width), static_cast<double>(am.width)) + dp(16);
-            const double ch = m.height + (about.empty() ? 0.0 : am.height + dp(2)) + dp(8);
-            double cx = xs[tool_index_] + ws[tool_index_] / 2.0 - cw / 2.0;
+            const bool show_section = shoulder_hold_dir_ != 0 && section != nullptr && section[0] != '\0';
+            const TextMetrics sm = show_section ? measure_text(cr, tag_font(), section, -1) : TextMetrics{};
+            const double cw = std::max(std::max(static_cast<double>(m.width), static_cast<double>(am.width)),
+                                       static_cast<double>(sm.width)) +
+                              dp(16);
+            const double ch = (show_section ? sm.height + dp(2) : 0.0) + m.height +
+                              (about.empty() ? 0.0 : am.height + dp(2)) + dp(8);
+            double cx = xs[label_tool] + ws[label_tool] / 2.0 - cw / 2.0;
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
-            slate_text(cr, bold_font(), caption, cx + dp(8), cy + dp(4), kSlateGold);
+            double text_y = cy + dp(4);
+            if (show_section) {
+                slate_text(cr, tag_font(), section, cx + dp(8), text_y, kSlateGoldDim);
+                text_y += sm.height + dp(2);
+            }
+            slate_text(cr, bold_font(), caption, cx + dp(8), text_y, kSlateGold);
             if (!about.empty()) {
-                paint_text(cr, ui_font(), about, cx + dp(8), cy + dp(4) + m.height + dp(2), kSlateInk.r, kSlateInk.g,
+                paint_text(cr, ui_font(), about, cx + dp(8), text_y + m.height + dp(2), kSlateInk.r, kSlateInk.g,
                            kSlateInk.b, about_room);
             }
         }
