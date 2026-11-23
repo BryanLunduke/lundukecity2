@@ -525,6 +525,9 @@ public:
     // "Traffic 62 → <40 · 92,140 → ≥90,000".
     std::string scenario_clock_short() const;
     std::string scenario_meter_short() const;
+    // Tight forms for a 960-pixel band: "18k→100k · 30y".
+    std::string scenario_clock_compact() const;
+    std::string scenario_meter_compact() const;
 
     // Public-opinion and score data from the last cityEvaluation().
     // update_evaluation() runs that pass; evaluation() only reads it.

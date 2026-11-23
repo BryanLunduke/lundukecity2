@@ -55,6 +55,23 @@ std::string grouped_count(std::int64_t value)
     return grouped;
 }
 
+// Short population figures for a narrow goal meter: 18,080 becomes "18k".
+std::string compact_count(std::int64_t value)
+{
+    const bool neg = value < 0;
+    const std::int64_t mag = neg ? -value : value;
+    std::string text;
+    if (mag >= 10000) {
+        text = std::to_string((mag + 500) / 1000) + "k";
+    } else {
+        text = grouped_count(mag);
+    }
+    if (neg) {
+        text.insert(text.begin(), '-');
+    }
+    return text;
+}
+
 // Funds, taxes, and department costs. The sign sits in front of the dollar.
 std::string with_commas(std::int64_t value)
 {
@@ -2830,6 +2847,27 @@ std::string CitySession::scenario_clock_short() const
     return std::to_string(years) + "y " + std::to_string(months) + "m left";
 }
 
+std::string CitySession::scenario_clock_compact() const
+{
+    const Micropolis &sim = engine_->sim;
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+        return {};
+    }
+    if (sim.scoreWait <= 0) {
+        return "Time up";
+    }
+    const int cycles = static_cast<int>(sim.scoreWait);
+    const int years = cycles / 48;
+    const int months = (cycles % 48) / 4;
+    if (years <= 0) {
+        return std::to_string(months) + "m";
+    }
+    if (months <= 0) {
+        return std::to_string(years) + "y";
+    }
+    return std::to_string(years) + "y" + std::to_string(months) + "m";
+}
+
 bool CitySession::traffic_measured() const
 {
     // The engine runs cityEvaluation (and so getTrafficAverage) with each
@@ -2877,6 +2915,44 @@ std::string CitySession::scenario_meter_short() const
         return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + " → >500";
     }
     return grouped_count(people > 0 ? people : 0) + " → 100,000";
+}
+
+std::string CitySession::scenario_meter_compact() const
+{
+    const int id = scenario_id();
+    if (id == 0 || scenario_years_left() < 0) {
+        return {};
+    }
+    const Micropolis &sim = engine_->sim;
+    const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
+    if (id == SC_DETROIT) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + "→<60";
+    }
+    if (id == SC_SEATTLE) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + "→<" +
+               std::to_string(SEATTLE_CRIME_GOAL) + " " + seattle_zone_short(sim);
+    }
+    if (id == SC_SAN_FRANCISCO_1962) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + "→<" +
+               std::to_string(SF1962_CRIME_GOAL) + " " + sf1962_escape_short(sim);
+    }
+    if (id == SC_PORTLAND) {
+        return "Crime " + std::to_string(static_cast<int>(sim.crimeAverage)) + "→<" +
+               std::to_string(PORTLAND_CRIME_GOAL) + " " + portland_fires_short(sim);
+    }
+    if (id == SC_SAN_DIEGO) {
+        return compact_count(people > 0 ? people : 0) + "→≥" + compact_count(SANDIEGO_POPULATION_GOAL) + " " +
+               san_diego_lion_short(sim);
+    }
+    if (id == SC_BERN) {
+        const std::string traffic = traffic_measured() ? std::to_string(static_cast<int>(sim.trafficAverage)) : "—";
+        return "T" + traffic + "→<" + std::to_string(BERN_TRAFFIC_GOAL) + " " +
+               compact_count(people > 0 ? people : 0) + "→≥" + compact_count(BERN_POPULATION_GOAL);
+    }
+    if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
+        return "Score " + compact_count(static_cast<std::int64_t>(sim.cityScore)) + "→>500";
+    }
+    return compact_count(people > 0 ? people : 0) + "→100k";
 }
 
 std::string CitySession::scenario_progress() const
