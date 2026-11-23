@@ -32,6 +32,9 @@
 #include "theme.hpp"
 #include "tile_atlas.hpp"
 #include "scenario_preview.hpp"
+#include "scenario_briefing.hpp"
+#include "scenario_scorebook.hpp"
+#include "platform.hpp"
 #include "side_widgets.hpp"
 #include "special_buildings.hpp"
 #include "tool_keys.hpp"
@@ -1862,7 +1865,9 @@ void Shell::draw_dialog(cairo_t *cr)
     }
     if (dialog_ == Dialog::Scenario) {
         const int count = CitySession::kScenarioCount;
-        const double row_h = dp(76);
+        // Taller rows leave room for a larger preview, the years, a
+        // difficulty tag, and the scorebook line on every row.
+        const double row_h = dp(96);
         const double header = dp(70);
         const double footer = margin + dp(36) + dp(12);
         const double max_list = std::max(row_h, band_h - 2.0 * margin - header - footer);
@@ -1874,7 +1879,7 @@ void Shell::draw_dialog(cairo_t *cr)
             want_rows = count;
         }
         const double want_h = header + footer + want_rows * row_h;
-        const double want_w = std::min(static_cast<double>(dp(680)), std::max(1.0, win_w_ - 2.0 * margin));
+        const double want_w = std::min(static_cast<double>(dp(740)), std::max(1.0, win_w_ - 2.0 * margin));
         const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
         const double x = panel.x;
         const double y = panel.y;
@@ -1887,9 +1892,9 @@ void Shell::draw_dialog(cairo_t *cr)
               static_cast<int>(dw - 2 * margin));
         const double list_top = y + header;
         const double buttons_y = y + dh - margin - dp(36);
-        // Room for the chosen scenario's goal: two lines, or more when the
-        // longest goal (with its hint) wraps further at a large UI scale.
-        // The longest, so the list does not change length as you scroll.
+        // Room for the chosen scenario's full goal: never folded or
+        // ellipsized. Height is reserved for the longest goal so the list
+        // does not change length as you scroll.
         double goal_h = 0;
         for (int i = 0; i < count; ++i) {
             goal_h = std::max(goal_h, static_cast<double>(measure_text(cr, ui_font(), CitySession::scenario_def(i).goal,
@@ -1917,8 +1922,9 @@ void Shell::draw_dialog(cairo_t *cr)
         align_list_focus();
         const double track_w = dp(12);
         const double row_w = dw - margin - track_w - dp(16);
-        const int preview_w = dp(72);
+        const int preview_w = dp(96);
         const int preview_h = std::max(1, preview_w * CitySession::kWorldH / CitySession::kWorldW);
+        const std::vector<ScenarioScore> book = load_scorebook(city_config_dir());
         for (int row = 0; row < visible; ++row) {
             const int i = list_scroll_ + row;
             if (i < 0 || i >= count) {
@@ -1959,19 +1965,49 @@ void Shell::draw_dialog(cairo_t *cr)
             stroke_rect(cr, tx, ty, preview_w, preview_h, theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
             const double text_x = tx + preview_w + dp(8);
             const double text_w = std::max(1.0, x + dp(8) + row_w - text_x - dp(6));
+            const ScenarioDifficulty difficulty = scenario_difficulty_from(def.years, def.goal);
+            const char *tag = scenario_difficulty_tag(difficulty);
+            const TextMetrics tag_m = measure_text(cr, ui_font(), tag, -1);
+            const double tag_pad_x = dp(6);
+            const double tag_pad_y = dp(2);
+            const double tag_w = tag_m.width + tag_pad_x * 2;
+            const double tag_h = tag_m.height + tag_pad_y * 2;
+            const double tag_x = text_x + std::max(0.0, text_w - tag_w);
+            const double tag_y = ry + dp(6);
+            double tag_r = 0.22;
+            double tag_g = 0.45;
+            double tag_b = 0.22;
+            if (difficulty == ScenarioDifficulty::Medium) {
+                tag_r = 0.50;
+                tag_g = 0.36;
+                tag_b = 0.08;
+            } else if (difficulty == ScenarioDifficulty::Hard) {
+                tag_r = 0.58;
+                tag_g = 0.16;
+                tag_b = 0.14;
+            }
+            fill(cr, tag_x, tag_y, tag_w, tag_h, tag_r, tag_g, tag_b);
+            paint_text(cr, ui_font(), tag, tag_x + tag_pad_x, tag_y + tag_pad_y, 1, 1, 1, -1);
             std::string line = def.name;
             const std::string year = std::to_string(def.year);
             if (line.find(year) == std::string::npos) {
                 line += " (" + year + ")";
             }
-            paint_text(cr, body_font(), line, text_x, ry + dp(6), theme::kTextR, theme::kTextG, theme::kTextB,
+            const int name_w = std::max(1, static_cast<int>(tag_x - text_x - dp(6)));
+            paint_text(cr, body_font(), line, text_x, ry + dp(6), theme::kTextR, theme::kTextG, theme::kTextB, name_w);
+            const std::string years_line = scenario_years_label(def.years);
+            paint_text(cr, ui_font(), years_line, text_x, ry + dp(28), theme::kAccelR, theme::kAccelG, theme::kAccelB,
                        static_cast<int>(text_w));
-            paint_text(cr, ui_font(), def.summary, text_x, ry + dp(28), theme::kAccelR, theme::kAccelG, theme::kAccelB,
+            const ScenarioScore entry = scorebook_find(book, def.id);
+            const std::string book_line = scorebook_summary(entry);
+            paint_text(cr, ui_font(), book_line, text_x, ry + dp(50), theme::kAccelR, theme::kAccelG, theme::kAccelB,
                        static_cast<int>(text_w));
         }
         {
             const CitySession::ScenarioDef &chosen = CitySession::scenario_def(scenario_index_);
             const double dy = buttons_y - detail_h;
+            // Full goal, always visible: the reserved height is the longest
+            // wrapped goal, so this is never folded or cut mid-sentence.
             paint_text(cr, ui_font(), chosen.goal, x + margin, dy, theme::kTextR, theme::kTextG, theme::kTextB,
                        static_cast<int>(dw - 2 * margin));
         }

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
+#include "scenario_briefing.hpp"
 #include "scenario_scorebook.hpp"
 
 #include <cstdio>
@@ -160,6 +161,40 @@ int main()
     if (scorebook_find(mixed, 4).id != 0 || scorebook_find(mixed, 5).best_score != 501) {
         remove_temp_dir(dir);
         return fail("short lines should be skipped; complete lines should load");
+    }
+
+    // Difficulty tags (display only) follow the documented goal+deadline rule.
+    auto expect_tag = [](int years, const char *goal, const char *want, const char *name) -> int {
+        const char *got = scenario_difficulty_tag(years, goal);
+        if (std::string(got) != want) {
+            std::fprintf(stderr, "%s: got %s want %s\n", name, got, want);
+            return 1;
+        }
+        return 0;
+    };
+    if (expect_tag(30, "Turn this city into a Metropolis (more than 100,000 people) within 30 years.", "Easy",
+                   "Dullsville") ||
+        expect_tag(5, "Keep the city a Metropolis (over 100,000) until 1911 despite the quake.", "Hard",
+                   "San Francisco") ||
+        expect_tag(5, "Keep the city a Metropolis (over 100,000) until 1949 despite the fire.", "Hard", "Hamburg") ||
+        expect_tag(10, "Bring average traffic below 40 and keep at least 90,000 people within 10 years.", "Medium",
+                   "Bern") ||
+        expect_tag(5, "Keep the city score above 500 until 1962.", "Hard", "Tokyo") ||
+        expect_tag(10, "Bring average crime below 60 within 10 years.", "Medium", "Detroit") ||
+        expect_tag(5, "Raise the score above 500 by 2015.", "Hard", "Boston") ||
+        expect_tag(10, "Keep the city score above 500 until 2057.", "Hard", "Rio") ||
+        expect_tag(5, "Clear the Autonomous Zone and bring average crime below 60 by mid-2025.", "Hard", "Seattle") ||
+        expect_tag(2, "Round up the Alcatraz escapees and bring average crime below 45 by mid-1964.", "Hard",
+                   "San Francisco 1962") ||
+        expect_tag(1, "Put out the riot fires and bring average crime below 60 by summer 2021.", "Hard", "Portland") ||
+        expect_tag(2, "Have the police catch the lion within four months and keep at least 100,000 people by spring 2027.",
+                   "Hard", "San Diego")) {
+        remove_temp_dir(dir);
+        return fail("scenario difficulty tag derivation");
+    }
+    if (scenario_years_label(1) != "1 year" || scenario_years_label(30) != "30 years") {
+        remove_temp_dir(dir);
+        return fail("years label");
     }
 
     remove_temp_dir(dir);
