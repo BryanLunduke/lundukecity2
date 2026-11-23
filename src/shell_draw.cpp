@@ -1650,6 +1650,11 @@ void Shell::draw_dialog(cairo_t *cr)
         if (!dialog_error_.empty()) {
             want_h += dp(22);
         }
+        // The seed field explains its rule as you type, so the land page
+        // always reserves a line (or two, when the help wraps).
+        if (new_page_ == 1) {
+            want_h += dp(36);
+        }
         const DialogRect panel = place_dialog(win_w_, band_h, want_w, want_h, margin);
         const double x = panel.x;
         const double y = panel.y;
@@ -1735,8 +1740,14 @@ void Shell::draw_dialog(cairo_t *cr)
             // rolls a new seed, sits in the third on the same row.
             const double seed_x = cols_x;
             const double seed_w = choice_w * 2.0 + col_gap;
+            bool seed_field_ok = true;
+            city_seed_live_message(field_b_, seed_field_ok);
             fill(cr, seed_x, seed_y, seed_w, dp(32), 1, 1, 1);
-            stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+            if (seed_field_ok) {
+                stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), theme::kMenuFrameR, theme::kMenuFrameG, theme::kMenuFrameB);
+            } else {
+                stroke_rect(cr, seed_x, seed_y, seed_w, dp(32), 0.7, 0.15, 0.12);
+            }
             push_hot(seed_x, seed_y, seed_w, dp(32), kFieldSeed);
             push_focus(kFieldSeed);
             // One line, clipped to the box. A long seed used to wrap onto
@@ -1814,10 +1825,30 @@ void Shell::draw_dialog(cairo_t *cr)
                 }
             }
             double preview_y = seed_y + row_step;
-            if (!dialog_error_.empty()) {
-                paint_text(cr, ui_font(), dialog_error_, cols_x, seed_y + row_h + dp(4), 0.6, 0.1, 0.1,
-                           static_cast<int>(cols_w));
-                preview_y += dp(22);
+            {
+                bool seed_ok = true;
+                const char *live = city_seed_live_message(field_b_, seed_ok);
+                const char *help = city_seed_rule_help();
+                const std::string shown = (!dialog_error_.empty() && !seed_ok) ? dialog_error_ : live;
+                const double help_r = seed_ok ? theme::kAccelR : 0.6;
+                const double help_g = seed_ok ? theme::kAccelG : 0.1;
+                const double help_b = seed_ok ? theme::kAccelB : 0.1;
+                const int help_w = static_cast<int>(cols_w);
+                paint_text(cr, ui_font(), shown, cols_x, seed_y + row_h + dp(4), help_r, help_g, help_b, help_w);
+                preview_y += std::max(static_cast<double>(dp(22)),
+                                      static_cast<double>(measure_text(cr, ui_font(), shown, help_w).height) + dp(8));
+                // The rule stays visible under a typo so New terrain is
+                // still the obvious way out.
+                if (!seed_ok) {
+                    paint_text(cr, ui_font(), help, cols_x, preview_y, theme::kAccelR, theme::kAccelG, theme::kAccelB,
+                               help_w);
+                    preview_y += std::max(static_cast<double>(dp(18)),
+                                          static_cast<double>(measure_text(cr, ui_font(), help, help_w).height) + dp(6));
+                }
+                if (!dialog_error_.empty() && seed_ok) {
+                    paint_text(cr, ui_font(), dialog_error_, cols_x, preview_y, 0.6, 0.1, 0.1, help_w);
+                    preview_y += dp(22);
+                }
             }
             const double buttons_y = y + dh - margin - dp(36);
             const double summary_y = buttons_y - dp(10) - dp(20);

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
+#include "city_seed.hpp"
 #include "mayor_notes.hpp"
 #include "scenario_briefing.hpp"
 #include "scenario_scorebook.hpp"
@@ -218,6 +219,39 @@ int main()
         remove_temp_dir(dir);
         std::fprintf(stderr, "note: %s\n", note.c_str());
         return fail("mayor note should reuse civic advice_for copy");
+    }
+
+    // Seed field: live validation as you type, with the rule as a way out.
+    {
+        bool ok = false;
+        if (std::string(city_seed_live_message("", ok)).find("New terrain") == std::string::npos || !ok) {
+            remove_temp_dir(dir);
+            return fail("blank seed should be valid and mention New terrain");
+        }
+        if (std::string(city_seed_live_message("auto", ok)).find("new seed") == std::string::npos || !ok) {
+            remove_temp_dir(dir);
+            return fail("auto seed should be valid");
+        }
+        if (std::string(city_seed_live_message("  42 ", ok)).find("This seed will be used") == std::string::npos || !ok) {
+            remove_temp_dir(dir);
+            return fail("a whole number should be accepted as you type");
+        }
+        if (city_seed_live_message("12ab", ok) == nullptr || ok) {
+            remove_temp_dir(dir);
+            return fail("a typo should be rejected as you type");
+        }
+        if (std::string(city_seed_live_message("12ab", ok)).find("New terrain") == std::string::npos) {
+            remove_temp_dir(dir);
+            return fail("a typo should still point at New terrain");
+        }
+        if (city_seed_live_message("1000000000", ok) != nullptr && ok) {
+            remove_temp_dir(dir);
+            return fail("a number over 999999999 should be rejected");
+        }
+        if (std::string(city_seed_rule_help()).find("New terrain") == std::string::npos) {
+            remove_temp_dir(dir);
+            return fail("the inline rule should mention New terrain");
+        }
     }
 
     remove_temp_dir(dir);
