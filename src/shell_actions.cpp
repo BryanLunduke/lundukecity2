@@ -594,6 +594,8 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         list_index_ = 0;
         list_scroll_ = 0;
     } else if (dialog == Dialog::HowToPlay || dialog == Dialog::About) {
+        howto_scroll_ = 0;
+        howto_scroll_max_ = 0;
         focus_id_ = kClose;
     } else if (dialog == Dialog::License) {
         // Read the files each time the viewer opens; they are small.

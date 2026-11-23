@@ -269,8 +269,12 @@ void Shell::layout()
         view_h_ = std::max(dp(32), win_h_);
     } else {
         // The editor's top bar (city name, Map Complete) is a band in both skins.
-        if (slate_ || terrain_edit_) {
+        if (terrain_edit_) {
             band_h_ = dp(46);
+        } else if (slate_) {
+            // Taller than the old 46px band so the demand meters can be
+            // proper signed bars, not tiny ticks, at 960 and on a 1280 window.
+            band_h_ = dp(60);
         }
         // No message bar under the status line. Alerts are drawn over the map.
         const int body = win_h_ - menu_h_ - band_h_ - status_h_;
@@ -2368,16 +2372,9 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             body_h = body_for(split, section_gap, cut);
         }
-        // The Budget paragraph is the longest first-column topic. On 960 and
-        // the Deck, start it at the top of the second column so it is not
-        // clipped under Demand.
-        if (split && sections.size() >= 4) {
-            // Always start Budget at the top of column two, even when that
-            // column is a little taller: a clipped Budget paragraph was the
-            // bug this dialog had to fix.
-            cut = 3;
-            body_h = body_for(true, section_gap, cut);
-        }
+        // Prefer the shortest two-column split (usually Budget at the end of
+        // column one). If the text is still taller than the window, the body
+        // scrolls and a bar plus a "More" mark show that there is more.
         const double col_w = split ? (inner - col_gap) / 2.0 : inner;
         auto lay = [&](double x, double y, bool paint) {
             const std::size_t marks[3] = {0, split ? cut : sections.size(), sections.size()};
@@ -2399,18 +2396,43 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             return tallest;
         };
+        const double buttons_h = static_cast<double>(control_px(36, 44));
         const double height = chrome + body_h;
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "How to play");
         const double body_top = panel.y + dp(48);
-        const double buttons_h = static_cast<double>(control_px(36, 44));
         const double body_bottom = panel.y + panel.h - margin - buttons_h - dp(10);
+        const double view_h = std::max(1.0, body_bottom - body_top);
+        howto_view_h_ = static_cast<int>(view_h);
+        howto_scroll_max_ = std::max(0, static_cast<int>(std::ceil(body_h - view_h)));
+        howto_scroll_ = std::max(0, std::min(howto_scroll_, howto_scroll_max_));
+        const double track_w = howto_scroll_max_ > 0 ? std::max(4.0, static_cast<double>(dp(6))) : 0.0;
         cairo_save(cr);
-        cairo_rectangle(cr, panel.x + margin - 2, body_top - 2, panel.w - 2 * margin + 4,
-                        std::max(1.0, body_bottom - body_top + 2));
+        cairo_rectangle(cr, panel.x + margin - 2, body_top - 2,
+                        panel.w - 2 * margin + 4 - (track_w > 0 ? track_w + dp(6) : 0), view_h + 2);
         cairo_clip(cr);
-        lay(panel.x + margin, body_top, true);
+        lay(panel.x + margin, body_top - howto_scroll_, true);
         cairo_restore(cr);
+        if (howto_scroll_max_ > 0) {
+            const double track_x = panel.x + panel.w - margin - track_w;
+            fill(cr, track_x, body_top, track_w, view_h, 0.82, 0.82, 0.82);
+            const double thumb_h =
+                std::max(static_cast<double>(dp(18)), view_h * view_h / (view_h + static_cast<double>(howto_scroll_max_)));
+            const double travel = std::max(0.0, view_h - thumb_h);
+            const double thumb_y =
+                body_top + travel * (static_cast<double>(howto_scroll_) / static_cast<double>(howto_scroll_max_));
+            fill(cr, track_x, thumb_y, track_w, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(),
+                 theme::chrome_select_b());
+            if (howto_scroll_ < howto_scroll_max_) {
+                const char *more = "More";
+                const TextMetrics more_m = measure_text(cr, tag_font(), more, -1);
+                const double mx = panel.x + panel.w - margin - track_w - dp(8) - more_m.width;
+                const double my = body_bottom - more_m.height - dp(2);
+                fill(cr, mx - dp(6), my - dp(2), more_m.width + dp(12), more_m.height + dp(4), theme::kMenuBgR,
+                     theme::kMenuBgG, theme::kMenuBgB);
+                paint_text(cr, tag_font(), more, mx, my, 0.45, 0.04, 0.02, -1);
+            }
+        }
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - buttons_h, {{"_Close", kClose}});
         return;
     }
@@ -4294,10 +4316,13 @@ void Shell::draw(cairo_t *cr)
             const int goal_room = std::max(1, full_room - keep_for_tool);
             const std::string short_clock = session_.scenario_clock_short();
             const std::string short_meter = session_.scenario_meter_short();
+            const std::string compact_clock = session_.scenario_clock_compact();
+            const std::string compact_meter = session_.scenario_meter_compact();
             auto join = [](const std::string &a, const std::string &b) {
                 return a.empty() ? b : (b.empty() ? a : a + "    " + b);
             };
-            const std::string forms[] = {join(clock, meter), join(clock, short_meter), join(short_clock, short_meter)};
+            const std::string forms[] = {join(clock, meter), join(clock, short_meter), join(short_clock, short_meter),
+                                         join(compact_clock, compact_meter)};
             bool placed = false;
             for (const std::string &form : forms) {
                 if (!form.empty() && fits_in(status + "    " + form, goal_room)) {
@@ -4309,8 +4334,10 @@ void Shell::draw(cairo_t *cr)
             if (!placed) {
                 const std::string head = status + "    " + (short_clock.empty() ? std::string() : short_clock + "    ");
                 const int meter_room = goal_room - width_of(ui_font(), head);
-                if (!short_meter.empty() && meter_room >= dp(80)) {
-                    status = head + fit_text(cr, ui_font(), short_meter, meter_room);
+                if (!compact_meter.empty() && fits_in(head + compact_meter, goal_room)) {
+                    status = head + compact_meter;
+                } else if (!short_meter.empty() && meter_room >= dp(80)) {
+                    status = head + fit_text(cr, ui_font(), compact_meter.empty() ? short_meter : compact_meter, meter_room);
                 } else if (!short_clock.empty() && fits_in(status + "    " + short_clock, goal_room)) {
                     status += "    " + short_clock;
                 }
@@ -5925,8 +5952,9 @@ void Shell::draw_info_band(cairo_t *cr)
             value_w = pill * 4 + pill_gap * 3;
         }
         if (k == Demand) {
-            // Wider, labeled meters at 960 and on a 1280 window.
-            value_w = dp(win_w_ <= 1000 ? 114 : 126);
+            // Three labeled vertical meters. Wider at 960 so "Res/Com/Ind"
+            // and the bars sit side by side, not as three tiny ticks.
+            value_w = dp(win_w_ <= 1000 ? 156 : 168);
         }
         widths[k] = std::max(label_w, value_w);
     }
@@ -5945,7 +5973,14 @@ void Shell::draw_info_band(cairo_t *cr)
         }
         double need = widths[k] + gap * 2;
         if (k == Goal) {
-            need = std::min(need, static_cast<double>(dp(160)));
+            const std::string compact = session_.scenario_meter_compact();
+            const std::string compact_clock = session_.scenario_clock_compact();
+            std::string compact_goal = compact;
+            if (!compact_clock.empty()) {
+                compact_goal += compact.empty() ? compact_clock : " \u00b7 " + compact_clock;
+            }
+            const double compact_w = compact_goal.empty() ? 0.0 : measure_text(cr, bold_font(), compact_goal, -1).width;
+            need = std::max(compact_w + gap * 2, std::min(need, static_cast<double>(dp(220))));
         }
         if (used + need <= room) {
             shown[k] = true;
@@ -6027,16 +6062,19 @@ void Shell::draw_info_band(cairo_t *cr)
                                         {0x5B / 255.0, 0x9B / 255.0, 0xE6 / 255.0},
                                         {0xE8 / 255.0, 0xC2 / 255.0, 0x4A / 255.0}};
             const char *letters[3] = {"Res", "Com", "Ind"};
-            const double mid = value_y + dp(8);
-            const double col = (win_w_ <= 1000 ? dp(38) : dp(42));
-            const double bar_w = dp(12);
-            const double reach = dp(10);
+            const double col = (win_w_ <= 1000 ? dp(50) : dp(54));
+            const double bar_w = dp(10);
+            const double meter_top = value_y;
+            const double meter_bot = y + h - dp(5);
+            const double mid = (meter_top + meter_bot) / 2.0;
+            const double reach = std::max(10.0, (meter_bot - meter_top) / 2.0 - 1.0);
             for (int i = 0; i < 3; ++i) {
                 const double bx = x + i * col;
                 const double pulse = demand_tick_.pulse(i);
-                slate_text(cr, tag_font(), letters[i], bx, value_y + dp(1), kSlateDim);
                 const double label_w = measure_text(cr, tag_font(), letters[i], -1).width;
-                const double bar_x = bx + label_w + dp(3);
+                const double letter_h = measure_text(cr, tag_font(), letters[i], -1).height;
+                slate_text(cr, tag_font(), letters[i], bx, mid - letter_h / 2.0, kSlateDim);
+                const double bar_x = bx + label_w + dp(4);
                 if (pulse > 0.0) {
                     slate_round(cr, bar_x - dp(3), mid - reach - dp(3), bar_w + dp(6), reach * 2 + dp(6), dp(4),
                                 colors[i], 0.28 * pulse);
@@ -6053,9 +6091,10 @@ void Shell::draw_info_band(cairo_t *cr)
                 const int hid = kDemandMeter + i;
                 const bool hot = hover_id_ == hid && dialog_ == Dialog::None && !menu_.open();
                 if (hot) {
-                    slate_round(cr, bx - dp(2), value_y - dp(2), col - dp(2), dp(22), dp(4), kSlateEdge, 0.45);
+                    slate_round(cr, bx - dp(2), value_y - dp(2), col - dp(2), meter_bot - value_y + dp(4), dp(4),
+                                kSlateEdge, 0.45);
                 }
-                push_hot(bx - dp(2), value_y - dp(2), col, dp(22), hid);
+                push_hot(bx - dp(2), value_y - dp(2), col, meter_bot - value_y + dp(4), hid);
             }
             break;
         }
@@ -6076,30 +6115,38 @@ void Shell::draw_info_band(cairo_t *cr)
             const int goal_px = static_cast<int>(goal_room);
             if (measure_text(cr, bold_font(), shown_goal, -1).width > goal_px) {
                 const std::string short_clock = session_.scenario_clock_short();
+                const std::string compact_clock = session_.scenario_clock_compact();
+                const std::string compact_meter = session_.scenario_meter_compact();
+                auto join = [](const std::string &meter, const std::string &clock, const char *sep) {
+                    if (meter.empty()) {
+                        return clock;
+                    }
+                    return clock.empty() ? meter : meter + sep + clock;
+                };
                 const std::string candidates[] = {
-                    session_.scenario_meter() + (short_clock.empty() ? "" : "  \u00b7  " + short_clock),
-                    session_.scenario_meter_short() + (short_clock.empty() ? "" : "  \u00b7  " + short_clock),
-                    session_.scenario_meter_short() + (short_clock.empty() ? "" : " \u00b7 " + short_clock),
+                    join(session_.scenario_meter(), short_clock, "  \u00b7  "),
+                    join(session_.scenario_meter_short(), short_clock, "  \u00b7  "),
+                    join(session_.scenario_meter_short(), short_clock, " \u00b7 "),
+                    join(compact_meter, compact_clock, " \u00b7 "),
                 };
                 bool fitted = false;
                 for (const std::string &candidate : candidates) {
-                    if (measure_text(cr, bold_font(), candidate, -1).width <= goal_px) {
+                    if (!candidate.empty() && measure_text(cr, bold_font(), candidate, -1).width <= goal_px) {
                         shown_goal = candidate;
                         fitted = true;
                         break;
                     }
                 }
-                if (!fitted && !short_clock.empty()) {
-                    // Keep the clock whole and shorten the meter in front of it.
-                    const std::string tail = " \u00b7 " + short_clock;
-                    const int meter_px = goal_px - measure_text(cr, bold_font(), tail, -1).width;
-                    if (meter_px > dp(40)) {
-                        shown_goal = fit_text(cr, bold_font(), session_.scenario_meter_short(), meter_px) + tail;
-                        fitted = true;
+                if (!fitted && !compact_meter.empty()) {
+                    const std::string tail = compact_clock.empty() ? "" : std::string(" \u00b7 ") + compact_clock;
+                    shown_goal = compact_meter;
+                    if (measure_text(cr, bold_font(), shown_goal + tail, -1).width <= goal_px) {
+                        shown_goal += tail;
                     }
+                    fitted = true;
                 }
                 if (!fitted) {
-                    shown_goal = fit_text(cr, bold_font(), candidates[2], goal_px);
+                    shown_goal = join(compact_meter, compact_clock, " \u00b7 ");
                 }
             }
             slate_text(cr, bold_font(), shown_goal, x, value_y, kSlateInk);
@@ -6362,7 +6409,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
     // them while it is open; the pill is taller than the bar, so drawing it
     // left a sliver (a red demand bar) peeking out underneath.
     const double top = dp(10);
-    const double chip_h = dp(40);
+    const double chip_h = dp(52);
     double x = dp(10);
     const bool menu_up = menu_.open();
     if (!menu_up) {
@@ -6389,26 +6436,35 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         const double dw = measure_text(cr, bold_font(), date, -1).width;
         const double pw = measure_text(cr, ui_font(), people, -1).width;
         const double speed_w = dp(22);
-        const double demand_w = dp(84);
+        const double demand_w = dp(132);
         double w = pad + fw + sep + dw + sep + speed_w + sep + pw + sep + demand_w + pad;
         const double limit = mini_x_ - dp(16) - x;
         // A scenario's goal sits in its own chip beside the pill: the short
         // meter and the short clock. The population gives way first when the
         // two do not fit side by side.
         const std::string goal_clock = session_.scenario_clock_short();
+        const std::string compact_clock = session_.scenario_clock_compact();
         std::string goal_text = session_.scenario_meter_short();
         if (!goal_clock.empty()) {
             goal_text += (goal_text.empty() ? "" : " \u00b7 ") + goal_clock;
         }
         const double goal_pad = dp(12);
         const double goal_gap = dp(8);
-        const double goal_w = goal_text.empty() ? 0.0 : measure_text(cr, bold_font(), goal_text, -1).width + goal_pad * 2;
+        double goal_w = goal_text.empty() ? 0.0 : measure_text(cr, bold_font(), goal_text, -1).width + goal_pad * 2;
         bool with_people = w <= limit;
         if (with_people && goal_w > 0.0 && x + w + goal_gap + goal_w > mini_x_ - dp(16)) {
             with_people = false;
         }
         if (!with_people) {
             w -= pw + sep;
+        }
+        if (goal_w > 0.0 && x + w + goal_gap + goal_w > mini_x_ - dp(16)) {
+            std::string compact_goal = session_.scenario_meter_compact();
+            if (!compact_clock.empty()) {
+                compact_goal += compact_goal.empty() ? compact_clock : " \u00b7 " + compact_clock;
+            }
+            goal_text = compact_goal;
+            goal_w = goal_text.empty() ? 0.0 : measure_text(cr, bold_font(), goal_text, -1).width + goal_pad * 2;
         }
         slate_round(cr, x, top, w, chip_h, dp(10), kSlateBand, 0.94);
         const double ty = top + (chip_h - measure_text(cr, bold_font(), "Ag", -1).height) / 2.0;
@@ -6438,17 +6494,18 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         const SlateInk colors[3] = {{0x6C / 255.0, 0xCB / 255.0, 0x7A / 255.0},
                                     {0x5B / 255.0, 0x9B / 255.0, 0xE6 / 255.0},
                                     {0xE8 / 255.0, 0xC2 / 255.0, 0x4A / 255.0}};
-        const char *letters[3] = {"R", "C", "I"};
+        const char *letters[3] = {"Res", "Com", "Ind"};
         const double mid = top + chip_h / 2.0;
-        const double col = dp(26);
+        const double col = dp(42);
         const double bar_w = dp(10);
-        const double reach = dp(10);
+        const double reach = dp(16);
         for (int i = 0; i < 3; ++i) {
             const double bx = cx + i * col;
             const double pulse = demand_tick_.pulse(i);
-            slate_text(cr, tag_font(), letters[i], bx, top + dp(4), kSlateDim);
             const double label_w = measure_text(cr, tag_font(), letters[i], -1).width;
-            const double bar_x = bx + label_w + dp(2);
+            const double letter_h = measure_text(cr, tag_font(), letters[i], -1).height;
+            slate_text(cr, tag_font(), letters[i], bx, mid - letter_h / 2.0, kSlateDim);
+            const double bar_x = bx + label_w + dp(3);
             if (pulse > 0.0) {
                 slate_round(cr, bar_x - dp(2), mid - reach - dp(2), bar_w + dp(4), reach * 2 + dp(4), dp(3), colors[i],
                             0.28 * pulse);

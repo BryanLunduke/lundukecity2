@@ -678,6 +678,10 @@ private:
     int license_scroll_ = 0;
     int license_scroll_max_ = 0;
     int license_view_h_ = 0;
+    // How to play: pixel scroll when the two columns are taller than the window.
+    int howto_scroll_ = 0;
+    int howto_scroll_max_ = 0;
+    int howto_view_h_ = 0;
     double license_view_x_ = 0;
     double license_view_y_ = 0;
     double license_view_w_ = 0;
