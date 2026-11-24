@@ -4570,10 +4570,14 @@ void Shell::draw(cairo_t *cr)
     theme::banner_ink(look_ink_r, look_ink_g, look_ink_b);
     const BannerColors goal_bar = goal_banner_colors(BannerColors{look_r, look_g, look_b, look_ink_r, look_ink_g, look_ink_b});
     const std::string goal = session_.scenario_progress();
-    if (session_.scenario_id() != goal_scenario_) {
+    if (session_.scenario_id() != goal_scenario_ ||
+        (session_.scenario_id() == SC_LEARN_TO_PLAY && session_.tutorial_step() != goal_tutorial_step_)) {
         goal_scenario_ = session_.scenario_id();
+        goal_tutorial_step_ = session_.tutorial_step();
         goal_dismissed_ = false;
-        goal_until_ = now + std::chrono::seconds(6);
+        // The tutorial hint stays up longer so a new player can read it.
+        const int seconds = session_.scenario_id() == SC_LEARN_TO_PLAY ? 20 : 6;
+        goal_until_ = now + std::chrono::seconds(seconds);
     }
     const bool goal_visible = !goal.empty() && !goal_dismissed_ && now < goal_until_;
     double goal_bottom = 0;

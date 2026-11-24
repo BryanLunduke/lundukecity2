@@ -2219,6 +2219,9 @@ Quad Micropolis::scenarioStartCityTime(Scenario s)
         case SC_SAN_DIEGO:
             // Start of March 2025; the lion gets out in April.
             return ((2025 - 1900) * 48) + 2 * 4;
+        case SC_LEARN_TO_PLAY:
+            // January 1900, same opening offset as Dullsville.
+            return ((1900 - 1900) * 48) + 2;
         default:
             return 0;
     }
@@ -2316,6 +2319,14 @@ bool Micropolis::loadScenario(Scenario s)
             fname = "sandiego.cty";
             which = SC_SAN_DIEGO;
             funds = 20000;
+            break;
+        case SC_LEARN_TO_PLAY:
+            // Lunduke City 2 tutorial map (data/scenarios/brookside.cty).
+            // The city is called Brookside; the picker name is Learn to Play.
+            name = "Brookside";
+            fname = "brookside.cty";
+            which = SC_LEARN_TO_PLAY;
+            funds = LEARN_TO_PLAY_FUNDS;
             break;
         default:
             NOT_REACHED();

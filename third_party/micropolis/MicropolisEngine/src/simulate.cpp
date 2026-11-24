@@ -461,6 +461,7 @@ short Micropolis::disasterWaitAtStart(Scenario s)
         SF1962_ESCAPE_WAIT + 1, // San Francisco 1962 (Prison Escape)
         PORTLAND_RIOT_WAIT + 1, // Portland (Riot)
         SANDIEGO_LION_WAIT + 1, // San Diego (Zoo Escape)
+        0,          // Learn to Play (no scripted disaster)
     };
     if (s <= SC_NONE || s >= SC_COUNT) {
         return 0;
@@ -485,6 +486,7 @@ void Micropolis::simLoadInit()
         SF1962_YEARS * 48, // San Francisco 1962 (Prison Escape)
         PORTLAND_YEARS * 48, // Portland (Riot)
         SANDIEGO_YEARS * 48, // San Diego (Zoo Escape)
+        LEARN_TO_PLAY_SCORE_YEARS * 48, // Learn to Play (hidden; no deadline)
     };
 
     externalMarket = (float)miscHist[1];

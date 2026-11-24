@@ -720,6 +720,7 @@ private:
     int osk_last_name_ = -1;
     bool goal_dismissed_ = false;
     int goal_scenario_ = -1;
+    int goal_tutorial_step_ = -1;
     std::chrono::steady_clock::time_point goal_until_{};
     bool pause_noted_ = false;
     bool touch_pending_ = false;

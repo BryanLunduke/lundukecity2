@@ -15,6 +15,7 @@
 #include "special_buildings.hpp"
 
 #include "micropolis.h"
+#include "tutorial_goals.hpp"
 #include "text.h"
 #include "tile_kind.hpp"
 
@@ -380,12 +381,19 @@ const ScenarioEntry kScenarios[] = {
       " people by spring 2027.",
       SANDIEGO_YEARS},
      "sandiego.cty", true},
+    // Learn to Play (data/scenarios/brookside.cty, built by tools/learn_map.cpp).
+    // Opens in January 1900 with a quiet empty map. There is no deadline.
+    {{SC_LEARN_TO_PLAY, "Learn to Play", 1900,
+      "A quiet valley. Learn the tools by building a small city.",
+      "Build a small city from scratch: roads, power, zones, police and fire, parks, then 2,000 people. There is no deadline.",
+      LEARN_TO_PLAY_YEARS, "Brookside"},
+     "brookside.cty", true},
 };
 
 static_assert(sizeof(kScenarios) / sizeof(kScenarios[0]) == CitySession::kScenarioCount,
               "scenario catalog size");
 static_assert(SC_DULLSVILLE == 1 && SC_RIO == 8 && SC_SEATTLE == 9 && SC_SAN_FRANCISCO_1962 == 10 &&
-                  SC_PORTLAND == 11 && SC_SAN_DIEGO == 12,
+                  SC_PORTLAND == 11 && SC_SAN_DIEGO == 12 && SC_LEARN_TO_PLAY == 13,
               "scenario ids");
 static_assert(static_cast<int>(LEVEL_EASY) == CitySession::kLevelEasy, "easy level");
 static_assert(static_cast<int>(LEVEL_MEDIUM) == CitySession::kLevelMedium, "medium level");
@@ -738,6 +746,9 @@ void CitySession::finish_stroke_attempt(long long before, int tool, int x, int y
         stroke_reason_.clear();
     } else if (!message_.empty()) {
         stroke_reason_ = message_;
+    }
+    if (tool_stroke_placed_ > 0 && scenario_id() == SC_LEARN_TO_PLAY) {
+        refresh_tutorial();
     }
 }
 
@@ -1384,6 +1395,9 @@ bool CitySession::load_city(const std::string &path)
     catch_up_ledger(false);
     arm_eval_baseline();
     restore_loaded_eval();
+    if (scenario_id() == SC_LEARN_TO_PLAY) {
+        refresh_tutorial(false);
+    }
     if (kind == CityFileKind::Incomplete) {
         post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
     } else {
@@ -1466,6 +1480,10 @@ bool CitySession::load_scenario(int id)
     catch_up_ledger(false);
     arm_eval_baseline();
     post_message(std::string("Playing ") + entry->def.name + ".");
+    reset_tutorial();
+    if (id == SC_LEARN_TO_PLAY) {
+        refresh_tutorial();
+    }
     return true;
 }
 
@@ -1552,6 +1570,9 @@ void CitySession::tick()
     if (speed_ != 0) {
         engine_->sim.animateTiles();
     }
+    if (scenario_id() == SC_LEARN_TO_PLAY) {
+        refresh_tutorial();
+    }
 }
 
 void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
@@ -1572,6 +1593,9 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
         ~Guard() { self->finish_stroke_attempt(before, tool, x, y); }
     } guard{this, before, engine_tool, tile_x, tile_y};
     tool_stroke_placed_ = 0;
+    if (engine_tool == TOOL_QUERY) {
+        note_tutorial_inspect();
+    }
     if (engine_tool == kSpecialEngineId) {
         return;
     }
@@ -2800,6 +2824,9 @@ int CitySession::scenario_years_left() const
     if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
         return -1;
     }
+    if (scenario_id() == SC_LEARN_TO_PLAY) {
+        return 0;
+    }
     // scoreWait counts simulation cycles. A year is 48 cycles. Whole years
     // are rounded down so a partial year still shows in scenario_clock_text.
     if (sim.scoreWait <= 0) {
@@ -2811,7 +2838,7 @@ int CitySession::scenario_years_left() const
 std::string CitySession::scenario_clock_text() const
 {
     const Micropolis &sim = engine_->sim;
-    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE || scenario_id() == SC_LEARN_TO_PLAY) {
         return {};
     }
     if (sim.scoreWait <= 0) {
@@ -2834,7 +2861,7 @@ std::string CitySession::scenario_clock_text() const
 std::string CitySession::scenario_clock_short() const
 {
     const Micropolis &sim = engine_->sim;
-    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE || scenario_id() == SC_LEARN_TO_PLAY) {
         return {};
     }
     if (sim.scoreWait <= 0) {
@@ -2855,7 +2882,7 @@ std::string CitySession::scenario_clock_short() const
 std::string CitySession::scenario_clock_compact() const
 {
     const Micropolis &sim = engine_->sim;
-    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE || scenario_id() == SC_LEARN_TO_PLAY) {
         return {};
     }
     if (sim.scoreWait <= 0) {
@@ -2886,8 +2913,11 @@ bool CitySession::traffic_measured() const
 std::string CitySession::scenario_meter_short() const
 {
     const int id = scenario_id();
-    if (id == 0 || scenario_years_left() < 0) {
+    if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
         return {};
+    }
+    if (id == SC_LEARN_TO_PLAY) {
+        return tutorial_meter_short_;
     }
     const Micropolis &sim = engine_->sim;
     const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
@@ -2925,8 +2955,11 @@ std::string CitySession::scenario_meter_short() const
 std::string CitySession::scenario_meter_compact() const
 {
     const int id = scenario_id();
-    if (id == 0 || scenario_years_left() < 0) {
+    if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
         return {};
+    }
+    if (id == SC_LEARN_TO_PLAY) {
+        return tutorial_meter_compact_;
     }
     const Micropolis &sim = engine_->sim;
     const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
@@ -2963,8 +2996,11 @@ std::string CitySession::scenario_meter_compact() const
 std::string CitySession::scenario_progress() const
 {
     const int id = scenario_id();
-    if (id == 0 || scenario_years_left() < 0) {
+    if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
         return {};
+    }
+    if (id == SC_LEARN_TO_PLAY) {
+        return tutorial::progress_line(tutorial_step_);
     }
     const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
     const std::string time = scenario_clock_text();
@@ -2977,8 +3013,11 @@ std::string CitySession::scenario_progress() const
 std::string CitySession::scenario_meter() const
 {
     const int id = scenario_id();
-    if (id == 0 || scenario_years_left() < 0) {
+    if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
         return {};
+    }
+    if (id == SC_LEARN_TO_PLAY) {
+        return tutorial_meter_;
     }
     const Micropolis &sim = engine_->sim;
     const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
@@ -4263,6 +4302,7 @@ void restore_or_recompute_disaster_wait(Micropolis &sim, const ScenarioClock &cl
 void CitySession::clear_scenario_clock()
 {
     scenario_result_ = 0;
+    reset_tutorial();
 }
 
 bool CitySession::write_scenario_sidecar(const std::string &path) const
@@ -4329,6 +4369,10 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     append_string("score", std::to_string(static_cast<int>(sim.cityScore)));
     append_string("phase", std::to_string(static_cast<int>(sim.phaseCycle)));
     append_string("sim_cycle", std::to_string(static_cast<int>(sim.simCycle)));
+    if (static_cast<int>(sim.scenario) == SC_LEARN_TO_PLAY) {
+        append_string("tutorial", std::string("i=") + (tutorial_inspected_ ? "1" : "0") +
+                                      ",b=" + (tutorial_budget_seen_ ? "1" : "0"));
+    }
     append_string("rng", std::to_string(static_cast<unsigned long long>(sim.randomState())));
     {
         short res_valve = 0, com_valve = 0, ind_valve = 0;
@@ -4469,6 +4513,11 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     loaded_score_ = whole_value("score", 0, 1000);
     loaded_phase_ = whole_value("phase", 0, 15);
     loaded_sim_cycle_ = whole_value("sim_cycle", 0, 1023);
+    {
+        const std::string raw = string_value("tutorial");
+        tutorial_inspected_ = raw.find("i=1") != std::string::npos;
+        tutorial_budget_seen_ = raw.find("b=1") != std::string::npos;
+    }
     {
         const std::string raw = string_value("rng");
         if (!raw.empty() && raw.size() <= 20) {
@@ -4705,3 +4754,132 @@ unsigned CitySession::sprite_signature() const
     return hash;
 }
 
+
+void CitySession::reset_tutorial()
+{
+    tutorial_inspected_ = false;
+    tutorial_budget_seen_ = false;
+    tutorial_step_ = 0;
+    tutorial_announced_ = -1;
+    tutorial_meter_.clear();
+    tutorial_meter_short_.clear();
+    tutorial_meter_compact_.clear();
+}
+
+void CitySession::note_tutorial_inspect()
+{
+    if (scenario_id() != SC_LEARN_TO_PLAY || tutorial_inspected_) {
+        return;
+    }
+    tutorial_inspected_ = true;
+    refresh_tutorial();
+}
+
+void CitySession::note_tutorial_budget()
+{
+    if (scenario_id() != SC_LEARN_TO_PLAY || tutorial_budget_seen_) {
+        return;
+    }
+    tutorial_budget_seen_ = true;
+    refresh_tutorial();
+}
+
+int CitySession::tutorial_step() const
+{
+    return tutorial_step_;
+}
+
+void CitySession::refresh_tutorial(bool announce)
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    const auto tile_at = [this](int x, int y) { return map_value(x, y); };
+    const tutorial::Status status = tutorial::census(
+        tile_at, kWorldW, kWorldH, static_cast<std::int64_t>(live_population_count(engine_->sim)),
+        tutorial_inspected_, tutorial_budget_seen_);
+    const int step = tutorial::current_step(status);
+    tutorial_step_ = step;
+    tutorial_meter_ = tutorial::meter(step, status);
+    tutorial_meter_short_ = tutorial::meter_short(step, status);
+    tutorial_meter_compact_ = tutorial::meter_compact(step, status);
+    if (!announce) {
+        tutorial_announced_ = step;
+        return;
+    }
+    if (step == tutorial_announced_) {
+        return;
+    }
+    if (tutorial_announced_ < 0) {
+        if (step < tutorial::kStepCount) {
+            post_message(tutorial::hint(step));
+        }
+    } else if (step >= tutorial::kStepCount) {
+        post_message(tutorial::done_toast(tutorial::Population));
+        if (scenario_result_ == 0 && scenario_outcome_ == 0) {
+            engine_->sim.doWinGame();
+        }
+    } else {
+        post_message(tutorial::done_toast(step - 1));
+    }
+    tutorial_announced_ = step;
+}
+
+void CitySession::setup_tutorial_through(int last_complete)
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    set_auto_bulldoze(true);
+    // Open field south of the river: a road, a coal plant, R/C/I, police,
+    // fire and a park, leaving later steps for the player.
+    if (last_complete >= tutorial::Roads) {
+        drag_tool(TOOL_ROAD, 50, 58, 74, 58);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::Power) {
+        use_tool(TOOL_COALPOWER, 52, 64);
+        end_tool_stroke();
+        // A line up to the road so the later zones and stations have power
+        // in mid-scenario shots.
+        drag_tool(TOOL_WIRE, 52, 62, 52, 58);
+        end_tool_stroke();
+        drag_tool(TOOL_WIRE, 52, 58, 66, 58);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::Zones) {
+        // Centres at y=56 so the 3x3 lots touch the road at y=58 and pick
+        // up the power on that road.
+        use_tool(TOOL_RESIDENTIAL, 58, 56);
+        end_tool_stroke();
+        use_tool(TOOL_COMMERCIAL, 62, 56);
+        end_tool_stroke();
+        use_tool(TOOL_INDUSTRIAL, 66, 56);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::Safety) {
+        use_tool(TOOL_POLICESTATION, 56, 62);
+        end_tool_stroke();
+        use_tool(TOOL_FIRESTATION, 61, 62);
+        end_tool_stroke();
+        drag_tool(TOOL_WIRE, 54, 62, 61, 62);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::Parks) {
+        use_tool(TOOL_PARK, 58, 52);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::InspectBudget) {
+        tutorial_inspected_ = true;
+        tutorial_budget_seen_ = true;
+    }
+    placement_note_ = PlacementNote{};
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    refresh_tutorial(false);
+    // Show this step's hint so a mid-scenario jump (and its shots) lands
+    // on the same NEWS toast a player would see at this step.
+    if (tutorial_step_ >= 0 && tutorial_step_ < tutorial::kStepCount) {
+        post_message(tutorial::hint(tutorial_step_));
+    }
+}

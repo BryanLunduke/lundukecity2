@@ -45,3 +45,16 @@ sandiego_map = executable(
   build_by_default: false,
   install: false,
 )
+
+# Learn to Play map (data/scenarios/brookside.cty).
+#   meson compile -C build learn_map
+#   build/tools/learn_map data/scenarios/brookside.cty
+learn_map = executable(
+  'learn_map',
+  'learn_map.cpp',
+  '../src/terrain_paint.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+  build_by_default: false,
+  install: false,
+)

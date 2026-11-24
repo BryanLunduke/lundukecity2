@@ -187,15 +187,15 @@ int main()
         return fail(17, "zoom should ignore the bare equal key and ctrl-alt");
     }
 
-    if (CitySession::kScenarioCount != 12) {
-        return fail(18, "expected the eight engine scenarios, Seattle, San Francisco 1962, Portland and San Diego");
+    if (CitySession::kScenarioCount != 13) {
+        return fail(18, "expected the eight engine scenarios, Seattle, San Francisco 1962, Portland, San Diego and Learn to Play");
     }
     for (int i = 0; i < CitySession::kScenarioCount; ++i) {
         const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
         if (def.name == nullptr || def.name[0] == '\0' || def.year < 1900) {
             return fail(19, "scenario catalog entry is incomplete");
         }
-        if (!session.load_scenario(def.id) || session.city_name() != def.name) {
+        if (!session.load_scenario(def.id) || session.city_name() != CitySession::scenario_city(def)) {
             return fail(20, "scenario did not load through the engine");
         }
         if (!session.save_path().empty()) {

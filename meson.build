@@ -145,12 +145,14 @@ install_data(
 )
 # City 2's own scenario maps (tools/seattle_map.cpp builds seattle.cty,
 # tools/sf1962_map.cpp sanfrancisco1962.cty, tools/portland_map.cpp
-# portland.cty, tools/sandiego_map.cpp sandiego.cty).
+# portland.cty, tools/sandiego_map.cpp sandiego.cty,
+# tools/learn_map.cpp brookside.cty).
 install_data(
   'data/scenarios/seattle.cty',
   'data/scenarios/sanfrancisco1962.cty',
   'data/scenarios/portland.cty',
   'data/scenarios/sandiego.cty',
+  'data/scenarios/brookside.cty',
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'scenarios',
 )
 install_data(

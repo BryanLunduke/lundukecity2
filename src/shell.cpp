@@ -48,6 +48,7 @@
 #include <filesystem>
 #include <fstream>
 #include "effects_fx.hpp"
+#include "tutorial_goals.hpp"
 #include "ui_sounds.hpp"
 
 #include <iostream>
@@ -321,6 +322,7 @@ int Shell::run(int argc, char **argv)
         }
     }
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
+        demo_ != "learn" && demo_ != "learn_mid" && demo_ != "learn_picker" &&
         demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget" &&
         demo_ != "crime" && demo_ != "zones" && demo_ != "police" && demo_ != "graphs" && demo_ != "terrain" &&
         demo_ != "controls" && demo_ != "settings" && demo_ != "won" && demo_ != "lost" &&         demo_ != "fire" &&
@@ -2133,6 +2135,27 @@ void Shell::loop()
             } else if (demo_ == "help") {
                 menu_.open_menu = 4;
                 menu_.cursor = 0;
+            } else if (demo_ == "learn_picker") {
+                scenario_index_ = CitySession::kScenarioCount - 1;
+                list_index_ = scenario_index_;
+                list_scroll_ = std::max(0, scenario_index_ - 2);
+                open_dialog(Dialog::Scenario);
+                focus_id_ = kListItem + scenario_index_;
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "learn" || demo_ == "learn_mid") {
+                const int id = CitySession::scenario_def(CitySession::kScenarioCount - 1).id;
+                session_.load_scenario(id);
+                speed_ = 0;
+                session_.set_speed(0);
+                if (demo_ == "learn_mid") {
+                    session_.setup_tutorial_through(tutorial::Safety);
+                }
+                close_dialog();
+                goal_dismissed_ = false;
+                goal_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+                center_on_fraction((tutorial::kFieldX + 0.5) / CitySession::kWorldW,
+                                   (tutorial::kFieldY + 0.5) / CitySession::kWorldH);
+                map_.set_tile_size(16);
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);

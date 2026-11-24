@@ -43,6 +43,10 @@ inline bool scenario_goal_is_survival(const char *goal)
 
 inline ScenarioDifficulty scenario_difficulty_from(int years, const char *goal)
 {
+    // No deadline is a tutorial or an open-ended task, not a short clock.
+    if (years <= 0) {
+        return ScenarioDifficulty::Easy;
+    }
     const bool survival = scenario_goal_is_survival(goal);
     if (years <= 5) {
         return ScenarioDifficulty::Hard;
@@ -73,6 +77,9 @@ inline const char *scenario_difficulty_tag(int years, const char *goal)
 
 inline std::string scenario_years_label(int years)
 {
+    if (years <= 0) {
+        return "No deadline";
+    }
     if (years == 1) {
         return "1 year";
     }

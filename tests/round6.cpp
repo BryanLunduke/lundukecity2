@@ -41,11 +41,12 @@ int main()
         "Put out the riot fires and bring average crime below 60 by summer 2021. Build fire stations by the riot, and "
         "bulldoze firebreaks if it spreads.",
         "Have the police catch the lion within four months and keep at least 100,000 people by spring 2027.",
+        "Build a small city from scratch: roads, power, zones, police and fire, parks, then 2,000 people. There is no deadline.",
     };
-    static const int kYears[] = {30, 5, 5, 10, 5, 10, 5, 10, 5, 2, 1, 2};
-    if (CitySession::kScenarioCount != 12) {
-        return fail(1, "the scenario catalog is no longer the eight classic cities, Seattle, San Francisco 1962, Portland "
-                       "and San Diego");
+    static const int kYears[] = {30, 5, 5, 10, 5, 10, 5, 10, 5, 2, 1, 2, 0};
+    if (CitySession::kScenarioCount != 13) {
+        return fail(1, "the scenario catalog is no longer the eight classic cities, Seattle, San Francisco 1962, Portland, "
+                       "San Diego and Learn to Play");
     }
     for (int i = 0; i < CitySession::kScenarioCount; ++i) {
         const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
@@ -118,8 +119,17 @@ int main()
     for (int i = 0; i < CitySession::kScenarioCount; ++i) {
         CitySession city;
         const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
-        if (!city.load_scenario(def.id) || city.scenario_years_left() != def.years ||
-            city.scenario_progress().find(def.goal) == std::string::npos) {
+        const bool learn = std::string(def.name) == "Learn to Play";
+        if (!city.load_scenario(def.id) || city.scenario_years_left() != def.years) {
+            std::fprintf(stderr, "%s left %d\n", def.name, city.scenario_years_left());
+            return fail(7, "a scenario deadline does not match its classic year count");
+        }
+        if (learn) {
+            if (city.scenario_progress().find("Step 1 of 7") == std::string::npos) {
+                std::fprintf(stderr, "learn progress '%s'\n", city.scenario_progress().c_str());
+                return fail(7, "Learn to Play did not open on step 1");
+            }
+        } else if (city.scenario_progress().find(def.goal) == std::string::npos) {
             std::fprintf(stderr, "%s left %d\n", def.name, city.scenario_years_left());
             return fail(7, "a scenario deadline does not match its classic year count");
         }
@@ -144,7 +154,18 @@ int main()
     for (int i = 0; i < CitySession::kScenarioCount; ++i) {
         CitySession city;
         const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
-        if (!city.load_scenario(def.id) || hostile_review_session_probe(city, 20) != 2) {
+        if (!city.load_scenario(def.id)) {
+            return fail(10, "a scenario priced its departments at the empty receipt");
+        }
+        // Learn to Play starts empty, so the first-year estimate is $0.
+        if (std::string(def.name) == "Learn to Play") {
+            const CitySession::BudgetBook book = city.budget();
+            if (book.taxes_known || !book.estimates) {
+                return fail(10, "Learn to Play should still use a first-year estimate");
+            }
+            continue;
+        }
+        if (hostile_review_session_probe(city, 20) != 2) {
             const CitySession::BudgetBook book = city.budget();
             std::fprintf(stderr, "%s known %d est %d road %" PRId64 " police %" PRId64 " fire %" PRId64 " tax %" PRId64 "\n", def.name,
                          book.taxes_known ? 1 : 0, book.estimates ? 1 : 0, book.road_need, book.police_need,
