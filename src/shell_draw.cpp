@@ -5079,9 +5079,21 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
             notice_bar_h_ = h;
         }
     }
+    // On the Deck (handheld) layout the tutorial hint already lives in the
+    // top goal banner. Skip the same text as a toast so it is not shown twice.
+    // Desktop keeps the toast: the Slate band only has the short meter.
+    const std::string tutorial_banner =
+        (handheld_ && dialog_ == Dialog::None && !terrain_edit_ && !goal_dismissed_ && now < goal_until_ &&
+         session_.scenario_id() == SC_LEARN_TO_PLAY)
+            ? session_.scenario_progress()
+            : std::string();
     const std::vector<std::size_t> order = toast_draw_order(toasts_);
     for (std::size_t slot : order) {
         const Toast &toast = toasts_[slot];
+        if (!tutorial_banner.empty() && !toast.disaster && !toast.text.empty() &&
+            tutorial_banner.find(toast.text) != std::string::npos) {
+            continue;
+        }
         const double left_ms =
             static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(toast.until - now).count());
         const double alpha = std::max(0.0, std::min(1.0, left_ms / kToastFadeMs));

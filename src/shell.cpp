@@ -322,7 +322,7 @@ int Shell::run(int argc, char **argv)
         }
     }
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
-        demo_ != "learn" && demo_ != "learn_mid" && demo_ != "learn_picker" &&
+        demo_ != "learn" && demo_ != "learn_mid" && demo_ != "learn_win" && demo_ != "learn_picker" &&
         demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget" &&
         demo_ != "crime" && demo_ != "zones" && demo_ != "police" && demo_ != "graphs" && demo_ != "terrain" &&
         demo_ != "controls" && demo_ != "settings" && demo_ != "won" && demo_ != "lost" &&         demo_ != "fire" &&
@@ -2142,14 +2142,37 @@ void Shell::loop()
                 open_dialog(Dialog::Scenario);
                 focus_id_ = kListItem + scenario_index_;
                 gamepad_nav_ = deck_;
-            } else if (demo_ == "learn" || demo_ == "learn_mid") {
+            } else if (demo_ == "learn" || demo_ == "learn_mid" || demo_ == "learn_win") {
                 const int id = CitySession::scenario_def(CitySession::kScenarioCount - 1).id;
                 session_.load_scenario(id);
-                speed_ = 0;
-                session_.set_speed(0);
+                session_.set_simulation_paused(false);
+                session_.set_auto_goto(false);
                 if (demo_ == "learn_mid") {
                     session_.setup_tutorial_through(tutorial::Safety);
+                    session_.pump_simulation(1200);
+                    int n = 0;
+                    while (session_.population() <= 0 && n < 6) {
+                        session_.pump_simulation(800);
+                        ++n;
+                    }
+                } else if (demo_ == "learn_win") {
+                    session_.setup_tutorial_growth();
+                    session_.pump_simulation(2400);
+                    int n = 0;
+                    long long last_people = session_.population();
+                    while (session_.population() < LEARN_TO_PLAY_POPULATION_GOAL && n < 24) {
+                        if (session_.funds() < 500 && session_.population() <= last_people) {
+                            break;
+                        }
+                        last_people = session_.population();
+                        session_.pump_simulation(1200);
+                        ++n;
+                    }
+                } else {
+                    session_.pump_simulation(8);
                 }
+                speed_ = 1;
+                session_.set_speed(1);
                 close_dialog();
                 goal_dismissed_ = false;
                 goal_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(30);

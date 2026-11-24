@@ -4825,6 +4825,33 @@ void CitySession::refresh_tutorial(bool announce)
     tutorial_announced_ = step;
 }
 
+void CitySession::pump_simulation(int ticks)
+{
+    if (!ready_ || ticks <= 0) {
+        return;
+    }
+    simulation_paused_ = false;
+    engine_->sim.resume();
+    if (speed_ <= 0 || engine_->sim.simSpeed <= 0) {
+        set_speed(3);
+    }
+    // Auto-accept the yearly tax so a demo can run past January without
+    // pausing on the Year in Review, and so zones can keep growing.
+    // Disasters stay off during the pump so a fire cannot wipe the
+    // teaching buildings before a win shot.
+    const bool auto_was = auto_budget();
+    const bool disasters_was = engine_->sim.enableDisasters;
+    set_auto_budget(true);
+    engine_->sim.setEnableDisasters(false);
+    for (int i = 0; i < ticks; ++i) {
+        tick();
+    }
+    engine_->sim.setEnableDisasters(disasters_was);
+    set_auto_budget(auto_was);
+    while (take_budget_request()) {
+    }
+}
+
 void CitySession::setup_tutorial_through(int last_complete)
 {
     if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
@@ -4882,4 +4909,72 @@ void CitySession::setup_tutorial_through(int last_complete)
     if (tutorial_step_ >= 0 && tutorial_step_ < tutorial::kStepCount) {
         post_message(tutorial::hint(tutorial_step_));
     }
+}
+
+void CitySession::setup_tutorial_growth()
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    setup_tutorial_through(tutorial::InspectBudget);
+    set_auto_bulldoze(true);
+    // Extra streets and a nuclear plant east of the starter coal, far
+    // enough that the 4x4 lots do not overlap. The nuclear lot is
+    // centred at (88, 70) and is wired from its west edge.
+    drag_tool(TOOL_ROAD, 50, 70, 84, 70);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 50, 76, 84, 76);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 58, 58, 58, 76);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 66, 58, 66, 76);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 74, 58, 74, 76);
+    end_tool_stroke();
+    // Two more coal plants on open dirt, wired to the streets, so the
+    // extra grid stays powered. (88, 70) sat in the east woods and the
+    // nuclear plant often failed to land.
+    use_tool(TOOL_COALPOWER, 70, 64);
+    end_tool_stroke();
+    use_tool(TOOL_COALPOWER, 62, 84);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 70, 63, 70, 58);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 62, 83, 62, 76);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 62, 76, 62, 82);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 62, 76, 62, 82);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 50, 70, 84, 70);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 50, 76, 84, 76);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 58, 58, 58, 76);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 66, 58, 66, 76);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 74, 58, 74, 76);
+    end_tool_stroke();
+    const int spots[][3] = {
+        {TOOL_RESIDENTIAL, 54, 56}, {TOOL_RESIDENTIAL, 70, 56},
+        {TOOL_RESIDENTIAL, 50, 56},
+        {TOOL_RESIDENTIAL, 54, 66}, {TOOL_RESIDENTIAL, 58, 66},
+        {TOOL_RESIDENTIAL, 62, 66}, {TOOL_RESIDENTIAL, 70, 66},
+        {TOOL_RESIDENTIAL, 62, 72}, {TOOL_RESIDENTIAL, 58, 72},
+        {TOOL_RESIDENTIAL, 70, 72}, {TOOL_RESIDENTIAL, 54, 72},
+        {TOOL_RESIDENTIAL, 62, 78}, {TOOL_RESIDENTIAL, 58, 78},
+        {TOOL_RESIDENTIAL, 70, 78}, {TOOL_RESIDENTIAL, 54, 78},
+        {TOOL_RESIDENTIAL, 66, 78}, {TOOL_RESIDENTIAL, 74, 78},
+        {TOOL_COMMERCIAL, 50, 66}, {TOOL_COMMERCIAL, 50, 72},
+        {TOOL_INDUSTRIAL, 80, 76}, {TOOL_INDUSTRIAL, 80, 66},
+    };
+    for (const int *spot : spots) {
+        use_tool(spot[0], spot[1], spot[2]);
+        end_tool_stroke();
+    }
+    placement_note_ = PlacementNote{};
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    refresh_tutorial(false);
 }

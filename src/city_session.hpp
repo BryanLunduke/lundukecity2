@@ -545,6 +545,13 @@ public:
     // Place the buildings a mid-scenario demo or test needs, up through the
     // given 0-based step (that step is left for the player).
     void setup_tutorial_through(int last_complete);
+    // Teaching buildings plus a small extra grid so a win-shot can grow
+    // to 2,000 people. Leaves Inspect and Budget marked complete.
+    void setup_tutorial_growth();
+    // Run the ordinary simulator for a number of ticks. Used by demos and
+    // shots so power can reach new buildings. Does not change prices or
+    // tables. Leaves the clock running.
+    void pump_simulation(int ticks);
     void refresh_tutorial(bool announce = true);
 
 

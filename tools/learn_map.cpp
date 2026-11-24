@@ -3,7 +3,7 @@
 // See COPYING and NOTICE.
 
 // Builds data/scenarios/brookside.cty, the Learn to Play map: a winding
-// river, a pond, some woods, and a large open field. Existing tiles only.
+// river, a pond, woods around a friendly opening, and a large open field. Existing tiles only.
 // Deterministic: no simulator random numbers.
 //
 //   meson compile -C build learn_map
@@ -51,8 +51,19 @@ bool in_river(int x, int y)
     return in_ellipse(x, y, 16, 24, 6.5, 5.0);
 }
 
+// Dirt reserved for the tutorial buildings and a first wave of zones.
+// Trees frame this pad but do not sit on it, so the opening view stays
+// buildable and auto-bulldoze does not spend the player's first dollars.
+bool in_build_pad(int x, int y)
+{
+    return x >= 48 && x <= 76 && y >= 51 && y <= 70;
+}
+
 bool in_woods(int x, int y)
 {
+    if (in_build_pad(x, y) || in_river(x, y)) {
+        return false;
+    }
     if (in_ellipse(x, y, 104, 14, 16, 11)) {
         return true;
     }
@@ -62,13 +73,34 @@ bool in_woods(int x, int y)
     if (in_ellipse(x, y, 18, 10, 6, 5) || in_ellipse(x, y, 102, 82, 7, 5)) {
         return true;
     }
+    // Copses around the opening view: west, east, and along the south edge.
+    if (in_ellipse(x, y, 36, 64, 8, 7) || in_ellipse(x, y, 90, 66, 9, 7) ||
+        in_ellipse(x, y, 72, 80, 8, 6) || in_ellipse(x, y, 44, 78, 6, 5)) {
+        return true;
+    }
     // A light scatter along the north bank, skipping the open field.
     if (y < 50 && y > 20 && x > 30 && x < 95) {
-        // Stay off the river itself and the building field south of it.
         const bool bank = in_river(x, y + 2) && !in_river(x, y) && !in_river(x, y - 1);
         if (bank && (hash32(x, y, 0x51ed) % 5) == 0) {
             return true;
         }
+    }
+    // Trees on the south bank, just above the build pad, so the river edge
+    // in the opening view is green.
+    if (y >= 44 && y <= 50 && x >= 28 && x <= 95) {
+        const bool bank = in_river(x, y - 2) && !in_river(x, y);
+        // Leave a clear gap around the park site at (58, 52).
+        const bool park_gap = x >= 56 && x <= 60 && y >= 49;
+        if (bank && !park_gap && (hash32(x, y, 0x0a11) % 3) != 0) {
+            return true;
+        }
+    }
+    // Loose trees along the west and east sides of the opening view.
+    if (x >= 28 && x <= 46 && y >= 52 && y <= 76 && (hash32(x, y, 0x7e11) % 7) == 0) {
+        return true;
+    }
+    if (x >= 78 && x <= 100 && y >= 52 && y <= 76 && (hash32(x, y, 0x33a0) % 6) == 0) {
+        return true;
     }
     return false;
 }
@@ -144,17 +176,19 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "learn_map: terrain looks wrong (land %d water %d trees %d)\n", land, water, trees);
         return 1;
     }
-    // The open field south of the river must stay buildable dirt.
+    // The reserved pad south of the river must stay buildable dirt.
     int field = 0;
-    for (int x = 48; x <= 80; ++x) {
-        for (int y = 52; y <= 78; ++y) {
+    int pad = 0;
+    for (int x = 48; x <= 76; ++x) {
+        for (int y = 51; y <= 70; ++y) {
+            ++pad;
             if (b.dirt(x, y)) {
                 ++field;
             }
         }
     }
-    if (field < 500) {
-        std::fprintf(stderr, "learn_map: open field is too tight (%d dirt tiles)\n", field);
+    if (field < 400 || field != pad) {
+        std::fprintf(stderr, "learn_map: open field is too tight or has non-dirt tiles (%d of %d)\n", field, pad);
         return 1;
     }
     std::fprintf(stderr, "learn_map: land %d, water %d, trees %d, field %d\n", land, water, trees, field);

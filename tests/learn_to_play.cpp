@@ -132,6 +132,24 @@ int main()
         return fail(22, "the last step should show the 2,000-person target");
     }
 
+    // The opening build pad is clear dirt so the first road is not
+    // auto-bulldozing trees.
+    CitySession fresh;
+    if (!fresh.load_scenario(SC_LEARN_TO_PLAY)) {
+        return fail(24, "could not reload Brookside to check the opening pad");
+    }
+    for (int x = 50; x <= 74; ++x) {
+        if ((fresh.map_value(x, 58) & LOMASK) != DIRT) {
+            return fail(25, "the starter road line should be open dirt");
+        }
+    }
+    if ((fresh.map_value(58, 52) & LOMASK) != DIRT || (fresh.map_value(52, 64) & LOMASK) != DIRT) {
+        return fail(26, "the park and power-plant sites should be open dirt");
+    }
+    if (LEARN_TO_PLAY_POPULATION_GOAL != 2000 || LEARN_TO_PLAY_FUNDS != 20000 || LEARN_TO_PLAY_YEARS != 0) {
+        return fail(27, "approved funds, population goal, or deadline constants changed");
+    }
+
     // Other scenarios are untouched.
     CitySession dull;
     if (!dull.load_scenario(SC_DULLSVILLE) || dull.city_name() != "Dullsville" || dull.funds() != 5000 ||
