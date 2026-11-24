@@ -2775,7 +2775,7 @@ bool MapView::draw_water(cairo_t *cr, const TileSpan &span)
                         }
                         const float wave = 0.6f * table[(x * 9 + y * 14 - phase_a) & 255] +
                                            0.4f * table[(x * 3 - y * 8 + phase_b) & 255];
-                        if (wave > 0.86f && look_fx::hash01(static_cast<std::uint32_t>(x * 73856093 ^ y * 19349663)) > 0.82) {
+                        if (wave > 0.86f && look_fx::hash01(static_cast<std::uint32_t>(x) * 73856093u ^ static_cast<std::uint32_t>(y) * 19349663u) > 0.82) {
                             dest[ox] = 0xff000000u | water_rgb_[static_cast<std::size_t>(crest)];
                         } else if (wave > 0.55f) {
                             dest[ox] = 0xff000000u | water_lift_[static_cast<std::size_t>(idx)];
