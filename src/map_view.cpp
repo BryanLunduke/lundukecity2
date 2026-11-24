@@ -902,6 +902,11 @@ void MapView::blit_special(int x, int y, int index, int cell)
     }
 }
 
+namespace {
+bool casts_shadow(int tile);
+bool is_water_tile(int raw);
+} // namespace
+
 void MapView::sync()
 {
     ensure_surface();
@@ -924,6 +929,7 @@ void MapView::sync()
             int special_index = -1;
             int special_cell = 0;
             const int special_key = special_display_key(session_, x, y, special_index, special_cell);
+            const int old_special = special_cell_.size() == cached_raw_.size() ? special_cell_[index] : -1;
             if (special_cell_.size() == cached_raw_.size()) {
                 special_cell_[index] = special_key == 0 ? 0 : special_basin_cell(special_index, special_cell) ? 2 : 1;
                 special_slot_[index] = special_key == 0 ? 0 : special_index * 16 + special_cell + 1;
@@ -963,10 +969,17 @@ void MapView::sync()
                 grown.push_back(static_cast<int>(index));
             }
             blit_tile(x, y, shown, atlas);
+            // Review nov24 #7: the pixel classes and the sun shadow depend
+            // only on whether a cell casts a shadow and, for water cells,
+            // on its pixels. Animated traffic (hundreds of tiles a tick in
+            // a big city) changes neither, so skip that rework.
+            const int old_raw = cached_raw_[index];
+            const bool same_class = old_raw >= 0 && old_special == 0 && !is_water_tile(old_raw) && !is_water_tile(raw) &&
+                                    casts_shadow(old_raw & LOMASK) == casts_shadow(raw & LOMASK);
             cached_raw_[index] = raw;
             cached_shown_[index] = shown;
             ++dirty;
-            if (!class_all_) {
+            if (!class_all_ && !same_class) {
                 class_dirty_.push_back(static_cast<int>(index));
             }
             if (!night_stale_) {
