@@ -167,6 +167,7 @@ private:
     void on_hotspot(int id, double x, double y);
     void on_dialog_button(int id);
     bool dialog_pauses() const;
+    bool goal_banner_allowed() const;
     void set_paused_for_dialog();
     void close_dialog();
     // Close the dialog. When the launch screen is still the way back in,
@@ -724,6 +725,10 @@ private:
     int goal_scenario_ = -1;
     int goal_tutorial_step_ = -1;
     std::chrono::steady_clock::time_point goal_until_{};
+    // The player clicked Goal: show the goal banner on Slate too (#5).
+    bool goal_recalled_ = false;
+    // Desktop tutorial hint: up until the step is done (#5).
+    static constexpr int kGoalPinSeconds = 24 * 3600;
     bool pause_noted_ = false;
     bool touch_pending_ = false;
     bool touch_armed_ = false;

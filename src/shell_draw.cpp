@@ -4582,8 +4582,12 @@ void Shell::draw(cairo_t *cr)
         goal_scenario_ = session_.scenario_id();
         goal_tutorial_step_ = session_.tutorial_step();
         goal_dismissed_ = false;
+        goal_recalled_ = false;
         // The tutorial hint stays up longer so a new player can read it.
-        const int seconds = session_.scenario_id() == SC_LEARN_TO_PLAY ? 20 : 6;
+        // Review nov24 #5: on the desktop it stays until the step is done
+        // (the Deck keeps its 20 s banner). Clicking Goal shows it again.
+        const bool learn = session_.scenario_id() == SC_LEARN_TO_PLAY;
+        const int seconds = learn ? (handheld_ ? 20 : kGoalPinSeconds) : 6;
         goal_until_ = now + std::chrono::seconds(seconds);
     }
     const bool goal_visible = !goal.empty() && !goal_dismissed_ && now < goal_until_;
@@ -4591,8 +4595,10 @@ void Shell::draw(cairo_t *cr)
     double goal_left = 0;
     double goal_right = 0;
     // The Slate info band shows the goal all the time, so the desktop
-    // Slate layout has no banner to repeat it.
-    if (goal_visible && dialog_ == Dialog::None && view_w_ > dp(32) && (handheld_ || !slate_) && !terrain_edit_) {
+    // Slate layout has no banner to repeat it, except for the tutorial
+    // (the band has only the short meter, not what to do) or after the
+    // player clicks Goal (review nov24 #5).
+    if (goal_visible && dialog_ == Dialog::None && view_w_ > dp(32) && goal_banner_allowed() && !terrain_edit_) {
         const int pad = dp(8);
         double room = 0;
         const bool beside = goal_banner_room(view_w_, pad, inspect_card_w_, inspect_card_shown_, room);
@@ -5086,11 +5092,11 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
             notice_bar_h_ = h;
         }
     }
-    // On the Deck (handheld) layout the tutorial hint already lives in the
-    // top goal banner. Skip the same text as a toast so it is not shown twice.
-    // Desktop keeps the toast: the Slate band only has the short meter.
+    // The tutorial hint already lives in the top goal banner (the Deck, and
+    // since review nov24 #5 the desktop too). Skip the same text as a toast
+    // so it is not shown twice.
     const std::string tutorial_banner =
-        (handheld_ && dialog_ == Dialog::None && !terrain_edit_ && !goal_dismissed_ && now < goal_until_ &&
+        (goal_banner_allowed() && dialog_ == Dialog::None && !terrain_edit_ && !goal_dismissed_ && now < goal_until_ &&
          session_.scenario_id() == SC_LEARN_TO_PLAY)
             ? session_.scenario_progress()
             : std::string();
@@ -6479,8 +6485,14 @@ void Shell::draw_info_band(cairo_t *cr)
                     shown_goal = join(compact_meter, compact_clock, " \u00b7 ");
                 }
             }
-            slate_text(cr, bold_font(), shown_goal, x, value_y, kSlateInk);
             w = std::min(w, goal_room);
+            // Review nov24 #5: click the goal to see the full goal again.
+            const bool hot = hover_id_ == kGoalStrip && dialog_ == Dialog::None && !menu_.open();
+            if (hot) {
+                slate_round(cr, x - dp(4), value_y - dp(2), w + dp(8), dp(20), dp(5), kSlateEdge, 0.45);
+            }
+            slate_text(cr, bold_font(), shown_goal, x, value_y, kSlateInk);
+            push_hot(x - dp(4), value_y - dp(2), w + dp(8), dp(22), kGoalStrip);
             break;
         }
         default:
@@ -6489,6 +6501,11 @@ void Shell::draw_info_band(cairo_t *cr)
         }
         x += w + gap * 2;
     }
+}
+
+bool Shell::goal_banner_allowed() const
+{
+    return handheld_ || !slate_ || goal_recalled_ || session_.scenario_id() == SC_LEARN_TO_PLAY;
 }
 
 void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint)

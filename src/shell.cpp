@@ -1046,7 +1046,11 @@ void Shell::bind_session()
             paint_terrain_line(x, y, x, y);
             return;
         }
-        goal_dismissed_ = true;
+        // Review nov24 #5: the desktop tutorial hint stays while the player
+        // follows it; other goal banners still step aside for the map.
+        if (handheld_ || session_.scenario_id() != SC_LEARN_TO_PLAY) {
+            goal_dismissed_ = true;
+        }
         const ToolDef *tool = tool_by_index(tool_index_);
         const int fixed = tool_fixed_special(tool);
         if (fixed >= 0) {
