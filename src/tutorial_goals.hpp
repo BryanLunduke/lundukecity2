@@ -127,8 +127,9 @@ inline const char *hint(int step)
                "people happier.";
     case InspectBudget:
         return "Click Inspect, then click a zone or building to see how it is "
-               "doing. Open Budget (under Tools) to see taxes and funding for "
-               "roads, police and fire.";
+               "doing. Open Budget (in the Analysis menu) to see taxes and funding for "
+               "roads, police and fire. If the yearly cash flow is red, raise "
+               "the tax rate a point or two; more people also bring in more tax.";
     case Population:
         return "Keep zoning and connecting power. Reach 2,000 people and you "
                "have learned the basics — the city is yours.";

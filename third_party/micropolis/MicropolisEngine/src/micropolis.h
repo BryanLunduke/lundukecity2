@@ -1939,6 +1939,17 @@ public:
     BudgetBases projectBudget(short roads, short rails, short policePop, short firePop, Quad pop, short landValue,
                               short taxRate) const;
 
+    /**
+     * Lunduke City 2 (review nov24 #12/#13): yearly upkeep of one police or
+     * fire station. $100 everywhere except two scenario-local tweaks:
+     * Learn to Play's Brookside ($25, so a small teaching town is not in the
+     * red by its stations alone) and Portland's sixteen fire stations ($60).
+     */
+    Quad stationUpkeep(bool fire) const;
+
+    /** Lunduke City 2 (review nov24 #13): a scenario's starting tax rate. */
+    static short scenarioStartTax(Scenario which);
+
     /** Road, police, and fire effects follow the slider percents now. */
     void applyFundingLevels();
 
