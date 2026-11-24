@@ -756,6 +756,9 @@ private:
     int tutorial_announced_ = -1;
     // Furthest step passed; steps never go back (review nov24 #3/#4).
     int tutorial_reached_ = 0;
+    // Last clock and population a tick refreshed the tutorial at (#8).
+    long long tutorial_tick_time_ = -1;
+    long long tutorial_tick_people_ = -1;
     std::string tutorial_meter_;
     std::string tutorial_meter_short_;
     std::string tutorial_meter_compact_;

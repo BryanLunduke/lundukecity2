@@ -1571,7 +1571,16 @@ void CitySession::tick()
         engine_->sim.animateTiles();
     }
     if (scenario_id() == SC_LEARN_TO_PLAY) {
-        refresh_tutorial();
+        // Review nov24 #8: the census scans the whole map. Tool strokes and
+        // Inspect/Budget refresh on their own, so a tick only needs a new
+        // look when the simulation clock or the population has moved.
+        const long long now = static_cast<long long>(engine_->sim.cityTime);
+        const long long people = static_cast<long long>(live_population_count(engine_->sim));
+        if (now != tutorial_tick_time_ || people != tutorial_tick_people_) {
+            tutorial_tick_time_ = now;
+            tutorial_tick_people_ = people;
+            refresh_tutorial();
+        }
     }
 }
 
