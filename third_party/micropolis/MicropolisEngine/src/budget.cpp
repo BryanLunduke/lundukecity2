@@ -264,17 +264,6 @@ Quad Micropolis::stationUpkeep(bool fire) const
 }
 
 
-short Micropolis::scenarioStartTax(Scenario which)
-{
-    // Portland and San Diego are big cities that ran $250-$1,000 a year in
-    // the red at 7% once their goal was settled (review nov24 #13).
-    if (which == SC_PORTLAND || which == SC_SAN_DIEGO) {
-        return 8;
-    }
-    return 7;
-}
-
-
 Micropolis::BudgetBases Micropolis::projectBudget(short roads, short rails, short policePop, short firePop, Quad pop,
                                                    short landValue, short taxRate) const
 {

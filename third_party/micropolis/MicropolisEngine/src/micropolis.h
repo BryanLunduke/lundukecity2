@@ -1947,9 +1947,6 @@ public:
      */
     Quad stationUpkeep(bool fire) const;
 
-    /** Lunduke City 2 (review nov24 #13): a scenario's starting tax rate. */
-    static short scenarioStartTax(Scenario which);
-
     /** Road, police, and fire effects follow the slider percents now. */
     void applyFundingLevels();
 

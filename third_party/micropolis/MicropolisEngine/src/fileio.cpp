@@ -2351,7 +2351,7 @@ bool Micropolis::loadScenario(Scenario s)
     setFunds(funds);
     setCleanCityName(name);
     setSpeed(3);
-    setCityTax(scenarioStartTax(which));
+    setCityTax(7);
 
     initWillStuff();
     initFundingLevel();

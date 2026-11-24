@@ -125,27 +125,29 @@ int main()
         Scenario which;
         Quad police;
         Quad fire;
-        short tax;
     };
     const Want wants[] = {
-        {SC_NONE, 100, 100, 7},        {SC_DULLSVILLE, 100, 100, 7},  {SC_SEATTLE, 100, 100, 7},
-        {SC_PORTLAND, 100, 60, 8},     {SC_SAN_DIEGO, 100, 100, 8},   {SC_LEARN_TO_PLAY, 25, 25, 7},
+        {SC_NONE, 100, 100},     {SC_DULLSVILLE, 100, 100}, {SC_SEATTLE, 100, 100},
+        {SC_PORTLAND, 100, 60},  {SC_SAN_DIEGO, 100, 100},  {SC_LEARN_TO_PLAY, 25, 25},
     };
     for (const Want &want : wants) {
         sim.scenario = want.which;
         const Micropolis::BudgetBases bases = sim.projectBudget(0, 0, 2, 3, 0, 0, 7);
         if (sim.stationUpkeep(false) != want.police || sim.stationUpkeep(true) != want.fire ||
-            bases.police != 2 * want.police || bases.fire != 3 * want.fire ||
-            Micropolis::scenarioStartTax(want.which) != want.tax) {
-            std::fprintf(stderr, "scenario %d: police %d fire %d tax %d\n", static_cast<int>(want.which),
-                         static_cast<int>(sim.stationUpkeep(false)), static_cast<int>(sim.stationUpkeep(true)),
-                         static_cast<int>(Micropolis::scenarioStartTax(want.which)));
-            return fail(13, "a station upkeep or start tax is wrong");
+            bases.police != 2 * want.police || bases.fire != 3 * want.fire) {
+            std::fprintf(stderr, "scenario %d: police %d fire %d\n", static_cast<int>(want.which),
+                         static_cast<int>(sim.stationUpkeep(false)), static_cast<int>(sim.stationUpkeep(true)));
+            return fail(13, "a station upkeep is wrong");
         }
     }
+    // Every scenario keeps the 7% starting tax (editor's call, nov24).
     CitySession portland;
-    if (!portland.load_scenario(SC_PORTLAND) || portland.tax() != 8) {
-        return fail(14, "Portland does not start at 8%");
+    if (!portland.load_scenario(SC_PORTLAND) || portland.tax() != 7) {
+        return fail(14, "Portland does not start at 7%");
+    }
+    CitySession san_diego;
+    if (!san_diego.load_scenario(SC_SAN_DIEGO) || san_diego.tax() != 7) {
+        return fail(16, "San Diego does not start at 7%");
     }
     CitySession seattle;
     if (!seattle.load_scenario(SC_SEATTLE) || seattle.tax() != 7) {
