@@ -599,7 +599,7 @@ inline void write_preview(const Micropolis &sim, const char *path)
             const MapTile t = sim.map[x][y] & LOMASK;
             unsigned char r = 180, g = 150, b = 100;
             if (t >= WATER_LOW && t <= WATER_HIGH) { r = 40; g = 80; b = 190; }
-            else if (t >= TREEBASE && t <= LASTTREE) { r = 30; g = 120; b = 40; }
+            else if (t >= TREEBASE && t <= WOODS) { r = 30; g = 120; b = 40; }
             else if (t >= FIREBASE && t < ROADBASE) { r = 200; g = 60; b = 0; }
             else if (t >= ROADBASE && t <= LASTROAD) { r = 60; g = 60; b = 60; }
             else if (t >= POWERBASE && t <= LASTPOWER) { r = 220; g = 220; b = 0; }

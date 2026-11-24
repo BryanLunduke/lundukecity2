@@ -223,8 +223,10 @@ inline std::string progress_line(int step)
     return std::string("Step ") + std::to_string(step + 1) + " of 7: " + title(step) + ". " + hint(step);
 }
 
-// Count buildings and zones from a raw map. zone centers are the empty-zone
-// tiles (RESCLR and friends) or the first house/shop/factory of a grown 3x3.
+// Count buildings and zones from a raw map. A 3x3 zone is counted once from
+// its centre (the tile with ZONEBIT). Grown shops and factories can have a
+// parking or smokestack tile that sits outside the empty-zone range, so the
+// eight neighbours are not required to match.
 template <typename TileAt>
 inline Status census(const TileAt &tile_at, int width, int height, std::int64_t population, bool inspected,
                      bool budget_seen)
@@ -241,22 +243,14 @@ inline Status census(const TileAt &tile_at, int width, int height, std::int64_t 
     };
     auto is_kind = [](MapTile tile, MapTile lo, MapTile hi) { return tile >= lo && tile < hi; };
     auto zone_at = [&](int x, int y, MapTile lo, MapTile hi) {
-        // A 3x3 zone is counted once, from its centre tile.
-        const MapTile mid = at(x, y);
-        if (!is_kind(mid, lo, hi)) {
+        if (x < 0 || y < 0 || x >= width || y >= height) {
             return false;
         }
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                if (dx == 0 && dy == 0) {
-                    continue;
-                }
-                if (!is_kind(at(x + dx, y + dy), lo, hi)) {
-                    return false;
-                }
-            }
+        const unsigned raw = static_cast<unsigned>(tile_at(x, y));
+        if ((raw & ZONEBIT) == 0) {
+            return false;
         }
-        return true;
+        return is_kind(static_cast<MapTile>(raw & LOMASK), lo, hi);
     };
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {

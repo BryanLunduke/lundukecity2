@@ -4244,7 +4244,14 @@ void Shell::draw(cairo_t *cr)
             // The footprint follows the pointer before the button goes down,
             // including while the city is paused. Motion updates the tile
             // under the cursor. It does not move the pointer.
-            if (gamepad_nav_ && !pad_dragging_) {
+            // Learn-to-play shots park the pointer off the map; on a
+            // handheld the gamepad cursor still mapped to a tile and showed
+            // the Inspect "Clear / Open land" card.
+            const bool learn_shot = demo_ == "learn" || demo_ == "learn_mid" || demo_ == "learn_win" ||
+                                    demo_ == "learn_picker";
+            if (learn_shot) {
+                map_.clear_hover();
+            } else if (gamepad_nav_ && !pad_dragging_) {
                 map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
             } else if (!gamepad_nav_ && !pointer_down_ && pointer_x_ >= view_x_ &&
                        pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ && pointer_y_ < view_y_ + view_h_) {

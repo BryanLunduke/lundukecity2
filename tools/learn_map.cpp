@@ -12,6 +12,7 @@
 #include "map_builder.hpp"
 
 #include <cstdint>
+#include <cstddef>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
@@ -64,43 +65,85 @@ bool in_woods(int x, int y)
     if (in_build_pad(x, y) || in_river(x, y)) {
         return false;
     }
-    if (in_ellipse(x, y, 104, 14, 16, 11)) {
+
+    const auto grove = [](int x, int y, int cx, int cy, int rx, int ry, unsigned salt) {
+        const unsigned h = hash32(x, y, salt);
+        const double rx2 = static_cast<double>(rx) + static_cast<int>(h % 5) - 2;
+        const double ry2 = static_cast<double>(ry) + static_cast<int>((h / 5u) % 5) - 2;
+        if (rx2 <= 0.5 || ry2 <= 0.5) {
+            return false;
+        }
+        return in_ellipse(x, y, cx, cy, rx2, ry2);
+    };
+
+    // Dense, irregular fill of the four map corners and the far edges.
+    if (grove(x, y, 10, 8, 16, 12, 0x21u) || grove(x, y, 22, 6, 10, 8, 0x22u) || grove(x, y, 8, 22, 10, 10, 0x23u) ||
+        grove(x, y, 110, 8, 16, 12, 0x24u) || grove(x, y, 98, 6, 12, 8, 0x25u) || grove(x, y, 112, 24, 10, 10, 0x26u) ||
+        grove(x, y, 10, 92, 16, 12, 0x27u) || grove(x, y, 24, 94, 10, 8, 0x28u) || grove(x, y, 8, 78, 10, 10, 0x29u) ||
+        grove(x, y, 110, 92, 16, 12, 0x2au) || grove(x, y, 96, 94, 12, 8, 0x2bu) || grove(x, y, 112, 78, 10, 10, 0x2cu)) {
         return true;
     }
-    if (in_ellipse(x, y, 14, 86, 15, 11)) {
+    if ((x <= 10 || x >= 109 || y <= 6 || y >= 93) && (hash32(x, y, 0x2du) % 5) < 4) {
         return true;
     }
-    if (in_ellipse(x, y, 18, 10, 6, 5) || in_ellipse(x, y, 102, 82, 7, 5)) {
+
+    // Opening-view copses of mixed sizes, kept off the reserved field.
+    if (grove(x, y, 36, 64, 7, 6, 0x31u) || grove(x, y, 30, 58, 5, 4, 0x32u) || grove(x, y, 40, 74, 6, 5, 0x33u) ||
+        grove(x, y, 28, 70, 4, 4, 0x34u) || grove(x, y, 24, 80, 6, 5, 0x35u) || grove(x, y, 42, 80, 5, 4, 0x36u) ||
+        grove(x, y, 32, 50, 5, 4, 0x37u) || grove(x, y, 22, 54, 4, 3, 0x38u) || grove(x, y, 38, 44, 4, 3, 0x39u)) {
         return true;
     }
-    // Copses around the opening view: west, east, and along the south edge.
-    if (in_ellipse(x, y, 36, 64, 8, 7) || in_ellipse(x, y, 90, 66, 9, 7) ||
-        in_ellipse(x, y, 72, 80, 8, 6) || in_ellipse(x, y, 44, 78, 6, 5)) {
+    if (grove(x, y, 90, 64, 7, 6, 0x41u) || grove(x, y, 96, 58, 5, 4, 0x42u) || grove(x, y, 86, 74, 6, 5, 0x43u) ||
+        grove(x, y, 98, 70, 4, 4, 0x44u) || grove(x, y, 102, 80, 6, 5, 0x45u) || grove(x, y, 84, 80, 5, 4, 0x46u) ||
+        grove(x, y, 94, 50, 5, 4, 0x47u) || grove(x, y, 104, 54, 4, 3, 0x48u) || grove(x, y, 80, 54, 4, 3, 0x49u)) {
         return true;
     }
-    // A light scatter along the north bank, skipping the open field.
-    if (y < 50 && y > 20 && x > 30 && x < 95) {
-        const bool bank = in_river(x, y + 2) && !in_river(x, y) && !in_river(x, y - 1);
-        if (bank && (hash32(x, y, 0x51ed) % 5) == 0) {
-            return true;
+    if (grove(x, y, 58, 80, 6, 5, 0x51u) || grove(x, y, 70, 82, 5, 4, 0x52u) || grove(x, y, 50, 84, 6, 5, 0x53u) ||
+        grove(x, y, 78, 78, 5, 4, 0x54u) || grove(x, y, 44, 78, 4, 3, 0x55u) || grove(x, y, 64, 88, 5, 4, 0x56u) ||
+        grove(x, y, 82, 86, 4, 3, 0x57u) || grove(x, y, 54, 76, 4, 3, 0x58u)) {
+        return true;
+    }
+    if (grove(x, y, 40, 34, 6, 5, 0x61u) || grove(x, y, 70, 32, 6, 5, 0x62u) || grove(x, y, 54, 30, 5, 4, 0x63u) ||
+        grove(x, y, 86, 36, 5, 4, 0x64u) || grove(x, y, 28, 32, 5, 4, 0x65u) || grove(x, y, 98, 30, 5, 4, 0x66u) ||
+        grove(x, y, 16, 36, 4, 3, 0x67u)) {
+        return true;
+    }
+
+    // Scattered small groves (2x2 / 3x3 stamps) around the opening, off the pad.
+    if ((x >= 18 && x <= 46 && y >= 44 && y <= 90) || (x >= 80 && x <= 108 && y >= 44 && y <= 90) ||
+        (x >= 46 && x <= 80 && y >= 72 && y <= 94) || (x >= 16 && x <= 104 && y >= 20 && y <= 42)) {
+        const int sx = (x / 3) * 3;
+        const int sy = (y / 3) * 3;
+        if ((hash32(sx, sy, 0x73u) % 7) == 0) {
+            const int span = 1 + static_cast<int>(hash32(sx, sy, 0x75u) % 2); // 1 or 2 => 2x2 or 3x3
+            if (x >= sx && x <= sx + span && y >= sy && y <= sy + span && !in_build_pad(sx, sy) &&
+                !in_river(sx, sy)) {
+                return true;
+            }
         }
     }
-    // Trees on the south bank, just above the build pad, so the river edge
-    // in the opening view is green.
-    if (y >= 44 && y <= 50 && x >= 28 && x <= 95) {
-        const bool bank = in_river(x, y - 2) && !in_river(x, y);
-        // Leave a clear gap around the park site at (58, 52).
-        const bool park_gap = x >= 56 && x <= 60 && y >= 49;
-        if (bank && !park_gap && (hash32(x, y, 0x0a11) % 3) != 0) {
+
+    // River-bank belt, 1-3 tiles wide with noisy width, leaving a gap at
+    // the teaching park site north of the field.
+    const bool park_gap = x >= 56 && x <= 60 && y >= 49 && y <= 52;
+    if (!park_gap) {
+        int bank_d = 0;
+        for (int d = 1; d <= 3; ++d) {
+            if (in_river(x, y - d) || in_river(x, y + d) || in_river(x - d, y) || in_river(x + d, y) ||
+                in_river(x - d, y - d) || in_river(x + d, y - d) || in_river(x - d, y + d) || in_river(x + d, y + d)) {
+                bank_d = d;
+                break;
+            }
+        }
+        if (bank_d == 1) {
             return true;
         }
-    }
-    // Loose trees along the west and east sides of the opening view.
-    if (x >= 28 && x <= 46 && y >= 52 && y <= 76 && (hash32(x, y, 0x7e11) % 7) == 0) {
-        return true;
-    }
-    if (x >= 78 && x <= 100 && y >= 52 && y <= 76 && (hash32(x, y, 0x33a0) % 6) == 0) {
-        return true;
+        if (bank_d == 2 && (hash32(x, y, 0x51edu) % 5) < 4) {
+            return true;
+        }
+        if (bank_d == 3 && (hash32(x, y, 0x0a11u) % 3) != 0) {
+            return true;
+        }
     }
     return false;
 }
@@ -153,6 +196,55 @@ int main(int argc, char **argv)
     b.sim.cityTime = ((1900 - 1900) * 48) + 2;
     b.paint_terrain();
 
+    // Knock back plus-shaped one-tile stubs left by compact ellipses and
+    // the cardinal autotile table, then re-run edge smoothing.
+    auto is_tree = [&](int x, int y) {
+        if (!Micropolis::testBounds(x, y)) {
+            return false;
+        }
+        const MapTile t = b.tile(x, y);
+        return t >= TREEBASE && t <= WOODS;
+    };
+    for (int pass = 0; pass < 4; ++pass) {
+        std::vector<int> drop;
+        for (int x = 0; x < W; ++x) {
+            for (int y = 0; y < H; ++y) {
+                if (!is_tree(x, y)) {
+                    continue;
+                }
+                const int n = (is_tree(x, y - 1) ? 1 : 0) + (is_tree(x, y + 1) ? 1 : 0) + (is_tree(x - 1, y) ? 1 : 0) +
+                              (is_tree(x + 1, y) ? 1 : 0);
+                if (n < 2) {
+                    drop.push_back(y * W + x);
+                }
+            }
+        }
+        if (drop.empty()) {
+            break;
+        }
+        for (int at : drop) {
+            b.sim.map[at % W][at / W] = DIRT;
+        }
+    }
+    {
+        std::vector<unsigned short> tiles(static_cast<std::size_t>(W * H), DIRT);
+        for (int x = 0; x < W; ++x) {
+            for (int y = 0; y < H; ++y) {
+                tiles[static_cast<std::size_t>(y * W + x)] = static_cast<unsigned short>(b.sim.map[x][y] & LOMASK);
+            }
+        }
+        terrain_paint::fix_edges(tiles, W, H, 0, 0, W - 1, H - 1);
+        for (int x = 0; x < W; ++x) {
+            for (int y = 0; y < H; ++y) {
+                if (in_build_pad(x, y)) {
+                    b.sim.map[x][y] = DIRT;
+                } else {
+                    b.sim.map[x][y] = tiles[static_cast<std::size_t>(y * W + x)];
+                }
+            }
+        }
+    }
+
     int land = 0, water = 0, trees = 0, parks = 0;
     for (int x = 0; x < W; ++x) {
         for (int y = 0; y < H; ++y) {
@@ -191,7 +283,20 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "learn_map: open field is too tight or has non-dirt tiles (%d of %d)\n", field, pad);
         return 1;
     }
-    std::fprintf(stderr, "learn_map: land %d, water %d, trees %d, field %d\n", land, water, trees, field);
+    int vis_trees = 0;
+    int vis_tiles = 0;
+    for (int x = 24; x < 97; ++x) {
+        for (int y = 38; y < 83; ++y) {
+            ++vis_tiles;
+            const MapTile t = b.tile(x, y);
+            if (t >= TREEBASE && t <= WOODS) {
+                ++vis_trees;
+            }
+        }
+    }
+    const int vis_pct = vis_tiles > 0 ? (vis_trees * 100) / vis_tiles : 0;
+    std::fprintf(stderr, "learn_map: land %d, water %d, trees %d, field %d, view-green %d/%d (%d%%)\n", land, water,
+                 trees, field, vis_trees, vis_tiles, vis_pct);
 
     if (argc > 2 && argv[2][0] != '\0') {
         mapgen::write_preview(b.sim, argv[2]);

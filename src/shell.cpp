@@ -10,6 +10,7 @@
 #include "city_seed.hpp"
 #include "controls_page.hpp"
 #include "dialog_copy.hpp"
+#include "messages.hpp"
 #include "notice_bar.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
@@ -1601,6 +1602,13 @@ void Shell::loop()
         }
         note_message();
         note_disaster_fx();
+        if (demo_ == "learn" || demo_ == "learn_mid" || demo_ == "learn_win" || demo_ == "learn_picker") {
+            // Keep the Inspect "Clear / Open land" hover card off captures
+            // by parking the pointer on the NEWS bar, off the map.
+            pointer_x_ = cursor_x_ = 24;
+            pointer_y_ = cursor_y_ = static_cast<float>(std::max(8, win_h_ - 6));
+            map_.clear_hover();
+        }
         advance_presentation(elapsed);
         if (session_.query_serial() != shown_query_serial_) {
             shown_query_serial_ = session_.query_serial();
@@ -2148,15 +2156,17 @@ void Shell::loop()
                 session_.set_simulation_paused(false);
                 session_.set_auto_goto(false);
                 if (demo_ == "learn_mid") {
-                    session_.setup_tutorial_through(tutorial::Safety);
-                    session_.pump_simulation(1200);
+                    session_.setup_tutorial_mid();
+                    session_.pump_simulation(2000);
                     int n = 0;
-                    while (session_.population() <= 0 && n < 6) {
-                        session_.pump_simulation(800);
+                    while (!session_.tutorial_mid_ready() && n < 24) {
+                        session_.pump_simulation(1000);
                         ++n;
                     }
+                    session_.ensure_tutorial_power();
                 } else if (demo_ == "learn_win") {
                     session_.setup_tutorial_growth();
+                    session_.ensure_tutorial_power();
                     session_.pump_simulation(2400);
                     int n = 0;
                     long long last_people = session_.population();
@@ -2168,17 +2178,37 @@ void Shell::loop()
                         session_.pump_simulation(1200);
                         ++n;
                     }
+                    session_.ensure_tutorial_power();
+                    session_.ensure_tutorial_park();
+                    int extra = 0;
+                    while (session_.population() < LEARN_TO_PLAY_POPULATION_GOAL && extra < 8) {
+                        session_.pump_simulation(600);
+                        ++extra;
+                    }
+                    session_.ensure_tutorial_power();
+                    session_.set_simulation_paused(true);
                 } else {
                     session_.pump_simulation(8);
                 }
-                speed_ = 1;
-                session_.set_speed(1);
+                if (demo_ == "learn_win") {
+                    speed_ = 0;
+                    session_.set_speed(0);
+                } else {
+                    speed_ = 1;
+                    session_.set_speed(1);
+                }
                 close_dialog();
                 goal_dismissed_ = false;
                 goal_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(30);
                 center_on_fraction((tutorial::kFieldX + 0.5) / CitySession::kWorldW,
                                    (tutorial::kFieldY + 0.5) / CitySession::kWorldH);
                 map_.set_tile_size(16);
+                toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(),
+                                             [](const Toast &t) { return notice_is_tool_feedback(t.text); }),
+                              toasts_.end());
+                if (notice_is_tool_feedback(shown_message_)) {
+                    shown_message_.clear();
+                }
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);

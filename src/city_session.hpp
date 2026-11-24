@@ -552,6 +552,18 @@ public:
     // shots so power can reach new buildings. Does not change prices or
     // tables. Leaves the clock running.
     void pump_simulation(int ticks);
+    // Mid-scenario demo: teaching buildings through Safety, plus a few
+    // extra R and C lots so houses and shops can grow in the shot.
+    void setup_tutorial_mid();
+    // Grown house and shop zone counts (centers), for mid-shot readiness.
+    int tutorial_grown_homes() const;
+    int tutorial_grown_shops() const;
+    bool tutorial_mid_ready() const;
+    // Connect power lines to every zone in the teaching town, and add a
+    // plant if the grid is still short, so a win shot has no unpowered
+    // alert and no blackout news.
+    bool ensure_tutorial_power();
+    void ensure_tutorial_park();
     void refresh_tutorial(bool announce = true);
 
 

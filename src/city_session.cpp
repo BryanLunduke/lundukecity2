@@ -3072,7 +3072,9 @@ std::string CitySession::scenario_outcome_text(bool won) const
         text += " ";
         text += def.goal;
     }
-    if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
+    if (id == SC_LEARN_TO_PLAY && won) {
+        text += " 2,000 people — done.";
+    } else if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
         text += " Score " + grouped_count(static_cast<std::int64_t>(engine_->sim.cityScore)) + ".";
     } else {
         const std::string meter = scenario_meter();
@@ -4852,6 +4854,421 @@ void CitySession::pump_simulation(int ticks)
     }
 }
 
+void CitySession::setup_tutorial_mid()
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    setup_tutorial_through(tutorial::Safety);
+    set_auto_bulldoze(true);
+    // Extra lots along the teaching road so the mid shot can show grown
+    // houses and shops, not only empty zone squares.
+    use_tool(TOOL_RESIDENTIAL, 54, 56);
+    end_tool_stroke();
+    use_tool(TOOL_RESIDENTIAL, 70, 56);
+    end_tool_stroke();
+    use_tool(TOOL_COMMERCIAL, 50, 56);
+    end_tool_stroke();
+    use_tool(TOOL_COMMERCIAL, 74, 56);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 50, 58, 74, 58);
+    end_tool_stroke();
+    placement_note_ = PlacementNote{};
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    refresh_tutorial(false);
+    if (tutorial_step_ >= 0 && tutorial_step_ < tutorial::kStepCount) {
+        post_message(tutorial::hint(tutorial_step_));
+    }
+}
+
+int CitySession::tutorial_grown_homes() const
+{
+    if (!ready_) {
+        return 0;
+    }
+    int homes = 0;
+    const Micropolis &sim = engine_->sim;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            const unsigned short raw = sim.map[x][y];
+            const int tile = raw & LOMASK;
+            // Low-density houses are one tile each. A denser 3x3 is
+            // counted from its centre, including church and hospital.
+            if (tile >= HOUSE && tile <= HHTHR) {
+                ++homes;
+            } else if ((raw & ZONEBIT) != 0 && tile >= RZB && tile < COMBASE) {
+                ++homes;
+            }
+        }
+    }
+    return homes;
+}
+
+int CitySession::tutorial_grown_shops() const
+{
+    if (!ready_) {
+        return 0;
+    }
+    int shops = 0;
+    const Micropolis &sim = engine_->sim;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            const unsigned short raw = sim.map[x][y];
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int tile = raw & LOMASK;
+            if (tile >= CZB && tile <= COMLAST) {
+                ++shops;
+            }
+        }
+    }
+    return shops;
+}
+
+bool CitySession::tutorial_mid_ready() const
+{
+    return tutorial_grown_homes() >= 3 && tutorial_grown_shops() >= 2 && crisis_report().unpowered == 0;
+}
+
+bool CitySession::ensure_tutorial_power()
+{
+    if (!ready_) {
+        return false;
+    }
+    set_auto_bulldoze(true);
+
+    auto is_road = [&](int x, int y) {
+        if (!Micropolis::testBounds(x, y)) {
+            return false;
+        }
+        const int tile = engine_->sim.map[x][y] & LOMASK;
+        return tile >= ROADBASE && tile <= LASTROAD;
+    };
+    auto wire_roads = [&]() {
+        const int x0 = 46;
+        const int x1 = 92;
+        const int y0 = 48;
+        const int y1 = 90;
+        for (int y = y0; y <= y1; ++y) {
+            int run = -1;
+            for (int x = x0; x <= x1 + 1; ++x) {
+                const bool on = x <= x1 && is_road(x, y);
+                if (on && run < 0) {
+                    run = x;
+                } else if (!on && run >= 0) {
+                    drag_tool(TOOL_WIRE, run, y, x - 1, y);
+                    end_tool_stroke();
+                    run = -1;
+                }
+            }
+        }
+        for (int x = x0; x <= x1; ++x) {
+            int run = -1;
+            for (int y = y0; y <= y1 + 1; ++y) {
+                const bool on = y <= y1 && is_road(x, y);
+                if (on && run < 0) {
+                    run = y;
+                } else if (!on && run >= 0) {
+                    drag_tool(TOOL_WIRE, x, run, x, y - 1);
+                    end_tool_stroke();
+                    run = -1;
+                }
+            }
+        }
+    };
+    auto conducts = [&](int x, int y) {
+        return Micropolis::testBounds(x, y) && (engine_->sim.map[x][y] & CONDBIT) != 0;
+    };
+    // Some 4-way road crossings cannot take a power line. A wire on the
+    // dirt beside the crossing joins the segments the crossing isolates.
+    auto bridge_road_gaps = [&]() {
+        const int x0 = 46;
+        const int x1 = 92;
+        const int y0 = 48;
+        const int y1 = 90;
+        const int dx[4] = {-1, 1, 0, 0};
+        const int dy[4] = {0, 0, -1, 1};
+        for (int x = x0; x <= x1; ++x) {
+            for (int y = y0; y <= y1; ++y) {
+                if (!is_road(x, y) || conducts(x, y)) {
+                    continue;
+                }
+                use_tool(TOOL_WIRE, x, y);
+                end_tool_stroke();
+                if (conducts(x, y)) {
+                    continue;
+                }
+                for (int i = 0; i < 4; ++i) {
+                    const int nx = x + dx[i];
+                    const int ny = y + dy[i];
+                    if (!Micropolis::testBounds(nx, ny)) {
+                        continue;
+                    }
+                    const unsigned short raw = engine_->sim.map[nx][ny];
+                    const int tile = raw & LOMASK;
+                    if ((raw & ZONEBIT) != 0 || tile == POWERPLANT || tile == NUCLEAR) {
+                        continue;
+                    }
+                    if (tile == DIRT || (tile >= TREEBASE && tile <= WOODS) ||
+                        (tile >= POWERBASE && tile <= LASTPOWER && tile != POWERPLANT)) {
+                        use_tool(TOOL_WIRE, nx, ny);
+                        end_tool_stroke();
+                    }
+                }
+                // A diagonal wire touches both arms of a crossing that
+                // cannot itself take a power line.
+                const int ddx[4] = {-1, -1, 1, 1};
+                const int ddy[4] = {-1, 1, -1, 1};
+                for (int i = 0; i < 4; ++i) {
+                    const int nx = x + ddx[i];
+                    const int ny = y + ddy[i];
+                    if (!Micropolis::testBounds(nx, ny)) {
+                        continue;
+                    }
+                    const unsigned short raw = engine_->sim.map[nx][ny];
+                    const int tile = raw & LOMASK;
+                    if ((raw & ZONEBIT) != 0 || tile == POWERPLANT || tile == NUCLEAR) {
+                        continue;
+                    }
+                    if (tile == DIRT || (tile >= TREEBASE && tile <= WOODS) ||
+                        (tile >= POWERBASE && tile <= LASTPOWER && tile != POWERPLANT)) {
+                        use_tool(TOOL_WIRE, nx, ny);
+                        end_tool_stroke();
+                    }
+                }
+            }
+        }
+    };
+
+    wire_roads();
+    bridge_road_gaps();
+    pump_simulation(64);
+
+    auto wireable = [&](int x, int y) {
+        if (!Micropolis::testBounds(x, y)) {
+            return false;
+        }
+        const unsigned short raw = engine_->sim.map[x][y];
+        if ((raw & ZONEBIT) != 0) {
+            return false;
+        }
+        const int t = raw & LOMASK;
+        if (t == POWERPLANT || t == NUCLEAR || t == POLICESTATION || t == FIRESTATION || t == FOUNTAIN ||
+            (t >= WOODS2 && t <= WOODS5)) {
+            return false;
+        }
+        if (t == DIRT || (t >= RUBBLE && t <= LASTRUBBLE) || (t >= TREEBASE && t <= WOODS) ||
+            (t >= ROADBASE && t <= LASTROAD) || (t >= POWERBASE && t <= LASTPOWER && t != POWERPLANT)) {
+            return true;
+        }
+        return false;
+    };
+    auto drag_wire_safe = [&](int x0, int y0, int x1, int y1) {
+        const int dx = (x1 > x0) - (x1 < x0);
+        const int dy = (y1 > y0) - (y1 < y0);
+        int x = x0;
+        int y = y0;
+        int run_x = -1;
+        int run_y = -1;
+        while (true) {
+            if (wireable(x, y)) {
+                if (run_x < 0) {
+                    run_x = x;
+                    run_y = y;
+                }
+            } else {
+                // Step back to the last wireable tile before flushing.
+                if (run_x >= 0) {
+                    const int px = x - dx;
+                    const int py = y - dy;
+                    drag_tool(TOOL_WIRE, run_x, run_y, px, py);
+                    end_tool_stroke();
+                    run_x = -1;
+                }
+            }
+            if (x == x1 && y == y1) {
+                if (run_x >= 0) {
+                    drag_tool(TOOL_WIRE, run_x, run_y, x, y);
+                    end_tool_stroke();
+                }
+                break;
+            }
+            x += dx;
+            y += dy;
+        }
+    };
+    auto wire_unpowered = [&]() {
+        const CrisisReport report = crisis_report();
+        const int x0 = 46;
+        const int x1 = 92;
+        const int y0 = 48;
+        const int y1 = 90;
+        for (const CrisisSite &site : report.sites) {
+            const unsigned short raw = engine_->sim.map[site.x][site.y];
+            if ((raw & ZONEBIT) == 0 || (raw & PWRBIT) != 0) {
+                continue;
+            }
+            int sx = -1;
+            int sy = -1;
+            for (int y = site.y - 2; y <= site.y + 2 && sx < 0; ++y) {
+                for (int x = site.x - 2; x <= site.x + 2; ++x) {
+                    const bool inside = x >= site.x - 1 && x <= site.x + 1 && y >= site.y - 1 && y <= site.y + 1;
+                    if (!inside && wireable(x, y)) {
+                        sx = x;
+                        sy = y;
+                    }
+                }
+            }
+            if (sx < 0) {
+                continue;
+            }
+            int bx = -1;
+            int by = -1;
+            int best = 10000;
+            for (int x = x0; x <= x1; ++x) {
+                for (int y = y0; y <= y1; ++y) {
+                    if (!is_road(x, y)) {
+                        continue;
+                    }
+                    const int d = std::abs(x - sx) + std::abs(y - sy);
+                    if (d < best) {
+                        best = d;
+                        bx = x;
+                        by = y;
+                    }
+                }
+            }
+            if (bx < 0) {
+                continue;
+            }
+            // Prefer an L that stays on wireable tiles, so grown zones are
+            // not overwritten by a power line.
+            auto path_clear = [&](bool horiz_first) {
+                if (horiz_first) {
+                    const int dx = (bx > sx) - (bx < sx);
+                    for (int x = sx; x != bx; x += dx) {
+                        if (!wireable(x, sy)) {
+                            return false;
+                        }
+                    }
+                    const int dy = (by > sy) - (by < sy);
+                    for (int y = sy; y != by; y += dy) {
+                        if (!wireable(bx, y)) {
+                            return false;
+                        }
+                    }
+                    return wireable(bx, by);
+                }
+                const int dy = (by > sy) - (by < sy);
+                for (int y = sy; y != by; y += dy) {
+                    if (!wireable(sx, y)) {
+                        return false;
+                    }
+                }
+                const int dx = (bx > sx) - (bx < sx);
+                for (int x = sx; x != bx; x += dx) {
+                    if (!wireable(x, by)) {
+                        return false;
+                    }
+                }
+                return wireable(bx, by);
+            };
+            if (path_clear(true)) {
+                drag_wire_safe(sx, sy, bx, sy);
+                drag_wire_safe(bx, sy, bx, by);
+            } else if (path_clear(false)) {
+                drag_wire_safe(sx, sy, sx, by);
+                drag_wire_safe(sx, by, bx, by);
+            }
+        }
+    };
+
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        if (crisis_report().unpowered == 0) {
+            break;
+        }
+        wire_unpowered();
+        wire_roads();
+        bridge_road_gaps();
+        pump_simulation(64);
+    }
+
+    if (crisis_report().unpowered > 0) {
+        // A fourth coal plant, south-west of the extra grid, if the first
+        // three cannot reach every lot.
+        use_tool(TOOL_COALPOWER, 50, 84);
+        end_tool_stroke();
+        drag_tool(TOOL_WIRE, 50, 83, 50, 76);
+        end_tool_stroke();
+        drag_tool(TOOL_ROAD, 50, 76, 50, 82);
+        end_tool_stroke();
+        drag_tool(TOOL_WIRE, 50, 76, 50, 82);
+        end_tool_stroke();
+        wire_roads();
+        pump_simulation(96);
+        if (crisis_report().unpowered > 0) {
+            wire_unpowered();
+            wire_roads();
+            bridge_road_gaps();
+            pump_simulation(64);
+        }
+    }
+
+    auto is_power_news = [](const std::string &text) {
+        return text.find("Blackout") != std::string::npos || text.find("Brownout") != std::string::npos ||
+               text.find("blackout") != std::string::npos || text.find("Not enough power") != std::string::npos;
+    };
+    notices_.erase(std::remove_if(notices_.begin(), notices_.end(),
+                                  [&](const CityNotice &n) { return is_power_news(n.text); }),
+                   notices_.end());
+    refresh_tutorial(false);
+    if (is_power_news(message()) || message() == "Cannot build here.") {
+        if (population() >= LEARN_TO_PLAY_POPULATION_GOAL) {
+            post_message(tutorial::done_toast(tutorial::Population));
+        } else if (tutorial_step_ >= 0 && tutorial_step_ < tutorial::kStepCount) {
+            post_message(tutorial::hint(tutorial_step_));
+        } else {
+            post_message("Power is on.");
+        }
+    }
+    placement_note_ = PlacementNote{};
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    return crisis_report().unpowered == 0;
+}
+
+void CitySession::ensure_tutorial_park()
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    auto park_count = [&]() {
+        int n = 0;
+        for (int x = 0; x < kWorldW; ++x) {
+            for (int y = 0; y < kWorldH; ++y) {
+                if (tutorial::is_park_tile(static_cast<MapTile>(engine_->sim.map[x][y] & LOMASK))) {
+                    ++n;
+                }
+            }
+        }
+        return n;
+    };
+    if (park_count() >= tutorial::kParkTiles) {
+        return;
+    }
+    set_auto_bulldoze(true);
+    const int spots[][2] = {{58, 52}, {57, 52}, {59, 52}, {58, 51}, {56, 52}, {60, 52}, {58, 53}};
+    for (const int *spot : spots) {
+        use_tool(TOOL_PARK, spot[0], spot[1]);
+        end_tool_stroke();
+        if (park_count() >= tutorial::kParkTiles) {
+            break;
+        }
+    }
+}
+
 void CitySession::setup_tutorial_through(int last_complete)
 {
     if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
@@ -4871,7 +5288,7 @@ void CitySession::setup_tutorial_through(int last_complete)
         // in mid-scenario shots.
         drag_tool(TOOL_WIRE, 52, 62, 52, 58);
         end_tool_stroke();
-        drag_tool(TOOL_WIRE, 52, 58, 66, 58);
+        drag_tool(TOOL_WIRE, 50, 58, 74, 58);
         end_tool_stroke();
     }
     if (last_complete >= tutorial::Zones) {
@@ -4917,10 +5334,13 @@ void CitySession::setup_tutorial_growth()
         return;
     }
     setup_tutorial_through(tutorial::InspectBudget);
+    ensure_tutorial_park();
     set_auto_bulldoze(true);
     // Extra streets and a nuclear plant east of the starter coal, far
     // enough that the 4x4 lots do not overlap. The nuclear lot is
     // centred at (88, 70) and is wired from its west edge.
+    drag_tool(TOOL_ROAD, 50, 66, 84, 66);
+    end_tool_stroke();
     drag_tool(TOOL_ROAD, 50, 70, 84, 70);
     end_tool_stroke();
     drag_tool(TOOL_ROAD, 50, 76, 84, 76);
@@ -4931,6 +5351,8 @@ void CitySession::setup_tutorial_growth()
     end_tool_stroke();
     drag_tool(TOOL_ROAD, 74, 58, 74, 76);
     end_tool_stroke();
+    drag_tool(TOOL_ROAD, 80, 58, 80, 76);
+    end_tool_stroke();
     // Two more coal plants on open dirt, wired to the streets, so the
     // extra grid stays powered. (88, 70) sat in the east woods and the
     // nuclear plant often failed to land.
@@ -4940,11 +5362,17 @@ void CitySession::setup_tutorial_growth()
     end_tool_stroke();
     drag_tool(TOOL_WIRE, 70, 63, 70, 58);
     end_tool_stroke();
+    drag_tool(TOOL_WIRE, 70, 67, 70, 70);
+    end_tool_stroke();
     drag_tool(TOOL_WIRE, 62, 83, 62, 76);
     end_tool_stroke();
     drag_tool(TOOL_ROAD, 62, 76, 62, 82);
     end_tool_stroke();
     drag_tool(TOOL_WIRE, 62, 76, 62, 82);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 50, 58, 84, 58);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 50, 66, 84, 66);
     end_tool_stroke();
     drag_tool(TOOL_WIRE, 50, 70, 84, 70);
     end_tool_stroke();
@@ -4955,6 +5383,8 @@ void CitySession::setup_tutorial_growth()
     drag_tool(TOOL_WIRE, 66, 58, 66, 76);
     end_tool_stroke();
     drag_tool(TOOL_WIRE, 74, 58, 74, 76);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 80, 58, 80, 76);
     end_tool_stroke();
     const int spots[][3] = {
         {TOOL_RESIDENTIAL, 54, 56}, {TOOL_RESIDENTIAL, 70, 56},
