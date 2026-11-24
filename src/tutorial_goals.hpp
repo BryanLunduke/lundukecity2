@@ -214,6 +214,33 @@ inline int current_step(const Status &s)
     return kStepCount;
 }
 
+// Review nov24 #3/#4: a step, once passed, stays passed. Bulldozing the
+// teaching road or a dip below 2,000 people after the win must not send
+// the player back. reached is the furthest step seen so far.
+inline int latched_step(const Status &s, int reached)
+{
+    if (reached < 0) {
+        reached = 0;
+    }
+    for (int step = reached; step < kStepCount; ++step) {
+        if (!step_complete(step, s)) {
+            return step;
+        }
+    }
+    return kStepCount;
+}
+
+// Review nov24 #6: "1,440 → 2,000", not "1440 → 2,000".
+inline std::string grouped_count(std::int64_t value)
+{
+    const bool negative = value < 0;
+    std::string digits = std::to_string(static_cast<long long>(negative ? -value : value));
+    for (int at = static_cast<int>(digits.size()) - 3; at > 0; at -= 3) {
+        digits.insert(static_cast<std::size_t>(at), ",");
+    }
+    return negative ? "-" + digits : digits;
+}
+
 inline std::string meter(int step, const Status &s)
 {
     if (step >= kStepCount) {
@@ -221,7 +248,7 @@ inline std::string meter(int step, const Status &s)
     }
     if (step == Population) {
         const std::int64_t people = s.population > 0 ? s.population : 0;
-        return "Step 7 of 7 · " + std::to_string(static_cast<long long>(people)) + " → 2,000";
+        return "Step 7 of 7 · " + grouped_count(people) + " → 2,000";
     }
     return "Step " + std::to_string(step + 1) + " of 7 · " + title(step);
 }
@@ -233,7 +260,7 @@ inline std::string meter_short(int step, const Status &s)
     }
     if (step == Population) {
         const std::int64_t people = s.population > 0 ? s.population : 0;
-        return std::to_string(static_cast<long long>(people)) + "→2,000";
+        return grouped_count(people) + "→2,000";
     }
     return std::to_string(step + 1) + "/7 " + title(step);
 }
@@ -245,7 +272,7 @@ inline std::string meter_compact(int step, const Status &s)
     }
     if (step == Population) {
         const std::int64_t people = s.population > 0 ? s.population : 0;
-        return std::to_string(static_cast<long long>(people)) + "→2k";
+        return grouped_count(people) + "→2k";
     }
     return std::to_string(step + 1) + "/7";
 }

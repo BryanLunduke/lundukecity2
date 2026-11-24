@@ -754,6 +754,8 @@ private:
     bool tutorial_budget_seen_ = false;
     int tutorial_step_ = 0;
     int tutorial_announced_ = -1;
+    // Furthest step passed; steps never go back (review nov24 #3/#4).
+    int tutorial_reached_ = 0;
     std::string tutorial_meter_;
     std::string tutorial_meter_short_;
     std::string tutorial_meter_compact_;

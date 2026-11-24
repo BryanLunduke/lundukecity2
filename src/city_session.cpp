@@ -4373,7 +4373,8 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     append_string("sim_cycle", std::to_string(static_cast<int>(sim.simCycle)));
     if (static_cast<int>(sim.scenario) == SC_LEARN_TO_PLAY) {
         append_string("tutorial", std::string("i=") + (tutorial_inspected_ ? "1" : "0") +
-                                      ",b=" + (tutorial_budget_seen_ ? "1" : "0"));
+                                      ",b=" + (tutorial_budget_seen_ ? "1" : "0") +
+                                      ",r=" + std::to_string(tutorial_reached_));
     }
     append_string("rng", std::to_string(static_cast<unsigned long long>(sim.randomState())));
     {
@@ -4519,6 +4520,16 @@ void CitySession::read_scenario_sidecar(const std::string &path)
         const std::string raw = string_value("tutorial");
         tutorial_inspected_ = raw.find("i=1") != std::string::npos;
         tutorial_budget_seen_ = raw.find("b=1") != std::string::npos;
+        // Review nov24 #4: the furthest step passed. Older saves have none
+        // and start from the first incomplete step, as before.
+        tutorial_reached_ = 0;
+        const std::size_t at = raw.find("r=");
+        if (at != std::string::npos && at + 2 < raw.size()) {
+            const char digit = raw[at + 2];
+            if (digit >= '0' && digit <= '0' + tutorial::kStepCount) {
+                tutorial_reached_ = digit - '0';
+            }
+        }
     }
     {
         const std::string raw = string_value("rng");
@@ -4762,6 +4773,7 @@ void CitySession::reset_tutorial()
     tutorial_inspected_ = false;
     tutorial_budget_seen_ = false;
     tutorial_step_ = 0;
+    tutorial_reached_ = 0;
     tutorial_announced_ = -1;
     tutorial_meter_.clear();
     tutorial_meter_short_.clear();
@@ -4800,7 +4812,9 @@ void CitySession::refresh_tutorial(bool announce)
     const tutorial::Status status = tutorial::census(
         tile_at, kWorldW, kWorldH, static_cast<std::int64_t>(live_population_count(engine_->sim)),
         tutorial_inspected_, tutorial_budget_seen_);
-    const int step = tutorial::current_step(status);
+    // Review nov24 #3/#4: steps latch. A won tutorial stays done.
+    const int step = scenario_result_ > 0 ? tutorial::kStepCount : tutorial::latched_step(status, tutorial_reached_);
+    tutorial_reached_ = std::max(tutorial_reached_, step);
     tutorial_step_ = step;
     tutorial_meter_ = tutorial::meter(step, status);
     tutorial_meter_short_ = tutorial::meter_short(step, status);
@@ -4809,7 +4823,7 @@ void CitySession::refresh_tutorial(bool announce)
         tutorial_announced_ = step;
         return;
     }
-    if (step == tutorial_announced_) {
+    if (step <= tutorial_announced_) {
         return;
     }
     if (tutorial_announced_ < 0) {
@@ -4821,7 +4835,7 @@ void CitySession::refresh_tutorial(bool announce)
         if (scenario_result_ == 0 && scenario_outcome_ == 0) {
             engine_->sim.doWinGame();
         }
-    } else {
+    } else if (step > 0) {
         post_message(tutorial::done_toast(step - 1));
     }
     tutorial_announced_ = step;
