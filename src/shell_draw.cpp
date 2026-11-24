@@ -6627,22 +6627,67 @@ void Shell::draw_weather(cairo_t *cr)
             cairo_paint(cr);
         }
         const int count = effects_fx::weather_particles(kind, w, h, unit);
+        // Review nov24 #9: one path per alpha step instead of one fill or
+        // stroke per drop (up to 340 a frame at 20 Hz). The drops in a layer
+        // share one colour, so the order inside a step does not matter;
+        // alpha is rounded to 1/32 (Classic is always opaque).
+        constexpr int kAlphaSteps = 32;
+        auto step_of = [&](double alpha) {
+            if (classic) {
+                return alpha > 0.0 ? kAlphaSteps : 0;
+            }
+            return std::max(0, std::min(kAlphaSteps, static_cast<int>(std::lround(alpha * kAlphaSteps))));
+        };
+        auto paint_steps = [&](double r, double g, double b, bool stroke) {
+            std::stable_sort(weather_marks_.begin(), weather_marks_.end(),
+                             [](const WeatherMark &a, const WeatherMark &b) { return a.step < b.step; });
+            std::size_t at = 0;
+            while (at < weather_marks_.size()) {
+                const int step = weather_marks_[at].step;
+                std::size_t end = at;
+                while (end < weather_marks_.size() && weather_marks_[end].step == step) {
+                    ++end;
+                }
+                if (step > 0) {
+                    cairo_new_path(cr);
+                    for (std::size_t i = at; i < end; ++i) {
+                        const WeatherMark &m = weather_marks_[i];
+                        if (stroke) {
+                            cairo_move_to(cr, m.x0, m.y0);
+                            cairo_line_to(cr, m.x1, m.y1);
+                        } else if (m.shape == 1) {
+                            // A bigger flake: a plus of three by three.
+                            cairo_rectangle(cr, m.x0 - m.x1 / 2.0, m.y0, m.x1 * 2.0, m.x1);
+                            cairo_rectangle(cr, m.x0, m.y0 - m.x1 / 2.0, m.x1, m.x1 * 2.0);
+                        } else if (m.shape == 2) {
+                            // A splash: two dots and a dash under them.
+                            cairo_rectangle(cr, m.x0 - m.y1, m.y0, m.x1, m.x1);
+                            cairo_rectangle(cr, m.x0 + m.y1, m.y0, m.x1, m.x1);
+                            cairo_rectangle(cr, m.x0 - m.x1, m.y0 + m.x1, m.x1 * 2.0, m.x1);
+                        } else {
+                            cairo_rectangle(cr, m.x0, m.y0, m.x1, m.x1);
+                        }
+                    }
+                    cairo_set_source_rgba(cr, r, g, b, classic ? 1.0 : static_cast<double>(step) / kAlphaSteps);
+                    if (stroke) {
+                        cairo_stroke(cr);
+                    } else {
+                        cairo_fill(cr);
+                    }
+                }
+                at = end;
+            }
+            weather_marks_.clear();
+        };
+        weather_marks_.clear();
         if (kind == effects_fx::Snow) {
             const double flake = std::max(2.0, std::round(2.0 * unit));
             for (int i = 0; i < count; ++i) {
                 const effects_fx::Drop drop = effects_fx::weather_drop(kind, i, fx, w, h, unit);
-                const double x = std::round(drop.x);
-                const double y = std::round(drop.y);
-                cairo_set_source_rgba(cr, 0.98, 0.98, 1.0, classic ? 1.0 : drop.alpha * amount);
-                if (i % 4 == 0) {
-                    // A bigger flake: a plus of three by three.
-                    cairo_rectangle(cr, x - flake / 2.0, y, flake * 2.0, flake);
-                    cairo_rectangle(cr, x, y - flake / 2.0, flake, flake * 2.0);
-                } else {
-                    cairo_rectangle(cr, x, y, flake, flake);
-                }
-                cairo_fill(cr);
+                weather_marks_.push_back(WeatherMark{step_of(drop.alpha * amount), i % 4 == 0 ? 1 : 0, std::round(drop.x),
+                                                     std::round(drop.y), flake, 0.0});
             }
+            paint_steps(0.98, 0.98, 1.0, false);
             return;
         }
         const double lean = effects_fx::rain_lean(kind);
@@ -6652,11 +6697,10 @@ void Shell::draw_weather(cairo_t *cr)
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
         for (int i = 0; i < count; ++i) {
             const effects_fx::Drop drop = effects_fx::weather_drop(kind, i, fx, w, h, unit);
-            cairo_set_source_rgba(cr, 0.80, 0.88, 0.98, classic ? 1.0 : drop.alpha * amount);
-            cairo_move_to(cr, std::round(drop.x - lean * len) + 0.5, std::round(drop.y - len));
-            cairo_line_to(cr, std::round(drop.x) + 0.5, std::round(drop.y));
-            cairo_stroke(cr);
+            weather_marks_.push_back(WeatherMark{step_of(drop.alpha * amount), 0, std::round(drop.x - lean * len) + 0.5,
+                                                 std::round(drop.y - len), std::round(drop.x) + 0.5, std::round(drop.y)});
         }
+        paint_steps(0.80, 0.88, 0.98, true);
         // Splashes: a short dash that fades where a drop lands.
         const int splashes = count / 6;
         for (int i = 0; i < splashes; ++i) {
@@ -6667,12 +6711,10 @@ void Shell::draw_weather(cairo_t *cr)
             const double sx = std::round(look_fx::hash01(seed) * w);
             const double sy = std::round(look_fx::hash01(seed ^ 0x99u) * h);
             const double spread = std::round((1.0 + age * 3.0) * unit);
-            cairo_set_source_rgba(cr, 0.86, 0.92, 1.0, classic ? (age < 0.5 ? 1.0 : 0.0) : 0.55 * (1.0 - age) * amount);
-            cairo_rectangle(cr, sx - spread, sy, thick, thick);
-            cairo_rectangle(cr, sx + spread, sy, thick, thick);
-            cairo_rectangle(cr, sx - thick, sy + thick, thick * 2.0, thick);
-            cairo_fill(cr);
+            const double alpha = classic ? (age < 0.5 ? 1.0 : 0.0) : 0.55 * (1.0 - age) * amount;
+            weather_marks_.push_back(WeatherMark{step_of(alpha), 2, sx, sy, thick, spread});
         }
+        paint_steps(0.86, 0.92, 1.0, false);
         if (kind == effects_fx::Storm && !classic) {
             const double flash = effects_fx::storm_flash(fx, effects_fx::weather_salt(session_.city_name().c_str()));
             if (flash > 0.0) {

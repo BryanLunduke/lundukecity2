@@ -727,6 +727,16 @@ private:
     std::chrono::steady_clock::time_point goal_until_{};
     // The player clicked Goal: show the goal banner on Slate too (#5).
     bool goal_recalled_ = false;
+    // Weather drops of one frame, grouped by alpha step (review nov24 #9).
+    struct WeatherMark {
+        int step;
+        int shape; // snow: 0 dot, 1 plus; 2 splash
+        double x0;
+        double y0;
+        double x1;
+        double y1;
+    };
+    std::vector<WeatherMark> weather_marks_;
     // Desktop tutorial hint: up until the step is done (#5).
     static constexpr int kGoalPinSeconds = 24 * 3600;
     bool pause_noted_ = false;
