@@ -162,6 +162,34 @@ test(
   ],
 )
 
+learn_to_play = executable(
+  'learn_to_play',
+  'learn_to_play.cpp',
+  '../src/assets.cpp',
+  '../src/city_session.cpp',
+  '../src/city_events.cpp',
+  '../src/placement_hint.cpp',
+  '../src/special_buildings.cpp',
+  '../src/messages.cpp',
+  '../src/sound_player.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'learn_to_play',
+  learn_to_play,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+)
+
 crime_load = executable(
   'crime_load',
   'crime_load.cpp',

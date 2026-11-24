@@ -15,6 +15,7 @@
 #include "special_buildings.hpp"
 
 #include "micropolis.h"
+#include "tutorial_goals.hpp"
 #include "text.h"
 #include "tile_kind.hpp"
 
@@ -380,12 +381,19 @@ const ScenarioEntry kScenarios[] = {
       " people by spring 2027.",
       SANDIEGO_YEARS},
      "sandiego.cty", true},
+    // Learn to Play (data/scenarios/brookside.cty, built by tools/learn_map.cpp).
+    // Opens in January 1900 with a quiet empty map. There is no deadline.
+    {{SC_LEARN_TO_PLAY, "Learn to Play", 1900,
+      "A quiet valley. Learn the tools by building a small city.",
+      "Build a small city from scratch: roads, power, zones, police and fire, parks, then 2,000 people. There is no deadline.",
+      LEARN_TO_PLAY_YEARS, "Brookside"},
+     "brookside.cty", true},
 };
 
 static_assert(sizeof(kScenarios) / sizeof(kScenarios[0]) == CitySession::kScenarioCount,
               "scenario catalog size");
 static_assert(SC_DULLSVILLE == 1 && SC_RIO == 8 && SC_SEATTLE == 9 && SC_SAN_FRANCISCO_1962 == 10 &&
-                  SC_PORTLAND == 11 && SC_SAN_DIEGO == 12,
+                  SC_PORTLAND == 11 && SC_SAN_DIEGO == 12 && SC_LEARN_TO_PLAY == 13,
               "scenario ids");
 static_assert(static_cast<int>(LEVEL_EASY) == CitySession::kLevelEasy, "easy level");
 static_assert(static_cast<int>(LEVEL_MEDIUM) == CitySession::kLevelMedium, "medium level");
@@ -738,6 +746,9 @@ void CitySession::finish_stroke_attempt(long long before, int tool, int x, int y
         stroke_reason_.clear();
     } else if (!message_.empty()) {
         stroke_reason_ = message_;
+    }
+    if (tool_stroke_placed_ > 0 && scenario_id() == SC_LEARN_TO_PLAY) {
+        refresh_tutorial();
     }
 }
 
@@ -1384,6 +1395,9 @@ bool CitySession::load_city(const std::string &path)
     catch_up_ledger(false);
     arm_eval_baseline();
     restore_loaded_eval();
+    if (scenario_id() == SC_LEARN_TO_PLAY) {
+        refresh_tutorial(false);
+    }
     if (kind == CityFileKind::Incomplete) {
         post_message("Loaded a saved city. Part of the City 2 data at the end of the file is missing.");
     } else {
@@ -1466,6 +1480,10 @@ bool CitySession::load_scenario(int id)
     catch_up_ledger(false);
     arm_eval_baseline();
     post_message(std::string("Playing ") + entry->def.name + ".");
+    reset_tutorial();
+    if (id == SC_LEARN_TO_PLAY) {
+        refresh_tutorial();
+    }
     return true;
 }
 
@@ -1552,6 +1570,9 @@ void CitySession::tick()
     if (speed_ != 0) {
         engine_->sim.animateTiles();
     }
+    if (scenario_id() == SC_LEARN_TO_PLAY) {
+        refresh_tutorial();
+    }
 }
 
 void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
@@ -1572,6 +1593,9 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
         ~Guard() { self->finish_stroke_attempt(before, tool, x, y); }
     } guard{this, before, engine_tool, tile_x, tile_y};
     tool_stroke_placed_ = 0;
+    if (engine_tool == TOOL_QUERY) {
+        note_tutorial_inspect();
+    }
     if (engine_tool == kSpecialEngineId) {
         return;
     }
@@ -2800,6 +2824,9 @@ int CitySession::scenario_years_left() const
     if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
         return -1;
     }
+    if (scenario_id() == SC_LEARN_TO_PLAY) {
+        return 0;
+    }
     // scoreWait counts simulation cycles. A year is 48 cycles. Whole years
     // are rounded down so a partial year still shows in scenario_clock_text.
     if (sim.scoreWait <= 0) {
@@ -2811,7 +2838,7 @@ int CitySession::scenario_years_left() const
 std::string CitySession::scenario_clock_text() const
 {
     const Micropolis &sim = engine_->sim;
-    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE || scenario_id() == SC_LEARN_TO_PLAY) {
         return {};
     }
     if (sim.scoreWait <= 0) {
@@ -2834,7 +2861,7 @@ std::string CitySession::scenario_clock_text() const
 std::string CitySession::scenario_clock_short() const
 {
     const Micropolis &sim = engine_->sim;
-    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE || scenario_id() == SC_LEARN_TO_PLAY) {
         return {};
     }
     if (sim.scoreWait <= 0) {
@@ -2855,7 +2882,7 @@ std::string CitySession::scenario_clock_short() const
 std::string CitySession::scenario_clock_compact() const
 {
     const Micropolis &sim = engine_->sim;
-    if (scenario_id() == 0 || sim.scoreType == SC_NONE) {
+    if (scenario_id() == 0 || sim.scoreType == SC_NONE || scenario_id() == SC_LEARN_TO_PLAY) {
         return {};
     }
     if (sim.scoreWait <= 0) {
@@ -2886,8 +2913,11 @@ bool CitySession::traffic_measured() const
 std::string CitySession::scenario_meter_short() const
 {
     const int id = scenario_id();
-    if (id == 0 || scenario_years_left() < 0) {
+    if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
         return {};
+    }
+    if (id == SC_LEARN_TO_PLAY) {
+        return tutorial_meter_short_;
     }
     const Micropolis &sim = engine_->sim;
     const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
@@ -2925,8 +2955,11 @@ std::string CitySession::scenario_meter_short() const
 std::string CitySession::scenario_meter_compact() const
 {
     const int id = scenario_id();
-    if (id == 0 || scenario_years_left() < 0) {
+    if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
         return {};
+    }
+    if (id == SC_LEARN_TO_PLAY) {
+        return tutorial_meter_compact_;
     }
     const Micropolis &sim = engine_->sim;
     const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
@@ -2963,8 +2996,11 @@ std::string CitySession::scenario_meter_compact() const
 std::string CitySession::scenario_progress() const
 {
     const int id = scenario_id();
-    if (id == 0 || scenario_years_left() < 0) {
+    if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
         return {};
+    }
+    if (id == SC_LEARN_TO_PLAY) {
+        return tutorial::progress_line(tutorial_step_);
     }
     const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
     const std::string time = scenario_clock_text();
@@ -2977,8 +3013,11 @@ std::string CitySession::scenario_progress() const
 std::string CitySession::scenario_meter() const
 {
     const int id = scenario_id();
-    if (id == 0 || scenario_years_left() < 0) {
+    if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
         return {};
+    }
+    if (id == SC_LEARN_TO_PLAY) {
+        return tutorial_meter_;
     }
     const Micropolis &sim = engine_->sim;
     const std::int64_t people = static_cast<std::int64_t>(live_population_count(sim));
@@ -3033,7 +3072,9 @@ std::string CitySession::scenario_outcome_text(bool won) const
         text += " ";
         text += def.goal;
     }
-    if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
+    if (id == SC_LEARN_TO_PLAY && won) {
+        text += " 2,000 people — done.";
+    } else if (id == SC_TOKYO || id == SC_BOSTON || id == SC_RIO) {
         text += " Score " + grouped_count(static_cast<std::int64_t>(engine_->sim.cityScore)) + ".";
     } else {
         const std::string meter = scenario_meter();
@@ -4263,6 +4304,7 @@ void restore_or_recompute_disaster_wait(Micropolis &sim, const ScenarioClock &cl
 void CitySession::clear_scenario_clock()
 {
     scenario_result_ = 0;
+    reset_tutorial();
 }
 
 bool CitySession::write_scenario_sidecar(const std::string &path) const
@@ -4329,6 +4371,10 @@ bool CitySession::write_scenario_sidecar(const std::string &path) const
     append_string("score", std::to_string(static_cast<int>(sim.cityScore)));
     append_string("phase", std::to_string(static_cast<int>(sim.phaseCycle)));
     append_string("sim_cycle", std::to_string(static_cast<int>(sim.simCycle)));
+    if (static_cast<int>(sim.scenario) == SC_LEARN_TO_PLAY) {
+        append_string("tutorial", std::string("i=") + (tutorial_inspected_ ? "1" : "0") +
+                                      ",b=" + (tutorial_budget_seen_ ? "1" : "0"));
+    }
     append_string("rng", std::to_string(static_cast<unsigned long long>(sim.randomState())));
     {
         short res_valve = 0, com_valve = 0, ind_valve = 0;
@@ -4469,6 +4515,11 @@ void CitySession::read_scenario_sidecar(const std::string &path)
     loaded_score_ = whole_value("score", 0, 1000);
     loaded_phase_ = whole_value("phase", 0, 15);
     loaded_sim_cycle_ = whole_value("sim_cycle", 0, 1023);
+    {
+        const std::string raw = string_value("tutorial");
+        tutorial_inspected_ = raw.find("i=1") != std::string::npos;
+        tutorial_budget_seen_ = raw.find("b=1") != std::string::npos;
+    }
     {
         const std::string raw = string_value("rng");
         if (!raw.empty() && raw.size() <= 20) {
@@ -4705,3 +4756,661 @@ unsigned CitySession::sprite_signature() const
     return hash;
 }
 
+
+void CitySession::reset_tutorial()
+{
+    tutorial_inspected_ = false;
+    tutorial_budget_seen_ = false;
+    tutorial_step_ = 0;
+    tutorial_announced_ = -1;
+    tutorial_meter_.clear();
+    tutorial_meter_short_.clear();
+    tutorial_meter_compact_.clear();
+}
+
+void CitySession::note_tutorial_inspect()
+{
+    if (scenario_id() != SC_LEARN_TO_PLAY || tutorial_inspected_) {
+        return;
+    }
+    tutorial_inspected_ = true;
+    refresh_tutorial();
+}
+
+void CitySession::note_tutorial_budget()
+{
+    if (scenario_id() != SC_LEARN_TO_PLAY || tutorial_budget_seen_) {
+        return;
+    }
+    tutorial_budget_seen_ = true;
+    refresh_tutorial();
+}
+
+int CitySession::tutorial_step() const
+{
+    return tutorial_step_;
+}
+
+void CitySession::refresh_tutorial(bool announce)
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    const auto tile_at = [this](int x, int y) { return map_value(x, y); };
+    const tutorial::Status status = tutorial::census(
+        tile_at, kWorldW, kWorldH, static_cast<std::int64_t>(live_population_count(engine_->sim)),
+        tutorial_inspected_, tutorial_budget_seen_);
+    const int step = tutorial::current_step(status);
+    tutorial_step_ = step;
+    tutorial_meter_ = tutorial::meter(step, status);
+    tutorial_meter_short_ = tutorial::meter_short(step, status);
+    tutorial_meter_compact_ = tutorial::meter_compact(step, status);
+    if (!announce) {
+        tutorial_announced_ = step;
+        return;
+    }
+    if (step == tutorial_announced_) {
+        return;
+    }
+    if (tutorial_announced_ < 0) {
+        if (step < tutorial::kStepCount) {
+            post_message(tutorial::hint(step));
+        }
+    } else if (step >= tutorial::kStepCount) {
+        post_message(tutorial::done_toast(tutorial::Population));
+        if (scenario_result_ == 0 && scenario_outcome_ == 0) {
+            engine_->sim.doWinGame();
+        }
+    } else {
+        post_message(tutorial::done_toast(step - 1));
+    }
+    tutorial_announced_ = step;
+}
+
+void CitySession::pump_simulation(int ticks)
+{
+    if (!ready_ || ticks <= 0) {
+        return;
+    }
+    simulation_paused_ = false;
+    engine_->sim.resume();
+    if (speed_ <= 0 || engine_->sim.simSpeed <= 0) {
+        set_speed(3);
+    }
+    // Auto-accept the yearly tax so a demo can run past January without
+    // pausing on the Year in Review, and so zones can keep growing.
+    // Disasters stay off during the pump so a fire cannot wipe the
+    // teaching buildings before a win shot.
+    const bool auto_was = auto_budget();
+    const bool disasters_was = engine_->sim.enableDisasters;
+    set_auto_budget(true);
+    engine_->sim.setEnableDisasters(false);
+    for (int i = 0; i < ticks; ++i) {
+        tick();
+    }
+    engine_->sim.setEnableDisasters(disasters_was);
+    set_auto_budget(auto_was);
+    while (take_budget_request()) {
+    }
+}
+
+void CitySession::setup_tutorial_mid()
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    setup_tutorial_through(tutorial::Safety);
+    set_auto_bulldoze(true);
+    // Extra lots along the teaching road so the mid shot can show grown
+    // houses and shops, not only empty zone squares.
+    use_tool(TOOL_RESIDENTIAL, tutorial::kMidResWest, tutorial::kZoneY);
+    end_tool_stroke();
+    use_tool(TOOL_RESIDENTIAL, tutorial::kMidResEast, tutorial::kZoneY);
+    end_tool_stroke();
+    use_tool(TOOL_COMMERCIAL, tutorial::kMidComWest, tutorial::kZoneY);
+    end_tool_stroke();
+    use_tool(TOOL_COMMERCIAL, tutorial::kMidComEast, tutorial::kZoneY);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, tutorial::kRoadX0, tutorial::kRoadY, tutorial::kRoadX1, tutorial::kRoadY);
+    end_tool_stroke();
+    placement_note_ = PlacementNote{};
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    refresh_tutorial(false);
+    if (tutorial_step_ >= 0 && tutorial_step_ < tutorial::kStepCount) {
+        post_message(tutorial::hint(tutorial_step_));
+    }
+}
+
+int CitySession::tutorial_grown_homes() const
+{
+    if (!ready_) {
+        return 0;
+    }
+    int homes = 0;
+    const Micropolis &sim = engine_->sim;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            const unsigned short raw = sim.map[x][y];
+            const int tile = raw & LOMASK;
+            // Low-density houses are one tile each. A denser 3x3 is
+            // counted from its centre, including church and hospital.
+            if (tile >= HOUSE && tile <= HHTHR) {
+                ++homes;
+            } else if ((raw & ZONEBIT) != 0 && tile >= RZB && tile < COMBASE) {
+                ++homes;
+            }
+        }
+    }
+    return homes;
+}
+
+int CitySession::tutorial_grown_shops() const
+{
+    if (!ready_) {
+        return 0;
+    }
+    int shops = 0;
+    const Micropolis &sim = engine_->sim;
+    for (int x = 0; x < kWorldW; ++x) {
+        for (int y = 0; y < kWorldH; ++y) {
+            const unsigned short raw = sim.map[x][y];
+            if ((raw & ZONEBIT) == 0) {
+                continue;
+            }
+            const int tile = raw & LOMASK;
+            if (tile >= CZB && tile <= COMLAST) {
+                ++shops;
+            }
+        }
+    }
+    return shops;
+}
+
+bool CitySession::tutorial_mid_ready() const
+{
+    return tutorial_grown_homes() >= 3 && tutorial_grown_shops() >= 2 && crisis_report().unpowered == 0;
+}
+
+bool CitySession::ensure_tutorial_power()
+{
+    if (!ready_) {
+        return false;
+    }
+    set_auto_bulldoze(true);
+
+    auto is_road = [&](int x, int y) {
+        if (!Micropolis::testBounds(x, y)) {
+            return false;
+        }
+        const int tile = engine_->sim.map[x][y] & LOMASK;
+        return tile >= ROADBASE && tile <= LASTROAD;
+    };
+    auto wire_roads = [&]() {
+        const int x0 = tutorial::kTownX0;
+        const int x1 = tutorial::kTownX1;
+        const int y0 = tutorial::kTownY0;
+        const int y1 = tutorial::kTownY1;
+        for (int y = y0; y <= y1; ++y) {
+            int run = -1;
+            for (int x = x0; x <= x1 + 1; ++x) {
+                const bool on = x <= x1 && is_road(x, y);
+                if (on && run < 0) {
+                    run = x;
+                } else if (!on && run >= 0) {
+                    drag_tool(TOOL_WIRE, run, y, x - 1, y);
+                    end_tool_stroke();
+                    run = -1;
+                }
+            }
+        }
+        for (int x = x0; x <= x1; ++x) {
+            int run = -1;
+            for (int y = y0; y <= y1 + 1; ++y) {
+                const bool on = y <= y1 && is_road(x, y);
+                if (on && run < 0) {
+                    run = y;
+                } else if (!on && run >= 0) {
+                    drag_tool(TOOL_WIRE, x, run, x, y - 1);
+                    end_tool_stroke();
+                    run = -1;
+                }
+            }
+        }
+    };
+    auto conducts = [&](int x, int y) {
+        return Micropolis::testBounds(x, y) && (engine_->sim.map[x][y] & CONDBIT) != 0;
+    };
+    // Some 4-way road crossings cannot take a power line. A wire on the
+    // dirt beside the crossing joins the segments the crossing isolates.
+    auto bridge_road_gaps = [&]() {
+        const int x0 = tutorial::kTownX0;
+        const int x1 = tutorial::kTownX1;
+        const int y0 = tutorial::kTownY0;
+        const int y1 = tutorial::kTownY1;
+        const int dx[4] = {-1, 1, 0, 0};
+        const int dy[4] = {0, 0, -1, 1};
+        for (int x = x0; x <= x1; ++x) {
+            for (int y = y0; y <= y1; ++y) {
+                if (!is_road(x, y) || conducts(x, y)) {
+                    continue;
+                }
+                use_tool(TOOL_WIRE, x, y);
+                end_tool_stroke();
+                if (conducts(x, y)) {
+                    continue;
+                }
+                for (int i = 0; i < 4; ++i) {
+                    const int nx = x + dx[i];
+                    const int ny = y + dy[i];
+                    if (!Micropolis::testBounds(nx, ny)) {
+                        continue;
+                    }
+                    const unsigned short raw = engine_->sim.map[nx][ny];
+                    const int tile = raw & LOMASK;
+                    if ((raw & ZONEBIT) != 0 || tile == POWERPLANT || tile == NUCLEAR) {
+                        continue;
+                    }
+                    if (tile == DIRT || (tile >= TREEBASE && tile <= WOODS) ||
+                        (tile >= POWERBASE && tile <= LASTPOWER && tile != POWERPLANT)) {
+                        use_tool(TOOL_WIRE, nx, ny);
+                        end_tool_stroke();
+                    }
+                }
+                // A diagonal wire touches both arms of a crossing that
+                // cannot itself take a power line.
+                const int ddx[4] = {-1, -1, 1, 1};
+                const int ddy[4] = {-1, 1, -1, 1};
+                for (int i = 0; i < 4; ++i) {
+                    const int nx = x + ddx[i];
+                    const int ny = y + ddy[i];
+                    if (!Micropolis::testBounds(nx, ny)) {
+                        continue;
+                    }
+                    const unsigned short raw = engine_->sim.map[nx][ny];
+                    const int tile = raw & LOMASK;
+                    if ((raw & ZONEBIT) != 0 || tile == POWERPLANT || tile == NUCLEAR) {
+                        continue;
+                    }
+                    if (tile == DIRT || (tile >= TREEBASE && tile <= WOODS) ||
+                        (tile >= POWERBASE && tile <= LASTPOWER && tile != POWERPLANT)) {
+                        use_tool(TOOL_WIRE, nx, ny);
+                        end_tool_stroke();
+                    }
+                }
+            }
+        }
+    };
+
+    wire_roads();
+    bridge_road_gaps();
+    pump_simulation(64);
+
+    auto wireable = [&](int x, int y) {
+        if (!Micropolis::testBounds(x, y)) {
+            return false;
+        }
+        const unsigned short raw = engine_->sim.map[x][y];
+        if ((raw & ZONEBIT) != 0) {
+            return false;
+        }
+        const int t = raw & LOMASK;
+        if (t == POWERPLANT || t == NUCLEAR || t == POLICESTATION || t == FIRESTATION || t == FOUNTAIN ||
+            (t >= WOODS2 && t <= WOODS5)) {
+            return false;
+        }
+        if (t == DIRT || (t >= RUBBLE && t <= LASTRUBBLE) || (t >= TREEBASE && t <= WOODS) ||
+            (t >= ROADBASE && t <= LASTROAD) || (t >= POWERBASE && t <= LASTPOWER && t != POWERPLANT)) {
+            return true;
+        }
+        return false;
+    };
+    auto drag_wire_safe = [&](int x0, int y0, int x1, int y1) {
+        const int dx = (x1 > x0) - (x1 < x0);
+        const int dy = (y1 > y0) - (y1 < y0);
+        int x = x0;
+        int y = y0;
+        int run_x = -1;
+        int run_y = -1;
+        while (true) {
+            if (wireable(x, y)) {
+                if (run_x < 0) {
+                    run_x = x;
+                    run_y = y;
+                }
+            } else {
+                // Step back to the last wireable tile before flushing.
+                if (run_x >= 0) {
+                    const int px = x - dx;
+                    const int py = y - dy;
+                    drag_tool(TOOL_WIRE, run_x, run_y, px, py);
+                    end_tool_stroke();
+                    run_x = -1;
+                }
+            }
+            if (x == x1 && y == y1) {
+                if (run_x >= 0) {
+                    drag_tool(TOOL_WIRE, run_x, run_y, x, y);
+                    end_tool_stroke();
+                }
+                break;
+            }
+            x += dx;
+            y += dy;
+        }
+    };
+    auto wire_unpowered = [&]() {
+        const CrisisReport report = crisis_report();
+        const int x0 = tutorial::kTownX0;
+        const int x1 = tutorial::kTownX1;
+        const int y0 = tutorial::kTownY0;
+        const int y1 = tutorial::kTownY1;
+        for (const CrisisSite &site : report.sites) {
+            const unsigned short raw = engine_->sim.map[site.x][site.y];
+            if ((raw & ZONEBIT) == 0 || (raw & PWRBIT) != 0) {
+                continue;
+            }
+            int sx = -1;
+            int sy = -1;
+            for (int y = site.y - 2; y <= site.y + 2 && sx < 0; ++y) {
+                for (int x = site.x - 2; x <= site.x + 2; ++x) {
+                    const bool inside = x >= site.x - 1 && x <= site.x + 1 && y >= site.y - 1 && y <= site.y + 1;
+                    if (!inside && wireable(x, y)) {
+                        sx = x;
+                        sy = y;
+                    }
+                }
+            }
+            if (sx < 0) {
+                continue;
+            }
+            int bx = -1;
+            int by = -1;
+            int best = 10000;
+            for (int x = x0; x <= x1; ++x) {
+                for (int y = y0; y <= y1; ++y) {
+                    if (!is_road(x, y)) {
+                        continue;
+                    }
+                    const int d = std::abs(x - sx) + std::abs(y - sy);
+                    if (d < best) {
+                        best = d;
+                        bx = x;
+                        by = y;
+                    }
+                }
+            }
+            if (bx < 0) {
+                continue;
+            }
+            // Prefer an L that stays on wireable tiles, so grown zones are
+            // not overwritten by a power line.
+            auto path_clear = [&](bool horiz_first) {
+                if (horiz_first) {
+                    const int dx = (bx > sx) - (bx < sx);
+                    for (int x = sx; x != bx; x += dx) {
+                        if (!wireable(x, sy)) {
+                            return false;
+                        }
+                    }
+                    const int dy = (by > sy) - (by < sy);
+                    for (int y = sy; y != by; y += dy) {
+                        if (!wireable(bx, y)) {
+                            return false;
+                        }
+                    }
+                    return wireable(bx, by);
+                }
+                const int dy = (by > sy) - (by < sy);
+                for (int y = sy; y != by; y += dy) {
+                    if (!wireable(sx, y)) {
+                        return false;
+                    }
+                }
+                const int dx = (bx > sx) - (bx < sx);
+                for (int x = sx; x != bx; x += dx) {
+                    if (!wireable(x, by)) {
+                        return false;
+                    }
+                }
+                return wireable(bx, by);
+            };
+            if (path_clear(true)) {
+                drag_wire_safe(sx, sy, bx, sy);
+                drag_wire_safe(bx, sy, bx, by);
+            } else if (path_clear(false)) {
+                drag_wire_safe(sx, sy, sx, by);
+                drag_wire_safe(sx, by, bx, by);
+            }
+        }
+    };
+
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        if (crisis_report().unpowered == 0) {
+            break;
+        }
+        wire_unpowered();
+        wire_roads();
+        bridge_road_gaps();
+        pump_simulation(64);
+    }
+
+    if (crisis_report().unpowered > 0) {
+        // A fourth coal plant on the east grid, if the first three cannot
+        // reach every lot. (The river south-west of the clearing is water.)
+        use_tool(TOOL_COALPOWER, 102, 42);
+        end_tool_stroke();
+        drag_tool(TOOL_WIRE, 102, 45, 102, 46);
+        end_tool_stroke();
+        drag_tool(TOOL_WIRE, 102, 38, 102, 40);
+        end_tool_stroke();
+        wire_roads();
+        pump_simulation(96);
+        if (crisis_report().unpowered > 0) {
+            wire_unpowered();
+            wire_roads();
+            bridge_road_gaps();
+            pump_simulation(64);
+        }
+    }
+
+    auto is_power_news = [](const std::string &text) {
+        return text.find("Blackout") != std::string::npos || text.find("Brownout") != std::string::npos ||
+               text.find("blackout") != std::string::npos || text.find("Not enough power") != std::string::npos;
+    };
+    notices_.erase(std::remove_if(notices_.begin(), notices_.end(),
+                                  [&](const CityNotice &n) { return is_power_news(n.text); }),
+                   notices_.end());
+    refresh_tutorial(false);
+    if (is_power_news(message()) || message() == "Cannot build here.") {
+        if (population() >= LEARN_TO_PLAY_POPULATION_GOAL) {
+            post_message(tutorial::done_toast(tutorial::Population));
+        } else if (tutorial_step_ >= 0 && tutorial_step_ < tutorial::kStepCount) {
+            post_message(tutorial::hint(tutorial_step_));
+        } else {
+            post_message("Power is on.");
+        }
+    }
+    placement_note_ = PlacementNote{};
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    return crisis_report().unpowered == 0;
+}
+
+void CitySession::ensure_tutorial_park()
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    auto park_count = [&]() {
+        int n = 0;
+        for (int x = 0; x < kWorldW; ++x) {
+            for (int y = 0; y < kWorldH; ++y) {
+                if (tutorial::is_park_tile(static_cast<MapTile>(engine_->sim.map[x][y] & LOMASK))) {
+                    ++n;
+                }
+            }
+        }
+        return n;
+    };
+    if (park_count() >= tutorial::kParkTiles) {
+        return;
+    }
+    set_auto_bulldoze(true);
+    const int spots[][2] = {{tutorial::kParkX, tutorial::kParkY},
+                            {tutorial::kParkX - 1, tutorial::kParkY},
+                            {tutorial::kParkX + 1, tutorial::kParkY},
+                            {tutorial::kParkX, tutorial::kParkY - 1},
+                            {tutorial::kParkX - 2, tutorial::kParkY},
+                            {tutorial::kParkX + 2, tutorial::kParkY},
+                            {tutorial::kParkX, tutorial::kParkY + 1}};
+    for (const int *spot : spots) {
+        use_tool(TOOL_PARK, spot[0], spot[1]);
+        end_tool_stroke();
+        if (park_count() >= tutorial::kParkTiles) {
+            break;
+        }
+    }
+}
+
+void CitySession::setup_tutorial_through(int last_complete)
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    set_auto_bulldoze(true);
+    // Dirt clearing beside the river: a road, a coal plant, R/C/I, police,
+    // fire and a park, leaving later steps for the player.
+    if (last_complete >= tutorial::Roads) {
+        drag_tool(TOOL_ROAD, tutorial::kRoadX0, tutorial::kRoadY, tutorial::kRoadX1, tutorial::kRoadY);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::Power) {
+        use_tool(TOOL_COALPOWER, tutorial::kPlantX, tutorial::kPlantY);
+        end_tool_stroke();
+        // A line up to the road so the later zones and stations have power
+        // in mid-scenario shots.
+        drag_tool(TOOL_WIRE, tutorial::kPlantX, tutorial::kPlantY - 2, tutorial::kPlantX, tutorial::kRoadY);
+        end_tool_stroke();
+        drag_tool(TOOL_WIRE, tutorial::kRoadX0, tutorial::kRoadY, tutorial::kRoadX1, tutorial::kRoadY);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::Zones) {
+        // Centres one tile north of the road so the 3x3 lots touch it and
+        // pick up the power on that road.
+        use_tool(TOOL_RESIDENTIAL, tutorial::kResX, tutorial::kZoneY);
+        end_tool_stroke();
+        use_tool(TOOL_COMMERCIAL, tutorial::kComX, tutorial::kZoneY);
+        end_tool_stroke();
+        use_tool(TOOL_INDUSTRIAL, tutorial::kIndX, tutorial::kZoneY);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::Safety) {
+        use_tool(TOOL_POLICESTATION, tutorial::kPoliceX, tutorial::kSafetyY);
+        end_tool_stroke();
+        use_tool(TOOL_FIRESTATION, tutorial::kFireX, tutorial::kSafetyY);
+        end_tool_stroke();
+        drag_tool(TOOL_WIRE, tutorial::kPoliceX - 2, tutorial::kSafetyY, tutorial::kFireX, tutorial::kSafetyY);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::Parks) {
+        use_tool(TOOL_PARK, tutorial::kParkX, tutorial::kParkY);
+        end_tool_stroke();
+    }
+    if (last_complete >= tutorial::InspectBudget) {
+        tutorial_inspected_ = true;
+        tutorial_budget_seen_ = true;
+    }
+    placement_note_ = PlacementNote{};
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    refresh_tutorial(false);
+    // Show this step's hint so a mid-scenario jump (and its shots) lands
+    // on the same NEWS toast a player would see at this step.
+    if (tutorial_step_ >= 0 && tutorial_step_ < tutorial::kStepCount) {
+        post_message(tutorial::hint(tutorial_step_));
+    }
+}
+
+void CitySession::setup_tutorial_growth()
+{
+    if (!ready_ || scenario_id() != SC_LEARN_TO_PLAY) {
+        return;
+    }
+    setup_tutorial_through(tutorial::InspectBudget);
+    ensure_tutorial_park();
+    set_auto_bulldoze(true);
+    // Grow the win city east of the clearing, on land. Trees may be
+    // auto-bulldozed; the river south-west of the pad cannot.
+    drag_tool(TOOL_ROAD, tutorial::kRoadX0, tutorial::kRoadY, 106, tutorial::kRoadY);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 74, 30, 106, 30);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 74, 46, 106, 46);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 74, 52, 106, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 74, 30, 74, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 82, 30, 82, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 90, 30, 90, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 98, 30, 98, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_ROAD, 106, 30, 106, 52);
+    end_tool_stroke();
+    // Two more coal plants in the cells of the east grid, wired to the
+    // streets, so the extra lots stay powered.
+    use_tool(TOOL_COALPOWER, 86, 34);
+    end_tool_stroke();
+    use_tool(TOOL_COALPOWER, 94, 48);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 86, 37, 86, 38);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 94, 46, 94, 46);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 94, 51, 94, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, tutorial::kRoadX0, tutorial::kRoadY, 106, tutorial::kRoadY);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 74, 30, 106, 30);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 74, 46, 106, 46);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 74, 52, 106, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 74, 30, 74, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 82, 30, 82, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 90, 30, 90, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 98, 30, 98, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 106, 30, 106, 52);
+    end_tool_stroke();
+    const int spots[][3] = {
+        {TOOL_RESIDENTIAL, tutorial::kMidResWest, tutorial::kZoneY},
+        {TOOL_RESIDENTIAL, tutorial::kMidResEast, tutorial::kZoneY},
+        {TOOL_RESIDENTIAL, 78, 36}, {TOOL_RESIDENTIAL, 78, 32}, {TOOL_RESIDENTIAL, 78, 40},
+        {TOOL_RESIDENTIAL, 82, 32}, {TOOL_RESIDENTIAL, 82, 36}, {TOOL_RESIDENTIAL, 82, 40},
+        {TOOL_RESIDENTIAL, 90, 32}, {TOOL_RESIDENTIAL, 90, 36}, {TOOL_RESIDENTIAL, 90, 40},
+        {TOOL_RESIDENTIAL, 98, 32}, {TOOL_RESIDENTIAL, 98, 36}, {TOOL_RESIDENTIAL, 98, 40},
+        {TOOL_RESIDENTIAL, 78, 44}, {TOOL_RESIDENTIAL, 82, 48}, {TOOL_RESIDENTIAL, 90, 48},
+        {TOOL_RESIDENTIAL, 98, 48}, {TOOL_RESIDENTIAL, 78, 50}, {TOOL_RESIDENTIAL, 82, 54},
+        {TOOL_RESIDENTIAL, 90, 54}, {TOOL_RESIDENTIAL, 98, 54},
+        {TOOL_COMMERCIAL, tutorial::kMidComWest, tutorial::kZoneY},
+        {TOOL_COMMERCIAL, tutorial::kMidComEast, tutorial::kZoneY},
+        {TOOL_COMMERCIAL, 74, 32}, {TOOL_COMMERCIAL, 74, 40},
+        {TOOL_INDUSTRIAL, 106, 36}, {TOOL_INDUSTRIAL, 106, 48},
+    };
+    for (const int *spot : spots) {
+        use_tool(spot[0], spot[1], spot[2]);
+        end_tool_stroke();
+    }
+    placement_note_ = PlacementNote{};
+    stroke_spent_ = 0;
+    stroke_tiles_ = 0;
+    refresh_tutorial(false);
+}

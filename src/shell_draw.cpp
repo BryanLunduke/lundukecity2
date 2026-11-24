@@ -4244,7 +4244,14 @@ void Shell::draw(cairo_t *cr)
             // The footprint follows the pointer before the button goes down,
             // including while the city is paused. Motion updates the tile
             // under the cursor. It does not move the pointer.
-            if (gamepad_nav_ && !pad_dragging_) {
+            // Learn-to-play shots park the pointer off the map; on a
+            // handheld the gamepad cursor still mapped to a tile and showed
+            // the Inspect "Clear / Open land" card.
+            const bool learn_shot = demo_ == "learn" || demo_ == "learn_mid" || demo_ == "learn_win" ||
+                                    demo_ == "learn_picker";
+            if (learn_shot) {
+                map_.clear_hover();
+            } else if (gamepad_nav_ && !pad_dragging_) {
                 map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
             } else if (!gamepad_nav_ && !pointer_down_ && pointer_x_ >= view_x_ &&
                        pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ && pointer_y_ < view_y_ + view_h_) {
@@ -4570,10 +4577,14 @@ void Shell::draw(cairo_t *cr)
     theme::banner_ink(look_ink_r, look_ink_g, look_ink_b);
     const BannerColors goal_bar = goal_banner_colors(BannerColors{look_r, look_g, look_b, look_ink_r, look_ink_g, look_ink_b});
     const std::string goal = session_.scenario_progress();
-    if (session_.scenario_id() != goal_scenario_) {
+    if (session_.scenario_id() != goal_scenario_ ||
+        (session_.scenario_id() == SC_LEARN_TO_PLAY && session_.tutorial_step() != goal_tutorial_step_)) {
         goal_scenario_ = session_.scenario_id();
+        goal_tutorial_step_ = session_.tutorial_step();
         goal_dismissed_ = false;
-        goal_until_ = now + std::chrono::seconds(6);
+        // The tutorial hint stays up longer so a new player can read it.
+        const int seconds = session_.scenario_id() == SC_LEARN_TO_PLAY ? 20 : 6;
+        goal_until_ = now + std::chrono::seconds(seconds);
     }
     const bool goal_visible = !goal.empty() && !goal_dismissed_ && now < goal_until_;
     double goal_bottom = 0;
@@ -5075,9 +5086,21 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
             notice_bar_h_ = h;
         }
     }
+    // On the Deck (handheld) layout the tutorial hint already lives in the
+    // top goal banner. Skip the same text as a toast so it is not shown twice.
+    // Desktop keeps the toast: the Slate band only has the short meter.
+    const std::string tutorial_banner =
+        (handheld_ && dialog_ == Dialog::None && !terrain_edit_ && !goal_dismissed_ && now < goal_until_ &&
+         session_.scenario_id() == SC_LEARN_TO_PLAY)
+            ? session_.scenario_progress()
+            : std::string();
     const std::vector<std::size_t> order = toast_draw_order(toasts_);
     for (std::size_t slot : order) {
         const Toast &toast = toasts_[slot];
+        if (!tutorial_banner.empty() && !toast.disaster && !toast.text.empty() &&
+            tutorial_banner.find(toast.text) != std::string::npos) {
+            continue;
+        }
         const double left_ms =
             static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(toast.until - now).count());
         const double alpha = std::max(0.0, std::min(1.0, left_ms / kToastFadeMs));

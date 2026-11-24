@@ -163,7 +163,7 @@ int main()
     for (int i = 0; i < CitySession::kScenarioCount; ++i) {
         CitySession scenario;
         const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
-        if (!scenario.load_scenario(def.id) || scenario.city_name() != def.name || !scenario.disasters()) {
+        if (!scenario.load_scenario(def.id) || scenario.city_name() != CitySession::scenario_city(def) || !scenario.disasters()) {
             std::fprintf(stderr, "scenario %s disasters %d\n", def.name, scenario.disasters() ? 1 : 0);
             return fail(11, "a bundled scenario no longer loads with disasters on");
         }

@@ -10,6 +10,7 @@
 #include "city_seed.hpp"
 #include "controls_page.hpp"
 #include "dialog_copy.hpp"
+#include "messages.hpp"
 #include "notice_bar.hpp"
 #include "platform.hpp"
 #include "save_path.hpp"
@@ -48,6 +49,7 @@
 #include <filesystem>
 #include <fstream>
 #include "effects_fx.hpp"
+#include "tutorial_goals.hpp"
 #include "ui_sounds.hpp"
 
 #include <iostream>
@@ -321,6 +323,7 @@ int Shell::run(int argc, char **argv)
         }
     }
     if (!demo_.empty() && demo_ != "budget" && demo_ != "menu" && demo_ != "welcome" && demo_ != "scenario" &&
+        demo_ != "learn" && demo_ != "learn_mid" && demo_ != "learn_win" && demo_ != "learn_picker" &&
         demo_ != "quit" && demo_ != "special" && demo_ != "gifts" && demo_ != "giftquery" && demo_ != "giftbudget" &&
         demo_ != "crime" && demo_ != "zones" && demo_ != "police" && demo_ != "graphs" && demo_ != "terrain" &&
         demo_ != "controls" && demo_ != "settings" && demo_ != "won" && demo_ != "lost" &&         demo_ != "fire" &&
@@ -1599,6 +1602,13 @@ void Shell::loop()
         }
         note_message();
         note_disaster_fx();
+        if (demo_ == "learn" || demo_ == "learn_mid" || demo_ == "learn_win" || demo_ == "learn_picker") {
+            // Keep the Inspect "Clear / Open land" hover card off captures
+            // by parking the pointer on the NEWS bar, off the map.
+            pointer_x_ = cursor_x_ = 24;
+            pointer_y_ = cursor_y_ = static_cast<float>(std::max(8, win_h_ - 6));
+            map_.clear_hover();
+        }
         advance_presentation(elapsed);
         if (session_.query_serial() != shown_query_serial_) {
             shown_query_serial_ = session_.query_serial();
@@ -2133,6 +2143,81 @@ void Shell::loop()
             } else if (demo_ == "help") {
                 menu_.open_menu = 4;
                 menu_.cursor = 0;
+            } else if (demo_ == "learn_picker") {
+                scenario_index_ = CitySession::kScenarioCount - 1;
+                list_index_ = scenario_index_;
+                list_scroll_ = std::max(0, scenario_index_ - 2);
+                open_dialog(Dialog::Scenario);
+                focus_id_ = kListItem + scenario_index_;
+                gamepad_nav_ = deck_;
+            } else if (demo_ == "learn" || demo_ == "learn_mid" || demo_ == "learn_win") {
+                const int id = CitySession::scenario_def(CitySession::kScenarioCount - 1).id;
+                session_.load_scenario(id);
+                session_.set_simulation_paused(false);
+                session_.set_auto_goto(false);
+                if (demo_ == "learn_mid") {
+                    session_.setup_tutorial_mid();
+                    session_.pump_simulation(2000);
+                    int n = 0;
+                    while (!session_.tutorial_mid_ready() && n < 24) {
+                        session_.pump_simulation(1000);
+                        ++n;
+                    }
+                    session_.ensure_tutorial_power();
+                } else if (demo_ == "learn_win") {
+                    session_.setup_tutorial_growth();
+                    session_.ensure_tutorial_power();
+                    session_.pump_simulation(2400);
+                    int n = 0;
+                    long long last_people = session_.population();
+                    while (session_.population() < LEARN_TO_PLAY_POPULATION_GOAL && n < 24) {
+                        if (session_.funds() < 500 && session_.population() <= last_people) {
+                            break;
+                        }
+                        last_people = session_.population();
+                        session_.pump_simulation(1200);
+                        ++n;
+                    }
+                    session_.ensure_tutorial_power();
+                    session_.ensure_tutorial_park();
+                    int extra = 0;
+                    while (session_.population() < LEARN_TO_PLAY_POPULATION_GOAL && extra < 8) {
+                        session_.pump_simulation(600);
+                        ++extra;
+                    }
+                    session_.ensure_tutorial_power();
+                    session_.set_simulation_paused(true);
+                } else {
+                    session_.pump_simulation(8);
+                }
+                if (demo_ == "learn_win") {
+                    speed_ = 0;
+                    session_.set_speed(0);
+                } else {
+                    speed_ = 1;
+                    session_.set_speed(1);
+                }
+                close_dialog();
+                goal_dismissed_ = false;
+                goal_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+                if (demo_ == "learn_win") {
+                    center_on_fraction((tutorial::kWinViewX + 0.5) / CitySession::kWorldW,
+                                       (tutorial::kWinViewY + 0.5) / CitySession::kWorldH);
+                } else {
+                    center_on_fraction((tutorial::kFieldX + 0.5) / CitySession::kWorldW,
+                                       (tutorial::kFieldY + 0.5) / CitySession::kWorldH);
+                }
+                if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
+                    map_.set_tile_size(std::atoi(zoom));
+                } else {
+                    map_.set_tile_size(16);
+                }
+                toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(),
+                                             [](const Toast &t) { return notice_is_tool_feedback(t.text); }),
+                              toasts_.end());
+                if (notice_is_tool_feedback(shown_message_)) {
+                    shown_message_.clear();
+                }
             } else if (demo_ == "unsaved") {
                 gamepad_nav_ = true;
                 open_dialog(Dialog::Unsaved);

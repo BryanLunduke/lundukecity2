@@ -524,6 +524,12 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
     // A hover left over from the map must not light a dialog button.
     hover_id_ = 0;
     focus_id_ = kOk;
+    if (dialog == Dialog::Budget) {
+        session_.note_tutorial_budget();
+    }
+    if (dialog == Dialog::Query) {
+        session_.note_tutorial_inspect();
+    }
     if (dialog == Dialog::NewCity) {
         field_a_ = "New City";
         field_b_ = "auto";

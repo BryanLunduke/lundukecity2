@@ -426,6 +426,18 @@ void Micropolis::doScenarioScore(Scenario type)
         }
         break;
 
+    case SC_LEARN_TO_PLAY: {
+        // Lunduke City 2: the last teaching step is a small population.
+        // CitySession also awards a win as soon as every step is done.
+        const Quad people = censusSnapshotValid
+            ? static_cast<Quad>(cityPopulationOf(snapResPop, snapComPop, snapIndPop, snapDataCenterPop))
+            : getPopulation();
+        if (people >= LEARN_TO_PLAY_POPULATION_GOAL) {
+            z = MESSAGE_SCENARIO_WON;
+        }
+        break;
+    }
+
     default:
         NOT_REACHED();
         scoreType = SC_NONE;

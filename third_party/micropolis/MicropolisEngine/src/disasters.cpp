@@ -227,6 +227,10 @@ void Micropolis::scenarioDisaster()
             }
             break;
 
+        case SC_LEARN_TO_PLAY:
+            // Tutorial: no scripted disaster.
+            break;
+
         default:
             NOT_REACHED();
             break; // Never used

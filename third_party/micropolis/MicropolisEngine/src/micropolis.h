@@ -887,6 +887,7 @@ enum Scenario {
     SC_SAN_FRANCISCO_1962, ///< San Francisco 1962 (Prison Escape; Lunduke City 2)
     SC_PORTLAND,           ///< Portland (Riot; Lunduke City 2)
     SC_SAN_DIEGO,          ///< San Diego (Zoo Escape; Lunduke City 2)
+    SC_LEARN_TO_PLAY,      ///< Learn to Play tutorial (Lunduke City 2)
 
     SC_COUNT,          ///< Number of scenarios
 };
@@ -945,6 +946,17 @@ static const int SANDIEGO_LION_WAIT = 5;
 static const int SANDIEGO_LION_CATCH_STEPS = 16;
 static const int SANDIEGO_POPULATION_GOAL = 100000;
 static const int SANDIEGO_YEARS = 2;
+
+/**
+ * Learn to Play (Lunduke City 2): a tutorial city with no deadline.
+ * The population goal is the last teaching step. LEARN_TO_PLAY_YEARS is
+ * 0 in the picker ("No deadline"). The engine keeps a long scoreWait so
+ * the existing scenario clock is never zero at start.
+ */
+static const int LEARN_TO_PLAY_POPULATION_GOAL = 2000;
+static const int LEARN_TO_PLAY_FUNDS = 20000;
+static const int LEARN_TO_PLAY_YEARS = 0;
+static const int LEARN_TO_PLAY_SCORE_YEARS = 100;
 
 
 ///////////////////////////////////////////////////

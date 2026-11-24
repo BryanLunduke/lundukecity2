@@ -299,7 +299,7 @@ int main()
         for (int i = 0; i < CitySession::kScenarioCount; ++i) {
             const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
             const long expect = def.id == SC_DULLSVILLE ? 5000 : 20000;
-            if (!session.load_scenario(def.id) || session.city_name() != def.name || session.funds() != expect ||
+            if (!session.load_scenario(def.id) || session.city_name() != CitySession::scenario_city(def) || session.funds() != expect ||
                 !session.disasters()) {
                 std::fprintf(stderr, "%s funds %" PRId64 "\n", def.name, session.funds());
                 return fail(25, "a scenario load changed funds, the name, or disasters");

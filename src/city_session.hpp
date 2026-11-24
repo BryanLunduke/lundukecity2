@@ -114,9 +114,16 @@ public:
         // Classic win condition, including the deadline in years.
         const char *goal = "";
         int years = 0;
+        // The name painted on the HUD. Empty or null means name is used.
+        const char *city_name = nullptr;
     };
 
-    static constexpr int kScenarioCount = 12;
+    static const char *scenario_city(const ScenarioDef &def)
+    {
+        return (def.city_name != nullptr && def.city_name[0] != '\0') ? def.city_name : def.name;
+    }
+
+    static constexpr int kScenarioCount = 13;
     // Seattle: the Autonomous Zone forms on the road block holding this tile
     // (Cal Anderson Park on Capitol Hill) and its least-policed neighbour.
     static constexpr int kSeattleZoneX = 75;
@@ -530,6 +537,36 @@ public:
     std::string scenario_clock_compact() const;
     std::string scenario_meter_compact() const;
 
+    // Learn to Play: the first incomplete teaching step (0..6), or 7 when won.
+    int tutorial_step() const;
+    // The player used Inspect or opened Budget (steps that are not on the map).
+    void note_tutorial_inspect();
+    void note_tutorial_budget();
+    // Place the buildings a mid-scenario demo or test needs, up through the
+    // given 0-based step (that step is left for the player).
+    void setup_tutorial_through(int last_complete);
+    // Teaching buildings plus a small extra grid so a win-shot can grow
+    // to 2,000 people. Leaves Inspect and Budget marked complete.
+    void setup_tutorial_growth();
+    // Run the ordinary simulator for a number of ticks. Used by demos and
+    // shots so power can reach new buildings. Does not change prices or
+    // tables. Leaves the clock running.
+    void pump_simulation(int ticks);
+    // Mid-scenario demo: teaching buildings through Safety, plus a few
+    // extra R and C lots so houses and shops can grow in the shot.
+    void setup_tutorial_mid();
+    // Grown house and shop zone counts (centers), for mid-shot readiness.
+    int tutorial_grown_homes() const;
+    int tutorial_grown_shops() const;
+    bool tutorial_mid_ready() const;
+    // Connect power lines to every zone in the teaching town, and add a
+    // plant if the grid is still short, so a win shot has no unpowered
+    // alert and no blackout news.
+    bool ensure_tutorial_power();
+    void ensure_tutorial_park();
+    void refresh_tutorial(bool announce = true);
+
+
     // Public-opinion and score data from the last cityEvaluation().
     // update_evaluation() runs that pass; evaluation() only reads it.
     struct Problem {
@@ -713,6 +750,15 @@ private:
     long long traffic_anchor_time_ = 0;
     bool traffic_measured() const;
     int scenario_result_ = 0;
+    bool tutorial_inspected_ = false;
+    bool tutorial_budget_seen_ = false;
+    int tutorial_step_ = 0;
+    int tutorial_announced_ = -1;
+    std::string tutorial_meter_;
+    std::string tutorial_meter_short_;
+    std::string tutorial_meter_compact_;
+    void reset_tutorial();
+
     bool query_has_tile_ = false;
     int query_x_ = 0;
     int query_y_ = 0;
