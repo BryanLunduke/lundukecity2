@@ -604,6 +604,8 @@ private:
     // ceremony_won_ puts it on the Scenario won box instead of the card.
     int ceremony_ms_ = -1;
     bool ceremony_won_ = false;
+    // A scenario outcome that arrived while another window was open (#1).
+    int pending_outcome_ = 0;
     void draw_ceremony(cairo_t *cr, double x, double y, double w, double h);
     // Weather over the map view: rain, snow or a storm for the city's
     // month (effects_fx::weather_for). Cosmetic, on the ambient clock.
