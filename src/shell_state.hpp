@@ -167,6 +167,7 @@ private:
     void on_hotspot(int id, double x, double y);
     void on_dialog_button(int id);
     bool dialog_pauses() const;
+    bool goal_banner_allowed() const;
     void set_paused_for_dialog();
     void close_dialog();
     // Close the dialog. When the launch screen is still the way back in,
@@ -604,6 +605,8 @@ private:
     // ceremony_won_ puts it on the Scenario won box instead of the card.
     int ceremony_ms_ = -1;
     bool ceremony_won_ = false;
+    // A scenario outcome that arrived while another window was open (#1).
+    int pending_outcome_ = 0;
     void draw_ceremony(cairo_t *cr, double x, double y, double w, double h);
     // Weather over the map view: rain, snow or a storm for the city's
     // month (effects_fx::weather_for). Cosmetic, on the ambient clock.
@@ -722,6 +725,20 @@ private:
     int goal_scenario_ = -1;
     int goal_tutorial_step_ = -1;
     std::chrono::steady_clock::time_point goal_until_{};
+    // The player clicked Goal: show the goal banner on Slate too (#5).
+    bool goal_recalled_ = false;
+    // Weather drops of one frame, grouped by alpha step (review nov24 #9).
+    struct WeatherMark {
+        int step;
+        int shape; // snow: 0 dot, 1 plus; 2 splash
+        double x0;
+        double y0;
+        double x1;
+        double y1;
+    };
+    std::vector<WeatherMark> weather_marks_;
+    // Desktop tutorial hint: up until the step is done (#5).
+    static constexpr int kGoalPinSeconds = 24 * 3600;
     bool pause_noted_ = false;
     bool touch_pending_ = false;
     bool touch_armed_ = false;

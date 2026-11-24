@@ -902,6 +902,11 @@ void MapView::blit_special(int x, int y, int index, int cell)
     }
 }
 
+namespace {
+bool casts_shadow(int tile);
+bool is_water_tile(int raw);
+} // namespace
+
 void MapView::sync()
 {
     ensure_surface();
@@ -924,6 +929,7 @@ void MapView::sync()
             int special_index = -1;
             int special_cell = 0;
             const int special_key = special_display_key(session_, x, y, special_index, special_cell);
+            const int old_special = special_cell_.size() == cached_raw_.size() ? special_cell_[index] : -1;
             if (special_cell_.size() == cached_raw_.size()) {
                 special_cell_[index] = special_key == 0 ? 0 : special_basin_cell(special_index, special_cell) ? 2 : 1;
                 special_slot_[index] = special_key == 0 ? 0 : special_index * 16 + special_cell + 1;
@@ -963,10 +969,17 @@ void MapView::sync()
                 grown.push_back(static_cast<int>(index));
             }
             blit_tile(x, y, shown, atlas);
+            // Review nov24 #7: the pixel classes and the sun shadow depend
+            // only on whether a cell casts a shadow and, for water cells,
+            // on its pixels. Animated traffic (hundreds of tiles a tick in
+            // a big city) changes neither, so skip that rework.
+            const int old_raw = cached_raw_[index];
+            const bool same_class = old_raw >= 0 && old_special == 0 && !is_water_tile(old_raw) && !is_water_tile(raw) &&
+                                    casts_shadow(old_raw & LOMASK) == casts_shadow(raw & LOMASK);
             cached_raw_[index] = raw;
             cached_shown_[index] = shown;
             ++dirty;
-            if (!class_all_) {
+            if (!class_all_ && !same_class) {
                 class_dirty_.push_back(static_cast<int>(index));
             }
             if (!night_stale_) {
@@ -1853,39 +1866,88 @@ void MapView::draw_city_events(cairo_t *cr, double sprite_to_source, bool dusk)
             }
         }
         cairo_fill(cr);
+        // Review nov24 #10: one clip and one stroke for the whole band
+        // instead of a save/clip/stroke/restore per tile edge. The hatching
+        // is the lines x + y = 4k, the same lines every edge drew. Where two
+        // edges of one tile meet, their bands overlapped and were hatched
+        // twice; a second pass over just those corners keeps that look.
         static const int kStep[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-        for (int x = 0; x < CitySession::kWorldW; ++x) {
-            for (int y = 0; y < CitySession::kWorldH; ++y) {
-                if (events.zoneTile[x][y] == 0) {
-                    continue;
+        auto open_side = [&](int x, int y, int side) {
+            const int nx = x + kStep[side][0];
+            const int ny = y + kStep[side][1];
+            return !(nx < 0 || ny < 0 || nx >= CitySession::kWorldW || ny >= CitySession::kWorldH ||
+                     events.zoneTile[nx][ny] != 0);
+        };
+        double x0 = 1e9;
+        double y0 = 1e9;
+        double x1 = -1e9;
+        double y1 = -1e9;
+        bool any_band = false;
+        bool any_corner = false;
+        cairo_new_path(cr);
+        for (int pass = 0; pass < 2; ++pass) {
+            if (pass == 1) {
+                if (!any_corner) {
+                    break;
                 }
-                for (int side = 0; side < 4; ++side) {
-                    const int nx = x + kStep[side][0];
-                    const int ny = y + kStep[side][1];
-                    if (nx < 0 || ny < 0 || nx >= CitySession::kWorldW || ny >= CitySession::kWorldH ||
-                        events.zoneTile[nx][ny] != 0) {
+                cairo_new_path(cr);
+            }
+            for (int x = 0; x < CitySession::kWorldW; ++x) {
+                for (int y = 0; y < CitySession::kWorldH; ++y) {
+                    if (events.zoneTile[x][y] == 0) {
                         continue;
                     }
-                    // A 4px band along this edge, inside the tile.
-                    const double bx = x * 16.0 + (side == 1 ? 12.0 : 0.0);
-                    const double by = y * 16.0 + (side == 2 ? 12.0 : 0.0);
-                    const double bw = (side == 0 || side == 2) ? 16.0 : 4.0;
-                    const double bh = (side == 0 || side == 2) ? 4.0 : 16.0;
-                    cairo_save(cr);
-                    cairo_rectangle(cr, bx, by, bw, bh);
-                    cairo_clip(cr);
-                    cairo_set_source_rgba(cr, 0.80, 0.12, 0.06, 0.45);
-                    cairo_set_line_width(cr, 1.5);
-                    for (double d = -16.0; d < 20.0; d += 4.0) {
-                        cairo_move_to(cr, bx + d, by + bh);
-                        cairo_line_to(cr, bx + d + bh, by);
-                        cairo_move_to(cr, bx + d, by + 16.0);
-                        cairo_line_to(cr, bx + d + 16.0, by);
+                    bool open[4];
+                    for (int side = 0; side < 4; ++side) {
+                        open[side] = open_side(x, y, side);
                     }
-                    cairo_stroke(cr);
-                    cairo_restore(cr);
+                    for (int side = 0; side < 4; ++side) {
+                        if (!open[side]) {
+                            continue;
+                        }
+                        if (pass == 0) {
+                            // A 4px band along this edge, inside the tile.
+                            const double bx = x * 16.0 + (side == 1 ? 12.0 : 0.0);
+                            const double by = y * 16.0 + (side == 2 ? 12.0 : 0.0);
+                            const double bw = (side == 0 || side == 2) ? 16.0 : 4.0;
+                            const double bh = (side == 0 || side == 2) ? 4.0 : 16.0;
+                            cairo_rectangle(cr, bx, by, bw, bh);
+                            any_band = true;
+                            x0 = std::min(x0, bx);
+                            y0 = std::min(y0, by);
+                            x1 = std::max(x1, bx + bw);
+                            y1 = std::max(y1, by + bh);
+                        }
+                        // This edge and the next one round meet in a corner.
+                        const int next = (side + 1) % 4;
+                        if (open[next]) {
+                            any_corner = true;
+                            if (pass == 1) {
+                                // Sides 0/1 top-right, 1/2 bottom-right,
+                                // 2/3 bottom-left, 3/0 top-left.
+                                const double cx = x * 16.0 + ((side == 0 || side == 1) ? 12.0 : 0.0);
+                                const double cy = y * 16.0 + ((side == 1 || side == 2) ? 12.0 : 0.0);
+                                cairo_rectangle(cr, cx, cy, 4.0, 4.0);
+                            }
+                        }
+                    }
                 }
             }
+            if (!any_band) {
+                cairo_new_path(cr);
+                break;
+            }
+            cairo_save(cr);
+            cairo_clip(cr);
+            cairo_set_source_rgba(cr, 0.80, 0.12, 0.06, 0.45);
+            cairo_set_line_width(cr, 1.5);
+            const double first = std::floor((x0 + y0) / 4.0) * 4.0 - 4.0;
+            for (double c = first; c <= x1 + y1 + 4.0; c += 4.0) {
+                cairo_move_to(cr, c - (y1 + 2.0), y1 + 2.0);
+                cairo_line_to(cr, c - (y0 - 2.0), y0 - 2.0);
+            }
+            cairo_stroke(cr);
+            cairo_restore(cr);
         }
         cairo_restore(cr);
     }
@@ -2661,11 +2723,25 @@ bool MapView::draw_water(cairo_t *cr, const TileSpan &span)
         const bool with_shade = shade_pixels_ != nullptr && cairo_image_surface_get_width(shade_pixels_) == art_w;
         const unsigned char *shade = with_shade ? cairo_image_surface_get_data(shade_pixels_) : nullptr;
         const int sstride = with_shade ? cairo_image_surface_get_stride(shade_pixels_) : 0;
+        // The shade layer is alpha only (#11): expand it to the shade
+        // colour, premultiplied, as draw_shadows paints it.
+        std::uint32_t shade_rgb[256];
+        if (with_shade) {
+            for (std::uint32_t a = 0; a < 256; ++a) {
+                shade_rgb[a] = a == 0 ? 0u
+                               : shade_classic_
+                                   ? 0xff000000u
+                                   : (a << 24) | ((kShadeR * a / 255u) << 16) | ((kShadeG * a / 255u) << 8) |
+                                         (kShadeB * a / 255u);
+            }
+        }
         for (int y = 0; y < h; ++y) {
             if (with_shade) {
-                std::memcpy(out + y * ostride,
-                            shade + static_cast<std::size_t>(y + span.y0 * kTile) * sstride + span.x0 * kTile * 4,
-                            static_cast<std::size_t>(w) * 4);
+                const std::uint8_t *src = shade + static_cast<std::size_t>(y + span.y0 * kTile) * sstride + span.x0 * kTile;
+                auto *dest = reinterpret_cast<std::uint32_t *>(out + y * ostride);
+                for (int x = 0; x < w; ++x) {
+                    dest[x] = shade_rgb[src[x]];
+                }
             } else {
                 std::memset(out + y * ostride, 0, static_cast<std::size_t>(w) * 4);
             }
@@ -2699,7 +2775,7 @@ bool MapView::draw_water(cairo_t *cr, const TileSpan &span)
                         }
                         const float wave = 0.6f * table[(x * 9 + y * 14 - phase_a) & 255] +
                                            0.4f * table[(x * 3 - y * 8 + phase_b) & 255];
-                        if (wave > 0.86f && look_fx::hash01(static_cast<std::uint32_t>(x * 73856093 ^ y * 19349663)) > 0.82) {
+                        if (wave > 0.86f && look_fx::hash01(static_cast<std::uint32_t>(x) * 73856093u ^ static_cast<std::uint32_t>(y) * 19349663u) > 0.82) {
                             dest[ox] = 0xff000000u | water_rgb_[static_cast<std::size_t>(crest)];
                         } else if (wave > 0.55f) {
                             dest[ox] = 0xff000000u | water_lift_[static_cast<std::size_t>(idx)];
@@ -2742,10 +2818,17 @@ void MapView::refresh_shade(const std::vector<int> &tiles)
         if (shade_pixels_ != nullptr) {
             cairo_surface_destroy(shade_pixels_);
         }
-        shade_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, art_w, art_h);
+        // Review nov24 #11: an alpha-only layer (3 MB instead of 12 MB);
+        // draw_shadows supplies the colour.
+        shade_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_A8, art_w, art_h);
         all = true;
     }
     const bool classic = classic_fx();
+    if (classic != shade_classic_) {
+        // The whole layer is one look; redo it all when the look changes.
+        all = true;
+    }
+    shade_classic_ = classic;
     cairo_surface_flush(shade_pixels_);
     unsigned char *data = cairo_image_surface_get_data(shade_pixels_);
     const int stride = cairo_image_surface_get_stride(shade_pixels_);
@@ -2783,7 +2866,7 @@ void MapView::refresh_shade(const std::vector<int> &tiles)
                 continue;
             }
             for (int y = ty * kTile; y < (ty + 1) * kTile; ++y) {
-                auto *out = reinterpret_cast<std::uint32_t *>(data + y * stride);
+                std::uint8_t *out = data + y * stride;
                 for (int x = tx * kTile; x < (tx + 1) * kTile; ++x) {
                     float a = 0.0f;
                     if (!solid(x, y)) {
@@ -2797,12 +2880,11 @@ void MapView::refresh_shade(const std::vector<int> &tiles)
                     if (a <= 0.0f) {
                         out[x] = 0;
                     } else if (classic) {
-                        out[x] = look_fx::dither_on(x, y, a * 0.6) ? 0xff000000u : 0u;
+                        // Opaque black dither.
+                        out[x] = look_fx::dither_on(x, y, a * 0.6) ? 255u : 0u;
                     } else {
-                        const std::uint32_t alpha = static_cast<std::uint32_t>(a * 255.0f + 0.5f);
-                        // Premultiplied cool shade (12, 14, 34).
-                        out[x] = (alpha << 24) | ((12u * alpha / 255u) << 16) | ((14u * alpha / 255u) << 8) |
-                                 (34u * alpha / 255u);
+                        // The cool shade (12, 14, 34) at this alpha.
+                        out[x] = static_cast<std::uint8_t>(a * 255.0f + 0.5f);
                     }
                 }
             }
@@ -2819,9 +2901,15 @@ void MapView::draw_shadows(cairo_t *cr)
         return;
     }
     cairo_save(cr);
-    cairo_set_source_surface(cr, shade_pixels_, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-    cairo_paint(cr);
+    if (shade_classic_) {
+        cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    } else {
+        cairo_set_source_rgb(cr, kShadeR / 255.0, kShadeG / 255.0, kShadeB / 255.0);
+    }
+    cairo_pattern_t *mask = cairo_pattern_create_for_surface(shade_pixels_);
+    cairo_pattern_set_filter(mask, CAIRO_FILTER_NEAREST);
+    cairo_mask(cr, mask);
+    cairo_pattern_destroy(mask);
     cairo_restore(cr);
 }
 
@@ -2894,7 +2982,9 @@ void MapView::draw_clouds(cairo_t *cr, const TileSpan &span)
         if (cloud_pixels_ != nullptr) {
             cairo_surface_destroy(cloud_pixels_);
         }
-        cloud_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, period, period);
+        // Review nov24 #11: alpha only (2.4 MB instead of 9.4 MB at the
+        // largest zoom); the colour is set when it is painted.
+        cloud_pixels_ = cairo_image_surface_create(CAIRO_FORMAT_A8, period, period);
         cloud_cache_key_ = key;
         unsigned char *data = cairo_image_surface_get_data(cloud_pixels_);
         const int stride = cairo_image_surface_get_stride(cloud_pixels_);
@@ -2915,19 +3005,17 @@ void MapView::draw_clouds(cairo_t *cr, const TileSpan &span)
             return top + (bot - top) * tv;
         };
         for (int y = 0; y < period; ++y) {
-            auto *row = reinterpret_cast<std::uint32_t *>(data + y * stride);
+            std::uint8_t *row = data + y * stride;
             const double v = (y + 0.5) / texel - 0.5;
             for (int x = 0; x < period; ++x) {
                 const float c = cover_at((x + 0.5) / texel - 0.5, v);
                 if (classic) {
                     // A sparse black dither inside the cloud outline. The
                     // repeat is a multiple of 4, so the dither tiles too.
-                    row[x] = c > 0.5f && look_fx::dither_on(x, y, 0.25) ? 0xff000000u : 0u;
+                    row[x] = c > 0.5f && look_fx::dither_on(x, y, 0.25) ? 255u : 0u;
                 } else {
-                    // A cool shade, deepest in the middle of a cloud.
-                    const std::uint32_t a = static_cast<std::uint32_t>(c * 0.32f * 255.0f + 0.5f);
-                    row[x] = a == 0 ? 0u
-                                    : (a << 24) | ((15u * a / 255u) << 16) | ((20u * a / 255u) << 8) | (51u * a / 255u);
+                    // A cool shade (15, 20, 51), deepest in the middle of a cloud.
+                    row[x] = static_cast<std::uint8_t>(c * 0.32f * 255.0f + 0.5f);
                 }
             }
         }
@@ -2944,10 +3032,19 @@ void MapView::draw_clouds(cairo_t *cr, const TileSpan &span)
     cairo_save(cr);
     cairo_rectangle(cr, span.x0 * source, span.y0 * source, (span.x1 - span.x0) * source, (span.y1 - span.y0) * source);
     cairo_clip(cr);
-    cairo_set_source_surface(cr, cloud_pixels_, ox, oy);
-    cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_REPEAT);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-    cairo_paint(cr);
+    if (classic) {
+        cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    } else {
+        cairo_set_source_rgb(cr, 15.0 / 255.0, 20.0 / 255.0, 51.0 / 255.0);
+    }
+    cairo_pattern_t *mask = cairo_pattern_create_for_surface(cloud_pixels_);
+    cairo_matrix_t place;
+    cairo_matrix_init_translate(&place, -ox, -oy);
+    cairo_pattern_set_matrix(mask, &place);
+    cairo_pattern_set_extend(mask, CAIRO_EXTEND_REPEAT);
+    cairo_pattern_set_filter(mask, CAIRO_FILTER_NEAREST);
+    cairo_mask(cr, mask);
+    cairo_pattern_destroy(mask);
     cairo_restore(cr);
 }
 

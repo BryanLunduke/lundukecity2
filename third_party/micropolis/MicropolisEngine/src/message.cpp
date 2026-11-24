@@ -80,7 +80,10 @@ void Micropolis::sendMessages()
     float TM;
 
     // Running a scenario, and waiting it to 'end' so we can give a score
-    if (scenario > SC_NONE && scoreType > SC_NONE && scoreWait > 0) {
+    // Review nov24 #2: Learn to Play has no deadline. Its win is the
+    // tutorial goal (CitySession), so its scoreWait must never run out and
+    // end the city as "Time is up" a hundred years in.
+    if (scenario > SC_NONE && scoreType > SC_NONE && scoreType != SC_LEARN_TO_PLAY && scoreWait > 0) {
         scoreWait--;
         if (scoreWait == 0) {
             doScenarioScore(scoreType);

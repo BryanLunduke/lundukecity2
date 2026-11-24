@@ -120,6 +120,7 @@ enum HotspotId : int {
     kDemandMeter = 9514, // + 0..2 (residential, commercial, industrial)
     kCrisisStrip = 9517,
     kWorstTraffic = 9518,
+    kGoalStrip = 9519, // the Goal value in the info band (review nov24 #5)
     // Terrain editor top bar and toolbar. Not dialog controls.
     kTerrainComplete = 9520,
     kTerrainCancel = 9521,

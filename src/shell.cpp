@@ -1046,7 +1046,11 @@ void Shell::bind_session()
             paint_terrain_line(x, y, x, y);
             return;
         }
-        goal_dismissed_ = true;
+        // Review nov24 #5: the desktop tutorial hint stays while the player
+        // follows it; other goal banners still step aside for the map.
+        if (handheld_ || session_.scenario_id() != SC_LEARN_TO_PLAY) {
+            goal_dismissed_ = true;
+        }
         const ToolDef *tool = tool_by_index(tool_index_);
         const int fixed = tool_fixed_special(tool);
         if (fixed >= 0) {
@@ -1574,7 +1578,18 @@ void Shell::loop()
             scorebook_record_file(city_config_dir(), session_.scenario_id(), outcome > 0,
                                   session_.evaluation().score, session_.city_year(),
                                   session_.city_month(), session_.generated_seed());
-            if (dialog_ == Dialog::None) {
+            // Review nov24 #1: the outcome can land while another window is
+            // up (opening Budget or Inspect completes the last Learn to Play
+            // step). Keep it until that window closes instead of losing the
+            // announcement while the clock stays held.
+            pending_outcome_ = outcome;
+        }
+        if (pending_outcome_ != 0 && dialog_ == Dialog::None) {
+            const int outcome = pending_outcome_;
+            pending_outcome_ = 0;
+            // A different city loaded in the meantime clears the hold; the
+            // old city's announcement no longer applies.
+            if (session_.outcome_pause_pending()) {
                 info_title_ = outcome > 0 ? "Scenario won" : "Scenario lost";
                 play_cue(outcome > 0 ? ui_sounds::Milestone : ui_sounds::Error);
                 ceremony_won_ = outcome > 0;

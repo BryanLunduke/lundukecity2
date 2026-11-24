@@ -234,6 +234,16 @@ std::string ui_data_file(const std::string &relative)
         }
         dir = up;
     }
+    // Review nov24 #15: a build outside the source tree finds the tree
+    // through the asset lookup, the same way the licence lookup does:
+    // <root>/third_party/micropolis-assets -> <root>/data.
+    const std::string assets = asset_root();
+    if (!assets.empty()) {
+        const std::string top = parent_dir(parent_dir(assets));
+        if (!top.empty()) {
+            add_layout(roots, top, "data");
+        }
+    }
     for (const std::string &root : roots) {
         const bool trailed = !root.empty() && (root.back() == '/' || root.back() == '\\');
         const std::string path = trailed ? root + relative : root + "/" + relative;

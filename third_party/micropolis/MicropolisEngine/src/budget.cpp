@@ -252,6 +252,18 @@ Quad Micropolis::taxGrowthPercent() const
 }
 
 
+Quad Micropolis::stationUpkeep(bool fire) const
+{
+    if (scenario == SC_LEARN_TO_PLAY) {
+        return 25;
+    }
+    if (scenario == SC_PORTLAND && fire) {
+        return 60;
+    }
+    return 100;
+}
+
+
 Micropolis::BudgetBases Micropolis::projectBudget(short roads, short rails, short policePop, short firePop, Quad pop,
                                                    short landValue, short taxRate) const
 {
@@ -285,8 +297,8 @@ Micropolis::BudgetBases Micropolis::projectBudget(short roads, short rails, shor
     }
 
     BudgetBases out;
-    out.police = (Quad)policePop * 100;
-    out.fire = (Quad)firePop * 100;
+    out.police = (Quad)policePop * stationUpkeep(false);
+    out.fire = (Quad)firePop * stationUpkeep(true);
     out.road = (Quad)((roads + (rails * 2)) * RLevels[level]);
     out.tax = (Quad)((((Quad)pop * (Quad)landValue) / 120) * (Quad)taxRate * FLevels[level]);
     // Review nov19 #5: upkeep grows with every road and station, but the

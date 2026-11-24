@@ -3055,6 +3055,21 @@ void Shell::on_hotspot(int id, double x, double y)
             }
             return;
         }
+        if (id == kGoalStrip) {
+            // Review nov24 #5: show the full goal (the tutorial step and
+            // what to do) again, or hide a banner that is already up.
+            const auto now = std::chrono::steady_clock::now();
+            const bool up = !goal_dismissed_ && now < goal_until_ && goal_banner_allowed();
+            if (up) {
+                goal_dismissed_ = true;
+            } else {
+                goal_dismissed_ = false;
+                goal_recalled_ = true;
+                const bool learn = session_.scenario_id() == SC_LEARN_TO_PLAY;
+                goal_until_ = now + std::chrono::seconds(learn && !handheld_ ? kGoalPinSeconds : 20);
+            }
+            return;
+        }
         if (id == kCrisisStrip) {
             const CitySession::CrisisReport crisis = session_.crisis_report();
             if (!crisis.sites.empty()) {

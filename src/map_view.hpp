@@ -226,7 +226,13 @@ private:
     // A real water tile or a Marina basin cell, for the water layer.
     bool fx_water_cell(std::size_t index) const;
     // Soft lower-right drop shadows at art resolution, premultiplied.
+    // Sun shadows, alpha only (review nov24 #11). shade_classic_: the
+    // Classic black dither rather than the cool shade colour.
     cairo_surface_t *shade_pixels_ = nullptr;
+    bool shade_classic_ = false;
+    static constexpr std::uint32_t kShadeR = 12;
+    static constexpr std::uint32_t kShadeG = 14;
+    static constexpr std::uint32_t kShadeB = 34;
     void refresh_shade(const std::vector<int> &tiles);
     void draw_shadows(cairo_t *cr);
     cairo_surface_t *fx_pixels_ = nullptr;
