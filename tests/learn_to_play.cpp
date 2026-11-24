@@ -138,12 +138,13 @@ int main()
     if (!fresh.load_scenario(SC_LEARN_TO_PLAY)) {
         return fail(24, "could not reload Brookside to check the opening pad");
     }
-    for (int x = 50; x <= 74; ++x) {
-        if ((fresh.map_value(x, 58) & LOMASK) != DIRT) {
+    for (int x = tutorial::kRoadX0; x <= tutorial::kRoadX1; ++x) {
+        if ((fresh.map_value(x, tutorial::kRoadY) & LOMASK) != DIRT) {
             return fail(25, "the starter road line should be open dirt");
         }
     }
-    if ((fresh.map_value(58, 52) & LOMASK) != DIRT || (fresh.map_value(52, 64) & LOMASK) != DIRT) {
+    if ((fresh.map_value(tutorial::kParkX, tutorial::kParkY) & LOMASK) != DIRT ||
+        (fresh.map_value(tutorial::kPlantX, tutorial::kPlantY) & LOMASK) != DIRT) {
         return fail(26, "the park and power-plant sites should be open dirt");
     }
     if (LEARN_TO_PLAY_POPULATION_GOAL != 2000 || LEARN_TO_PLAY_FUNDS != 20000 || LEARN_TO_PLAY_YEARS != 0) {

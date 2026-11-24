@@ -46,7 +46,7 @@ sandiego_map = executable(
   install: false,
 )
 
-# Learn to Play map (data/scenarios/brookside.cty).
+# Learn to Play map (data/scenarios/brookside.cty), from generateMap seed 6363.
 #   meson compile -C build learn_map
 #   build/tools/learn_map data/scenarios/brookside.cty
 learn_map = executable(

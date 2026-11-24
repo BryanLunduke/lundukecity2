@@ -4863,15 +4863,15 @@ void CitySession::setup_tutorial_mid()
     set_auto_bulldoze(true);
     // Extra lots along the teaching road so the mid shot can show grown
     // houses and shops, not only empty zone squares.
-    use_tool(TOOL_RESIDENTIAL, 54, 56);
+    use_tool(TOOL_RESIDENTIAL, tutorial::kMidResWest, tutorial::kZoneY);
     end_tool_stroke();
-    use_tool(TOOL_RESIDENTIAL, 70, 56);
+    use_tool(TOOL_RESIDENTIAL, tutorial::kMidResEast, tutorial::kZoneY);
     end_tool_stroke();
-    use_tool(TOOL_COMMERCIAL, 50, 56);
+    use_tool(TOOL_COMMERCIAL, tutorial::kMidComWest, tutorial::kZoneY);
     end_tool_stroke();
-    use_tool(TOOL_COMMERCIAL, 74, 56);
+    use_tool(TOOL_COMMERCIAL, tutorial::kMidComEast, tutorial::kZoneY);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 50, 58, 74, 58);
+    drag_tool(TOOL_WIRE, tutorial::kRoadX0, tutorial::kRoadY, tutorial::kRoadX1, tutorial::kRoadY);
     end_tool_stroke();
     placement_note_ = PlacementNote{};
     stroke_spent_ = 0;
@@ -4947,10 +4947,10 @@ bool CitySession::ensure_tutorial_power()
         return tile >= ROADBASE && tile <= LASTROAD;
     };
     auto wire_roads = [&]() {
-        const int x0 = 46;
-        const int x1 = 92;
-        const int y0 = 48;
-        const int y1 = 90;
+        const int x0 = tutorial::kTownX0;
+        const int x1 = tutorial::kTownX1;
+        const int y0 = tutorial::kTownY0;
+        const int y1 = tutorial::kTownY1;
         for (int y = y0; y <= y1; ++y) {
             int run = -1;
             for (int x = x0; x <= x1 + 1; ++x) {
@@ -4984,10 +4984,10 @@ bool CitySession::ensure_tutorial_power()
     // Some 4-way road crossings cannot take a power line. A wire on the
     // dirt beside the crossing joins the segments the crossing isolates.
     auto bridge_road_gaps = [&]() {
-        const int x0 = 46;
-        const int x1 = 92;
-        const int y0 = 48;
-        const int y1 = 90;
+        const int x0 = tutorial::kTownX0;
+        const int x1 = tutorial::kTownX1;
+        const int y0 = tutorial::kTownY0;
+        const int y1 = tutorial::kTownY1;
         const int dx[4] = {-1, 1, 0, 0};
         const int dy[4] = {0, 0, -1, 1};
         for (int x = x0; x <= x1; ++x) {
@@ -5101,10 +5101,10 @@ bool CitySession::ensure_tutorial_power()
     };
     auto wire_unpowered = [&]() {
         const CrisisReport report = crisis_report();
-        const int x0 = 46;
-        const int x1 = 92;
-        const int y0 = 48;
-        const int y1 = 90;
+        const int x0 = tutorial::kTownX0;
+        const int x1 = tutorial::kTownX1;
+        const int y0 = tutorial::kTownY0;
+        const int y1 = tutorial::kTownY1;
         for (const CrisisSite &site : report.sites) {
             const unsigned short raw = engine_->sim.map[site.x][site.y];
             if ((raw & ZONEBIT) == 0 || (raw & PWRBIT) != 0) {
@@ -5196,15 +5196,13 @@ bool CitySession::ensure_tutorial_power()
     }
 
     if (crisis_report().unpowered > 0) {
-        // A fourth coal plant, south-west of the extra grid, if the first
-        // three cannot reach every lot.
-        use_tool(TOOL_COALPOWER, 50, 84);
+        // A fourth coal plant on the east grid, if the first three cannot
+        // reach every lot. (The river south-west of the clearing is water.)
+        use_tool(TOOL_COALPOWER, 102, 42);
         end_tool_stroke();
-        drag_tool(TOOL_WIRE, 50, 83, 50, 76);
+        drag_tool(TOOL_WIRE, 102, 45, 102, 46);
         end_tool_stroke();
-        drag_tool(TOOL_ROAD, 50, 76, 50, 82);
-        end_tool_stroke();
-        drag_tool(TOOL_WIRE, 50, 76, 50, 82);
+        drag_tool(TOOL_WIRE, 102, 38, 102, 40);
         end_tool_stroke();
         wire_roads();
         pump_simulation(96);
@@ -5259,7 +5257,13 @@ void CitySession::ensure_tutorial_park()
         return;
     }
     set_auto_bulldoze(true);
-    const int spots[][2] = {{58, 52}, {57, 52}, {59, 52}, {58, 51}, {56, 52}, {60, 52}, {58, 53}};
+    const int spots[][2] = {{tutorial::kParkX, tutorial::kParkY},
+                            {tutorial::kParkX - 1, tutorial::kParkY},
+                            {tutorial::kParkX + 1, tutorial::kParkY},
+                            {tutorial::kParkX, tutorial::kParkY - 1},
+                            {tutorial::kParkX - 2, tutorial::kParkY},
+                            {tutorial::kParkX + 2, tutorial::kParkY},
+                            {tutorial::kParkX, tutorial::kParkY + 1}};
     for (const int *spot : spots) {
         use_tool(TOOL_PARK, spot[0], spot[1]);
         end_tool_stroke();
@@ -5275,42 +5279,42 @@ void CitySession::setup_tutorial_through(int last_complete)
         return;
     }
     set_auto_bulldoze(true);
-    // Open field south of the river: a road, a coal plant, R/C/I, police,
+    // Dirt clearing beside the river: a road, a coal plant, R/C/I, police,
     // fire and a park, leaving later steps for the player.
     if (last_complete >= tutorial::Roads) {
-        drag_tool(TOOL_ROAD, 50, 58, 74, 58);
+        drag_tool(TOOL_ROAD, tutorial::kRoadX0, tutorial::kRoadY, tutorial::kRoadX1, tutorial::kRoadY);
         end_tool_stroke();
     }
     if (last_complete >= tutorial::Power) {
-        use_tool(TOOL_COALPOWER, 52, 64);
+        use_tool(TOOL_COALPOWER, tutorial::kPlantX, tutorial::kPlantY);
         end_tool_stroke();
         // A line up to the road so the later zones and stations have power
         // in mid-scenario shots.
-        drag_tool(TOOL_WIRE, 52, 62, 52, 58);
+        drag_tool(TOOL_WIRE, tutorial::kPlantX, tutorial::kPlantY - 2, tutorial::kPlantX, tutorial::kRoadY);
         end_tool_stroke();
-        drag_tool(TOOL_WIRE, 50, 58, 74, 58);
+        drag_tool(TOOL_WIRE, tutorial::kRoadX0, tutorial::kRoadY, tutorial::kRoadX1, tutorial::kRoadY);
         end_tool_stroke();
     }
     if (last_complete >= tutorial::Zones) {
-        // Centres at y=56 so the 3x3 lots touch the road at y=58 and pick
-        // up the power on that road.
-        use_tool(TOOL_RESIDENTIAL, 58, 56);
+        // Centres one tile north of the road so the 3x3 lots touch it and
+        // pick up the power on that road.
+        use_tool(TOOL_RESIDENTIAL, tutorial::kResX, tutorial::kZoneY);
         end_tool_stroke();
-        use_tool(TOOL_COMMERCIAL, 62, 56);
+        use_tool(TOOL_COMMERCIAL, tutorial::kComX, tutorial::kZoneY);
         end_tool_stroke();
-        use_tool(TOOL_INDUSTRIAL, 66, 56);
+        use_tool(TOOL_INDUSTRIAL, tutorial::kIndX, tutorial::kZoneY);
         end_tool_stroke();
     }
     if (last_complete >= tutorial::Safety) {
-        use_tool(TOOL_POLICESTATION, 56, 62);
+        use_tool(TOOL_POLICESTATION, tutorial::kPoliceX, tutorial::kSafetyY);
         end_tool_stroke();
-        use_tool(TOOL_FIRESTATION, 61, 62);
+        use_tool(TOOL_FIRESTATION, tutorial::kFireX, tutorial::kSafetyY);
         end_tool_stroke();
-        drag_tool(TOOL_WIRE, 54, 62, 61, 62);
+        drag_tool(TOOL_WIRE, tutorial::kPoliceX - 2, tutorial::kSafetyY, tutorial::kFireX, tutorial::kSafetyY);
         end_tool_stroke();
     }
     if (last_complete >= tutorial::Parks) {
-        use_tool(TOOL_PARK, 58, 52);
+        use_tool(TOOL_PARK, tutorial::kParkX, tutorial::kParkY);
         end_tool_stroke();
     }
     if (last_complete >= tutorial::InspectBudget) {
@@ -5336,68 +5340,70 @@ void CitySession::setup_tutorial_growth()
     setup_tutorial_through(tutorial::InspectBudget);
     ensure_tutorial_park();
     set_auto_bulldoze(true);
-    // Extra streets and a nuclear plant east of the starter coal, far
-    // enough that the 4x4 lots do not overlap. The nuclear lot is
-    // centred at (88, 70) and is wired from its west edge.
-    drag_tool(TOOL_ROAD, 50, 66, 84, 66);
+    // Grow the win city east of the clearing, on land. Trees may be
+    // auto-bulldozed; the river south-west of the pad cannot.
+    drag_tool(TOOL_ROAD, tutorial::kRoadX0, tutorial::kRoadY, 106, tutorial::kRoadY);
     end_tool_stroke();
-    drag_tool(TOOL_ROAD, 50, 70, 84, 70);
+    drag_tool(TOOL_ROAD, 74, 30, 106, 30);
     end_tool_stroke();
-    drag_tool(TOOL_ROAD, 50, 76, 84, 76);
+    drag_tool(TOOL_ROAD, 74, 46, 106, 46);
     end_tool_stroke();
-    drag_tool(TOOL_ROAD, 58, 58, 58, 76);
+    drag_tool(TOOL_ROAD, 74, 52, 106, 52);
     end_tool_stroke();
-    drag_tool(TOOL_ROAD, 66, 58, 66, 76);
+    drag_tool(TOOL_ROAD, 74, 30, 74, 52);
     end_tool_stroke();
-    drag_tool(TOOL_ROAD, 74, 58, 74, 76);
+    drag_tool(TOOL_ROAD, 82, 30, 82, 52);
     end_tool_stroke();
-    drag_tool(TOOL_ROAD, 80, 58, 80, 76);
+    drag_tool(TOOL_ROAD, 90, 30, 90, 52);
     end_tool_stroke();
-    // Two more coal plants on open dirt, wired to the streets, so the
-    // extra grid stays powered. (88, 70) sat in the east woods and the
-    // nuclear plant often failed to land.
-    use_tool(TOOL_COALPOWER, 70, 64);
+    drag_tool(TOOL_ROAD, 98, 30, 98, 52);
     end_tool_stroke();
-    use_tool(TOOL_COALPOWER, 62, 84);
+    drag_tool(TOOL_ROAD, 106, 30, 106, 52);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 70, 63, 70, 58);
+    // Two more coal plants in the cells of the east grid, wired to the
+    // streets, so the extra lots stay powered.
+    use_tool(TOOL_COALPOWER, 86, 34);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 70, 67, 70, 70);
+    use_tool(TOOL_COALPOWER, 94, 48);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 62, 83, 62, 76);
+    drag_tool(TOOL_WIRE, 86, 37, 86, 38);
     end_tool_stroke();
-    drag_tool(TOOL_ROAD, 62, 76, 62, 82);
+    drag_tool(TOOL_WIRE, 94, 46, 94, 46);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 62, 76, 62, 82);
+    drag_tool(TOOL_WIRE, 94, 51, 94, 52);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 50, 58, 84, 58);
+    drag_tool(TOOL_WIRE, tutorial::kRoadX0, tutorial::kRoadY, 106, tutorial::kRoadY);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 50, 66, 84, 66);
+    drag_tool(TOOL_WIRE, 74, 30, 106, 30);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 50, 70, 84, 70);
+    drag_tool(TOOL_WIRE, 74, 46, 106, 46);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 50, 76, 84, 76);
+    drag_tool(TOOL_WIRE, 74, 52, 106, 52);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 58, 58, 58, 76);
+    drag_tool(TOOL_WIRE, 74, 30, 74, 52);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 66, 58, 66, 76);
+    drag_tool(TOOL_WIRE, 82, 30, 82, 52);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 74, 58, 74, 76);
+    drag_tool(TOOL_WIRE, 90, 30, 90, 52);
     end_tool_stroke();
-    drag_tool(TOOL_WIRE, 80, 58, 80, 76);
+    drag_tool(TOOL_WIRE, 98, 30, 98, 52);
+    end_tool_stroke();
+    drag_tool(TOOL_WIRE, 106, 30, 106, 52);
     end_tool_stroke();
     const int spots[][3] = {
-        {TOOL_RESIDENTIAL, 54, 56}, {TOOL_RESIDENTIAL, 70, 56},
-        {TOOL_RESIDENTIAL, 50, 56},
-        {TOOL_RESIDENTIAL, 54, 66}, {TOOL_RESIDENTIAL, 58, 66},
-        {TOOL_RESIDENTIAL, 62, 66}, {TOOL_RESIDENTIAL, 70, 66},
-        {TOOL_RESIDENTIAL, 62, 72}, {TOOL_RESIDENTIAL, 58, 72},
-        {TOOL_RESIDENTIAL, 70, 72}, {TOOL_RESIDENTIAL, 54, 72},
-        {TOOL_RESIDENTIAL, 62, 78}, {TOOL_RESIDENTIAL, 58, 78},
-        {TOOL_RESIDENTIAL, 70, 78}, {TOOL_RESIDENTIAL, 54, 78},
-        {TOOL_RESIDENTIAL, 66, 78}, {TOOL_RESIDENTIAL, 74, 78},
-        {TOOL_COMMERCIAL, 50, 66}, {TOOL_COMMERCIAL, 50, 72},
-        {TOOL_INDUSTRIAL, 80, 76}, {TOOL_INDUSTRIAL, 80, 66},
+        {TOOL_RESIDENTIAL, tutorial::kMidResWest, tutorial::kZoneY},
+        {TOOL_RESIDENTIAL, tutorial::kMidResEast, tutorial::kZoneY},
+        {TOOL_RESIDENTIAL, 78, 36}, {TOOL_RESIDENTIAL, 78, 32}, {TOOL_RESIDENTIAL, 78, 40},
+        {TOOL_RESIDENTIAL, 82, 32}, {TOOL_RESIDENTIAL, 82, 36}, {TOOL_RESIDENTIAL, 82, 40},
+        {TOOL_RESIDENTIAL, 90, 32}, {TOOL_RESIDENTIAL, 90, 36}, {TOOL_RESIDENTIAL, 90, 40},
+        {TOOL_RESIDENTIAL, 98, 32}, {TOOL_RESIDENTIAL, 98, 36}, {TOOL_RESIDENTIAL, 98, 40},
+        {TOOL_RESIDENTIAL, 78, 44}, {TOOL_RESIDENTIAL, 82, 48}, {TOOL_RESIDENTIAL, 90, 48},
+        {TOOL_RESIDENTIAL, 98, 48}, {TOOL_RESIDENTIAL, 78, 50}, {TOOL_RESIDENTIAL, 82, 54},
+        {TOOL_RESIDENTIAL, 90, 54}, {TOOL_RESIDENTIAL, 98, 54},
+        {TOOL_COMMERCIAL, tutorial::kMidComWest, tutorial::kZoneY},
+        {TOOL_COMMERCIAL, tutorial::kMidComEast, tutorial::kZoneY},
+        {TOOL_COMMERCIAL, 74, 32}, {TOOL_COMMERCIAL, 74, 40},
+        {TOOL_INDUSTRIAL, 106, 36}, {TOOL_INDUSTRIAL, 106, 48},
     };
     for (const int *spot : spots) {
         use_tool(spot[0], spot[1], spot[2]);

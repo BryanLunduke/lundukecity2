@@ -2,17 +2,21 @@
 // Copyright (C) 2026 Bryan Lunduke
 // See COPYING and NOTICE.
 
-// Builds data/scenarios/brookside.cty, the Learn to Play map: a winding
-// river, a pond, woods around a friendly opening, and a large open field. Existing tiles only.
-// Deterministic: no simulator random numbers.
+// Builds data/scenarios/brookside.cty for Learn to Play. The landscape
+// comes from City 2's built-in terrain generator (generateMap), the same
+// path New City uses for a random map. This tool only calls that
+// generator; it does not change it. Existing tiles only.
+//
+// Seed 6363, New City default knobs (island, rivers, lakes, trees = -1):
+// a winding river, natural woods, and a large dirt clearing for the
+// first tutorial road. Rebuild with:
 //
 //   meson compile -C build learn_map
 //   build/tools/learn_map data/scenarios/brookside.cty [preview.ppm]
 
 #include "map_builder.hpp"
+#include "tutorial_goals.hpp"
 
-#include <cstdint>
-#include <cstddef>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
@@ -20,144 +24,6 @@
 #include <vector>
 
 namespace {
-
-using mapgen::H;
-using mapgen::W;
-using mapgen::in_ellipse;
-using mapgen::in_line;
-using mapgen::LinePoint;
-
-// A tiny fixed hash so tree scatter never touches the sim RNG.
-unsigned hash32(int x, int y, unsigned salt)
-{
-    unsigned h = 2166136261u ^ salt;
-    h ^= static_cast<unsigned>(x * 374761393 + y * 668265263);
-    h *= 16777619u;
-    return h;
-}
-
-bool in_river(int x, int y)
-{
-    static const std::vector<LinePoint> main = {
-        {0, 30, 4.0},   {22, 26, 4.2}, {40, 34, 3.6}, {58, 42, 3.8},
-        {76, 48, 3.4},  {96, 52, 3.6}, {119, 56, 3.8},
-    };
-    static const std::vector<LinePoint> creek = {
-        {78, 0, 1.6}, {74, 18, 1.6}, {70, 36, 1.8}, {68, 46, 2.0},
-    };
-    if (in_line(main, x, y) || in_line(creek, x, y)) {
-        return true;
-    }
-    // A small pond that joins the river on the west bank.
-    return in_ellipse(x, y, 16, 24, 6.5, 5.0);
-}
-
-// Dirt reserved for the tutorial buildings and a first wave of zones.
-// Trees frame this pad but do not sit on it, so the opening view stays
-// buildable and auto-bulldoze does not spend the player's first dollars.
-bool in_build_pad(int x, int y)
-{
-    return x >= 48 && x <= 76 && y >= 51 && y <= 70;
-}
-
-bool in_woods(int x, int y)
-{
-    if (in_build_pad(x, y) || in_river(x, y)) {
-        return false;
-    }
-
-    const auto grove = [](int x, int y, int cx, int cy, int rx, int ry, unsigned salt) {
-        const unsigned h = hash32(x, y, salt);
-        const double rx2 = static_cast<double>(rx) + static_cast<int>(h % 5) - 2;
-        const double ry2 = static_cast<double>(ry) + static_cast<int>((h / 5u) % 5) - 2;
-        if (rx2 <= 0.5 || ry2 <= 0.5) {
-            return false;
-        }
-        return in_ellipse(x, y, cx, cy, rx2, ry2);
-    };
-
-    // Dense, irregular fill of the four map corners and the far edges.
-    if (grove(x, y, 10, 8, 16, 12, 0x21u) || grove(x, y, 22, 6, 10, 8, 0x22u) || grove(x, y, 8, 22, 10, 10, 0x23u) ||
-        grove(x, y, 110, 8, 16, 12, 0x24u) || grove(x, y, 98, 6, 12, 8, 0x25u) || grove(x, y, 112, 24, 10, 10, 0x26u) ||
-        grove(x, y, 10, 92, 16, 12, 0x27u) || grove(x, y, 24, 94, 10, 8, 0x28u) || grove(x, y, 8, 78, 10, 10, 0x29u) ||
-        grove(x, y, 110, 92, 16, 12, 0x2au) || grove(x, y, 96, 94, 12, 8, 0x2bu) || grove(x, y, 112, 78, 10, 10, 0x2cu)) {
-        return true;
-    }
-    if ((x <= 10 || x >= 109 || y <= 6 || y >= 93) && (hash32(x, y, 0x2du) % 5) < 4) {
-        return true;
-    }
-
-    // Opening-view copses of mixed sizes, kept off the reserved field.
-    if (grove(x, y, 36, 64, 7, 6, 0x31u) || grove(x, y, 30, 58, 5, 4, 0x32u) || grove(x, y, 40, 74, 6, 5, 0x33u) ||
-        grove(x, y, 28, 70, 4, 4, 0x34u) || grove(x, y, 24, 80, 6, 5, 0x35u) || grove(x, y, 42, 80, 5, 4, 0x36u) ||
-        grove(x, y, 32, 50, 5, 4, 0x37u) || grove(x, y, 22, 54, 4, 3, 0x38u) || grove(x, y, 38, 44, 4, 3, 0x39u)) {
-        return true;
-    }
-    if (grove(x, y, 90, 64, 7, 6, 0x41u) || grove(x, y, 96, 58, 5, 4, 0x42u) || grove(x, y, 86, 74, 6, 5, 0x43u) ||
-        grove(x, y, 98, 70, 4, 4, 0x44u) || grove(x, y, 102, 80, 6, 5, 0x45u) || grove(x, y, 84, 80, 5, 4, 0x46u) ||
-        grove(x, y, 94, 50, 5, 4, 0x47u) || grove(x, y, 104, 54, 4, 3, 0x48u) || grove(x, y, 80, 54, 4, 3, 0x49u)) {
-        return true;
-    }
-    if (grove(x, y, 58, 80, 6, 5, 0x51u) || grove(x, y, 70, 82, 5, 4, 0x52u) || grove(x, y, 50, 84, 6, 5, 0x53u) ||
-        grove(x, y, 78, 78, 5, 4, 0x54u) || grove(x, y, 44, 78, 4, 3, 0x55u) || grove(x, y, 64, 88, 5, 4, 0x56u) ||
-        grove(x, y, 82, 86, 4, 3, 0x57u) || grove(x, y, 54, 76, 4, 3, 0x58u)) {
-        return true;
-    }
-    if (grove(x, y, 40, 34, 6, 5, 0x61u) || grove(x, y, 70, 32, 6, 5, 0x62u) || grove(x, y, 54, 30, 5, 4, 0x63u) ||
-        grove(x, y, 86, 36, 5, 4, 0x64u) || grove(x, y, 28, 32, 5, 4, 0x65u) || grove(x, y, 98, 30, 5, 4, 0x66u) ||
-        grove(x, y, 16, 36, 4, 3, 0x67u)) {
-        return true;
-    }
-
-    // Scattered small groves (2x2 / 3x3 stamps) around the opening, off the pad.
-    if ((x >= 18 && x <= 46 && y >= 44 && y <= 90) || (x >= 80 && x <= 108 && y >= 44 && y <= 90) ||
-        (x >= 46 && x <= 80 && y >= 72 && y <= 94) || (x >= 16 && x <= 104 && y >= 20 && y <= 42)) {
-        const int sx = (x / 3) * 3;
-        const int sy = (y / 3) * 3;
-        if ((hash32(sx, sy, 0x73u) % 7) == 0) {
-            const int span = 1 + static_cast<int>(hash32(sx, sy, 0x75u) % 2); // 1 or 2 => 2x2 or 3x3
-            if (x >= sx && x <= sx + span && y >= sy && y <= sy + span && !in_build_pad(sx, sy) &&
-                !in_river(sx, sy)) {
-                return true;
-            }
-        }
-    }
-
-    // River-bank belt, 1-3 tiles wide with noisy width, leaving a gap at
-    // the teaching park site north of the field.
-    const bool park_gap = x >= 56 && x <= 60 && y >= 49 && y <= 52;
-    if (!park_gap) {
-        int bank_d = 0;
-        for (int d = 1; d <= 3; ++d) {
-            if (in_river(x, y - d) || in_river(x, y + d) || in_river(x - d, y) || in_river(x + d, y) ||
-                in_river(x - d, y - d) || in_river(x + d, y - d) || in_river(x - d, y + d) || in_river(x + d, y + d)) {
-                bank_d = d;
-                break;
-            }
-        }
-        if (bank_d == 1) {
-            return true;
-        }
-        if (bank_d == 2 && (hash32(x, y, 0x51edu) % 5) < 4) {
-            return true;
-        }
-        if (bank_d == 3 && (hash32(x, y, 0x0a11u) % 3) != 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-char terrain_at(int x, int y)
-{
-    if (in_river(x, y)) {
-        return 'W';
-    }
-    if (in_woods(x, y)) {
-        return 'T';
-    }
-    return 'L';
-}
 
 int write_trimmed(Micropolis &sim, const std::string &out)
 {
@@ -186,69 +52,23 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "usage: %s <output.cty> [preview.ppm]\n", argv[0]);
         return 2;
     }
-    mapgen::Builder b;
-    b.name = "learn_map";
-    b.terrain_at = terrain_at;
-    b.sim.setEnableDisasters(false);
-    b.sim.setGameLevel(LEVEL_EASY);
-    b.sim.setFunds(LEARN_TO_PLAY_FUNDS);
-    b.sim.setCleanCityName("Brookside");
-    b.sim.cityTime = ((1900 - 1900) * 48) + 2;
-    b.paint_terrain();
 
-    // Knock back plus-shaped one-tile stubs left by compact ellipses and
-    // the cardinal autotile table, then re-run edge smoothing.
-    auto is_tree = [&](int x, int y) {
-        if (!Micropolis::testBounds(x, y)) {
-            return false;
-        }
-        const MapTile t = b.tile(x, y);
-        return t >= TREEBASE && t <= WOODS;
-    };
-    for (int pass = 0; pass < 4; ++pass) {
-        std::vector<int> drop;
-        for (int x = 0; x < W; ++x) {
-            for (int y = 0; y < H; ++y) {
-                if (!is_tree(x, y)) {
-                    continue;
-                }
-                const int n = (is_tree(x, y - 1) ? 1 : 0) + (is_tree(x, y + 1) ? 1 : 0) + (is_tree(x - 1, y) ? 1 : 0) +
-                              (is_tree(x + 1, y) ? 1 : 0);
-                if (n < 2) {
-                    drop.push_back(y * W + x);
-                }
-            }
-        }
-        if (drop.empty()) {
-            break;
-        }
-        for (int at : drop) {
-            b.sim.map[at % W][at / W] = DIRT;
-        }
-    }
-    {
-        std::vector<unsigned short> tiles(static_cast<std::size_t>(W * H), DIRT);
-        for (int x = 0; x < W; ++x) {
-            for (int y = 0; y < H; ++y) {
-                tiles[static_cast<std::size_t>(y * W + x)] = static_cast<unsigned short>(b.sim.map[x][y] & LOMASK);
-            }
-        }
-        terrain_paint::fix_edges(tiles, W, H, 0, 0, W - 1, H - 1);
-        for (int x = 0; x < W; ++x) {
-            for (int y = 0; y < H; ++y) {
-                if (in_build_pad(x, y)) {
-                    b.sim.map[x][y] = DIRT;
-                } else {
-                    b.sim.map[x][y] = tiles[static_cast<std::size_t>(y * W + x)];
-                }
-            }
-        }
-    }
+    Micropolis sim;
+    sim.setEnableDisasters(false);
+    sim.setGameLevel(LEVEL_EASY);
+    sim.terrainCreateIsland = tutorial::kMapTerrainDefault;
+    sim.terrainCurveLevel = tutorial::kMapTerrainDefault;
+    sim.terrainLakeLevel = tutorial::kMapTerrainDefault;
+    sim.terrainTreeLevel = tutorial::kMapTerrainDefault;
+    sim.generateMap(tutorial::kMapSeed);
+    sim.setFunds(LEARN_TO_PLAY_FUNDS);
+    sim.setCleanCityName("Brookside");
+    sim.cityTime = ((1900 - 1900) * 48) + 2;
 
     int land = 0, water = 0, trees = 0, parks = 0;
-    for (int x = 0; x < W; ++x) {
-        for (int y = 0; y < H; ++y) {
-            const MapTile t = b.tile(x, y);
+    for (int x = 0; x < WORLD_W; ++x) {
+        for (int y = 0; y < WORLD_H; ++y) {
+            const MapTile t = static_cast<MapTile>(sim.map[x][y] & LOMASK);
             if (t >= WATER_LOW && t <= WATER_HIGH) {
                 ++water;
             } else if (t >= TREEBASE && t <= WOODS) {
@@ -264,42 +84,73 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "learn_map: starting woods spilled into park tiles\n");
         return 1;
     }
-    if (land < 4000 || water < 200 || trees < 200) {
+    if (land < 2000 || water < 200 || trees < 200) {
         std::fprintf(stderr, "learn_map: terrain looks wrong (land %d water %d trees %d)\n", land, water, trees);
         return 1;
     }
-    // The reserved pad south of the river must stay buildable dirt.
+
+    auto is_dirt = [&](int x, int y) {
+        return Micropolis::testBounds(x, y) && (sim.map[x][y] & LOMASK) == DIRT;
+    };
     int field = 0;
     int pad = 0;
-    for (int x = 48; x <= 76; ++x) {
-        for (int y = 51; y <= 70; ++y) {
+    for (int x = tutorial::kPadX0; x <= tutorial::kPadX1; ++x) {
+        for (int y = tutorial::kPadY0; y <= tutorial::kPadY1; ++y) {
             ++pad;
-            if (b.dirt(x, y)) {
+            if (is_dirt(x, y)) {
                 ++field;
             }
         }
     }
-    if (field < 400 || field != pad) {
-        std::fprintf(stderr, "learn_map: open field is too tight or has non-dirt tiles (%d of %d)\n", field, pad);
+    if (field != pad || pad == 0) {
+        std::fprintf(stderr, "learn_map: opening pad is not clear dirt (%d of %d)\n", field, pad);
         return 1;
     }
+    for (int x = tutorial::kRoadX0; x <= tutorial::kRoadX1; ++x) {
+        if (!is_dirt(x, tutorial::kRoadY)) {
+            std::fprintf(stderr, "learn_map: starter road line is not dirt at %d,%d\n", x, tutorial::kRoadY);
+            return 1;
+        }
+    }
+    if (!is_dirt(tutorial::kParkX, tutorial::kParkY) || !is_dirt(tutorial::kPlantX, tutorial::kPlantY)) {
+        std::fprintf(stderr, "learn_map: park or power-plant site is not dirt\n");
+        return 1;
+    }
+
     int vis_trees = 0;
+    int vis_water = 0;
     int vis_tiles = 0;
-    for (int x = 24; x < 97; ++x) {
-        for (int y = 38; y < 83; ++y) {
+    const int vx0 = tutorial::kFieldX - 34;
+    const int vx1 = tutorial::kFieldX + 38;
+    const int vy0 = tutorial::kFieldY - 20;
+    const int vy1 = tutorial::kFieldY + 24;
+    for (int x = vx0; x <= vx1; ++x) {
+        for (int y = vy0; y <= vy1; ++y) {
+            if (!Micropolis::testBounds(x, y)) {
+                continue;
+            }
             ++vis_tiles;
-            const MapTile t = b.tile(x, y);
+            const MapTile t = static_cast<MapTile>(sim.map[x][y] & LOMASK);
             if (t >= TREEBASE && t <= WOODS) {
                 ++vis_trees;
+            } else if (t >= WATER_LOW && t <= WATER_HIGH) {
+                ++vis_water;
             }
         }
     }
-    const int vis_pct = vis_tiles > 0 ? (vis_trees * 100) / vis_tiles : 0;
-    std::fprintf(stderr, "learn_map: land %d, water %d, trees %d, field %d, view-green %d/%d (%d%%)\n", land, water,
-                 trees, field, vis_trees, vis_tiles, vis_pct);
+    const int vis_tree_pct = vis_tiles > 0 ? (vis_trees * 100) / vis_tiles : 0;
+    const int vis_water_pct = vis_tiles > 0 ? (vis_water * 100) / vis_tiles : 0;
+    std::fprintf(stderr,
+                 "learn_map: seed %d, knobs island/rivers/lakes/trees = %d/%d/%d/%d\n"
+                 "learn_map: land %d, water %d, trees %d, pad %d dirt at (%d,%d)-(%d,%d)\n"
+                 "learn_map: opening view trees %d/%d (%d%%), water %d/%d (%d%%)\n",
+                 tutorial::kMapSeed, tutorial::kMapTerrainDefault, tutorial::kMapTerrainDefault,
+                 tutorial::kMapTerrainDefault, tutorial::kMapTerrainDefault, land, water, trees, field,
+                 tutorial::kPadX0, tutorial::kPadY0, tutorial::kPadX1, tutorial::kPadY1, vis_trees, vis_tiles,
+                 vis_tree_pct, vis_water, vis_tiles, vis_water_pct);
 
     if (argc > 2 && argv[2][0] != '\0') {
-        mapgen::write_preview(b.sim, argv[2]);
+        mapgen::write_preview(sim, argv[2]);
     }
-    return write_trimmed(b.sim, argv[1]);
+    return write_trimmed(sim, argv[1]);
 }

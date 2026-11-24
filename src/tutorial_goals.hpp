@@ -21,9 +21,44 @@ inline constexpr int kRoadTiles = 12;
 inline constexpr int kParkTiles = 1;
 inline constexpr int kPopulationGoal = LEARN_TO_PLAY_POPULATION_GOAL;
 
-// South of the river, in the open field the map opens on.
-inline constexpr int kFieldX = 58;
-inline constexpr int kFieldY = 58;
+// Brookside's landscape is seed 6363 of the built-in generateMap, with
+// New City default knobs (island, rivers, lakes, and trees all -1). The
+// camera opens on a dirt clearing beside the river.
+inline constexpr int kMapSeed = 6363;
+inline constexpr int kMapTerrainDefault = -1;
+
+inline constexpr int kFieldX = 62;
+inline constexpr int kFieldY = 38;
+// Win shots pan a little east so the grown city stays in the frame.
+inline constexpr int kWinViewX = 80;
+inline constexpr int kWinViewY = 40;
+inline constexpr int kPadX0 = 49;
+inline constexpr int kPadY0 = 28;
+inline constexpr int kPadX1 = 76;
+inline constexpr int kPadY1 = 47;
+inline constexpr int kRoadX0 = 50;
+inline constexpr int kRoadX1 = 74;
+inline constexpr int kRoadY = 38;
+inline constexpr int kPlantX = 52;
+inline constexpr int kPlantY = 44;
+inline constexpr int kParkX = 58;
+inline constexpr int kParkY = 32;
+inline constexpr int kZoneY = 36;
+inline constexpr int kResX = 58;
+inline constexpr int kComX = 62;
+inline constexpr int kIndX = 66;
+inline constexpr int kPoliceX = 56;
+inline constexpr int kFireX = 61;
+inline constexpr int kSafetyY = 42;
+inline constexpr int kMidResWest = 54;
+inline constexpr int kMidResEast = 70;
+inline constexpr int kMidComWest = 50;
+inline constexpr int kMidComEast = 74;
+// Covers the teaching pad and the east win-city grid (all land).
+inline constexpr int kTownX0 = 46;
+inline constexpr int kTownX1 = 110;
+inline constexpr int kTownY0 = 24;
+inline constexpr int kTownY1 = 56;
 
 enum Step : int {
     Roads = 0,
