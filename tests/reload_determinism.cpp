@@ -174,13 +174,18 @@ int main()
     }
 
     // A disaster sprite must come back too, not only the everyday traffic.
-    session.disaster_tornado();
-    run_ticks(session, 8);
+    // Review nov24 #14: the engine RNG is seeded from the clock and a
+    // tornado can blow itself out within a few ticks, so ask again (up to
+    // ten times) until one is on the map.
     bool saw_tornado = false;
-    for (const auto &dot : session.sprites()) {
-        if (dot.type == SPRITE_TORNADO) {
-            saw_tornado = true;
-            break;
+    for (int attempt = 0; attempt < 10 && !saw_tornado; ++attempt) {
+        session.disaster_tornado();
+        run_ticks(session, 8);
+        for (const auto &dot : session.sprites()) {
+            if (dot.type == SPRITE_TORNADO) {
+                saw_tornado = true;
+                break;
+            }
         }
     }
     if (!saw_tornado) {
