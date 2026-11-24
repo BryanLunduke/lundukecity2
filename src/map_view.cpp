@@ -1866,39 +1866,88 @@ void MapView::draw_city_events(cairo_t *cr, double sprite_to_source, bool dusk)
             }
         }
         cairo_fill(cr);
+        // Review nov24 #10: one clip and one stroke for the whole band
+        // instead of a save/clip/stroke/restore per tile edge. The hatching
+        // is the lines x + y = 4k, the same lines every edge drew. Where two
+        // edges of one tile meet, their bands overlapped and were hatched
+        // twice; a second pass over just those corners keeps that look.
         static const int kStep[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-        for (int x = 0; x < CitySession::kWorldW; ++x) {
-            for (int y = 0; y < CitySession::kWorldH; ++y) {
-                if (events.zoneTile[x][y] == 0) {
-                    continue;
+        auto open_side = [&](int x, int y, int side) {
+            const int nx = x + kStep[side][0];
+            const int ny = y + kStep[side][1];
+            return !(nx < 0 || ny < 0 || nx >= CitySession::kWorldW || ny >= CitySession::kWorldH ||
+                     events.zoneTile[nx][ny] != 0);
+        };
+        double x0 = 1e9;
+        double y0 = 1e9;
+        double x1 = -1e9;
+        double y1 = -1e9;
+        bool any_band = false;
+        bool any_corner = false;
+        cairo_new_path(cr);
+        for (int pass = 0; pass < 2; ++pass) {
+            if (pass == 1) {
+                if (!any_corner) {
+                    break;
                 }
-                for (int side = 0; side < 4; ++side) {
-                    const int nx = x + kStep[side][0];
-                    const int ny = y + kStep[side][1];
-                    if (nx < 0 || ny < 0 || nx >= CitySession::kWorldW || ny >= CitySession::kWorldH ||
-                        events.zoneTile[nx][ny] != 0) {
+                cairo_new_path(cr);
+            }
+            for (int x = 0; x < CitySession::kWorldW; ++x) {
+                for (int y = 0; y < CitySession::kWorldH; ++y) {
+                    if (events.zoneTile[x][y] == 0) {
                         continue;
                     }
-                    // A 4px band along this edge, inside the tile.
-                    const double bx = x * 16.0 + (side == 1 ? 12.0 : 0.0);
-                    const double by = y * 16.0 + (side == 2 ? 12.0 : 0.0);
-                    const double bw = (side == 0 || side == 2) ? 16.0 : 4.0;
-                    const double bh = (side == 0 || side == 2) ? 4.0 : 16.0;
-                    cairo_save(cr);
-                    cairo_rectangle(cr, bx, by, bw, bh);
-                    cairo_clip(cr);
-                    cairo_set_source_rgba(cr, 0.80, 0.12, 0.06, 0.45);
-                    cairo_set_line_width(cr, 1.5);
-                    for (double d = -16.0; d < 20.0; d += 4.0) {
-                        cairo_move_to(cr, bx + d, by + bh);
-                        cairo_line_to(cr, bx + d + bh, by);
-                        cairo_move_to(cr, bx + d, by + 16.0);
-                        cairo_line_to(cr, bx + d + 16.0, by);
+                    bool open[4];
+                    for (int side = 0; side < 4; ++side) {
+                        open[side] = open_side(x, y, side);
                     }
-                    cairo_stroke(cr);
-                    cairo_restore(cr);
+                    for (int side = 0; side < 4; ++side) {
+                        if (!open[side]) {
+                            continue;
+                        }
+                        if (pass == 0) {
+                            // A 4px band along this edge, inside the tile.
+                            const double bx = x * 16.0 + (side == 1 ? 12.0 : 0.0);
+                            const double by = y * 16.0 + (side == 2 ? 12.0 : 0.0);
+                            const double bw = (side == 0 || side == 2) ? 16.0 : 4.0;
+                            const double bh = (side == 0 || side == 2) ? 4.0 : 16.0;
+                            cairo_rectangle(cr, bx, by, bw, bh);
+                            any_band = true;
+                            x0 = std::min(x0, bx);
+                            y0 = std::min(y0, by);
+                            x1 = std::max(x1, bx + bw);
+                            y1 = std::max(y1, by + bh);
+                        }
+                        // This edge and the next one round meet in a corner.
+                        const int next = (side + 1) % 4;
+                        if (open[next]) {
+                            any_corner = true;
+                            if (pass == 1) {
+                                // Sides 0/1 top-right, 1/2 bottom-right,
+                                // 2/3 bottom-left, 3/0 top-left.
+                                const double cx = x * 16.0 + ((side == 0 || side == 1) ? 12.0 : 0.0);
+                                const double cy = y * 16.0 + ((side == 1 || side == 2) ? 12.0 : 0.0);
+                                cairo_rectangle(cr, cx, cy, 4.0, 4.0);
+                            }
+                        }
+                    }
                 }
             }
+            if (!any_band) {
+                cairo_new_path(cr);
+                break;
+            }
+            cairo_save(cr);
+            cairo_clip(cr);
+            cairo_set_source_rgba(cr, 0.80, 0.12, 0.06, 0.45);
+            cairo_set_line_width(cr, 1.5);
+            const double first = std::floor((x0 + y0) / 4.0) * 4.0 - 4.0;
+            for (double c = first; c <= x1 + y1 + 4.0; c += 4.0) {
+                cairo_move_to(cr, c - (y1 + 2.0), y1 + 2.0);
+                cairo_line_to(cr, c - (y0 - 2.0), y0 - 2.0);
+            }
+            cairo_stroke(cr);
+            cairo_restore(cr);
         }
         cairo_restore(cr);
     }
