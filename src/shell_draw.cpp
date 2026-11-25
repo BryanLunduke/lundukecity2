@@ -2275,7 +2275,14 @@ void Shell::draw_dialog(cairo_t *cr)
         const double height = std::min(static_cast<double>(dp(560)), std::max(1.0, band_h - 2.0 * margin));
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Remap controls");
-        const std::string help = "A or Enter listens. Taken bindings swap. Backspace clears.";
+        // Review nov25 #18: a pad (or a Deck) reads its own buttons here, not
+        // Enter and Backspace. Clearing is the row's clear button; while a
+        // row listens, every button press is the new binding.
+        const std::string help =
+            (gamepad_nav_ || deck_)
+                ? std::string(glyph_for(PadConfirm)) + " listens, then press the new button. Taken bindings swap. " +
+                      glyph_for(PadQuery) + " clears a row."
+                : std::string("A or Enter listens. Taken bindings swap. Backspace clears.");
         const double help_w = std::max(1.0, panel.w - 2 * margin);
         const double help_h = text_block_height(help, help_w);
         label(cr, ui_font(), help, panel.x + margin, panel.y + dp(46), static_cast<int>(help_w));
@@ -5045,7 +5052,9 @@ std::string Shell::dialog_title_hint() const
     }
     if (dialog_ == Dialog::Bindings) {
         if (bind_listen_) {
-            return pad ? hint_join({"Press a button", hint_button(b, "cancels"), "Backspace clears"})
+            // No "Backspace clears" on a pad: there is no pad button for it
+            // while listening (any press binds). X clears from the row.
+            return pad ? hint_join({"Press a button", hint_button(b, "cancels")})
                        : "Press a key. Esc cancels. Backspace clears";
         }
         if (focus_id_ == kCancel) {
