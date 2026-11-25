@@ -1942,6 +1942,9 @@ void Shell::draw_dialog(cairo_t *cr)
             {
                 bool seed_ok = true;
                 const char *live = city_seed_live_message(field_b_, seed_ok);
+                if (seed_ok && painted != nullptr) {
+                    live = city_seed_edited_message();
+                }
                 // A typo's live line already names New terrain, so do not
                 // stack the rule under it and squeeze out the map at 960.
                 const std::string shown = live;

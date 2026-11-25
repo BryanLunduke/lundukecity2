@@ -237,6 +237,15 @@ int main()
             remove_temp_dir(dir);
             return fail("a whole number should be accepted as you type");
         }
+        {
+            // Review nov25 #13: with an edited map the seed line says the
+            // seed is not used, not that a new one will be chosen.
+            const std::string edited = city_seed_edited_message();
+            if (edited.find("edited map") == std::string::npos || edited.find("new seed") != std::string::npos) {
+                remove_temp_dir(dir);
+                return fail("the edited-map seed line should say the seed is not used");
+            }
+        }
         if (city_seed_live_message("12ab", ok) == nullptr || ok) {
             remove_temp_dir(dir);
             return fail("a typo should be rejected as you type");
