@@ -3009,7 +3009,9 @@ std::string CitySession::scenario_progress() const
         return {};
     }
     if (id == SC_LEARN_TO_PLAY) {
-        return tutorial::progress_line(tutorial_step_);
+        tutorial::Status roads;
+        roads.roads = tutorial_roads_;
+        return tutorial::progress_line(tutorial_step_, &roads);
     }
     const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
     const std::string time = scenario_clock_text();
@@ -4787,6 +4789,7 @@ void CitySession::reset_tutorial()
     tutorial_meter_.clear();
     tutorial_meter_short_.clear();
     tutorial_meter_compact_.clear();
+    tutorial_roads_ = 0;
 }
 
 void CitySession::note_tutorial_inspect()
@@ -4828,6 +4831,7 @@ void CitySession::refresh_tutorial(bool announce)
     tutorial_meter_ = tutorial::meter(step, status);
     tutorial_meter_short_ = tutorial::meter_short(step, status);
     tutorial_meter_compact_ = tutorial::meter_compact(step, status);
+    tutorial_roads_ = status.roads;
     if (!announce) {
         tutorial_announced_ = step;
         return;

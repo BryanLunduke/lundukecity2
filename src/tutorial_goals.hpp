@@ -12,12 +12,13 @@
 // (that header has no include guard).
 
 #include <cstdint>
+#include <algorithm>
 #include <string>
 
 namespace tutorial {
 
 inline constexpr int kStepCount = 7;
-inline constexpr int kRoadTiles = 12;
+inline constexpr int kRoadTiles = 12;  // Step 1's hint says "12 tiles"; keep them in step.
 inline constexpr int kParkTiles = 1;
 inline constexpr int kPopulationGoal = LEARN_TO_PLAY_POPULATION_GOAL;
 
@@ -110,8 +111,9 @@ inline const char *hint(int step)
 {
     switch (step) {
     case Roads:
-        return "Select the Road tool and draw a road across the open field. "
-               "People need roads to reach their homes and jobs.";
+        // Release nov24 #4: say how long (kRoadTiles).
+        return "Select the Road tool and draw a road at least 12 tiles long "
+               "across the open field. People need roads to reach their homes and jobs.";
     case Power:
         return "A city needs electricity. Place a power plant on open land, "
                "then run power lines toward where you will zone.";
@@ -244,6 +246,13 @@ inline std::string grouped_count(std::int64_t value)
     return negative ? "-" + digits : digits;
 }
 
+// "8/12": road tiles laid toward Step 1, capped at the goal.
+inline std::string road_count(const Status &s)
+{
+    const int roads = std::max(0, std::min(s.roads, kRoadTiles));
+    return std::to_string(roads) + "/" + std::to_string(kRoadTiles);
+}
+
 inline std::string meter(int step, const Status &s)
 {
     if (step >= kStepCount) {
@@ -252,6 +261,11 @@ inline std::string meter(int step, const Status &s)
     if (step == Population) {
         const std::int64_t people = s.population > 0 ? s.population : 0;
         return "Step 7 of 7 · " + grouped_count(people) + " → 2,000";
+    }
+    if (step == Roads) {
+        // Release nov24 #4: the road count shows while it grows.
+        // Narrow enough that the band keeps the CITY column at 1011 px.
+        return "1/7 · Roads " + road_count(s);
     }
     return "Step " + std::to_string(step + 1) + " of 7 · " + title(step);
 }
@@ -265,6 +279,9 @@ inline std::string meter_short(int step, const Status &s)
         const std::int64_t people = s.population > 0 ? s.population : 0;
         return grouped_count(people) + "→2,000";
     }
+    if (step == Roads) {
+        return "1/7 Roads " + road_count(s);
+    }
     return std::to_string(step + 1) + "/7 " + title(step);
 }
 
@@ -277,15 +294,22 @@ inline std::string meter_compact(int step, const Status &s)
         const std::int64_t people = s.population > 0 ? s.population : 0;
         return grouped_count(people) + "→2k";
     }
+    if (step == Roads) {
+        return "1/7 " + road_count(s);
+    }
     return std::to_string(step + 1) + "/7";
 }
 
-inline std::string progress_line(int step)
+inline std::string progress_line(int step, const Status *s = nullptr)
 {
     if (step >= kStepCount) {
         return "You reached 2,000 people. There is no deadline.";
     }
-    return std::string("Step ") + std::to_string(step + 1) + " of 7: " + title(step) + ". " + hint(step);
+    std::string line = std::string("Step ") + std::to_string(step + 1) + " of 7: " + title(step) + ". " + hint(step);
+    if (step == Roads && s != nullptr) {
+        line += " Road tiles so far: " + road_count(*s) + ".";
+    }
+    return line;
 }
 
 // Count buildings and zones from a raw map. A 3x3 zone is counted once from

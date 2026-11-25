@@ -762,6 +762,8 @@ private:
     std::string tutorial_meter_;
     std::string tutorial_meter_short_;
     std::string tutorial_meter_compact_;
+    // Road tiles at the last refresh, for the Step 1 hint (release nov24 #4).
+    int tutorial_roads_ = 0;
     void reset_tutorial();
 
     bool query_has_tile_ = false;

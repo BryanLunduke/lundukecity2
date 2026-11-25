@@ -73,6 +73,19 @@ int main()
             return fail(25, "Step 6 does not say where Inspect is");
         }
     }
+    // Release-readiness #4: Step 1 says how long, and the meter counts.
+    {
+        tutorial::Status s;
+        s.roads = 8;
+        const std::string line = tutorial::progress_line(tutorial::Roads, &s);
+        if (tutorial::meter(tutorial::Roads, s) != "1/7 · Roads 8/12" ||
+            tutorial::meter_short(tutorial::Roads, s) != "1/7 Roads 8/12" ||
+            tutorial::meter_compact(tutorial::Roads, s) != "1/7 8/12" ||
+            line.find("at least 12 tiles") == std::string::npos || line.find("so far: 8/12") == std::string::npos) {
+            std::fprintf(stderr, "'%s' / '%s'\n", tutorial::meter(tutorial::Roads, s).c_str(), line.c_str());
+            return fail(26, "the road count is not shown");
+        }
+    }
 
     // #6: grouped digits in every meter form.
     tutorial::Status s;
