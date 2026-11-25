@@ -7,6 +7,7 @@
 #include "micropolis.h"
 #include "map_fit.hpp"
 #include "tutorial_goals.hpp"
+#include "controls_page.hpp"
 
 #include <cstdio>
 #include <string>
@@ -71,12 +72,32 @@ void pad_steps()
           "unbound buttons keep the desktop text");
 }
 
+// #4: How to Play has a Controller topic and button words with a pad.
+void how_to_play_pad()
+{
+    ControlsPadNames deck;
+    deck.left = "L1";
+    deck.right = "R1";
+    deck.menu = "\u2630";
+    const std::string desk = how_to_play_text();
+    check(desk.find("Controller") == std::string::npos, "desktop How to Play has no Controller topic");
+    check(has(desk, "Right-click"), "desktop keeps the mouse wording");
+    const std::string pad = how_to_play_text(&deck);
+    check(has(pad, "Controller\n") && has(pad, "L1 and R1 pick a tool"), "pad How to Play has a Controller topic");
+    check(has(pad, "Press X for Inspect") && !has(pad, "Right-click") && !has(pad, "press Q"),
+          "pad Finding your way names buttons");
+    const std::vector<HowToPlaySection> sections = how_to_play_sections(&deck);
+    check(sections.back().heading == "Touch" && sections[sections.size() - 2].heading == "Controller",
+          "Controller sits before Touch");
+}
+
 } // namespace
 
 int main()
 {
     bottom_reserve();
     pad_steps();
+    how_to_play_pad();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

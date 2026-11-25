@@ -4985,6 +4985,23 @@ const char *Shell::glyph_for(int pad_act) const
     return glyph(static_cast<SDL_GamepadButton>(binds_.pad[pad_act]));
 }
 
+ControlsPadNames Shell::controls_pad_names() const
+{
+    ControlsPadNames names;
+    auto named = [](const char *glyph) { return glyph != nullptr && glyph[0] != '\0' ? glyph : "None"; };
+    names.confirm = named(glyph_for(PadConfirm));
+    names.cancel = named(glyph_for(PadCancel));
+    names.west = named(glyph_for(PadQuery));
+    names.north = named(glyph_for(PadPause));
+    names.left = named(glyph_for(PadPrevTool));
+    names.right = named(glyph_for(PadNextTool));
+    names.menu = named(glyph_for(PadMenu));
+    names.view = named(glyph_for(PadBack));
+    names.l3 = named(glyph_for(PadOverlay));
+    names.r3 = named(glyph_for(PadCenter));
+    return names;
+}
+
 std::string Shell::pad_wording(const std::string &text) const
 {
     // Learn to Play names keys and clicks. A Deck or controller player gets

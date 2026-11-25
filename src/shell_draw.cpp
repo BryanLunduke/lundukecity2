@@ -2457,7 +2457,9 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::HowToPlay) {
         // A heading in the title colour over each topic, the same rule the
         // Controls window uses, so the two help windows read as a pair.
-        const std::vector<HowToPlaySection> sections = how_to_play_sections();
+        // A Deck or controller player gets button words and a Controller topic.
+        const ControlsPadNames pad_names = controls_pad_names();
+        const std::vector<HowToPlaySection> sections = how_to_play_sections(deck_ || gamepad_nav_ ? &pad_names : nullptr);
         const double width = message_width(win_w_, margin, dp(400), std::max(static_cast<double>(dp(880)), win_w_ - 2 * margin));
         const double inner = width - 2 * margin;
         const double head_gap = dp(4);
@@ -2955,18 +2957,7 @@ void Shell::draw_dialog(cairo_t *cr)
     }
     if (dialog_ == Dialog::Controls) {
         const std::string heading = controls_page_title(controls_page_, deck_);
-        ControlsPadNames pad_names;
-        auto named = [](const char *glyph) { return glyph != nullptr && glyph[0] != '\0' ? glyph : "None"; };
-        pad_names.confirm = named(glyph_for(PadConfirm));
-        pad_names.cancel = named(glyph_for(PadCancel));
-        pad_names.west = named(glyph_for(PadQuery));
-        pad_names.north = named(glyph_for(PadPause));
-        pad_names.left = named(glyph_for(PadPrevTool));
-        pad_names.right = named(glyph_for(PadNextTool));
-        pad_names.menu = named(glyph_for(PadMenu));
-        pad_names.view = named(glyph_for(PadBack));
-        pad_names.l3 = named(glyph_for(PadOverlay));
-        pad_names.r3 = named(glyph_for(PadCenter));
+        const ControlsPadNames pad_names = controls_pad_names();
         const ControlsKeyText key_text = controls_keys();
         const double width = message_width(win_w_, margin, dp(520), dp(1000));
         const double inner = width - 2 * margin;

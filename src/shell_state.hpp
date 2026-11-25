@@ -379,6 +379,7 @@ private:
     bool file_row_selected() const;
     std::string chord_token(SDL_Keycode key, int mods) const;
     ControlsKeyText controls_keys() const;
+    ControlsPadNames controls_pad_names() const;
     void schedule_autosave();
     bool adjust_focused_slider(int direction, int coarse = 1);
     bool nudge_file_list(int delta, bool page, bool force);

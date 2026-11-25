@@ -46,16 +46,34 @@ inline int controls_page_count()
     return 3;
 }
 
+// Names come from Shell::glyph so a Deck says L1 and a PlayStation pad says
+// its own face symbols. The back grips and the Guide button are not mapped,
+// so this page does not mention them.
+struct ControlsPadNames {
+    const char *confirm = "A";
+    const char *cancel = "B";
+    const char *west = "X";
+    const char *north = "Y";
+    const char *left = "LB";
+    const char *right = "RB";
+    const char *menu = "Start";
+    const char *view = "Back";
+    const char *l3 = "LS";
+    const char *r3 = "RS";
+};
+
 struct HowToPlaySection {
-    const char *heading;
-    const char *body;
+    std::string heading;
+    std::string body;
 };
 
 // One screen on first launch: zones, power, roads, the demand meters, and the
 // budget. Each topic is a short heading over a sentence or two.
-inline std::vector<HowToPlaySection> how_to_play_sections()
+// `pad` is set on a Deck or with a controller: "Finding your way" then names
+// buttons, and a Controller section sits before Touch.
+inline std::vector<HowToPlaySection> how_to_play_sections(const ControlsPadNames *pad = nullptr)
 {
-    return {
+    std::vector<HowToPlaySection> sections = {
         {"Zones and roads",
          "Place residential, commercial, and industrial zones. That is where the city grows. Connect them with roads."},
         {"Power",
@@ -78,12 +96,32 @@ inline std::vector<HowToPlaySection> how_to_play_sections()
          "A tap builds one tile. A drag pans the map. Hold still, then drag, to lay a line. Two fingers pan or pinch "
          "to zoom."},
     };
+    if (pad == nullptr) {
+        return sections;
+    }
+    const std::string a = pad->confirm;
+    const std::string b = pad->cancel;
+    const std::string x = pad->west;
+    const std::string y = pad->north;
+    for (HowToPlaySection &section : sections) {
+        if (section.heading == "Finding your way") {
+            section.body = "A scenario names a goal and a deadline. Press " + x + " for Inspect, then point at a tile and "
+                      "press " + a + " for its card: power, road, and why it is or is not growing. The minimap "
+                      "jumps across the city.";
+        }
+    }
+    const std::string controller = "The left stick moves the cursor and the right stick pans the map. " + std::string(pad->left) + " and " +
+                 pad->right + " pick a tool. " + a + " builds; hold it and move to lay a line. " + b +
+                 " goes back, " + y + " runs or pauses time, the triggers zoom, and " + pad->menu +
+                 " opens the menu. Help, then Controls, lists every button.";
+    sections.insert(sections.end() - 1, HowToPlaySection{"Controller", controller});
+    return sections;
 }
 
-inline std::string how_to_play_text()
+inline std::string how_to_play_text(const ControlsPadNames *pad = nullptr)
 {
     std::string text;
-    for (const HowToPlaySection &section : how_to_play_sections()) {
+    for (const HowToPlaySection &section : how_to_play_sections(pad)) {
         if (!text.empty()) {
             text += "\n\n";
         }
@@ -160,22 +198,6 @@ struct ControlsKeyText {
             }
         }
     }
-};
-
-// Names come from Shell::glyph so a Deck says L1 and a PlayStation pad says
-// its own face symbols. The back grips and the Guide button are not mapped,
-// so this page does not mention them.
-struct ControlsPadNames {
-    const char *confirm = "A";
-    const char *cancel = "B";
-    const char *west = "X";
-    const char *north = "Y";
-    const char *left = "LB";
-    const char *right = "RB";
-    const char *menu = "Start";
-    const char *view = "Back";
-    const char *l3 = "LS";
-    const char *r3 = "RS";
 };
 
 // One row of the Controls window: the key or button on the left, what it
