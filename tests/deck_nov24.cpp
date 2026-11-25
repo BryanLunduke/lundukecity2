@@ -9,6 +9,7 @@
 #include "tutorial_goals.hpp"
 #include "controls_page.hpp"
 #include "pad_feel.hpp"
+#include "pad_glyphs.hpp"
 
 #include <cstdio>
 #include <string>
@@ -103,6 +104,24 @@ void axis_noise()
     check(pad_feel::axis_wakes(true, 0.8f, 0.0f), "a trigger pull wakes");
 }
 
+// #14: an external Xbox pad on a Deck keeps LB, RB and Start.
+void deck_names()
+{
+    check(pad_uses_deck_names(true, false, 0, 0, 0, nullptr, 0), "a Deck with no pad open yet uses Deck names");
+    check(pad_uses_deck_names(true, true, 0x28de, 0x1205, SDL_GAMEPAD_TYPE_STANDARD, "Steam Deck", 0),
+          "the built-in controller uses Deck names");
+    check(pad_uses_deck_names(true, true, 0x28de, 0x11ff, SDL_GAMEPAD_TYPE_XBOX360, "Steam Virtual Gamepad", 0),
+          "the lone Steam virtual pad is the Deck");
+    check(!pad_uses_deck_names(true, true, 0x045e, 0x0b12, SDL_GAMEPAD_TYPE_XBOXONE, "Xbox Series X Controller", 1),
+          "a plugged-in Xbox pad keeps Xbox names");
+    check(!pad_uses_deck_names(true, true, 0x28de, 0x11ff, SDL_GAMEPAD_TYPE_XBOXONE, "Xbox Series X Controller", 1),
+          "an Xbox pad through Steam Input beside the Deck keeps Xbox names");
+    check(!pad_uses_deck_names(false, true, 0x28de, 0x1205, SDL_GAMEPAD_TYPE_STANDARD, "Steam Deck", 0),
+          "a desktop session never uses Deck names");
+    const FaceGlyphs xbox = face_glyphs(false, false, SDL_GAMEPAD_TYPE_XBOXONE);
+    check(std::string(xbox.left) == "LB" && std::string(xbox.menu) == "Start", "Xbox names are LB and Start");
+}
+
 } // namespace
 
 int main()
@@ -111,6 +130,7 @@ int main()
     pad_steps();
     how_to_play_pad();
     axis_noise();
+    deck_names();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

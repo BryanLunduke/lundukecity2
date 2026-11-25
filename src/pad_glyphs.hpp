@@ -6,6 +6,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstring>
+
 // Face names follow the pad SDL reports. A Deck session used to ignore that
 // and keep Xbox letters even after a PlayStation pad was plugged in.
 
@@ -29,6 +31,30 @@ inline bool pad_is_playstation(int gamepad_type, int south_label)
         return true;
     }
     return south_label == SDL_GAMEPAD_BUTTON_LABEL_CROSS;
+}
+
+// A Deck session labels the Deck's own buttons (L1, R1, the menu button)
+// only for the built-in controller. A plugged-in Xbox pad keeps LB, RB and
+// Start. In game mode Steam shows every pad as a virtual one (vendor 28de),
+// so a virtual Xbox-type pad beside another pad is the external one; alone,
+// it is the Deck. `others` counts the other open pads.
+inline bool pad_uses_deck_names(bool deck_session, bool have_pad, unsigned vendor, unsigned product, int gamepad_type,
+                                const char *name, int others)
+{
+    if (!deck_session) {
+        return false;
+    }
+    if (!have_pad) {
+        return true;
+    }
+    if ((vendor == 0x28de && product == 0x1205) || (name != nullptr && std::strstr(name, "Deck") != nullptr)) {
+        return true;
+    }
+    if (vendor != 0x28de) {
+        return false;
+    }
+    const bool xbox_type = gamepad_type == SDL_GAMEPAD_TYPE_XBOX360 || gamepad_type == SDL_GAMEPAD_TYPE_XBOXONE;
+    return !(xbox_type && others > 0);
 }
 
 inline FaceGlyphs face_glyphs(bool playstation, bool deck, int gamepad_type)

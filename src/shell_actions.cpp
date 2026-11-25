@@ -4564,7 +4564,16 @@ const char *Shell::glyph(SDL_GamepadButton button) const
         south = SDL_GetGamepadButtonLabel(pad_, SDL_GAMEPAD_BUTTON_SOUTH);
     }
     const bool playstation = pad_ != nullptr && pad_is_playstation(type, south);
-    const FaceGlyphs glyphs = face_glyphs(playstation, deck_, type);
+    bool deck_names = deck_;
+    if (deck_ && pad_ != nullptr) {
+        int others = 0;
+        for (SDL_Gamepad *have : pads_) {
+            others += have != nullptr && have != pad_ ? 1 : 0;
+        }
+        deck_names = pad_uses_deck_names(true, true, SDL_GetGamepadVendor(pad_), SDL_GetGamepadProduct(pad_), type,
+                                         SDL_GetGamepadName(pad_), others);
+    }
+    const FaceGlyphs glyphs = face_glyphs(playstation, deck_names, type);
     switch (button) {
     case SDL_GAMEPAD_BUTTON_SOUTH:
         return glyphs.south;

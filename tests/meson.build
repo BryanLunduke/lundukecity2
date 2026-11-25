@@ -1421,6 +1421,6 @@ deck_nov24 = executable(
   'deck_nov24',
   'deck_nov24.cpp',
   include_directories: include_directories('../src'),
-  dependencies: [micropolis_dep],
+  dependencies: [micropolis_dep, sdl3_dep],
 )
 test('deck_nov24', deck_nov24)
