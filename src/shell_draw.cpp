@@ -4978,12 +4978,23 @@ std::string Shell::dialog_title_hint() const
         return pad ? with_b(hint_button(a, "types"), typed, hint_button(menu, "confirms")) : "Enter types. Esc closes";
     }
     if (field) {
+        // On a pad, A on a text field does not type (the keys do): it is the
+        // dialog's action (activate_focus), except on the save name, where it
+        // goes to the keys. The header said "A types" there (review nov25).
+        const char *a_verb = "types";
+        if (dialog_ == Dialog::NewCity) {
+            a_verb = new_page_ == 0 ? "goes on" : "generates";
+        } else if (dialog_ == Dialog::Rename || dialog_ == Dialog::FileRename) {
+            a_verb = "renames";
+        } else if (dialog_ == Dialog::Files && files_save_ && osk_visible()) {
+            a_verb = "opens the keys";
+        }
         if (dialog_ == Dialog::NewCity && new_page_ > 0 && focus_id_ == kFieldSeed && field_b_ == "auto") {
-            return pad ? hint_join({hint_button(a, "types"), hint_button(b, "goes back"), hint_button(menu, "confirms")})
+            return pad ? hint_join({hint_button(a, a_verb), hint_button(b, "goes back"), hint_button(menu, "confirms")})
                        : "Type here. Enter confirms. Esc goes back";
         }
         const std::string &typed = focus_id_ == kFieldSeed ? field_b_ : field_a_;
-        return pad ? with_b(hint_button(a, "types"), typed, hint_button(menu, "confirms"))
+        return pad ? with_b(hint_button(a, a_verb), typed, hint_button(menu, "confirms"))
                    : "Type here. Enter confirms. Esc closes";
     }
     if (focus_id_ >= kSlider && focus_id_ < kSlider + 8) {

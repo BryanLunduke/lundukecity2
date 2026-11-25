@@ -738,6 +738,12 @@ void Shell::drive_ui_test()
         return;
     }
     case 8: {
+        // A pad opens New City on the first key, so the first A types
+        // (review nov25 #17).
+        if (show_osk() && focus_id_ != kOsk) {
+            fail("pad-opened New City starts on " + std::to_string(focus_id_) + ", not the keyboard");
+            return;
+        }
         int key_count = 0;
         osk_keys(key_count);
         std::vector<Hotspot> keys;

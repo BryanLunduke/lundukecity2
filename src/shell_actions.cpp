@@ -550,10 +550,19 @@ void Shell::open_dialog(Dialog dialog, bool prompted)
         new_trees_ = CitySession::kTerrainDefault;
         focus_id_ = kFieldName;
         field_select_all(field_a_, field_caret_, field_anchor_);
+        // A pad starts on the keyboard's first key, lit, so the first A
+        // types (review nov25 #17: the keys showed no focus and the first
+        // A only moved to 'q').
+        if (gamepad_nav_ && show_osk()) {
+            focus_id_ = kOsk;
+        }
     } else if (dialog == Dialog::Rename) {
         field_a_ = session_.city_name();
         focus_id_ = kFieldName;
         field_select_all(field_a_, field_caret_, field_anchor_);
+        if (gamepad_nav_ && show_osk()) {
+            focus_id_ = kOsk;
+        }
     } else if (dialog == Dialog::Files && files_save_) {
         field_a_ = proposed_city_filename(session_.city_name(), session_.save_path());
         focus_id_ = kFieldName;
