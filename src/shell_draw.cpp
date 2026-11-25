@@ -580,10 +580,10 @@ void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, con
         const bool title_hint = gamepad_nav_ || deck_ || touch_used_;
         const std::string hint = title_hint ? dialog_title_hint() : std::string();
         const TextMetrics hint_metrics = hint.empty() ? TextMetrics{} : measure_text(cr, ui_font(), hint, -1);
-        const int title_wrap =
-            static_cast<int>(std::max(40.0, w - rim * 2 - 16 - (hint.empty() ? 0 : hint_metrics.width + 16)));
-        paint_text(cr, title_font(), title, x + rim + 8, title_y, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0, title_wrap);
-        if (!hint.empty() && hint_metrics.width + 16 < w - title_metrics.width - 48) {
+        const TitleBand band = title_band(w, rim, title_metrics.width, hint_metrics.width, !hint.empty());
+        paint_text(cr, title_font(), title, x + rim + 8, title_y, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0,
+                   band.title_wrap);
+        if (band.show_hint) {
             paint_text(cr, ui_font(), hint, x + w - rim - hint_metrics.width - 8, title_y, 0xA9 / 255.0, 0xB3 / 255.0,
                        0xC2 / 255.0, -1);
         }
@@ -623,9 +623,9 @@ void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, con
     const bool title_hint = gamepad_nav_ || deck_ || touch_used_;
     const std::string hint = title_hint ? dialog_title_hint() : std::string();
     const TextMetrics hint_metrics = hint.empty() ? TextMetrics{} : measure_text(cr, ui_font(), hint, -1);
-    const int title_wrap = static_cast<int>(std::max(40.0, w - rim * 2 - 16 - (hint.empty() ? 0 : hint_metrics.width + 16)));
-    paint_text(cr, title_font(), title, x + rim + 8, title_y, title_r, title_g, title_b, title_wrap);
-    if (!hint.empty() && hint_metrics.width + 16 < w - title_metrics.width - 48) {
+    const TitleBand band = title_band(w, rim, title_metrics.width, hint_metrics.width, !hint.empty());
+    paint_text(cr, title_font(), title, x + rim + 8, title_y, title_r, title_g, title_b, band.title_wrap);
+    if (band.show_hint) {
         paint_text(cr, ui_font(), hint, x + w - rim - hint_metrics.width - 8, title_y, 0.28, 0.16, 0.06, -1);
     }
     cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);

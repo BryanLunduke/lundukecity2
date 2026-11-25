@@ -8,6 +8,7 @@
 #include "pad_feel.hpp"
 #include "welcome_rows.hpp"
 #include "controls_page.hpp"
+#include "dialog_layout.hpp"
 #include "pad_glyphs.hpp"
 
 #include <cstdio>
@@ -96,6 +97,20 @@ void controls_triggers()
     }
 }
 
+// Item 8: a title the hint does not fit beside keeps the full band.
+void title_band_width()
+{
+    // 420-wide panel, a 260-wide title and a 200-wide hint: no room for both.
+    const TitleBand crowded = title_band(420, 6, 260, 200, true);
+    check(!crowded.show_hint, "hint hidden when it does not fit beside the title");
+    check(crowded.title_wrap >= 260, "title keeps the full width when the hint is hidden");
+    const TitleBand roomy = title_band(520, 6, 160, 200, true);
+    check(roomy.show_hint, "hint shown when it fits");
+    check(roomy.title_wrap >= 160, "title still fits beside the hint");
+    const TitleBand none = title_band(420, 6, 380, 0, false);
+    check(!none.show_hint && none.title_wrap >= 380, "no hint, full width");
+}
+
 } // namespace
 
 int main()
@@ -103,6 +118,7 @@ int main()
     stick_as_dpad();
     welcome_grid();
     controls_triggers();
+    title_band_width();
     if (failures != 0) {
         std::fprintf(stderr, "deck_hw_nov25: %d failure(s)\n", failures);
         return 1;
