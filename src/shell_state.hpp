@@ -532,6 +532,9 @@ private:
     int quick_y_ = 0;
     double quick_x_ = 0;
     double quick_slot_ = 0;
+    // Touch on the handheld quick bar: a tap on a narrow slot opens its
+    // section at full size first, and a tap on a full-size slot chooses.
+    int touch_quick_shown_ = -1;
     int quick_h_ = 0;
     int hint_h_ = 0;
     // Continue card on the title screen: the last city's glance, cached.

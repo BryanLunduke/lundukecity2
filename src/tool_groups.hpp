@@ -220,6 +220,17 @@ inline QuickBarLayout quick_bar_layout(int count, int shown, double big, double 
     return out;
 }
 
+// Whether `index` is in the same quick-bar section as `shown` (Inspect,
+// the last slot, is a section of its own).
+inline bool same_section(int index, int shown)
+{
+    if (index == shown) {
+        return true;
+    }
+    const int g = group_of(index);
+    return g >= 0 && g == group_of(shown);
+}
+
 // The first tool of the section after (dir > 0) or before (dir < 0) the
 // one holding `index`, wrapping round. Inspect (count - 1, no section) is
 // its own stop after Ports. Holding L1/R1 on a pad steps by these.

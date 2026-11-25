@@ -10,6 +10,7 @@
 #include "controls_page.hpp"
 #include "pad_feel.hpp"
 #include "pad_glyphs.hpp"
+#include "tool_groups.hpp"
 
 #include <cstdio>
 #include <string>
@@ -130,6 +131,20 @@ void opening_zoom()
     check(opening_map_tile(false, 16) == 16, "the desktop keeps 16 px");
 }
 
+// #19: a touch on a narrow quick-bar slot opens its section first.
+void quick_sections()
+{
+    const tool_groups::Group &first = tool_groups::groups()[0];
+    const tool_groups::Group &second = tool_groups::groups()[1];
+    check(tool_groups::same_section(first.first, first.first + first.count - 1), "tools of one section match");
+    check(!tool_groups::same_section(first.first, second.first), "tools of two sections differ");
+    const int count = 27;
+    check(tool_groups::same_section(count - 1, count - 1), "Inspect is its own section");
+    check(!tool_groups::same_section(count - 1, first.first), "Inspect is not in Build");
+    const tool_groups::QuickBarLayout touch = tool_groups::quick_bar_layout(count, first.first, 56.0, 1280.0 - 24.0);
+    check(touch.big >= 56.0, "the open section gets full-size 56 px slots");
+}
+
 } // namespace
 
 int main()
@@ -140,6 +155,7 @@ int main()
     axis_noise();
     deck_names();
     opening_zoom();
+    quick_sections();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

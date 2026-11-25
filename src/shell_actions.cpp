@@ -792,6 +792,7 @@ unsigned Shell::locked_tool_mask() const
 
 void Shell::select_tool(int index)
 {
+    touch_quick_shown_ = -1;
     if (index < 0) {
         index = kToolCount - 1;
     }
@@ -3186,7 +3187,17 @@ void Shell::on_hotspot(int id, double x, double y)
             return;
         }
         if (id >= kQuickTool && id < kQuickTool + kToolCount) {
-            select_tool(id - kQuickTool);
+            const int index = id - kQuickTool;
+            // Touch: the narrow slots (about 44 px, 5 mm on a Deck) are too
+            // close for a fingertip. The first tap opens that section at
+            // full size; a tap on a full-size slot chooses (Deck review #19).
+            const int shown = touch_quick_shown_ >= 0 ? touch_quick_shown_ : tool_index_;
+            if (touch_used_ && handheld_ && !tool_groups::same_section(index, shown)) {
+                touch_quick_shown_ = index;
+                return;
+            }
+            touch_quick_shown_ = -1;
+            select_tool(index);
             return;
         }
         if (id == kHudZoomIn || id == kHudZoomOut) {

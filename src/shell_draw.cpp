@@ -7288,6 +7288,10 @@ void Shell::draw_handheld_hud(cairo_t *cr)
     if (!menu_.open()) {
         const int count = kToolCount;
         int shown_tool = palette_.focus() >= 0 ? palette_.focus() : tool_index_;
+        const bool finger_bar = touch_used_ && !gamepad_nav_;
+        if (finger_bar && palette_.focus() < 0 && touch_quick_shown_ >= 0) {
+            shown_tool = touch_quick_shown_;
+        }
         if (shoulder_hold_dir_ != 0 && shoulder_preview_ >= 0 && shoulder_preview_ < count) {
             shown_tool = shoulder_preview_;
         }
@@ -7300,8 +7304,9 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         double xs[kToolCount] = {};
         double ws[kToolCount] = {};
         const double big = static_cast<double>(quick_h_);
-        // The L1/R1 glyph chips sit outside the bar on both ends.
-        const double room = win_w_ - dp(96);
+        // The L1/R1 glyph chips sit outside the bar on both ends. Touch
+        // hides them and gives the bar their width (Deck review #19).
+        const double room = finger_bar ? win_w_ - dp(24) : win_w_ - dp(96);
         const tool_groups::QuickBarLayout bar = tool_groups::quick_bar_layout(count, shown_tool, big, room);
         const double bar_w = bar.total + dp(16);
         const double bar_x = (win_w_ - bar_w) / 2.0;
@@ -7405,8 +7410,8 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             push_hot(sx, quick_y_ - lift, slot, quick_h_ + lift + dp(4), kQuickTool + i);
         }
         // L1/R1 glyphs at the bar ends.
-        const std::string prev = glyph_for(PadPrevTool);
-        const std::string next = glyph_for(PadNextTool);
+        const std::string prev = finger_bar ? std::string() : glyph_for(PadPrevTool);
+        const std::string next = finger_bar ? std::string() : glyph_for(PadNextTool);
         if (!prev.empty()) {
             const TextMetrics m = measure_text(cr, tag_font(), prev, -1);
             const double kw = m.width + dp(12);
