@@ -1515,9 +1515,18 @@ void Shell::loop()
         if (pointer_down_ && pointer_on_map_ && map_.dragging()) {
             double dx = 0;
             double dy = 0;
-            const double local_x = pointer_x_ - view_x_;
-            const double local_y = pointer_y_ - view_y_;
-            if (map_.edge_scroll(local_x, local_y, view_w_, view_h_, elapsed, dx, dy)) {
+            // Measured from the open map (map_safe_rect): on a handheld the
+            // scroll starts at the top chips, the zoom buttons and the quick
+            // bar, not under them (a drag cannot reach the window edge).
+            double safe_x = 0;
+            double safe_y = 0;
+            double safe_w = 0;
+            double safe_h = 0;
+            map_safe_rect(safe_x, safe_y, safe_w, safe_h);
+            const double local_x = pointer_x_ - safe_x;
+            const double local_y = pointer_y_ - safe_y;
+            if (map_.edge_scroll(local_x, local_y, static_cast<int>(safe_w), static_cast<int>(safe_h), elapsed, dx,
+                                 dy)) {
                 scroll_x_ += dx;
                 scroll_y_ += dy;
                 clamp_scroll();

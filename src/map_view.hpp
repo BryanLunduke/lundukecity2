@@ -130,6 +130,17 @@ public:
     // ("Can't build on water", the price). The handheld raises it so a tag
     // reads at arm's length; the desktop keeps 11.
     void set_tag_min_px(double px) { tag_min_px_ = px > 1.0 ? px : 1.0; }
+    // Window-pixel rectangle the placement tags must stay inside (the map
+    // area not covered by the HUD). A tag that would sit above it flips
+    // below the footprint, and one past a side slides back in.
+    void set_tag_bounds(double left, double top, double right, double bottom)
+    {
+        tag_bounds_[0] = left;
+        tag_bounds_[1] = top;
+        tag_bounds_[2] = right;
+        tag_bounds_[3] = bottom;
+        tag_bounds_on_ = right > left && bottom > top;
+    }
 
     // Coordinates are map-local pixels (after subtracting the scroll origin).
     bool press(double x, double y);
@@ -298,6 +309,8 @@ private:
     bool night_hold_ = false;
     bool slate_tags_ = false;
     double tag_min_px_ = 11.0;
+    double tag_bounds_[4] = {0.0, 0.0, 0.0, 0.0};
+    bool tag_bounds_on_ = false;
     bool light_dirty_ = true;
     std::chrono::steady_clock::time_point light_built_{};
     cairo_surface_t *light_pixels_ = nullptr;

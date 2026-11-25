@@ -234,6 +234,12 @@ private:
     // push_* is the stick; a push outward steps off the port onto the UI.
     // Down is clamped onto the map so the cursor cannot fall into the hint bar.
     void clamp_gamepad_cursor(float push_x, float push_y);
+    // The part of the map a drag, an edge scroll and the placement tags can
+    // use: the whole view on the desktop; on a handheld the view below the
+    // top chips, left of the zoom buttons and above the quick bar.
+    void map_safe_rect(double &x, double &y, double &w, double &h) const;
+    // Puts the gamepad cursor in the middle of that area (a new city).
+    void center_pad_cursor();
     void toggle_fullscreen();
     void settle_windowed_frame();
     bool windowed_frame_current() const;

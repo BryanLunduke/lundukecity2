@@ -353,6 +353,14 @@ void Shell::layout()
     // At 1280x800 a 16px tile made 11px tags (about 9px capitals). The
     // handheld tags follow the UI text size instead.
     map_.set_tag_min_px(handheld_ ? static_cast<double>(dp(17)) : 11.0);
+    {
+        double sx = 0;
+        double sy = 0;
+        double sw = 0;
+        double sh = 0;
+        map_safe_rect(sx, sy, sw, sh);
+        map_.set_tag_bounds(sx, sy, sx + sw, sy + sh);
+    }
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
     cursor_y_ = std::max(0.0f, std::min(cursor_y_, static_cast<float>(win_h_ - 1)));
     fit_map_to_view();
@@ -4303,9 +4311,11 @@ void Shell::draw(cairo_t *cr)
                 map_.clear_hover();
             } else if (gamepad_nav_ && !pad_dragging_) {
                 map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
-            } else if (!gamepad_nav_ && handheld_ && terrain_edit_ && hit(pointer_x_, pointer_y_) != kMapId) {
-                // The editor's quick bar and chips sit over the map: no
-                // brush footprint under the pointer there.
+            } else if (!gamepad_nav_ && handheld_ && hit(pointer_x_, pointer_y_) != kMapId) {
+                // The quick bar and chips sit over the map: no footprint or
+                // brush under a touch or trackpad pointer there (it used to
+                // show "Bulldoze first" under the bar in play, not only in
+                // the terrain editor).
                 map_.clear_hover();
             } else if (!gamepad_nav_ && !pointer_down_ && pointer_x_ >= view_x_ &&
                        pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ && pointer_y_ < view_y_ + view_h_) {

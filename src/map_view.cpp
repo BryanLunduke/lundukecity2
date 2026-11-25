@@ -1259,7 +1259,7 @@ void paint_corners(cairo_t *cr, double x, double y, double w, double h, double l
 }
 
 void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::string &text, int tile, int slot,
-               bool slate, double min_px)
+               bool slate, double min_px, const double *bounds = nullptr)
 {
     if (text.empty()) {
         return;
@@ -1283,6 +1283,32 @@ void paint_tag(cairo_t *cr, double x, double y, double w, double h, const std::s
     const double cy = y + h * 0.5;
     if (cx >= tx && cx <= tx + tw && cy >= ty && cy <= ty + th) {
         tx = cx + std::max(8.0, w * 0.55);
+    }
+    if (bounds != nullptr) {
+        // Keep the tag where it can be read: not under the handheld top
+        // chips or off the top of the window (flip below the footprint),
+        // and not under the zoom buttons or past a side (slide back in).
+        double unit_x = 1.0;
+        double unit_y = 0.0;
+        cairo_user_to_device_distance(cr, &unit_x, &unit_y);
+        const double scale = unit_x > 0.01 ? unit_x : 1.0;
+        double top_x = tx;
+        double top_y = ty;
+        cairo_user_to_device(cr, &top_x, &top_y);
+        if (top_y < bounds[1]) {
+            ty = y + h + 2.0 + stack * (th + 2.0);
+        }
+        double left_x = tx;
+        double left_y = ty;
+        cairo_user_to_device(cr, &left_x, &left_y);
+        const double right_x = left_x + tw * scale;
+        if (right_x > bounds[2]) {
+            tx -= (right_x - bounds[2]) / scale;
+            left_x -= right_x - bounds[2];
+        }
+        if (left_x < bounds[0]) {
+            tx += (bounds[0] - left_x) / scale;
+        }
     }
     if (slate) {
         // Slate chip: dark plate, gold edge, cream text. Same place and size.
@@ -1422,7 +1448,8 @@ void MapView::draw_footprint(cairo_t *cr) const
                 cairo_stroke(cr);
             }
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.55), cue_.mark);
-            paint_tag(cr, x, y, w, h, live_tag, tile_size_, 0, slate_tags_, tag_min_px_);
+            paint_tag(cr, x, y, w, h, live_tag, tile_size_, 0, slate_tags_, tag_min_px_,
+                      tag_bounds_on_ ? tag_bounds_ : nullptr);
         }
         if (cue_.receipt && cue_.rwidth > 0 && cue_.rheight > 0) {
             const double x = cue_.rleft * tile;
@@ -1431,7 +1458,8 @@ void MapView::draw_footprint(cairo_t *cr) const
             const double h = cue_.rheight * tile;
             paint_corners(cr, x, y, w, h, std::min(10.0, tile * 0.6), cue_.receipt_ok ? 1 : 3);
             const int receipt_slot = cue_.active && !live_tag.empty() ? 1 : 0;
-            paint_tag(cr, x, y, w, h, cue_.receipt_text, tile_size_, receipt_slot, slate_tags_, tag_min_px_);
+            paint_tag(cr, x, y, w, h, cue_.receipt_text, tile_size_, receipt_slot, slate_tags_, tag_min_px_,
+                      tag_bounds_on_ ? tag_bounds_ : nullptr);
         }
         cairo_restore(cr);
         if (cue_.active) {

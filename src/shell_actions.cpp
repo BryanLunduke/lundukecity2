@@ -921,6 +921,7 @@ void Shell::center_on_fraction(double fx, double fy)
 void Shell::start_scenario(int id_num)
 {
     ++city_generation_;
+    center_pad_cursor();
     reset_touch_state();
     clear_transient_message();
     if (!session_.load_scenario(id_num)) {
@@ -1061,8 +1062,57 @@ void Shell::clamp_gamepad_cursor(float push_x, float push_y)
             y = limit - 1.0;
         }
     }
+    // Handheld drag: the top chips and the zoom buttons cover the map too.
+    // A line drawn toward them used to park the cursor under the "+" button
+    // (the edge scroll only woke 28px from the window edge), with its tag cut
+    // off. The drag stops at the open map instead and the edge scroll starts
+    // there (shell.cpp, map_safe_rect).
+    if (handheld_ && pad_dragging_) {
+        double sx = 0;
+        double sy = 0;
+        double sw = 0;
+        double sh = 0;
+        map_safe_rect(sx, sy, sw, sh);
+        x = std::clamp(x, sx, sx + sw - 1.0);
+        y = std::clamp(y, sy, sy + sh - 1.0);
+    }
     cursor_x_ = static_cast<float>(x);
     cursor_y_ = static_cast<float>(y);
+}
+
+void Shell::map_safe_rect(double &x, double &y, double &w, double &h) const
+{
+    x = view_x_;
+    y = view_y_;
+    w = view_w_;
+    h = view_h_;
+    if (!handheld_ || quick_h_ <= 0) {
+        return;
+    }
+    const double top = std::max<double>(view_y_, hud_top_);
+    const double right = std::min<double>(view_x_ + view_w_, win_w_ - hud_right_);
+    const double bottom = std::min<double>(view_y_ + view_h_, quick_y_);
+    if (right - view_x_ < dp(64) || bottom - top < dp(64)) {
+        return;
+    }
+    y = top;
+    w = right - view_x_;
+    h = bottom - top;
+}
+
+void Shell::center_pad_cursor()
+{
+    if (!gamepad_nav_) {
+        return;
+    }
+    double sx = 0;
+    double sy = 0;
+    double sw = 0;
+    double sh = 0;
+    map_safe_rect(sx, sy, sw, sh);
+    cursor_x_ = static_cast<float>(sx + sw * 0.5);
+    cursor_y_ = static_cast<float>(sy + sh * 0.5);
+    clamp_gamepad_cursor(0.0f, 0.0f);
 }
 
 void Shell::apply_pad_direction(SDL_GamepadButton button)
@@ -1939,6 +1989,7 @@ void Shell::finish_open(const std::string &path)
     welcome_gate_ = false;
     city_chosen_ = true;
     ++city_generation_;
+    center_pad_cursor();
     const int loaded_speed = session_.speed();
     restore_play_preferences();
     if (background_held_) {
@@ -2136,6 +2187,7 @@ void Shell::proceed(AfterSave next)
         welcome_gate_ = false;
         city_chosen_ = true;
         ++city_generation_;
+        center_pad_cursor();
         autosave_fingerprint_ = session_.change_fingerprint();
         set_speed(0);
         {
@@ -2901,6 +2953,7 @@ void Shell::on_dialog_button(int id)
     close_dialog();
     const int serial = session_.message_serial();
     ++city_generation_;
+    center_pad_cursor();
     reset_touch_state();
     clear_transient_message();
             session_.new_city(spec);
