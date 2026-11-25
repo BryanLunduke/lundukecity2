@@ -3098,6 +3098,48 @@ void Shell::draw_dialog(cairo_t *cr)
                 widths[0] = free_w * 0.29;
                 widths[1] = free_w * 0.29;
                 widths[2] = free_w - widths[0] - widths[1];
+                // The tool column must fit its longest single word beside
+                // the key chip, or Pango breaks it mid-word ("Amuseme-nt
+                // Park", review nov25 #6). Take the shortfall from the other
+                // two columns, which wrap at spaces.
+                double need = 0;
+                const double sub_gap = dp(16);
+                for (const ControlsSection *section : column[2]) {
+                    const int runs = section->side == 2 && section->rows.size() > 12 ? 2 : 1;
+                    const int count = static_cast<int>(section->rows.size());
+                    const int per = (count + runs - 1) / runs;
+                    for (int r = 0; r < runs; ++r) {
+                        double key_w = 0;
+                        double word_w = 0;
+                        for (int i = r * per; i < std::min(count, (r + 1) * per); ++i) {
+                            const ControlsRow &row = section->rows[static_cast<std::size_t>(i)];
+                            const TextMetrics km = measure_text(cr, bold_font(), row.key, -1);
+                            key_w = std::max(key_w, static_cast<double>(km.width));
+                            std::size_t at = 0;
+                            while (at < row.action.size()) {
+                                std::size_t end = row.action.find(' ', at);
+                                if (end == std::string::npos) {
+                                    end = row.action.size();
+                                }
+                                if (end > at) {
+                                    const std::string word = row.action.substr(at, end - at);
+                                    const TextMetrics wm = measure_text(cr, body_font(), word, -1);
+                                    word_w = std::max(word_w, static_cast<double>(wm.width));
+                                }
+                                at = end + 1;
+                            }
+                        }
+                        const double sub = key_w + 2 * chip_pad + dp(10) + word_w + dp(4);
+                        need = std::max(need, sub * runs + sub_gap * (runs - 1));
+                    }
+                }
+                const double floor_w = free_w * 0.24;
+                const double give = std::min(need - widths[2], 2.0 * (widths[0] - floor_w));
+                if (give > 0) {
+                    widths[0] -= give / 2.0;
+                    widths[1] -= give / 2.0;
+                    widths[2] += give;
+                }
             }
             double y = y0;
             double col_x = x0;
