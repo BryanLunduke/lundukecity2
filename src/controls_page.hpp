@@ -309,6 +309,7 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                             {keys.load, "Load a city"},
                             {keys.save, "Save"},
                             {keys.save_as, "Save as"},
+                            {"Ctrl+Z", "Undo last build"},
                             {keys.quit, "Quit"},
                         }, 0});
     ControlsSection tools{"Tool keys", {}, 2};

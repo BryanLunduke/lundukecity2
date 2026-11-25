@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <vector>
 
 int hostile_review_session_probe(CitySession &session, int op);
 
@@ -334,6 +335,85 @@ int main()
         }
         if (met_count == 0) {
             return fail(40, "no scenario read as met (Tokyo and Rio start above 500)");
+        }
+    }
+
+    // Release #18: undo the last stroke. Before the clock moves: tiles back
+    // and the full cost refunded. After the clock moves: tiles back, no refund.
+    {
+        CitySession u;
+        if (!u.load_scenario(SC_LEARN_TO_PLAY)) {
+            return fail(42, "could not load Brookside for undo");
+        }
+        const int y = tutorial::kRoadY;
+        const int x0 = tutorial::kRoadX0;
+        std::vector<int> before;
+        for (int x = x0 - 6; x < x0 + 14; ++x) {
+            for (int yy = y - 6; yy <= y + 6; ++yy) {
+                before.push_back(u.map_value(x, yy));
+            }
+        }
+        auto same_map = [&]() {
+            std::size_t i = 0;
+            for (int x = x0 - 6; x < x0 + 14; ++x) {
+                for (int yy = y - 6; yy <= y + 6; ++yy) {
+                    if (u.map_value(x, yy) != before[i++]) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        const long long f0 = u.funds();
+        u.use_tool(TOOL_ROAD, x0, y);
+        u.drag_tool(TOOL_ROAD, x0, y, x0 + 7, y);
+        u.end_tool_stroke();
+        const long long f1 = u.funds();
+        if (f1 >= f0 || !u.can_undo() || same_map()) {
+            return fail(43, "the road stroke did not build or was not recorded");
+        }
+        const CitySession::UndoResult r = u.undo_last_stroke();
+        if (!r.ok || r.refunded != f0 - f1 || u.funds() != f0 || !same_map() || u.can_undo()) {
+            std::fprintf(stderr, "undo ok=%d refunded=%lld spent=%lld funds %lld->%lld->%lld\n", r.ok ? 1 : 0,
+                         r.refunded, r.spent, f0, f1, u.funds());
+            return fail(44, "undo before the clock moved did not restore tiles and refund the cost");
+        }
+        // Bulldoze is undoable too: build, then bulldoze it, undo the bulldoze.
+        u.drag_tool(TOOL_ROAD, x0, y, x0 + 3, y);
+        u.end_tool_stroke();
+        const long long fb = u.funds();
+        u.use_tool(TOOL_BULLDOZER, x0 + 1, y);
+        u.end_tool_stroke();
+        const int dozed = u.map_value(x0 + 1, y);
+        const CitySession::UndoResult rb = u.undo_last_stroke();
+        if (!rb.ok || u.map_value(x0 + 1, y) == dozed || u.funds() != fb) {
+            return fail(45, "undoing a bulldoze did not put the road back at no net cost");
+        }
+        if (!u.undo_last_stroke().ok || !same_map() || u.funds() != f0) {
+            return fail(46, "the second undo (the stack) did not take the road back");
+        }
+        // After the clock moves: tiles back, no refund.
+        u.drag_tool(TOOL_ROAD, x0, y, x0 + 7, y);
+        u.end_tool_stroke();
+        const long long f2 = u.funds();
+        const long long t0 = u.city_time();
+        u.set_speed(3);
+        for (int i = 0; i < 400 && u.city_time() == t0; ++i) {
+            u.tick();
+        }
+        u.set_speed(0);
+        if (u.city_time() == t0) {
+            return fail(47, "the clock did not move in the undo test");
+        }
+        const long long f3 = u.funds();
+        const CitySession::UndoResult late = u.undo_last_stroke();
+        if (!late.ok || late.refunded != 0 || !late.clock_moved || u.funds() != f3 || !same_map()) {
+            std::fprintf(stderr, "late ok=%d refunded=%lld moved=%d funds %lld %lld %lld '%s'\n", late.ok ? 1 : 0,
+                         late.refunded, late.clock_moved ? 1 : 0, f2, f3, u.funds(), late.message.c_str());
+            return fail(48, "undo after the clock moved refunded money or did not restore tiles");
+        }
+        if (u.undo_last_stroke().ok) {
+            return fail(49, "undo with an empty stack did something");
         }
     }
 

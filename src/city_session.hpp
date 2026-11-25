@@ -323,6 +323,24 @@ public:
     };
     // One receipt for the stroke that just ended. False when nothing happened.
     bool take_placement_note(PlacementNote &out);
+    // Release nov24 #18: undo the last build or bulldoze stroke (a stack of
+    // up to kUndoDepth). The tiles the stroke changed go back. The money it
+    // cost comes back only while the city clock (cityTime) has not moved
+    // since the stroke began, so a paused city always gets a full refund
+    // and an undo after the sim has stepped restores tiles for free.
+    // Specials (and bulldozing one) are not undoable. A stroke whose tiles
+    // have since changed (growth, fire, a later build) is refused.
+    static constexpr int kUndoDepth = 16;
+    struct UndoResult {
+        bool ok = false;
+        long long refunded = 0;
+        long long spent = 0;
+        bool clock_moved = false;
+        std::string message;
+    };
+    bool can_undo() const { return !undo_stack_.empty(); }
+    int undo_depth() const { return static_cast<int>(undo_stack_.size()); }
+    UndoResult undo_last_stroke();
     int stroke_tiles() const { return stroke_tiles_; }
     long long stroke_spent() const { return stroke_spent_; }
     struct TileInspect {
@@ -698,6 +716,26 @@ private:
     bool dirty_ = false;
     int tool_stroke_placed_ = 0;
     long long stroke_spent_ = 0;
+    struct UndoCell {
+        int index;
+        unsigned short before;
+        unsigned short after;
+    };
+    struct UndoStroke {
+        std::vector<UndoCell> cells;
+        long long spent = 0;
+        long long city_time = 0;
+    };
+    std::vector<UndoStroke> undo_stack_;
+    std::vector<unsigned short> undo_before_;
+    bool undo_open_ = false;
+    bool undo_bad_ = false;
+    long long undo_funds_ = 0;
+    long long undo_time_ = 0;
+    int undo_x0_ = 0, undo_y0_ = 0, undo_x1_ = 0, undo_y1_ = 0;
+    void undo_begin(int x, int y);
+    void undo_finish();
+    void undo_reset();
     int stroke_tiles_ = 0;
     int stroke_tool_ = -1;
     int stroke_x_ = 0;

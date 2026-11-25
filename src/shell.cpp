@@ -2898,6 +2898,12 @@ void Shell::handle_event(const SDL_Event &event)
         if (!menu_.open() && take_bound_key(key, mods)) {
             break;
         }
+        if (!menu_.open() && dialog_ == Dialog::None && !welcome_gate_ && !chord.empty() && chord == "ctrl+z" &&
+            key_act_for_token(binds_, chord) < 0) {
+            // Release nov24 #18: undo the last build or bulldoze stroke.
+            apply_action(Action::Undo);
+            break;
+        }
         if (mods == 0 && !menu_.open() && active_field() == nullptr) {
             const int keyed = tool_index_for_key(letter);
             if (keyed >= 0) {

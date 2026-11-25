@@ -2131,6 +2131,12 @@ void Shell::apply_action(Action action)
     case Action::Rename:
         open_dialog(Dialog::Rename);
         break;
+    case Action::Undo:
+        // Release nov24 #18: the last build or bulldoze stroke.
+        if (!welcome_gate_ && !terrain_edit_) {
+            session_.undo_last_stroke();
+        }
+        break;
     case Action::Quit:
         // A saved city used to leave on one pad press. Ask first. An unsaved
         // city already gets the save prompt, which is the confirmation.

@@ -752,8 +752,134 @@ void CitySession::finish_stroke_attempt(long long before, int tool, int x, int y
     }
 }
 
+void CitySession::undo_reset()
+{
+    undo_stack_.clear();
+    undo_before_.clear();
+    undo_open_ = false;
+    undo_bad_ = false;
+}
+
+void CitySession::undo_begin(int x, int y)
+{
+    if (!ready_) {
+        return;
+    }
+    if (!undo_open_) {
+        const Micropolis &sim = engine_->sim;
+        undo_before_.assign(static_cast<std::size_t>(WORLD_W) * WORLD_H, 0);
+        for (int ix = 0; ix < WORLD_W; ++ix) {
+            for (int iy = 0; iy < WORLD_H; ++iy) {
+                undo_before_[static_cast<std::size_t>(ix) * WORLD_H + iy] = sim.map[ix][iy];
+            }
+        }
+        undo_open_ = true;
+        undo_bad_ = false;
+        undo_funds_ = funds();
+        undo_time_ = static_cast<long long>(sim.cityTime);
+        undo_x0_ = undo_x1_ = x;
+        undo_y0_ = undo_y1_ = y;
+        return;
+    }
+    undo_x0_ = std::min(undo_x0_, x);
+    undo_x1_ = std::max(undo_x1_, x);
+    undo_y0_ = std::min(undo_y0_, y);
+    undo_y1_ = std::max(undo_y1_, y);
+}
+
+void CitySession::undo_finish()
+{
+    if (!undo_open_) {
+        return;
+    }
+    undo_open_ = false;
+    if (undo_bad_ || !ready_ || undo_before_.empty()) {
+        undo_before_.clear();
+        return;
+    }
+    // Only the stroke's own area (plus the widest footprint, the airport)
+    // is compared, so the sim's growth elsewhere is not swept in.
+    constexpr int kMargin = 5;
+    const Micropolis &sim = engine_->sim;
+    UndoStroke stroke;
+    for (int ix = std::max(0, undo_x0_ - kMargin); ix <= std::min(WORLD_W - 1, undo_x1_ + kMargin); ++ix) {
+        for (int iy = std::max(0, undo_y0_ - kMargin); iy <= std::min(WORLD_H - 1, undo_y1_ + kMargin); ++iy) {
+            const int index = ix * WORLD_H + iy;
+            const unsigned short before = undo_before_[static_cast<std::size_t>(index)];
+            const unsigned short after = sim.map[ix][iy];
+            if (before != after) {
+                stroke.cells.push_back(UndoCell{index, before, after});
+            }
+        }
+    }
+    undo_before_.clear();
+    if (stroke.cells.empty()) {
+        return;
+    }
+    stroke.spent = std::max(0LL, undo_funds_ - funds());
+    stroke.city_time = undo_time_;
+    undo_stack_.push_back(std::move(stroke));
+    if (static_cast<int>(undo_stack_.size()) > kUndoDepth) {
+        undo_stack_.erase(undo_stack_.begin());
+    }
+}
+
+CitySession::UndoResult CitySession::undo_last_stroke()
+{
+    UndoResult result;
+    if (!ready_ || undo_stack_.empty()) {
+        result.message = "Nothing to undo.";
+        post_message(result.message);
+        return result;
+    }
+    // A road with cars on it is still the same road.
+    auto same = [](unsigned short now, unsigned short then) {
+        int a = now & LOMASK;
+        int b = then & LOMASK;
+        auto plain = [](int t) { return (t >= LTRFBASE && t <= LASTROAD) ? ROADBASE + ((t - LTRFBASE) % 16) : t; };
+        return plain(a) == plain(b);
+    };
+    Micropolis &sim = engine_->sim;
+    const UndoStroke &stroke = undo_stack_.back();
+    for (const UndoCell &cell : stroke.cells) {
+        if (!same(sim.map[cell.index / WORLD_H][cell.index % WORLD_H], cell.after)) {
+            result.message = "Cannot undo: the city has changed there since. Bulldoze instead.";
+            undo_stack_.pop_back();
+            post_message(result.message);
+            return result;
+        }
+    }
+    for (const UndoCell &cell : stroke.cells) {
+        sim.map[cell.index / WORLD_H][cell.index % WORLD_H] = cell.before;
+    }
+    result.ok = true;
+    result.spent = stroke.spent;
+    result.clock_moved = static_cast<long long>(sim.cityTime) != stroke.city_time;
+    if (!result.clock_moved && stroke.spent > 0) {
+        sim.spend(static_cast<int>(-stroke.spent));
+        result.refunded = stroke.spent;
+    }
+    undo_stack_.pop_back();
+    if (result.refunded > 0) {
+        result.message = "Undone. Refunded " + civic::dollars(result.refunded) + ".";
+    } else if (result.clock_moved && stroke.spent > 0) {
+        result.message = "Undone. No refund: the city clock has moved on since that build.";
+    } else {
+        result.message = "Undone.";
+    }
+    dirty_ = true;
+    placement_note_ = PlacementNote{};
+    placement_waiting_ = false;
+    if (scenario_id() == SC_LEARN_TO_PLAY) {
+        refresh_tutorial();
+    }
+    post_message(result.message);
+    return result;
+}
+
 void CitySession::end_tool_stroke()
 {
+    undo_finish();
     if (stroke_tool_ >= 0 && (tool_stroke_placed_ > 0 || !stroke_reason_.empty())) {
         placement_note_.ok = tool_stroke_placed_ > 0;
         placement_note_.tiles = stroke_tiles_ > 0 ? stroke_tiles_ : tool_stroke_placed_;
@@ -1084,6 +1210,7 @@ void CitySession::new_city(const NewCitySpec &spec)
     clear_notices();
     clear_scenario_clock();
     ledger_ = civic::Ledger{};
+    undo_reset();
     ledger_from_file_ = false;
     // A new city's first year starts with its difficulty funds.
     ledger_.have_start_funds = true;
@@ -1346,6 +1473,7 @@ bool CitySession::load_city(const std::string &path)
     clear_notices();
     clear_scenario_clock();
     ledger_ = civic::Ledger{};
+    undo_reset();
     ledger_from_file_ = false;
     opening_funds_ = static_cast<std::int64_t>(sim.totalFunds);
     read_scenario_sidecar(path);
@@ -1475,6 +1603,7 @@ bool CitySession::load_scenario(int id)
     clear_notices();
     clear_scenario_clock();
     ledger_ = civic::Ledger{};
+    undo_reset();
     ledger_from_file_ = false;
     opening_funds_ = static_cast<std::int64_t>(sim.totalFunds);
     recount_population_from_map();
@@ -1610,6 +1739,9 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
     if (engine_tool == kSpecialEngineId) {
         return;
     }
+    if (engine_tool != TOOL_QUERY) {
+        undo_begin(tile_x, tile_y);
+    }
     if (engine_tool == TOOL_BULLDOZER && bulldoze_blocked(tile_x, tile_y)) {
         // Landmarks are bulldozed here, before the engine's own check.
         refuse_in_zone();
@@ -1617,6 +1749,7 @@ void CitySession::use_tool(int engine_tool, int tile_x, int tile_y)
         return;
     }
     if (engine_tool == TOOL_BULLDOZER && bulldoze_special_at(&engine_->sim, tile_x, tile_y)) {
+        undo_bad_ = true;
         dirty_ = true;
         tool_stroke_placed_ = 1;
         notify();
@@ -1738,6 +1871,10 @@ void CitySession::drag_tool(int engine_tool, int from_x, int from_y, int to_x, i
         int y;
         ~Guard() { self->finish_stroke_attempt(before, tool, x, y); }
     } guard{this, before, engine_tool, to_x, to_y};
+    if (engine_tool != TOOL_QUERY) {
+        undo_begin(from_x, from_y);
+        undo_begin(to_x, to_y);
+    }
     const bool placed = engine_->sim.toolDrag(static_cast<EditingTool>(engine_tool),
                                               static_cast<short>(from_x), static_cast<short>(from_y),
                                               static_cast<short>(to_x), static_cast<short>(to_y));
