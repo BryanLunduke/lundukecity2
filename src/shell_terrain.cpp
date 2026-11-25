@@ -970,6 +970,28 @@ void Shell::draw_terrain_hud(cairo_t *cr)
         const double ch = m.height + dp(8);
         const double cx = std::max(static_cast<double>(dp(8)), std::min(chosen_x - cw / 2.0, win_w_ - cw - dp(8)));
         const double cy = quick_y_ - lift - ch - dp(6);
+        // The brush footprint over the map carries its own tag with the
+        // piece's name ("Channel · 3x3"). Where the brush (or that tag
+        // above it) reaches this chip, the chip is left out so the two
+        // labels do not stack over the brush (review nov25 #14).
+        bool covered = false;
+        int hx = 0;
+        int hy = 0;
+        if (map_.hover_tile(hx, hy)) {
+            const double ts = std::max(1, map_.tile_size());
+            const int half = terrain_brush_ >= terrain_paint::kBrushLarge ? 1 : 0;
+            const double ox = snapped_map_origin(view_x_, map_ox_, scroll_x_) + map_.shake_x();
+            const double oy = snapped_map_origin(view_y_, map_oy_, scroll_y_) + map_.shake_y();
+            const double fl = ox + (hx - half) * ts;
+            const double fr = ox + (hx + half + 1) * ts;
+            const double ft = oy + (hy - half) * ts - dp(40);
+            const double fb = oy + (hy + half + 1) * ts;
+            covered = fl < cx + cw && fr > cx && ft < cy + ch && fb > cy;
+        }
+        if (covered) {
+            draw_pad_legend(cr, win_h_ - hint_h_, hint_h_);
+            return;
+        }
         rounded_path(cr, cx, cy, cw, ch, dp(6));
         cairo_set_source_rgba(cr, kSlateDeep.r, kSlateDeep.g, kSlateDeep.b, 0.92);
         cairo_fill_preserve(cr);
