@@ -13,6 +13,7 @@
 #include "tools.hpp"
 #include "welcome_rows.hpp"
 #include "tutorial_goals.hpp"
+#include "inspect_report.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -257,6 +258,20 @@ int main()
     CitySession seattle;
     if (!seattle.load_scenario(SC_SEATTLE) || seattle.tax() != 7) {
         return fail(15, "Seattle's start tax changed");
+    }
+
+    // Release #11: Inspect on water and trees says what can be done there.
+    {
+        inspect_report::Facts water;
+        water.kind = inspect_report::Kind::Water;
+        if (inspect_report::make(water).status != "Bridge or power line only") {
+            return fail(32, "Inspect on water does not say bridge or power line only");
+        }
+        inspect_report::Facts trees;
+        trees.kind = inspect_report::Kind::Trees;
+        if (inspect_report::make(trees).status != "Bulldoze to build") {
+            return fail(33, "Inspect on trees does not say bulldoze to build");
+        }
     }
 
     std::printf("review_nov24 ok\n");

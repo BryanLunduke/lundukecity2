@@ -3791,6 +3791,8 @@ CitySession::InspectFacts CitySession::inspect_facts(int x, int y)
         facts.kind = Kind::Park;
     } else if (card.name == "Water") {
         facts.kind = Kind::Water;
+    } else if (card.name == "Trees") {
+        facts.kind = Kind::Trees;
     } else if (card.name == "Rubble" || card.name == "Flood" || card.name == "Radiation" || card.name == "Fire") {
         facts.kind = Kind::Hazard;
     } else {
