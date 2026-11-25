@@ -3208,7 +3208,13 @@ void Shell::draw_dialog(cairo_t *cr)
                              dp(8);
         // Handheld: wide enough that the tax warning is one line, so the room
         // held for it under the tax bar is not an empty band (Deck review #17).
-        const double base_w = static_cast<double>(handheld_ ? dp(880) : dp(680));
+        // It stays clear of the minimap too: a centered window no wider than
+        // the space left of it, but never narrower than the desktop's.
+        double base_w = static_cast<double>(dp(680));
+        if (handheld_) {
+            const double clear_w = 2.0 * static_cast<double>(mini_x_ - dp(12)) - static_cast<double>(win_w_);
+            base_w = std::max(base_w, std::min(static_cast<double>(dp(880)), clear_w));
+        }
         const double want = std::max(base_w, 2.0 * margin + col_gap + 2.0 * static_cast<double>(need_col));
         const double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
         const double inner = width - 2.0 * margin;
