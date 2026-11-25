@@ -380,16 +380,16 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
             return;
         }
         // Focus comes from the model; the pixels then have to show it. The
-        // fill stays the primary blue, and the ring is the button's own edge
-        // turned focus blue (an unfocused edge is gold). The edge stroke is
-        // at least 3px wide, centred on the outline, so the pixel half a
-        // pixel inside the top edge is ring at any fractional position.
+        // fill stays the primary blue, and the ring is an orange line 3px
+        // outside the edge (review nov25 #7: a blue edge read like the blue
+        // default button). The 3px stroke is centred 3px out, so the pixel
+        // 3px above the top edge is ring at any fractional position.
         int er = 0;
         int eg = 0;
         int eb = 0;
         const bool edge_ok = channel_at(surface, static_cast<int>(std::floor(save->x + save->w / 2.0)),
-                                        static_cast<int>(std::floor(save->y + 0.5)), er, eg, eb);
-        if (focus_id_ != kSave || sb < sr + 20 || !edge_ok || eb < er + 20) {
+                                        static_cast<int>(std::floor(save->y - 3.0)), er, eg, eb);
+        if (focus_id_ != kSave || sb < sr + 20 || !edge_ok || er < eb + 80 || er < 170) {
             ran_ok_ = false;
             smoke_error_ = "Save is not the focused button (focus " + std::to_string(focus_id_) + ", fill " +
                            std::to_string(sr) + "," + std::to_string(sg) + "," + std::to_string(sb) + ", ring " +

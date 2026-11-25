@@ -444,16 +444,20 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         cairo_fill_preserve(cr);
         cairo_pattern_destroy(shade);
         const bool ring = focused && w > 18 && h > 18;
-        if (ring) {
-            // Focus follows the button's own outline: the edge itself turns
-            // focus blue, a little heavier than the gold edge it replaces.
-            cairo_set_source_rgb(cr, 0.10, 0.35, 0.78);
-            cairo_set_line_width(cr, std::max(3.0, h / 10.0));
-        } else {
-            cairo_set_source_rgb(cr, enabled ? gold_r : 0.62, enabled ? gold_g : 0.58, enabled ? gold_b : 0.48);
-            cairo_set_line_width(cr, selected ? std::max(3.0, h / 12.0) : std::max(2.0, h / 16.0));
-        }
+        cairo_set_source_rgb(cr, enabled ? gold_r : 0.62, enabled ? gold_g : 0.58, enabled ? gold_b : 0.48);
+        cairo_set_line_width(cr, selected ? std::max(3.0, h / 12.0) : std::max(2.0, h / 16.0));
         cairo_stroke(cr);
+        if (ring) {
+            // Focus is an orange ring just outside the button, the same
+            // orange as a focused list row. It used to turn the edge blue,
+            // which read like the blue-filled default button beside it
+            // (review nov25 #7: which button does A press?).
+            const double gap = 3.0;
+            round_dialog_rect(cr, x - gap, y - gap, w + 2.0 * gap, h + 2.0 * gap, std::min(6.0, h / 2.0) + gap);
+            cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
+            cairo_set_line_width(cr, 3.0);
+            cairo_stroke(cr);
+        }
         if (selected && enabled && w > 22 && h > 16) {
             const double mark = std::min(h * 0.42, 14.0);
             const double mx = x + 8;
@@ -463,16 +467,6 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
             cairo_move_to(cr, mx, my + mark * 0.55);
             cairo_line_to(cr, mx + mark * 0.35, my + mark * 0.9);
             cairo_line_to(cr, mx + mark, my + mark * 0.15);
-            cairo_stroke(cr);
-        }
-        if (ring && primary && !selected) {
-            // A blue edge on the blue primary needs a light line just inside
-            // it to read as focus. It hugs the same rounded outline.
-            const double inset = std::max(3.0, h / 10.0);
-            round_dialog_rect(cr, x + inset, y + inset, w - 2.0 * inset, h - 2.0 * inset,
-                              std::max(1.0, std::min(6.0, h / 2.0) - inset / 2.0));
-            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-            cairo_set_line_width(cr, 1.5);
             cairo_stroke(cr);
         }
         const std::string plain = strip_mnemonic(label);
@@ -655,18 +649,22 @@ void Shell::draw_osk(cairo_t *cr, double x, double y, double w, double max_h)
     OskPlacement placed[64];
     const int n = osk_place(x, y, w, max_h, placed, 64);
     cairo_save(cr);
-    cairo_rectangle(cr, x, y, w, max_h);
+    // Room for the focus ring, which sits 3px outside a key (review nov25
+    // #7); the focused key is drawn last so its neighbours do not cover it.
+    cairo_rectangle(cr, x - 6, y - 6, w + 12, max_h + 12);
     cairo_clip(cr);
-    for (int i = 0; i < n; ++i) {
-        const OskPlacement &box = placed[i];
-        if (box.index < 0 || box.index >= count) {
-            continue;
+    for (int pass = 0; pass < 2; ++pass) {
+        for (int i = 0; i < n; ++i) {
+            const OskPlacement &box = placed[i];
+            if (box.index < 0 || box.index >= count || (focus_id_ == kOsk + box.index) != (pass == 1)) {
+                continue;
+            }
+            const OskKey &key = keys[box.index];
+            const bool shifted = osk_shift_ && key.kind == OskKind::Text && key.shifted != nullptr;
+            const char *label = shifted ? key.shifted : key.label;
+            const bool primary = (key.kind == OskKind::Shift && osk_shift_) || focus_id_ == kOsk + box.index;
+            button(cr, box.x, box.y, box.w, box.h, label, kOsk + box.index, primary);
         }
-        const OskKey &key = keys[box.index];
-        const bool shifted = osk_shift_ && key.kind == OskKind::Text && key.shifted != nullptr;
-        const char *label = shifted ? key.shifted : key.label;
-        const bool primary = (key.kind == OskKind::Shift && osk_shift_) || focus_id_ == kOsk + box.index;
-        button(cr, box.x, box.y, box.w, box.h, label, kOsk + box.index, primary);
     }
     cairo_restore(cr);
 }
