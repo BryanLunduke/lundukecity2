@@ -92,6 +92,19 @@ std::string hint_button(const std::string &glyph, const char *words)
     return glyph + " " + words;
 }
 
+// "A or B closes" when both buttons do the same thing; one name if the
+// other is unbound (Deck review #18: the header read "A closes. B closes").
+std::string hint_either(const std::string &first, const std::string &second, const char *words)
+{
+    if (first.empty()) {
+        return hint_button(second, words);
+    }
+    if (second.empty()) {
+        return hint_button(first, words);
+    }
+    return first + " or " + second + " " + words;
+}
+
 std::string hint_pair(const std::string &left, const std::string &right, const char *words)
 {
     if (words == nullptr || words[0] == '\0' || (left.empty() && right.empty())) {
@@ -4937,7 +4950,7 @@ std::string Shell::dialog_title_hint() const
                    : std::string("Enter ") + verb + ". Esc keeps editing";
     }
     if (dialog_ == Dialog::Messages && session_.notices().empty()) {
-        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
+        return pad ? hint_either(a, b, "closes") : "Enter closes. Esc closes";
     }
     if (dialog_ == Dialog::License) {
         const std::string left = glyph_for(PadPrevTool);
@@ -4974,7 +4987,7 @@ std::string Shell::dialog_title_hint() const
                    : "Enter opens. Esc closes";
     }
     if (dialog_ == Dialog::Controls) {
-        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes"), "D-pad pages"})
+        return pad ? hint_join({hint_either(a, b, "closes"), "D-pad pages"})
                    : "Enter closes. Left and right change page";
     }
     if (dialog_ == Dialog::Graphs && focus_id_ == kGraphPlot) {
@@ -5007,7 +5020,7 @@ std::string Shell::dialog_title_hint() const
     // Graphs, Evaluation, Query, About, and the one-button notices have
     // nothing to confirm. Enter dismisses them. B always has a way out.
     if (dialog_only_closes()) {
-        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
+        return pad ? hint_either(a, b, "closes") : "Enter closes. Esc closes";
     }
     if (focus_id_ == kCancel) {
         return pad ? hint_join({hint_button(a, "cancels"), hint_button(b, "closes")}) : "Enter cancels. Esc closes";
