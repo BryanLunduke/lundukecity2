@@ -10,6 +10,7 @@
 #include "micropolis.h"
 #include "tool_groups.hpp"
 #include "tools.hpp"
+#include "welcome_rows.hpp"
 #include "tutorial_goals.hpp"
 
 #include <cstdio>
@@ -84,6 +85,30 @@ int main()
             line.find("at least 12 tiles") == std::string::npos || line.find("so far: 8/12") == std::string::npos) {
             std::fprintf(stderr, "'%s' / '%s'\n", tutorial::meter(tutorial::Roads, s).c_str(), line.c_str());
             return fail(26, "the road count is not shown");
+        }
+    }
+    // Release-readiness #7: Learn to Play is on Welcome and first in the picker.
+    {
+        if (CitySession::scenario_def(CitySession::picker_scenario(0)).id != SC_LEARN_TO_PLAY ||
+            CitySession::picker_scenario(1) != 0 ||
+            CitySession::picker_scenario(CitySession::kScenarioCount - 1) != CitySession::kScenarioCount - 2) {
+            return fail(27, "Learn to Play is not the first picker row");
+        }
+        bool seen[CitySession::kScenarioCount] = {};
+        for (int row = 0; row < CitySession::kScenarioCount; ++row) {
+            seen[CitySession::picker_scenario(row)] = true;
+        }
+        for (bool hit : seen) {
+            if (!hit) {
+                return fail(28, "the picker order drops a scenario");
+            }
+        }
+        bool learn = false;
+        for (const WelcomeRow &row : welcome_rows()) {
+            learn = learn || row.first.id == kWelcomeLearn || row.second.id == kWelcomeLearn;
+        }
+        if (!learn || !is_dialog_button(kWelcomeLearn)) {
+            return fail(29, "Welcome has no Learn to Play button");
         }
     }
 

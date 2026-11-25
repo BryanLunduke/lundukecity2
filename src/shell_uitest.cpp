@@ -1096,7 +1096,7 @@ void Shell::drive_ui_test()
         }
         if (find_hot(hot_, kWelcomeNew, 0) == nullptr || find_hot(hot_, kWelcomeLoad, 0) == nullptr ||
             find_hot(hot_, kWelcomeScenario, 0) == nullptr || find_hot(hot_, kWelcomeHowTo, 0) == nullptr ||
-            find_hot(hot_, kWelcomeQuit, 0) == nullptr) {
+            find_hot(hot_, kWelcomeQuit, 0) == nullptr || find_hot(hot_, kWelcomeLearn, 0) == nullptr) {
             fail("the welcome screen is missing a button");
             return;
         }
@@ -1122,7 +1122,13 @@ void Shell::drive_ui_test()
                 return;
             }
         }
+        // Release nov24 #7: Learn to Play sits beside Start a new city.
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeNew; });
+        if (focus_id_ != kWelcomeLearn) {
+            fail("D-pad Down did not move to Learn to Play");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeLearn; });
         if (focus_id_ != kWelcomeLoad) {
             fail("D-pad Down did not move to Load a Saved City");
             return;

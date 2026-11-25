@@ -52,6 +52,7 @@
 #include "version.hpp"
 #include "view_math.hpp"
 #include "zoom_keys.hpp"
+#include "welcome_rows.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -1350,7 +1351,7 @@ void Shell::draw_dialog(cairo_t *cr)
         // The last city gets a card with its map, date, people and funds
         // above the five plain choices.
         const double card_h = continued.empty() ? 0.0 : static_cast<double>(dp(92));
-        const int rows = 5;
+        const int rows = kWelcomeRowCount;
         const double plaque_h = dp(16) + (card_h > 0 ? card_h + dp(10) : 0.0) + rows * bh + (rows - 1) * gap + dp(14);
         const double plaque_w = std::min(static_cast<double>(card_h > 0 ? dp(480) : dp(420)),
                                          std::max(1.0, win_w_ - static_cast<double>(dp(48))));
@@ -1472,21 +1473,25 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, ui_font(), detail, text_x, ty, 0.30, 0.21, 0.06, -1);
             by += card_h + dp(10);
         }
-        if (dark) {
-            const struct {
-                const char *label;
-                int id;
-            } rows_list[] = {{"_Start a new city", kWelcomeNew},
-                             {"_Load a saved city", kWelcomeLoad},
-                             {"Select a _scenario", kWelcomeScenario},
-                             {"How to _play", kWelcomeHowTo},
-                             {"_Quit", kWelcomeQuit}};
-            for (const auto &row : rows_list) {
-                push_hot(bx, by, bw, bh, row.id);
-                push_focus(row.id);
-                const bool focused = focus_id_ == row.id;
-                const bool lit = focused || hover_id_ == row.id;
-                round_box(bx, by, bw, bh, dp(6));
+        // Five rows; Learn to Play shares the first row with New city
+        // (release nov24 #7), so the plaque keeps its height and the art
+        // stays as it was. Focus order runs left to right, top to bottom.
+        const auto &rows_list = welcome_rows();
+        for (const WelcomeRow &row : rows_list) {
+            const int cells = row.second.id != 0 ? 2 : 1;
+            const double cw = cells == 2 ? (bw - gap) / 2.0 : bw;
+            for (int c = 0; c < cells; ++c) {
+                const WelcomeCell &cell = c == 0 ? row.first : row.second;
+                const double cx = bx + c * (cw + gap);
+                if (!dark) {
+                    button(cr, cx, by, cw, bh, cell.label, cell.id, false);
+                    continue;
+                }
+                push_hot(cx, by, cw, bh, cell.id);
+                push_focus(cell.id);
+                const bool focused = focus_id_ == cell.id;
+                const bool lit = focused || hover_id_ == cell.id;
+                round_box(cx, by, cw, bh, dp(6));
                 if (lit) {
                     cairo_set_source_rgb(cr, 0x3A / 255.0, 0x4B / 255.0, 0x63 / 255.0);
                 } else {
@@ -1501,22 +1506,12 @@ void Shell::draw_dialog(cairo_t *cr)
                     cairo_set_line_width(cr, 1.0);
                 }
                 cairo_stroke(cr);
-                const TextMetrics m = measure_text(cr, ui_font(), strip_mnemonic(row.label), -1);
-                paint_mnemonic(cr, ui_font(), row.label, bx + (bw - m.width) / 2.0, by + (bh - m.height) / 2.0,
+                const TextMetrics m = measure_text(cr, ui_font(), strip_mnemonic(cell.label), -1);
+                paint_mnemonic(cr, ui_font(), cell.label, cx + (cw - m.width) / 2.0, by + (bh - m.height) / 2.0,
                                menu_.alt_shown, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
-                by += bh + gap;
             }
-            return;
+            by += bh + gap;
         }
-        button(cr, bx, by, bw, bh, "_Start a new city", kWelcomeNew, false);
-        by += bh + gap;
-        button(cr, bx, by, bw, bh, "_Load a saved city", kWelcomeLoad, false);
-        by += bh + gap;
-        button(cr, bx, by, bw, bh, "Select a _scenario", kWelcomeScenario, false);
-        by += bh + gap;
-        button(cr, bx, by, bw, bh, "How to _play", kWelcomeHowTo, false);
-        by += bh + gap;
-        button(cr, bx, by, bw, bh, "_Quit", kWelcomeQuit, false);
         return;
     }
     if (dialog_ == Dialog::BulldozeConfirm) {
@@ -2035,7 +2030,9 @@ void Shell::draw_dialog(cairo_t *cr)
             if (i < 0 || i >= count) {
                 break;
             }
-            const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
+            // Release nov24 #7: rows are picker order (Learn to Play first).
+            const int def_index = CitySession::picker_scenario(i);
+            const CitySession::ScenarioDef &def = CitySession::scenario_def(def_index);
             const double ry = list_top + row * row_h;
             const int id = kListItem + row;
             const double row_box_h = std::max(1.0, row_h - dp(4));
@@ -2052,7 +2049,7 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             const double tx = x + dp(12);
             const double ty = ry + std::max(0.0, (row_box_h - preview_h) / 2.0);
-            cairo_surface_t *preview = scenario_preview(i);
+            cairo_surface_t *preview = scenario_preview(def_index);
             if (preview != nullptr) {
                 cairo_save(cr);
                 cairo_rectangle(cr, tx, ty, preview_w, preview_h);
@@ -2109,7 +2106,7 @@ void Shell::draw_dialog(cairo_t *cr)
                        static_cast<int>(text_w));
         }
         {
-            const CitySession::ScenarioDef &chosen = CitySession::scenario_def(scenario_index_);
+            const CitySession::ScenarioDef &chosen = CitySession::scenario_def(CitySession::picker_scenario(scenario_index_));
             const double dy = buttons_y - detail_h;
             // Full goal, always visible: the reserved height is the longest
             // wrapped goal, so this is never folded or cut mid-sentence.

@@ -895,6 +895,29 @@ void Shell::center_on_fraction(double fx, double fy)
     clamp_scroll();
 }
 
+void Shell::start_scenario(int id_num)
+{
+    ++city_generation_;
+    reset_touch_state();
+    clear_transient_message();
+    if (!session_.load_scenario(id_num)) {
+        info_title_ = "Play Scenario";
+        info_body_ = "Could not start that scenario.";
+        open_dialog(Dialog::Info);
+        return;
+    }
+    welcome_gate_ = false;
+    city_chosen_ = true;
+    adopt_loaded_speed(session_.speed());
+    if (id_num == SC_LEARN_TO_PLAY) {
+        center_on_learn_field();
+    } else {
+        center_on_fraction(0.5, 0.5);
+    }
+    sync_title();
+    begin_city_reveal();
+}
+
 void Shell::center_on_learn_field()
 {
     // The desktop hint is pinned over the top of the map (about three
@@ -2564,6 +2587,13 @@ void Shell::on_dialog_button(int id)
             open_dialog(Dialog::HowToPlay);
             return;
         }
+        if (id == kWelcomeLearn) {
+            // Release nov24 #7: straight into Brookside, as Play does from
+            // the picker's (now first) Learn to Play row.
+            close_dialog();
+            start_scenario(SC_LEARN_TO_PLAY);
+            return;
+        }
         // Quit, B, and Escape ask first. A second B from New City or the
         // scenario list must not leave the game.
         open_dialog(Dialog::QuitConfirm);
@@ -2766,26 +2796,7 @@ void Shell::on_dialog_button(int id)
             const int index = scenario_index_;
             close_dialog();
             if (index >= 0 && index < CitySession::kScenarioCount) {
-                const int id_num = CitySession::scenario_def(index).id;
-                ++city_generation_;
-                reset_touch_state();
-                clear_transient_message();
-                if (!session_.load_scenario(id_num)) {
-                    info_title_ = "Play Scenario";
-                    info_body_ = "Could not start that scenario.";
-                    open_dialog(Dialog::Info);
-                } else {
-                    welcome_gate_ = false;
-                    city_chosen_ = true;
-                    adopt_loaded_speed(session_.speed());
-                    if (id_num == SC_LEARN_TO_PLAY) {
-                        center_on_learn_field();
-                    } else {
-                        center_on_fraction(0.5, 0.5);
-                    }
-                    sync_title();
-                    begin_city_reveal();
-                }
+                start_scenario(CitySession::scenario_def(CitySession::picker_scenario(index)).id);
             }
             return;
         }

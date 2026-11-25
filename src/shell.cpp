@@ -1773,11 +1773,12 @@ void Shell::loop()
                 menu_.alt_shown = true;
                 gamepad_nav_ = deck_;
             } else if (demo_ == "scenario") {
-                scenario_index_ = 2;
-                list_index_ = 2;
+                // Hamburg, as before Learn to Play moved to the top row.
+                scenario_index_ = 3;
+                list_index_ = 3;
                 list_scroll_ = 0;
                 open_dialog(Dialog::Scenario);
-                focus_id_ = kListItem + 2;
+                focus_id_ = kListItem + 3;
                 gamepad_nav_ = deck_;
             } else if (demo_ == "welcome") {
                 apply_look();
@@ -2159,9 +2160,10 @@ void Shell::loop()
                 menu_.open_menu = 4;
                 menu_.cursor = 0;
             } else if (demo_ == "learn_picker") {
-                scenario_index_ = CitySession::kScenarioCount - 1;
+                // Learn to Play is the first picker row (release nov24 #7).
+                scenario_index_ = 0;
                 list_index_ = scenario_index_;
-                list_scroll_ = std::max(0, scenario_index_ - 2);
+                list_scroll_ = 0;
                 open_dialog(Dialog::Scenario);
                 focus_id_ = kListItem + scenario_index_;
                 gamepad_nav_ = deck_;

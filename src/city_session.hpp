@@ -141,6 +141,15 @@ public:
     static constexpr int kSanDiegoZooLeft = 65;
     static constexpr int kSanDiegoZooTop = 46;
     static const ScenarioDef &scenario_def(int index);
+    // Release nov24 #7: the scenario picker lists Learn to Play (the last
+    // scenario_def) first, then the rest in their usual order. Row -> def index.
+    static int picker_scenario(int row)
+    {
+        if (row <= 0) {
+            return kScenarioCount - 1;
+        }
+        return row - 1 < kScenarioCount - 1 ? row - 1 : kScenarioCount - 1;
+    }
 
     // Difficulty is the engine GameLevel: easy $20,000, medium $12,500,
     // hard $7,500. It also changes the tax and road-cost tables.
