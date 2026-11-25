@@ -3438,10 +3438,11 @@ void Shell::draw_dialog(cairo_t *cr)
                 cursor += tax_note_room;
             }
         };
-        // Handheld: the line kept for the warning says where growth slows
-        // while the rate is fine, instead of sitting empty (Deck review #17).
+        // The line kept for the warning says where growth slows while the
+        // rate is fine, instead of sitting empty (Deck review #17; the
+        // desktop too since review nov25 #5 showed the empty band there).
         std::string tax_line = tax_warn.note;
-        if (tax_line.empty() && handheld_ && tax_warn.slows_from <= 20) {
+        if (tax_line.empty() && tax_warn.slows_from <= 20) {
             tax_line = "Growth starts to slow at " + std::to_string(tax_warn.slows_from) + "%.";
         }
         slider(1, copy.tax_title, copy.tax_value, tax_line, tax_, 0, 20);
