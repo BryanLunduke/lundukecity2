@@ -1347,6 +1347,7 @@ bool CitySession::load_city(const std::string &path)
     clear_scenario_clock();
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
+    opening_funds_ = static_cast<std::int64_t>(sim.totalFunds);
     read_scenario_sidecar(path);
     // Restore the simulator's place in its 16-phase cycle. Older sidecars
     // have no phase; those still restart at phase 0, holding the clock once
@@ -1475,6 +1476,7 @@ bool CitySession::load_scenario(int id)
     clear_scenario_clock();
     ledger_ = civic::Ledger{};
     ledger_from_file_ = false;
+    opening_funds_ = static_cast<std::int64_t>(sim.totalFunds);
     recount_population_from_map();
     refresh_loaded_meters();
     catch_up_ledger(false);
@@ -2084,7 +2086,17 @@ CitySession::BudgetBook CitySession::budget() const
     }
 
     book.funds = static_cast<std::int64_t>(sim.totalFunds);
-    book.previous_funds = book.funds;
+    // Release nov24 #12: outside the January window, Previous funds is the
+    // treasury this year started with (the Year in Review's "Start of
+    // year"), or what the city had when it was opened when no year has
+    // been recorded yet. It was a copy of Current funds.
+    if (ledger_.have_start_funds) {
+        book.previous_funds = ledger_.start_funds;
+    } else if (opening_funds_ >= 0) {
+        book.previous_funds = opening_funds_;
+    } else {
+        book.previous_funds = book.funds;
+    }
     // The same sum January pays (special_annual_income), shown on its own
     // line. It is not added to this estimate's cash flow.
     book.attraction_income = static_cast<std::int64_t>(special_annual_income(&sim));

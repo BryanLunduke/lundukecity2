@@ -274,6 +274,28 @@ int main()
         }
     }
 
+    // Release #12: mid-year, Previous funds is this year's opening treasury.
+    {
+        CitySession spend;
+        if (!spend.load_scenario(SC_LEARN_TO_PLAY)) {
+            return fail(34, "could not load Brookside for the budget check");
+        }
+        const std::int64_t opening = spend.budget().funds;
+        for (int x = 2; x < 8; ++x) {
+            spend.use_tool(TOOL_ROAD, x, 2);
+            spend.end_tool_stroke();
+        }
+        const CitySession::BudgetBook book = spend.budget();
+        if (book.funds >= opening) {
+            return fail(35, "building road did not spend money");
+        }
+        if (book.previous_funds != opening) {
+            std::fprintf(stderr, "previous %lld current %lld opening %lld\n", (long long)book.previous_funds,
+                         (long long)book.funds, (long long)opening);
+            return fail(36, "Previous funds is not the year's opening treasury");
+        }
+    }
+
     std::printf("review_nov24 ok\n");
     return 0;
 }

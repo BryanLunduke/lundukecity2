@@ -703,6 +703,9 @@ private:
     PlacementNote placement_note_;
     civic::Ledger ledger_;
     bool ledger_from_file_ = false;
+    // Treasury when this city was opened; Budget's Previous funds until a
+    // tax year records ledger_.start_funds (release nov24 #12).
+    std::int64_t opening_funds_ = -1;
     void finish_stroke_attempt(long long before, int tool, int x, int y);
     void catch_up_ledger(bool announce);
     bool powered_homes() const;
