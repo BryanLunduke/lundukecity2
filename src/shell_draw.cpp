@@ -3193,7 +3193,10 @@ void Shell::draw_dialog(cairo_t *cr)
         const int need_col = std::max(std::max(unwrapped(copy.taxes), unwrapped(copy.previous_funds)),
                                       std::max(unwrapped(copy.cash_flow), unwrapped(copy.current_funds))) +
                              dp(8);
-        const double want = std::max(static_cast<double>(dp(680)), 2.0 * margin + col_gap + 2.0 * static_cast<double>(need_col));
+        // Handheld: wide enough that the tax warning is one line, so the room
+        // held for it under the tax bar is not an empty band (Deck review #17).
+        const double base_w = static_cast<double>(handheld_ ? dp(880) : dp(680));
+        const double want = std::max(base_w, 2.0 * margin + col_gap + 2.0 * static_cast<double>(need_col));
         const double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
         const double inner = width - 2.0 * margin;
         const double col_w = std::max(1.0, (inner - col_gap) / 2.0);
@@ -3220,7 +3223,7 @@ void Shell::draw_dialog(cairo_t *cr)
             h += tail + static_cast<double>(dp(16)) + tail;
             return h;
         };
-        double fund_gap = static_cast<double>(dp(14));
+        double fund_gap = static_cast<double>(handheld_ ? dp(8) : dp(14));
         // The tax slider warns before the cliff (dialog_copy.hpp tax_warning).
         const TaxWarning tax_warn = tax_warning(tax_, session_.difficulty());
         // The warning sits under the tax bar in room kept for the longest
@@ -3389,7 +3392,13 @@ void Shell::draw_dialog(cairo_t *cr)
                 cursor += tax_note_room;
             }
         };
-        slider(1, copy.tax_title, copy.tax_value, tax_warn.note, tax_, 0, 20);
+        // Handheld: the line kept for the warning says where growth slows
+        // while the rate is fine, instead of sitting empty (Deck review #17).
+        std::string tax_line = tax_warn.note;
+        if (tax_line.empty() && handheld_ && tax_warn.slows_from <= 20) {
+            tax_line = "Growth starts to slow at " + std::to_string(tax_warn.slows_from) + "%.";
+        }
+        slider(1, copy.tax_title, copy.tax_value, tax_line, tax_, 0, 20);
         cursor += fund_gap;
         auto funded = [](int percent, std::int64_t need) {
             return std::to_string(percent) + "%  " + graph_money(need * percent / 100);
