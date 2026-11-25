@@ -448,6 +448,9 @@ public:
     bool start_scenario_disaster();
     // Empty when it can start now.
     std::string event_unavailable(city_events::Kind kind) const;
+    // Why Disasters > Meltdown cannot start (empty when it can): the engine
+    // only melts a full Nuclear Plant, and a Micro Nuclear Plant never melts.
+    std::string meltdown_unavailable() const;
     bool in_autonomous_zone(int x, int y) const;
     // True when the bulldozer may not touch (x, y): inside the zone, or a
     // building that reaches into it.

@@ -2547,6 +2547,10 @@ void CitySession::disaster_monster()
 
 void CitySession::disaster_meltdown()
 {
+    if (!meltdown_unavailable().empty()) {
+        // Nothing would melt; the city is not changed.
+        return;
+    }
     engine_->sim.makeMeltdown();
     dirty_ = true;
     notify();
@@ -2686,6 +2690,19 @@ bool CitySession::start_autonomous_zone_at(int x, int y)
 std::string CitySession::event_unavailable(city_events::Kind kind) const
 {
     return city_events::unavailable_reason(&engine_->sim, kind);
+}
+
+std::string CitySession::meltdown_unavailable() const
+{
+    // Same scan as Micropolis::makeMeltdown: it does nothing without one.
+    for (int x = 0; x < WORLD_W - 1; ++x) {
+        for (int y = 0; y < WORLD_H - 1; ++y) {
+            if ((engine_->sim.map[x][y] & LOMASK) == NUCLEAR) {
+                return {};
+            }
+        }
+    }
+    return "Meltdown needs a Nuclear Plant. Micro Nuclear Plants cannot melt down.";
 }
 
 bool CitySession::in_autonomous_zone(int x, int y) const
