@@ -2332,6 +2332,13 @@ void Shell::handle_event(const SDL_Event &event)
                                                                 pw, ph, normal_w_, normal_h_, windowed_density_);
         pointer_x_ = motion_point.x;
         pointer_y_ = motion_point.y;
+        // The controller cursor follows the pointer. On a Steam Deck the
+        // right trackpad is a mouse; A after pointing with it must act where
+        // the pointer is, not where the stick last left the cursor.
+        if (!pad_dragging_) {
+            cursor_x_ = static_cast<float>(pointer_x_);
+            cursor_y_ = static_cast<float>(pointer_y_);
+        }
         hover_id_ = hit(pointer_x_, pointer_y_);
         // The toolbar hover feeds the status line's name, price and lock
         // reason. It ends as soon as the pointer is anywhere else.
