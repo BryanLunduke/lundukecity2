@@ -78,6 +78,7 @@
  */
 Micropolis::Micropolis() :
         populationDensityMap(0),
+        datacenterDensityMap(0),
         trafficDensityMap(0),
         pollutionDensityMap(0),
         landValueMap(0),
@@ -283,6 +284,7 @@ void Micropolis::init()
     taxFlag = false;
 
     populationDensityMap.clear();
+    datacenterDensityMap.clear();
     trafficDensityMap.clear();
     pollutionDensityMap.clear();
     landValueMap.clear();

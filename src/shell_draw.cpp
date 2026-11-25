@@ -353,6 +353,14 @@ void Shell::layout()
     // At 1280x800 a 16px tile made 11px tags (about 9px capitals). The
     // handheld tags follow the UI text size instead.
     map_.set_tag_min_px(handheld_ ? static_cast<double>(dp(17)) : 11.0);
+    {
+        double sx = 0;
+        double sy = 0;
+        double sw = 0;
+        double sh = 0;
+        map_safe_rect(sx, sy, sw, sh);
+        map_.set_tag_bounds(sx, sy, sx + sw, sy + sh);
+    }
     cursor_x_ = std::max(0.0f, std::min(cursor_x_, static_cast<float>(win_w_ - 1)));
     cursor_y_ = std::max(0.0f, std::min(cursor_y_, static_cast<float>(win_h_ - 1)));
     fit_map_to_view();
@@ -436,16 +444,20 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         cairo_fill_preserve(cr);
         cairo_pattern_destroy(shade);
         const bool ring = focused && w > 18 && h > 18;
-        if (ring) {
-            // Focus follows the button's own outline: the edge itself turns
-            // focus blue, a little heavier than the gold edge it replaces.
-            cairo_set_source_rgb(cr, 0.10, 0.35, 0.78);
-            cairo_set_line_width(cr, std::max(3.0, h / 10.0));
-        } else {
-            cairo_set_source_rgb(cr, enabled ? gold_r : 0.62, enabled ? gold_g : 0.58, enabled ? gold_b : 0.48);
-            cairo_set_line_width(cr, selected ? std::max(3.0, h / 12.0) : std::max(2.0, h / 16.0));
-        }
+        cairo_set_source_rgb(cr, enabled ? gold_r : 0.62, enabled ? gold_g : 0.58, enabled ? gold_b : 0.48);
+        cairo_set_line_width(cr, selected ? std::max(3.0, h / 12.0) : std::max(2.0, h / 16.0));
         cairo_stroke(cr);
+        if (ring) {
+            // Focus is an orange ring just outside the button, the same
+            // orange as a focused list row. It used to turn the edge blue,
+            // which read like the blue-filled default button beside it
+            // (review nov25 #7: which button does A press?).
+            const double gap = 3.0;
+            round_dialog_rect(cr, x - gap, y - gap, w + 2.0 * gap, h + 2.0 * gap, std::min(6.0, h / 2.0) + gap);
+            cairo_set_source_rgb(cr, theme::kFocusR, theme::kFocusG, theme::kFocusB);
+            cairo_set_line_width(cr, 3.0);
+            cairo_stroke(cr);
+        }
         if (selected && enabled && w > 22 && h > 16) {
             const double mark = std::min(h * 0.42, 14.0);
             const double mx = x + 8;
@@ -455,16 +467,6 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
             cairo_move_to(cr, mx, my + mark * 0.55);
             cairo_line_to(cr, mx + mark * 0.35, my + mark * 0.9);
             cairo_line_to(cr, mx + mark, my + mark * 0.15);
-            cairo_stroke(cr);
-        }
-        if (ring && primary && !selected) {
-            // A blue edge on the blue primary needs a light line just inside
-            // it to read as focus. It hugs the same rounded outline.
-            const double inset = std::max(3.0, h / 10.0);
-            round_dialog_rect(cr, x + inset, y + inset, w - 2.0 * inset, h - 2.0 * inset,
-                              std::max(1.0, std::min(6.0, h / 2.0) - inset / 2.0));
-            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-            cairo_set_line_width(cr, 1.5);
             cairo_stroke(cr);
         }
         const std::string plain = strip_mnemonic(label);
@@ -478,11 +480,11 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         }
         const double ty = y + (h - metrics.height) / 2.0;
         if (!enabled) {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.45, 0.42, 0.38);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), 0.45, 0.42, 0.38);
         } else if (primary && !selected) {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), 1, 1, 1);
         } else {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.12, 0.09, 0.06);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), 0.12, 0.09, 0.06);
         }
         return;
     }
@@ -517,7 +519,7 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
     const double tx = x + (w - metrics.width) / 2.0;
     const double ty = y + (h - metrics.height) / 2.0;
     const bool light = primary;
-    paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, light ? 1 : theme::kTextR, light ? 1 : theme::kTextG,
+    paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), light ? 1 : theme::kTextR, light ? 1 : theme::kTextG,
                    light ? 1 : theme::kTextB);
 }
 
@@ -647,18 +649,22 @@ void Shell::draw_osk(cairo_t *cr, double x, double y, double w, double max_h)
     OskPlacement placed[64];
     const int n = osk_place(x, y, w, max_h, placed, 64);
     cairo_save(cr);
-    cairo_rectangle(cr, x, y, w, max_h);
+    // Room for the focus ring, which sits 3px outside a key (review nov25
+    // #7); the focused key is drawn last so its neighbours do not cover it.
+    cairo_rectangle(cr, x - 6, y - 6, w + 12, max_h + 12);
     cairo_clip(cr);
-    for (int i = 0; i < n; ++i) {
-        const OskPlacement &box = placed[i];
-        if (box.index < 0 || box.index >= count) {
-            continue;
+    for (int pass = 0; pass < 2; ++pass) {
+        for (int i = 0; i < n; ++i) {
+            const OskPlacement &box = placed[i];
+            if (box.index < 0 || box.index >= count || (focus_id_ == kOsk + box.index) != (pass == 1)) {
+                continue;
+            }
+            const OskKey &key = keys[box.index];
+            const bool shifted = osk_shift_ && key.kind == OskKind::Text && key.shifted != nullptr;
+            const char *label = shifted ? key.shifted : key.label;
+            const bool primary = (key.kind == OskKind::Shift && osk_shift_) || focus_id_ == kOsk + box.index;
+            button(cr, box.x, box.y, box.w, box.h, label, kOsk + box.index, primary);
         }
-        const OskKey &key = keys[box.index];
-        const bool shifted = osk_shift_ && key.kind == OskKind::Text && key.shifted != nullptr;
-        const char *label = shifted ? key.shifted : key.label;
-        const bool primary = (key.kind == OskKind::Shift && osk_shift_) || focus_id_ == kOsk + box.index;
-        button(cr, box.x, box.y, box.w, box.h, label, kOsk + box.index, primary);
     }
     cairo_restore(cr);
 }
@@ -709,7 +715,7 @@ void Shell::draw_menubar(cairo_t *cr)
             fill(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
             stroke_rect(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_edge_r(), theme::chrome_select_edge_g(), theme::chrome_select_edge_b());
         }
-        paint_mnemonic(cr, menu_font(), title, x + 10, 9, menu_.alt_shown || menu_.open(), lit && !dark ? 1 : ink_r,
+        paint_mnemonic(cr, menu_font(), title, x + 10, 9, title_mnemonics_on(), lit && !dark ? 1 : ink_r,
                        lit && !dark ? 1 : ink_g, lit && !dark ? 1 : ink_b);
         x += w + 2;
     }
@@ -984,13 +990,15 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
         // A disaster this city cannot have (no zoo, no prison, one already
         // running) is greyed. It still opens its dialog, which says why.
         const bool greyed =
-            menu_table::city_event_index(item.action) >= 0 &&
-            !session_.event_unavailable(static_cast<city_events::Kind>(menu_table::city_event_index(item.action))).empty();
+            (menu_table::city_event_index(item.action) >= 0 &&
+             !session_.event_unavailable(static_cast<city_events::Kind>(menu_table::city_event_index(item.action)))
+                  .empty()) ||
+            (item.action == Action::Meltdown && !session_.meltdown_unavailable().empty());
         if (greyed) {
-            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, ink_accel.r, ink_accel.g,
+            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, mnemonics_on(), ink_accel.r, ink_accel.g,
                            ink_accel.b);
         } else {
-            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, ink_text.r, ink_text.g,
+            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, mnemonics_on(), ink_text.r, ink_text.g,
                            ink_text.b);
         }
         if (item.kind == ItemKind::Submenu) {
@@ -1527,7 +1535,7 @@ void Shell::draw_dialog(cairo_t *cr)
                 cairo_stroke(cr);
                 const TextMetrics m = measure_text(cr, ui_font(), strip_mnemonic(cell.label), -1);
                 paint_mnemonic(cr, ui_font(), cell.label, cx + (cw - m.width) / 2.0, by + (bh - m.height) / 2.0,
-                               menu_.alt_shown, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
+                               mnemonics_on(), 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
             }
             by += bh + gap;
         }
@@ -1667,9 +1675,18 @@ void Shell::draw_dialog(cairo_t *cr)
             question = "Cause a nuclear meltdown?";
             detail = "A nuclear plant will melt down. This cannot be undone.";
         }
+        std::string blocked;
+        if (disaster_ == Action::Meltdown) {
+            // makeMeltdown only finds a full Nuclear Plant. Without one the
+            // Start button used to do nothing and still mark the city changed.
+            blocked = session_.meltdown_unavailable();
+            if (!blocked.empty()) {
+                question = "This disaster cannot start right now.";
+                detail = blocked.c_str();
+            }
+        }
         // City 2's own disasters take their words from city_events, and say
         // why when the city cannot have one (no zoo, no prison, ...).
-        std::string blocked;
         if (menu_table::city_event_index(disaster_) >= 0) {
             const auto kind = static_cast<city_events::Kind>(menu_table::city_event_index(disaster_));
             const city_events::KindInfo &row = city_events::info(kind);
@@ -1925,6 +1942,9 @@ void Shell::draw_dialog(cairo_t *cr)
             {
                 bool seed_ok = true;
                 const char *live = city_seed_live_message(field_b_, seed_ok);
+                if (seed_ok && painted != nullptr) {
+                    live = city_seed_edited_message();
+                }
                 // A typo's live line already names New terrain, so do not
                 // stack the rule under it and squeeze out the map at 960.
                 const std::string shown = live;
@@ -2256,7 +2276,14 @@ void Shell::draw_dialog(cairo_t *cr)
         const double height = std::min(static_cast<double>(dp(560)), std::max(1.0, band_h - 2.0 * margin));
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, "Remap controls");
-        const std::string help = "A or Enter listens. Taken bindings swap. Backspace clears.";
+        // Review nov25 #18: a pad (or a Deck) reads its own buttons here, not
+        // Enter and Backspace. Clearing is the row's clear button; while a
+        // row listens, every button press is the new binding.
+        const std::string help =
+            (gamepad_nav_ || deck_)
+                ? std::string(glyph_for(PadConfirm)) + " listens, then press the new button. Taken bindings swap. " +
+                      glyph_for(PadQuery) + " clears a row."
+                : std::string("A or Enter listens. Taken bindings swap. Backspace clears.");
         const double help_w = std::max(1.0, panel.w - 2 * margin);
         const double help_h = text_block_height(help, help_w);
         label(cr, ui_font(), help, panel.x + margin, panel.y + dp(46), static_cast<int>(help_w));
@@ -3074,6 +3101,48 @@ void Shell::draw_dialog(cairo_t *cr)
                 widths[0] = free_w * 0.29;
                 widths[1] = free_w * 0.29;
                 widths[2] = free_w - widths[0] - widths[1];
+                // The tool column must fit its longest single word beside
+                // the key chip, or Pango breaks it mid-word ("Amuseme-nt
+                // Park", review nov25 #6). Take the shortfall from the other
+                // two columns, which wrap at spaces.
+                double need = 0;
+                const double sub_gap = dp(16);
+                for (const ControlsSection *section : column[2]) {
+                    const int runs = section->side == 2 && section->rows.size() > 12 ? 2 : 1;
+                    const int count = static_cast<int>(section->rows.size());
+                    const int per = (count + runs - 1) / runs;
+                    for (int r = 0; r < runs; ++r) {
+                        double key_w = 0;
+                        double word_w = 0;
+                        for (int i = r * per; i < std::min(count, (r + 1) * per); ++i) {
+                            const ControlsRow &row = section->rows[static_cast<std::size_t>(i)];
+                            const TextMetrics km = measure_text(cr, bold_font(), row.key, -1);
+                            key_w = std::max(key_w, static_cast<double>(km.width));
+                            std::size_t at = 0;
+                            while (at < row.action.size()) {
+                                std::size_t end = row.action.find(' ', at);
+                                if (end == std::string::npos) {
+                                    end = row.action.size();
+                                }
+                                if (end > at) {
+                                    const std::string word = row.action.substr(at, end - at);
+                                    const TextMetrics wm = measure_text(cr, body_font(), word, -1);
+                                    word_w = std::max(word_w, static_cast<double>(wm.width));
+                                }
+                                at = end + 1;
+                            }
+                        }
+                        const double sub = key_w + 2 * chip_pad + dp(10) + word_w + dp(4);
+                        need = std::max(need, sub * runs + sub_gap * (runs - 1));
+                    }
+                }
+                const double floor_w = free_w * 0.24;
+                const double give = std::min(need - widths[2], 2.0 * (widths[0] - floor_w));
+                if (give > 0) {
+                    widths[0] -= give / 2.0;
+                    widths[1] -= give / 2.0;
+                    widths[2] += give;
+                }
             }
             double y = y0;
             double col_x = x0;
@@ -3414,10 +3483,11 @@ void Shell::draw_dialog(cairo_t *cr)
                 cursor += tax_note_room;
             }
         };
-        // Handheld: the line kept for the warning says where growth slows
-        // while the rate is fine, instead of sitting empty (Deck review #17).
+        // The line kept for the warning says where growth slows while the
+        // rate is fine, instead of sitting empty (Deck review #17; the
+        // desktop too since review nov25 #5 showed the empty band there).
         std::string tax_line = tax_warn.note;
-        if (tax_line.empty() && handheld_ && tax_warn.slows_from <= 20) {
+        if (tax_line.empty() && tax_warn.slows_from <= 20) {
             tax_line = "Growth starts to slow at " + std::to_string(tax_warn.slows_from) + "%.";
         }
         slider(1, copy.tax_title, copy.tax_value, tax_line, tax_, 0, 20);
@@ -3454,16 +3524,22 @@ void Shell::draw_dialog(cairo_t *cr)
         const double dw = panel.w;
         const double dh = panel.h;
         frame_panel(cr, x, y, dw, dh, "Graphs");
-        button(cr, x + dw - margin - dp(132), y + dp(6), dp(132), dp(30),
-               graph_rolled_ ? "Expand" : "Roll up", kGraphRoll, false);
+        // Roll up / Expand sit in the first row, not the title band: there
+        // the button covered the band's hint ("D-pad reads th…") on a Deck
+        // (review nov25 #3).
         if (graph_rolled_) {
+            const double close_x = x + dw - margin - dp(96);
+            const double roll_x = close_x - dp(8) - dp(132);
             paint_text(cr, ui_font(), "Graphs rolled up — city keeps running", x + margin, y + dp(54),
-                       theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(110)));
-            button(cr, x + dw - margin - dp(96), y + dp(48), dp(96), dp(32), "Close", kClose, false);
+                       theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(std::max(0.0, roll_x - dp(8) - (x + margin))));
+            button(cr, roll_x, y + dp(48), dp(132), dp(32), "Expand", kGraphRoll, false);
+            button(cr, close_x, y + dp(48), dp(96), dp(32), "Close", kClose, false);
             return;
         }
         button(cr, x + margin, y + dp(46), dp(140), dp(32), "10 year", kShortScale, false, !graphs_long_);
         button(cr, x + margin + dp(148), y + dp(46), dp(140), dp(32), "120 year", kLongScale, false, graphs_long_);
+        button(cr, x + dw - margin - dp(132), y + dp(46), dp(132), dp(32), "Roll up", kGraphRoll, false);
         const double legend_row_h = dp(20);
         const double button_top = y + dh - margin - dp(36);
         const double legend_top = button_top - dp(32) - legend_h;
@@ -3527,7 +3603,13 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, ui_font(), "Dashed line: middle of each series", nx + dp(24), note_y, theme::kTextR,
                        theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(24)));
         }
-        paint_text(cr, ui_font(), "Click a series to solo; click it again for all.", x + margin,
+        // Review nov25 #4: the pad and touch get their own words.
+        const std::string solo_note =
+            (gamepad_nav_ || (deck_ && !touch_used_)) ? std::string(glyph_for(PadConfirm)) + " on a series solos it; " +
+                               glyph_for(PadConfirm) + " again shows all."
+                         : (touch_used_ ? std::string("Tap a series to solo; tap it again for all.")
+                                        : std::string("Click a series to solo; click it again for all."));
+        paint_text(cr, ui_font(), solo_note, x + margin,
                    button_top - dp(20), theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin));
         buttons_at(x, dw, button_top, {{"_Close", kClose}});
         return;
@@ -3942,7 +4024,13 @@ void Shell::draw_dialog(cairo_t *cr)
             floor_y = static_cast<double>(quick_y_) - margin;
         }
         DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
-        if (query_anchored_) {
+        double box_l = 0;
+        double box_t = 0;
+        double box_r = 0;
+        double box_b = 0;
+        if (query_anchored_ && query_screen_box(box_l, box_t, box_r, box_b)) {
+            panel = place_beside(win_w_, band_h, panel.w, panel.h, box_l, box_t, box_r, box_b, margin);
+        } else if (query_anchored_) {
             panel = place_near(win_w_, band_h, panel.w, panel.h, query_anchor_x_, query_anchor_y_, margin);
         }
         // Stay under the menu bar and the info band (or the handheld chips).
@@ -4066,7 +4154,7 @@ void Shell::draw_dialog(cairo_t *cr)
             widest_label = std::max(widest_label, static_cast<double>(measure_text(cr, ui_font(), "Growth", -1).width));
         }
         double widest_value = 0.0;
-        for (const char *value : {"100%", "Down", "Flat"}) {
+        for (const char *value : {"100%", "Down", "Flat", "Held"}) {
             widest_value = std::max(widest_value, static_cast<double>(measure_text(cr, ui_font(), value, -1).width));
         }
         const inspect_report::BarLayout bar_layout =
@@ -4110,13 +4198,19 @@ void Shell::draw_dialog(cairo_t *cr)
             const double g = std::max(-1.0, std::min(1.0, facts.facts.growth / 200.0));
             // Any change shows at least a sliver, so a slow climb still reads.
             const double reach = std::max(static_cast<double>(dp(4)), bar_w / 2.0 * std::fabs(g));
-            if (g > 0.0) {
+            if (g > 0.0 && report.status == "Stalled") {
+                fill(cr, mid, track_y, reach, dp(8), 0.55, 0.58, 0.62);
+            } else if (g > 0.0) {
                 fill(cr, mid, track_y, reach, dp(8), 0.36, 0.80, 0.45);
             } else if (g < 0.0) {
                 fill(cr, mid - reach, track_y, reach, dp(8), 0.36, 0.55, 0.95);
             }
             fill(cr, mid - 0.5, track_y - dp(2), 1.0, dp(12), ink_r, ink_g, ink_b);
-            const char *trend = g > 0.0 ? "Up" : (g < 0.0 ? "Down" : "Flat");
+            // A zone with no power or road cannot grow, whatever its growth
+            // reading says: the trend matches the "Stalled" pill (review
+            // nov25 #10 showed Stalled beside Growth Up).
+            const bool held = report.status == "Stalled";
+            const char *trend = held ? "Held" : (g > 0.0 ? "Up" : (g < 0.0 ? "Down" : "Flat"));
             const TextMetrics tm = measure_text(cr, ui_font(), trend, -1);
             paint_text(cr, ui_font(), trend, x + panel.w - margin - tm.width, cy + dp(2), ink_r, ink_g, ink_b, -1);
             text_spans_.push_back(TextSpan{x + margin, cy, inner, row_h});
@@ -4303,9 +4397,11 @@ void Shell::draw(cairo_t *cr)
                 map_.clear_hover();
             } else if (gamepad_nav_ && !pad_dragging_) {
                 map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
-            } else if (!gamepad_nav_ && handheld_ && terrain_edit_ && hit(pointer_x_, pointer_y_) != kMapId) {
-                // The editor's quick bar and chips sit over the map: no
-                // brush footprint under the pointer there.
+            } else if (!gamepad_nav_ && handheld_ && hit(pointer_x_, pointer_y_) != kMapId) {
+                // The quick bar and chips sit over the map: no footprint or
+                // brush under a touch or trackpad pointer there (it used to
+                // show "Bulldoze first" under the bar in play, not only in
+                // the terrain editor).
                 map_.clear_hover();
             } else if (!gamepad_nav_ && !pointer_down_ && pointer_x_ >= view_x_ &&
                        pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ && pointer_y_ < view_y_ + view_h_) {
@@ -4430,6 +4526,8 @@ void Shell::draw(cairo_t *cr)
             // above the raised quick-bar slot, the same lift draw_toasts
             // gives the alerts stacked above this card.
             card_y -= dp(44);
+            // A tool card with a line about the tool is taller than that.
+            card_y = clear_of_tool_card(card_y + card_h, card_x, card_x + card_w) - card_h;
         }
         const bool grand = effects_fx::ceremony_for_milestone(card_id_, civic::Town, civic::Megalopolis);
         const int pop_ms = grand && !ceremony_won_ ? ceremony_ms_ : -1;
@@ -4940,12 +5038,23 @@ std::string Shell::dialog_title_hint() const
         return pad ? with_b(hint_button(a, "types"), typed, hint_button(menu, "confirms")) : "Enter types. Esc closes";
     }
     if (field) {
+        // On a pad, A on a text field does not type (the keys do): it is the
+        // dialog's action (activate_focus), except on the save name, where it
+        // goes to the keys. The header said "A types" there (review nov25).
+        const char *a_verb = "types";
+        if (dialog_ == Dialog::NewCity) {
+            a_verb = new_page_ == 0 ? "goes on" : "generates";
+        } else if (dialog_ == Dialog::Rename || dialog_ == Dialog::FileRename) {
+            a_verb = "renames";
+        } else if (dialog_ == Dialog::Files && files_save_ && osk_visible()) {
+            a_verb = "opens the keys";
+        }
         if (dialog_ == Dialog::NewCity && new_page_ > 0 && focus_id_ == kFieldSeed && field_b_ == "auto") {
-            return pad ? hint_join({hint_button(a, "types"), hint_button(b, "goes back"), hint_button(menu, "confirms")})
+            return pad ? hint_join({hint_button(a, a_verb), hint_button(b, "goes back"), hint_button(menu, "confirms")})
                        : "Type here. Enter confirms. Esc goes back";
         }
         const std::string &typed = focus_id_ == kFieldSeed ? field_b_ : field_a_;
-        return pad ? with_b(hint_button(a, "types"), typed, hint_button(menu, "confirms"))
+        return pad ? with_b(hint_button(a, a_verb), typed, hint_button(menu, "confirms"))
                    : "Type here. Enter confirms. Esc closes";
     }
     if (focus_id_ >= kSlider && focus_id_ < kSlider + 8) {
@@ -5012,7 +5121,9 @@ std::string Shell::dialog_title_hint() const
     }
     if (dialog_ == Dialog::Bindings) {
         if (bind_listen_) {
-            return pad ? hint_join({"Press a button", hint_button(b, "cancels"), "Backspace clears"})
+            // No "Backspace clears" on a pad: there is no pad button for it
+            // while listening (any press binds). X clears from the row.
+            return pad ? hint_join({"Press a button", hint_button(b, "cancels")})
                        : "Press a key. Esc cancels. Backspace clears";
         }
         if (focus_id_ == kCancel) {
@@ -5122,6 +5233,11 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
         // Clear of the chosen tool's name and price, drawn above the raised
         // quick-bar slot.
         bottom -= dp(44);
+        // The tool card grows a line about the tool (and the section while
+        // a shoulder is held), so it can be taller than that lift; alerts
+        // sat on its top corner (review nov25 #2).
+        const double right = view_x_ + view_w_ - edge - hud_right_;
+        bottom = clear_of_tool_card(bottom, right - max_w, right);
     }
     if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging() && !terrain_edit_) {
         bottom -= dp(78) + gap;
@@ -5961,9 +6077,9 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         const double tx = x + (w - metrics.width) / 2.0;
         const double ty = y + (h - metrics.height) / 2.0;
         if (primary) {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), 1, 1, 1);
         } else {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, body_r, body_g, body_b);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), body_r, body_g, body_b);
         }
     };
 
@@ -6939,7 +7055,12 @@ void Shell::draw_hover_card(cairo_t *cr)
         return;
     }
     const CitySession::InspectFacts facts = session_.inspect_facts(hx, hy);
-    const inspect_report::Report report = inspect_report::make(facts.facts);
+    inspect_report::Report report = inspect_report::make(facts.facts);
+    if (report.status == card.name) {
+        // A park's status is its own name: the card read "Park / Park"
+        // (review nov25 #16). The title already says it.
+        report.status.clear();
+    }
     const bool power_line = card.power != "Power: —";
     const std::string next_line = report.next.empty() ? std::string() : "Next: " + report.next;
     std::string pay_line;
@@ -6979,7 +7100,10 @@ void Shell::draw_hover_card(cairo_t *cr)
     if (card.offer_power) {
         body_h += dp(34);
     }
-    const double card_h = std::max(static_cast<double>(dp(72)), body_h + dp(16));
+    // A card with only its title (a park) is not padded out to the usual
+    // height, which left an empty plate under "Park".
+    const bool title_only = body_h <= dp(26);
+    const double card_h = std::max(static_cast<double>(title_only ? dp(42) : dp(72)), body_h + dp(16));
     inspect_card_shown_ = true;
     inspect_card_w_ = card_w;
     inspect_card_h_ = card_h;
@@ -7080,8 +7204,45 @@ double Shell::minimap_clearance() const
     return mini_h_ > 0 ? std::max(0.0, static_cast<double>(mini_bottom() - view_y_)) : 0.0;
 }
 
+bool Shell::query_screen_box(double &left, double &top, double &right, double &bottom)
+{
+    int qx = 0;
+    int qy = 0;
+    if (!session_.query_tile(qx, qy)) {
+        return false;
+    }
+    const CitySession::TileInspect card = session_.inspect_tile(qx, qy);
+    int tl = qx;
+    int tt = qy;
+    int tw = 1;
+    int th = 1;
+    if (card.zone && card.width > 0 && card.height > 0) {
+        tl = card.left;
+        tt = card.top;
+        tw = card.width;
+        th = card.height;
+    }
+    const double ts = std::max(1, map_.tile_size());
+    const double ox = snapped_map_origin(view_x_, map_ox_, scroll_x_) + map_.shake_x();
+    const double oy = snapped_map_origin(view_y_, map_oy_, scroll_y_) + map_.shake_y();
+    left = ox + tl * ts;
+    top = oy + tt * ts;
+    right = left + tw * ts;
+    bottom = top + th * ts;
+    return true;
+}
+
+double Shell::clear_of_tool_card(double bottom, double left, double right) const
+{
+    if (!handheld_ || !tool_card_on_ || left >= tool_card_x_ + tool_card_w_ || right <= tool_card_x_) {
+        return bottom;
+    }
+    return std::min(bottom, tool_card_y_ - dp(8));
+}
+
 void Shell::draw_handheld_hud(cairo_t *cr)
 {
+    tool_card_on_ = false;
     const bool open_ui = dialog_ != Dialog::None;
     draw_minimap_overlay(cr);
     // Menu chip and the compact info pill, top left. The menu bar replaces
@@ -7441,6 +7602,10 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             double cx = xs[label_tool] + ws[label_tool] / 2.0 - cw / 2.0;
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
+            tool_card_on_ = true;
+            tool_card_x_ = cx;
+            tool_card_y_ = cy;
+            tool_card_w_ = cw;
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
             // An edge line keeps the card readable where it sits on the deep
             // slate past the map edge, the same color as its fill.
@@ -7568,11 +7733,13 @@ std::vector<std::pair<std::string, std::string>> Shell::pad_legend() const
     }
     if (terrain_edit_) {
         // The editor's own buttons (shell.cpp): A paints, B leaves like
-        // Cancel, L1/R1 step the pieces, Y the brush, Start is Map Complete.
+        // Cancel, L1/R1 step the pieces, Y the brush, X undoes a stroke,
+        // Start is Map Complete. (L3 redoes; the Redo chip shows it.)
         return {{a, "Paint"},
                 {b, "Leave"},
                 {std::string(glyph_for(PadPrevTool)) + "/" + glyph_for(PadNextTool), "Terrain"},
                 {glyph_for(PadPause), "Brush"},
+                {glyph_for(PadQuery), "Undo"},
                 {menu, "Map Complete"}};
     }
     const ToolDef *tool = tool_by_index(tool_index_);

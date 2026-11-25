@@ -788,7 +788,7 @@ inline BindRow bind_row(int index)
         {"Open the menu", -1, PadMenu},
         {"Previous tool", -1, PadPrevTool},
         {"Next tool", -1, PadNextTool},
-        {"Map overlay", -1, PadOverlay},
+        {"Data map", -1, PadOverlay},
         {"Center on cursor", -1, PadCenter},
         {"New city", KeyNewCity, -1},
         {"Load city", KeyLoad, -1},

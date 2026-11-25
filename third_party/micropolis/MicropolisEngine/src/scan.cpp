@@ -162,6 +162,10 @@ void Micropolis::populationDensityScan()
 
     computeComRateMap();          /* Compute the comRateMap */
 
+    // City 2: the share of that density powered Data Centers add, which
+    // crime leaves out (crimeScan).
+    computeDatacenterDensity();
+
 
     // Compute new city center
     if (Ztot > 0) {               /* Find Center of Mass for City */
@@ -234,6 +238,61 @@ int Micropolis::getPopulationDensity(const Position &pos, MapTile tile)
     }
 
     return 0;
+}
+
+
+/**
+ * City 2 (review nov25 #15): a powered Data Center counts as light jobs in
+ * populationDensityMap so houses beside it can grow into apartments. Crime
+ * reads that map too, so homes beside Data Centers read high crime and
+ * stalled. This keeps the Data Centers' share in its own map so crimeScan
+ * can leave it out. With no powered, intact Data Center the map is all
+ * zero and crime is exactly what it was.
+ */
+void Micropolis::computeDatacenterDensity()
+{
+    datacenterDensityMap.clear();
+    bool any = false;
+    for (int x = 0; x < WORLD_W && !any; x++) {
+        for (int y = 0; y < WORLD_H; y++) {
+            const MapValue mapValue = map[x][y];
+            if ((mapValue & ZONEBIT) != 0 && (mapValue & LOMASK) == SPECIAL_DATACENTER &&
+                getPopulationDensity(Position(x, y), SPECIAL_DATACENTER) > 0) {
+                any = true;
+                break;
+            }
+        }
+    }
+    if (!any) {
+        return;
+    }
+    // The same smoothed density as populationDensityScan, without them.
+    tempMap1.clear();
+    for (int x = 0; x < WORLD_W; x++) {
+        for (int y = 0; y < WORLD_H; y++) {
+            const MapValue mapValue = map[x][y];
+            if ((mapValue & ZONEBIT) == 0) {
+                continue;
+            }
+            const MapTile mapTile = mapValue & LOMASK;
+            if (mapTile == SPECIAL_DATACENTER) {
+                continue;
+            }
+            int pop = getPopulationDensity(Position(x, y), mapTile) * 8;
+            pop = min(pop, 254);
+            tempMap1.worldSet(x, y, (Byte)pop);
+        }
+    }
+    doSmooth1(); // tempMap1 -> tempMap2
+    doSmooth2(); // tempMap2 -> tempMap1
+    doSmooth1(); // tempMap1 -> tempMap2
+    const Byte *without = tempMap2.getBase();
+    const Byte *with = populationDensityMap.getBase();
+    Byte *share = datacenterDensityMap.getBase();
+    for (int i = 0; i < tempMap2.MAP_W * tempMap2.MAP_H; i++) {
+        const int extra = (int)with[i] - (int)without[i] * 2;
+        share[i] = (Byte)clamp(extra, 0, 255);
+    }
 }
 
 
@@ -453,7 +512,9 @@ void Micropolis::crimeScan()
             if (z > 0) {
                 ++numz;
                 z = 128 - z;
-                z += populationDensityMap.worldGet(x, y);
+                // Data Centers' share of the density is not crime (City 2,
+                // review nov25 #15); it still lets houses beside them grow.
+                z += populationDensityMap.worldGet(x, y) - datacenterDensityMap.worldGet(x, y);
                 z = min(z, 300);
                 z -= policeStationMap.worldGet(x, y);
                 z = clamp(z, 0, 250);
@@ -702,6 +763,7 @@ void Micropolis::applyOrSettleScanMapsAfterLoad()
             if (trafficDensityMap.MAP_W * trafficDensityMap.MAP_H == (int)sizeof(pendingTrafficMap)) {
                 memcpy(trafficDensityMap.getBase(), pendingTrafficMap, sizeof(pendingTrafficMap));
                 memcpy(populationDensityMap.getBase(), pendingPopDensityMap, sizeof(pendingPopDensityMap));
+                computeDatacenterDensity();
             }
             if (rateOfGrowthMap.MAP_W * rateOfGrowthMap.MAP_H * (int)sizeof(short) == (int)sizeof(pendingRateOfGrowth)) {
                 memcpy(rateOfGrowthMap.getBase(), pendingRateOfGrowth, sizeof(pendingRateOfGrowth));
@@ -721,6 +783,7 @@ void Micropolis::applyOrSettleScanMapsAfterLoad()
     paintServiceCoverage();
     pollutionTerrainLandValueScan();
     paintServiceCoverage();
+    computeDatacenterDensity();
     crimeScan();
     paintServiceCoverage();
     fireAnalysis();

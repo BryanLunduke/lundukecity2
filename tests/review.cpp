@@ -421,6 +421,20 @@ int main()
     if (popped.x < 16 || popped.y < 16 || popped.x + popped.w > 1280 - 16 || popped.y + popped.h > 800 - 16) {
         return fail("query popup escaped the window");
     }
+    // Review nov25 #10: the Inspect card sits beside the building, not on it.
+    {
+        auto overlaps = [](const DialogRect &r, double l, double t, double rr, double b) {
+            return r.x < rr && r.x + r.w > l && r.y < b && r.y + r.h > t;
+        };
+        const DialogRect right = place_beside(1280, 800, 360, 420, 480, 430, 570, 525, 16);
+        const DialogRect left = place_beside(1280, 800, 360, 420, 1000, 300, 1096, 396, 16);
+        const DialogRect wide = place_beside(1280, 800, 600, 300, 400, 100, 880, 196, 16);
+        if (overlaps(right, 480, 430, 570, 525) || right.x < 570 || overlaps(left, 1000, 300, 1096, 396) ||
+            left.x + left.w > 1000 || overlaps(wide, 400, 100, 880, 196) || wide.x < 16 || wide.x + wide.w > 1264 ||
+            right.y + right.h > 800 - 16) {
+            return fail("inspect card covers the building it describes");
+        }
+    }
     redraw::Reasons idle;
     if (redraw::needed(idle)) {
         return fail("idle frame should not redraw");

@@ -90,7 +90,8 @@ inline std::vector<HowToPlaySection> how_to_play_sections(const ControlsPadNames
         {"Special buildings",
          "Parks, the Zoo, the Library and the Marina raise land value. Casinos, Amusement Parks and Marinas also pay "
          "each year, but only with power, a road and residents nearby. A Prison cuts crime. A Data Center adds jobs "
-         "and taxes, not residents, and draws three times the power of a zone."},
+         "and taxes, not residents, and draws three times the power of a zone. While powered it counts toward the "
+         "density of the homes around it, but not toward their crime."},
         {"Finding your way",
          "A scenario names a goal and a deadline. Right-click the map, or press Q, to switch to Inspect, then click "
          "a tile for its card: power, road, and why it is or is not growing. The minimap jumps across the city."},
@@ -259,7 +260,7 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                                 {pad.north, "Pause or resume. Hold to cycle slow, medium, and fast"},
                                 {pad.menu, "Open the menu. In a window, press OK"},
                                 {std::string(pad.left) + " / " + pad.right, "Previous or next tool. Hold to jump a section. A bigger slider step"},
-                                {pad.l3, "Show or hide the map overlay"},
+                                {pad.l3, "Show or hide the data map"},
                                 {pad.r3, "Center the view on the cursor"},
                             }, 0});
         sections.push_back({"Moving around",

@@ -463,6 +463,12 @@ bool Shell::on_terrain_hotspot(int id)
         cancel_terrain_editor();
         return true;
     }
+    if (id == kTerrainUndo || id == kTerrainRedo) {
+        // The Undo / Redo chips: the same stroke step as Ctrl+Z / Ctrl+Y and
+        // the pad's X / L3, so a Deck or touch player can take a stroke back.
+        step_terrain_history(id == kTerrainRedo);
+        return true;
+    }
     // Nothing else in the editor's chrome does anything (there is no menu).
     return id != kMapId && id != kMinimapId && id != kHudZoomIn && id != kHudZoomOut && id != kHudCenter;
 }
@@ -640,18 +646,25 @@ void Shell::draw_terrain_band(cairo_t *cr)
     // Buttons on the right: Cancel, then Map Complete as the main action.
     const double bh = dp(30);
     const double by = y + (h - bh) / 2.0;
-    const char *labels[2] = {"Cancel", "Map Complete"};
-    const int ids[2] = {kTerrainCancel, kTerrainComplete};
-    double widths[2] = {};
-    for (int i = 0; i < 2; ++i) {
-        widths[i] = std::max(static_cast<double>(dp(84)), static_cast<double>(measure_text(cr, bold_font(), labels[i], -1).width + dp(28)));
+    // Undo and Redo step one brush stroke (Ctrl+Z / Ctrl+Y); they used to
+    // be keyboard-only (review nov25 #12).
+    const char *labels[4] = {"Undo", "Redo", "Cancel", "Map Complete"};
+    const int ids[4] = {kTerrainUndo, kTerrainRedo, kTerrainCancel, kTerrainComplete};
+    const bool able[4] = {terrain_history_.can_undo(), terrain_history_.can_redo(), true, true};
+    double widths[4] = {};
+    double total = 0;
+    for (int i = 0; i < 4; ++i) {
+        widths[i] = std::max(static_cast<double>(dp(i < 2 ? 64 : 84)),
+                             static_cast<double>(measure_text(cr, bold_font(), labels[i], -1).width + dp(28)));
+        total += widths[i] + (i > 0 ? dp(8) : 0);
     }
-    double bx = right_edge - widths[0] - dp(8) - widths[1];
+    double bx = right_edge - total;
     const double buttons_left = bx;
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 4; ++i) {
         const int id = ids[i];
         const bool primary = id == kTerrainComplete;
-        const bool hot = dialog_ == Dialog::None && (hover_id_ == id || (gamepad_nav_ && hit(cursor_x_, cursor_y_) == id));
+        const bool hot = able[i] && dialog_ == Dialog::None &&
+                         (hover_id_ == id || (gamepad_nav_ && hit(cursor_x_, cursor_y_) == id));
         const bool down = hot && pointer_down_ && hover_id_ == id;
         if (slate_) {
             rounded_path(cr, bx, by, widths[i], bh, dp(6));
@@ -664,10 +677,10 @@ void Shell::draw_terrain_band(cairo_t *cr)
             cairo_stroke(cr);
             const TextMetrics m = measure_text(cr, bold_font(), labels[i], -1);
             text(cr, bold_font(), labels[i], bx + (widths[i] - m.width) / 2.0, by + (bh - m.height) / 2.0,
-                 primary ? kSlateDeep : kSlateInk);
+                 primary ? kSlateDeep : (able[i] ? kSlateInk : kSlateDim));
             push_hot(bx, by, widths[i], bh, id);
         } else {
-            button(cr, bx, by, widths[i], bh, labels[i], id, false);
+            button(cr, bx, by, widths[i], bh, labels[i], id, !able[i]);
             if (primary) {
                 // The main action: a gold keyline like the chosen toolbar stone.
                 cairo_set_source_rgb(cr, 0xB8 / 255.0, 0x8C / 255.0, 0x2E / 255.0);
@@ -793,10 +806,12 @@ void Shell::draw_terrain_hud(cairo_t *cr)
     const double right_limit = mini_x_ - dp(16);
     const std::string piece = terrain_paint::piece_name(static_cast<terrain_paint::Piece>(terrain_piece_));
     const std::string brush = std::string(terrain_brush_ >= terrain_paint::kBrushLarge ? "3x3" : "1x1") + " brush";
-    const char *labels[2] = {"Cancel", "Map Complete"};
-    const int ids[2] = {kTerrainCancel, kTerrainComplete};
-    double button_w[2] = {};
-    for (int i = 0; i < 2; ++i) {
+    // Undo / Redo chips first (review nov25 #12: undo was keyboard-only).
+    const char *labels[4] = {"Undo", "Redo", "Cancel", "Map Complete"};
+    const int ids[4] = {kTerrainUndo, kTerrainRedo, kTerrainCancel, kTerrainComplete};
+    const bool able[4] = {terrain_history_.can_undo(), terrain_history_.can_redo(), true, true};
+    double button_w[4] = {};
+    for (int i = 0; i < 4; ++i) {
         button_w[i] = measure_text(cr, bold_font(), labels[i], -1).width + dp(32);
     }
     // Title chip: a TERRAIN tag, the piece being painted, the brush, and
@@ -808,7 +823,7 @@ void Shell::draw_terrain_hud(cairo_t *cr)
     const double sep = dp(12);
     const double piece_w = measure_text(cr, bold_font(), piece, -1).width;
     const double brush_w = measure_text(cr, ui_font(), brush, -1).width;
-    const double buttons = button_w[0] + dp(8) + button_w[1];
+    const double buttons = button_w[0] + button_w[1] + button_w[2] + button_w[3] + dp(8) * 3;
     double x = dp(10);
     double title_w = pad + tag_w + sep + piece_w + sep + brush_w + pad;
     std::string city = field_a_;
@@ -844,10 +859,10 @@ void Shell::draw_terrain_hud(cairo_t *cr)
         }
     }
     x += title_w + dp(8);
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 4; ++i) {
         const int id = ids[i];
         const bool primary = id == kTerrainComplete;
-        const bool hot = live && under == id;
+        const bool hot = live && able[i] && under == id;
         const bool down = hot && pointer_down_ && hover_id_ == id;
         rounded_path(cr, x, top, button_w[i], chip_h, dp(10));
         const Ink face = primary ? (down ? kSlateGoldDim : kSlateGold) : (hot ? kSlateEdge : kSlateBand);
@@ -859,7 +874,7 @@ void Shell::draw_terrain_hud(cairo_t *cr)
         cairo_stroke(cr);
         const TextMetrics m = measure_text(cr, bold_font(), labels[i], -1);
         text(cr, bold_font(), labels[i], x + (button_w[i] - m.width) / 2.0, top + (chip_h - m.height) / 2.0,
-             primary ? kSlateDeep : kSlateInk);
+             primary ? kSlateDeep : (able[i] ? kSlateInk : kSlateDim));
         push_hot(x, top, button_w[i], chip_h, id);
         x += button_w[i] + dp(8);
     }
@@ -955,6 +970,28 @@ void Shell::draw_terrain_hud(cairo_t *cr)
         const double ch = m.height + dp(8);
         const double cx = std::max(static_cast<double>(dp(8)), std::min(chosen_x - cw / 2.0, win_w_ - cw - dp(8)));
         const double cy = quick_y_ - lift - ch - dp(6);
+        // The brush footprint over the map carries its own tag with the
+        // piece's name ("Channel · 3x3"). Where the brush (or that tag
+        // above it) reaches this chip, the chip is left out so the two
+        // labels do not stack over the brush (review nov25 #14).
+        bool covered = false;
+        int hx = 0;
+        int hy = 0;
+        if (map_.hover_tile(hx, hy)) {
+            const double ts = std::max(1, map_.tile_size());
+            const int half = terrain_brush_ >= terrain_paint::kBrushLarge ? 1 : 0;
+            const double ox = snapped_map_origin(view_x_, map_ox_, scroll_x_) + map_.shake_x();
+            const double oy = snapped_map_origin(view_y_, map_oy_, scroll_y_) + map_.shake_y();
+            const double fl = ox + (hx - half) * ts;
+            const double fr = ox + (hx + half + 1) * ts;
+            const double ft = oy + (hy - half) * ts - dp(40);
+            const double fb = oy + (hy + half + 1) * ts;
+            covered = fl < cx + cw && fr > cx && ft < cy + ch && fb > cy;
+        }
+        if (covered) {
+            draw_pad_legend(cr, win_h_ - hint_h_, hint_h_);
+            return;
+        }
         rounded_path(cr, cx, cy, cw, ch, dp(6));
         cairo_set_source_rgba(cr, kSlateDeep.r, kSlateDeep.g, kSlateDeep.b, 0.92);
         cairo_fill_preserve(cr);

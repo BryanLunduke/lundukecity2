@@ -380,16 +380,16 @@ void Shell::note_ui_frame(cairo_surface_t *surface)
             return;
         }
         // Focus comes from the model; the pixels then have to show it. The
-        // fill stays the primary blue, and the ring is the button's own edge
-        // turned focus blue (an unfocused edge is gold). The edge stroke is
-        // at least 3px wide, centred on the outline, so the pixel half a
-        // pixel inside the top edge is ring at any fractional position.
+        // fill stays the primary blue, and the ring is an orange line 3px
+        // outside the edge (review nov25 #7: a blue edge read like the blue
+        // default button). The 3px stroke is centred 3px out, so the pixel
+        // 3px above the top edge is ring at any fractional position.
         int er = 0;
         int eg = 0;
         int eb = 0;
         const bool edge_ok = channel_at(surface, static_cast<int>(std::floor(save->x + save->w / 2.0)),
-                                        static_cast<int>(std::floor(save->y + 0.5)), er, eg, eb);
-        if (focus_id_ != kSave || sb < sr + 20 || !edge_ok || eb < er + 20) {
+                                        static_cast<int>(std::floor(save->y - 3.0)), er, eg, eb);
+        if (focus_id_ != kSave || sb < sr + 20 || !edge_ok || er < eb + 80 || er < 170) {
             ran_ok_ = false;
             smoke_error_ = "Save is not the focused button (focus " + std::to_string(focus_id_) + ", fill " +
                            std::to_string(sr) + "," + std::to_string(sg) + "," + std::to_string(sb) + ", ring " +
@@ -626,10 +626,44 @@ void Shell::drive_ui_test()
         ui_step_ = 2;
         return;
     }
-    case 2:
+    case 2: {
+        // Review nov25 #11: open System with a click, slide onto Options
+        // (it opens by hover), then click Options. The menu stays on
+        // Options; a second click closes it.
+        const Hotspot *first = find_hot(hot_, kMenuTitle, 0);
+        const Hotspot *second = find_hot(hot_, kMenuTitle + 1, 0);
+        if (first == nullptr || second == nullptr) {
+            fail("the menu bar titles have no hotspots");
+            return;
+        }
+        const double fx = first->x + first->w * 0.5;
+        const double fy = first->y + first->h * 0.5;
+        const double sx = second->x + second->w * 0.5;
+        const double sy = second->y + second->h * 0.5;
+        click_at(fx, fy);
+        SDL_Event slide{};
+        slide.type = SDL_EVENT_MOUSE_MOTION;
+        slide.motion.x = static_cast<float>(sx);
+        slide.motion.y = static_cast<float>(sy);
+        handle_event(slide);
+        if (menu_.open_menu != 1) {
+            fail("sliding onto Options did not open it");
+            return;
+        }
+        click_at(sx, sy);
+        if (menu_.open_menu != 1) {
+            fail("a click on the title the pointer slid onto closed the menu");
+            return;
+        }
+        click_at(sx, sy);
+        if (menu_.open()) {
+            fail("a second click on the open title did not close the menu");
+            return;
+        }
         open_column(3);
         ui_step_ = 3;
         return;
+    }
     case 3: {
         const Hotspot *hot = find_hot(hot_, kMenuItem + 3 * 40 + 2, 0);
         if (hot == nullptr) {
@@ -704,6 +738,12 @@ void Shell::drive_ui_test()
         return;
     }
     case 8: {
+        // A pad opens New City on the first key, so the first A types
+        // (review nov25 #17).
+        if (show_osk() && focus_id_ != kOsk) {
+            fail("pad-opened New City starts on " + std::to_string(focus_id_) + ", not the keyboard");
+            return;
+        }
         int key_count = 0;
         osk_keys(key_count);
         std::vector<Hotspot> keys;
@@ -2069,11 +2109,43 @@ void Shell::drive_ui_test()
             pad(SDL_GAMEPAD_BUTTON_NORTH);
             const int brush_pad = terrain_brush_;
             pad(SDL_GAMEPAD_BUTTON_NORTH);
-            pad(SDL_GAMEPAD_BUTTON_WEST);
             if (piece_next != (piece_was + 1) % terrain_paint::kPieceCount || terrain_piece_ != piece_was ||
                 brush_pad != terrain_paint::kBrushLarge || terrain_brush_ != terrain_paint::kBrushSmall ||
                 !terrain_edit_ || dialog_ != Dialog::None) {
                 fail("the gamepad did not cycle terrain and flip the brush");
+                return;
+            }
+            // Review nov25 #12: X (Inspect elsewhere) takes the last stroke
+            // back and L3 lays it again, so a Deck can undo without a
+            // keyboard. The Undo / Redo chips do the same.
+            const std::vector<unsigned short> wet_again = terrain_work_;
+            pad(SDL_GAMEPAD_BUTTON_WEST);
+            if (terrain_work_ != before || !terrain_edit_ || dialog_ != Dialog::None) {
+                fail("X did not undo the last brush stroke in the editor");
+                return;
+            }
+            pad(SDL_GAMEPAD_BUTTON_LEFT_STICK);
+            if (terrain_work_ != wet_again) {
+                fail("L3 did not redo the brush stroke in the editor");
+                return;
+            }
+            render();
+            const Hotspot *undo_chip = find_hot(hot_, kTerrainUndo, 0);
+            const Hotspot *redo_chip = find_hot(hot_, kTerrainRedo, 0);
+            if (undo_chip == nullptr || redo_chip == nullptr) {
+                fail("the editor has no Undo / Redo buttons");
+                return;
+            }
+            click_at(undo_chip->x + undo_chip->w * 0.5, undo_chip->y + undo_chip->h * 0.5);
+            if (terrain_work_ != before) {
+                fail("the Undo button did not undo the stroke");
+                return;
+            }
+            render();
+            redo_chip = find_hot(hot_, kTerrainRedo, 0);
+            click_at(redo_chip->x + redo_chip->w * 0.5, redo_chip->y + redo_chip->h * 0.5);
+            if (terrain_work_ != wet_again) {
+                fail("the Redo button did not redo the stroke");
                 return;
             }
             gamepad_nav_ = false;

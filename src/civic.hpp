@@ -112,7 +112,7 @@ inline const char *milestone_title(int id)
     case Powered:
         return "A powered neighborhood";
     case Balanced:
-        return "A balanced year";
+        return "A balanced budget";
     case Traffic:
         return "Traffic eased";
     case Town:
@@ -136,7 +136,10 @@ inline const char *milestone_card(int id)
     case Powered:
         return "The first homes have power and people in them.";
     case Balanced:
-        return "This January the books closed without a loss.";
+        // The January budget (taxes against road, police and fire bills),
+        // not the funds: building can still spend more than that (review
+        // nov25 #9, the Year in Review said "Lost $9" beside this card).
+        return "This January's taxes covered the road, police and fire bills.";
     case Traffic:
         return "Traffic complaints are lower than last year. The poll does not name a cause.";
     case Town:
@@ -162,7 +165,7 @@ inline const char *milestone_highlight(int id)
     case Powered:
         return "The first homes got power";
     case Balanced:
-        return "Finished the year without losing money";
+        return "Taxes covered the road, police and fire bills";
     case Traffic:
         return "Fewer traffic complaints than last year";
     case Town:
@@ -721,9 +724,11 @@ inline ReviewText make_review_text(const YearDigest &digest, int homes, int shop
     text.funds = "Start of year " + dollars(digest.opening_funds) + "\nEnd of year" + est + " " +
                  dollars(digest.closing_funds) + "\n";
     if (delta > 0) {
-        text.funds += "Gained " + dollars(delta) + " this year";
+        text.funds += "Funds up " + dollars(delta) + " this year";
     } else if (delta < 0) {
-        text.funds += "Lost " + dollars(-delta) + " this year";
+        // Not "Lost": most of a fall is usually what was built (review
+        // nov25 #8).
+        text.funds += "Funds down " + dollars(-delta) + " this year";
     } else {
         text.funds += "Broke even this year";
     }

@@ -76,7 +76,7 @@ int check_start_funds()
     digest.closing_funds = 10251;
     const civic::ReviewText review = civic::make_review_text(digest, 0, 0, 0, true, "Village", 0, 0);
     if (review.funds.find("Start of year $20,000") == std::string::npos ||
-        review.funds.find("Lost $9,749") == std::string::npos) {
+        review.funds.find("Funds down $9,749") == std::string::npos) {
         return fail(22, "review funds text: " + review.funds);
     }
     return 0;

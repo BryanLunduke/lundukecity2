@@ -723,6 +723,7 @@ void Shell::note_keyboard_input()
 {
     gamepad_nav_ = false;
     touch_used_ = false;
+    keyboard_seen_ = true;
     sync_pointer_cursor();
 }
 
@@ -1475,7 +1476,17 @@ void Shell::loop()
         }
         poll_file_dialog();
         const bool skip_pause_note = smoke_ || ui_test_ || review_ || (!demo_.empty() && demo_ != "paused");
-        if (!pause_noted_ && !skip_pause_note && dialog_ == Dialog::None && !welcome_gate_ && speed_ == 0 && frame_ > 1) {
+        bool resume_said = false;
+        for (const Toast &toast : toasts_) {
+            // A live "Controller connected. Y resumes" already says how to
+            // run the city; the pause alert would stack on it (review nov25
+            // #16). The pause note waits until it has gone.
+            if (toast.until > wall && toast.text.compare(0, 21, "Controller connected.") == 0) {
+                resume_said = true;
+            }
+        }
+        const bool pause_due = dialog_ == Dialog::None && !welcome_gate_ && speed_ == 0 && frame_ > 1;
+        if (!pause_noted_ && !skip_pause_note && pause_due && !resume_said) {
             pause_noted_ = true;
             if (deck_ || gamepad_nav_ || pad_ != nullptr) {
                 shown_message_ = pause_run_hint(glyph_for(PadPause), glyph_for(PadMenu));
@@ -1515,9 +1526,18 @@ void Shell::loop()
         if (pointer_down_ && pointer_on_map_ && map_.dragging()) {
             double dx = 0;
             double dy = 0;
-            const double local_x = pointer_x_ - view_x_;
-            const double local_y = pointer_y_ - view_y_;
-            if (map_.edge_scroll(local_x, local_y, view_w_, view_h_, elapsed, dx, dy)) {
+            // Measured from the open map (map_safe_rect): on a handheld the
+            // scroll starts at the top chips, the zoom buttons and the quick
+            // bar, not under them (a drag cannot reach the window edge).
+            double safe_x = 0;
+            double safe_y = 0;
+            double safe_w = 0;
+            double safe_h = 0;
+            map_safe_rect(safe_x, safe_y, safe_w, safe_h);
+            const double local_x = pointer_x_ - safe_x;
+            const double local_y = pointer_y_ - safe_y;
+            if (map_.edge_scroll(local_x, local_y, static_cast<int>(safe_w), static_cast<int>(safe_h), elapsed, dx,
+                                 dy)) {
                 scroll_x_ += dx;
                 scroll_y_ += dy;
                 clamp_scroll();
@@ -2372,6 +2392,7 @@ void Shell::handle_event(const SDL_Event &event)
             if (!menu_thumb_drag_ && hover_id_ >= kMenuTitle && hover_id_ < kMenuTitle + menu_table::kColumnCount &&
                 hover_id_ != kMenuTitle + menu_.open_menu) {
                 menu_.open_by_pointer(hover_id_ - kMenuTitle);
+                menu_slid_open_ = true;
             }
             if (menu_thumb_drag_) {
                 scroll_menu_to_pointer(pointer_y_);
@@ -3133,7 +3154,11 @@ void Shell::handle_event(const SDL_Event &event)
             } else if (dialog_ == Dialog::Bindings && focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
                 clear_bind_row(true);
             } else if (terrain_edit_) {
-                // There is no Inspect in the editor.
+                // No Inspect in the editor: X takes back the last stroke
+                // (review nov25 #12; undo used to be keyboard-only).
+                if (dialog_ == Dialog::None && !menu_.open() && !pad_dragging_) {
+                    step_terrain_history(false);
+                }
             } else if (dialog_ == Dialog::None && !menu_.open()) {
                 select_tool(kToolCount - 1);
             }
@@ -3156,6 +3181,13 @@ void Shell::handle_event(const SDL_Event &event)
                 y_hold_fresh_ = true;
                 y_hold_ms_ = 0;
                 y_hold_fired_ = false;
+            }
+            break;
+        }
+        if (pact == PadOverlay && dialog_ == Dialog::None && !menu_.open() && terrain_edit_) {
+            // No data map in the editor: L3 puts back a stroke X took away.
+            if (!pad_dragging_) {
+                step_terrain_history(true);
             }
             break;
         }

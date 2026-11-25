@@ -172,6 +172,14 @@ inline const char *city_seed_rule_help()
     return "Blank or auto picks a seed. Type a whole number from 0 to 999999999, or use New terrain.";
 }
 
+// The seed line once the map editor's Map Complete has kept an edited map:
+// the seed no longer shapes the land (review nov25 #13 showed "A new seed
+// will be chosen" beside "Map (edited)").
+inline const char *city_seed_edited_message()
+{
+    return "Your edited map is used, not the seed. New terrain drops the edits.";
+}
+
 // Status shown as the player types. ok is true for blank, "auto", or a
 // whole number in range. A typo explains the rule in place instead of
 // waiting for Generate.
