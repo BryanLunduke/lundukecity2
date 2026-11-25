@@ -7482,6 +7482,12 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
+            // An edge line keeps the card readable where it sits on the deep
+            // slate past the map edge, the same color as its fill.
+            round_dialog_rect(cr, cx + 0.5, cy + 0.5, cw - 1.0, ch - 1.0, dp(6));
+            cairo_set_source_rgb(cr, kSlateEdge.r, kSlateEdge.g, kSlateEdge.b);
+            cairo_set_line_width(cr, std::max(1.0, static_cast<double>(dp(1))));
+            cairo_stroke(cr);
             double text_y = cy + dp(4);
             if (show_section) {
                 slate_text(cr, tag_font(), section, cx + dp(8), text_y, kSlateGoldDim);
