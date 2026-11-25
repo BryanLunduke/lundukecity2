@@ -329,6 +329,8 @@ private:
     void service_gamepad(int elapsed_ms);
     void advance_pad_drag(int dx, int dy, int elapsed_ms);
     void apply_pad_direction(SDL_GamepadButton button);
+    bool stick_navigates() const;
+    void service_stick_nav(int elapsed_ms);
     // One tile toward the map edge, when that tile is still on screen.
     void step_cursor_on_map(int dx, int dy);
     // Held D-pad is panning or walking the cursor, so the loop stays awake.
@@ -978,6 +980,10 @@ private:
     int pad_held_dy_ = 0;
     pad_feel::RepeatClock drag_repeat_{};
     pad_feel::RepeatClock nav_repeat_{};
+    // The left stick stepping focus like the D-pad (stick_nav_dir).
+    pad_feel::StickDir stick_nav_held_ = pad_feel::StickDir::None;
+    pad_feel::RepeatClock stick_nav_repeat_{};
+    bool stick_nav_live_ = false;
     SDL_GamepadButton nav_repeat_button_ = SDL_GAMEPAD_BUTTON_INVALID;
     bool y_hold_ = false;
     bool y_hold_fresh_ = false;

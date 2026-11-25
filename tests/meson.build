@@ -1424,3 +1424,12 @@ deck_nov24 = executable(
   dependencies: [micropolis_dep, sdl3_dep],
 )
 test('deck_nov24', deck_nov24)
+
+# Deck hardware notes nov25: fixes from a pass on a real Steam Deck (pure functions).
+deck_hw_nov25 = executable(
+  'deck_hw_nov25',
+  'deck_hw_nov25.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, sdl3_dep],
+)
+test('deck_hw_nov25', deck_hw_nov25)

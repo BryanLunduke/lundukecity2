@@ -444,6 +444,22 @@ void Shell::drive_ui_test()
             handle_event(up);
         }
     };
+    // Left stick push (Deck hardware notes, Nov 25): one axis event, then
+    // one frame of stick navigation.
+    auto stick = [&](SDL_GamepadAxis axis, int value) {
+        SDL_Event event{};
+        event.type = SDL_EVENT_GAMEPAD_AXIS_MOTION;
+        event.gaxis.which = pad_ != nullptr ? SDL_GetGamepadID(pad_) : 0;
+        event.gaxis.axis = static_cast<Uint8>(axis);
+        event.gaxis.value = static_cast<Sint16>(value);
+        handle_event(event);
+        service_stick_nav(16);
+    };
+    auto stick_tap = [&](SDL_GamepadAxis axis, int value) {
+        service_stick_nav(16);
+        stick(axis, value);
+        stick(axis, 0);
+    };
     auto click_at = [&](double x, double y) {
         int ww = 1;
         int wh = 1;
@@ -1168,6 +1184,17 @@ void Shell::drive_ui_test()
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeHowTo; });
         if (focus_id_ != kWelcomeScenario) {
             fail("D-pad Up did not return to Select a Scenario");
+            return;
+        }
+        // The left stick moves the focus like the D-pad (Deck hardware notes).
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTY, 30000);
+        if (focus_id_ != kWelcomeHowTo) {
+            fail("the left stick did not move the Welcome focus down");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTY, -30000);
+        if (focus_id_ != kWelcomeScenario) {
+            fail("the left stick did not move the Welcome focus up");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return dialog_ == Dialog::Welcome; });

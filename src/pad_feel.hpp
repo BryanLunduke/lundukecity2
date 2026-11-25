@@ -95,4 +95,51 @@ inline void stick_axes(float x, float y, float &out_x, float &out_y)
     out_y = y * gain;
 }
 
+// The left stick as a D-pad in windows and menus (Deck hardware notes,
+// Nov 25). A push past kStickNavOn counts as a press in the stronger
+// axis's direction; it stays held until that axis falls under
+// kStickNavOff, so a stick resting near the edge does not chatter. Raw
+// values: x right positive, y down positive, both -1..1.
+enum class StickDir { None, Up, Down, Left, Right };
+
+inline constexpr float kStickNavOn = 0.5f;
+inline constexpr float kStickNavOff = 0.3f;
+
+inline StickDir stick_nav_dir(float x, float y, StickDir held)
+{
+    switch (held) {
+    case StickDir::Up:
+        if (-y >= kStickNavOff && -y >= std::fabs(x)) {
+            return held;
+        }
+        break;
+    case StickDir::Down:
+        if (y >= kStickNavOff && y >= std::fabs(x)) {
+            return held;
+        }
+        break;
+    case StickDir::Left:
+        if (-x >= kStickNavOff && -x >= std::fabs(y)) {
+            return held;
+        }
+        break;
+    case StickDir::Right:
+        if (x >= kStickNavOff && x >= std::fabs(y)) {
+            return held;
+        }
+        break;
+    case StickDir::None:
+        break;
+    }
+    const float ax = std::fabs(x);
+    const float ay = std::fabs(y);
+    if (ax < kStickNavOn && ay < kStickNavOn) {
+        return StickDir::None;
+    }
+    if (ay >= ax) {
+        return y < 0.0f ? StickDir::Up : StickDir::Down;
+    }
+    return x < 0.0f ? StickDir::Left : StickDir::Right;
+}
+
 } // namespace pad_feel

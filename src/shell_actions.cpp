@@ -1158,6 +1158,65 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
     step_cursor_on_map(dx, dy);
 }
 
+bool Shell::stick_navigates() const
+{
+    // Where the left stick steps focus like the D-pad instead of moving
+    // the map cursor (Deck hardware notes, Nov 25).
+    return dialog_ == Dialog::Welcome && !menu_.open();
+}
+
+void Shell::service_stick_nav(int elapsed_ms)
+{
+    using pad_feel::StickDir;
+    const bool live = stick_navigates() && !pad_dragging_;
+    if (!live) {
+        stick_nav_live_ = false;
+        stick_nav_held_ = StickDir::None;
+        pad_feel::repeat_clear(stick_nav_repeat_);
+        return;
+    }
+    const StickDir dir = pad_feel::stick_nav_dir(raw_lx_, raw_ly_, stick_nav_held_);
+    if (!stick_nav_live_) {
+        // A window that opens under a stick already pushed (the player was
+        // moving the map cursor) waits for it to come back first.
+        stick_nav_live_ = true;
+        stick_nav_held_ = dir;
+        pad_feel::repeat_clear(stick_nav_repeat_);
+        return;
+    }
+    auto button_for = [](StickDir d) {
+        switch (d) {
+        case StickDir::Up:
+            return SDL_GAMEPAD_BUTTON_DPAD_UP;
+        case StickDir::Down:
+            return SDL_GAMEPAD_BUTTON_DPAD_DOWN;
+        case StickDir::Left:
+            return SDL_GAMEPAD_BUTTON_DPAD_LEFT;
+        case StickDir::Right:
+            return SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
+        default:
+            return SDL_GAMEPAD_BUTTON_INVALID;
+        }
+    };
+    if (dir != stick_nav_held_) {
+        stick_nav_held_ = dir;
+        pad_feel::repeat_clear(stick_nav_repeat_);
+        if (dir != StickDir::None) {
+            gamepad_nav_ = true;
+            apply_pad_direction(button_for(dir));
+            pad_feel::repeat_arm(stick_nav_repeat_);
+        }
+        return;
+    }
+    if (dir == StickDir::None) {
+        return;
+    }
+    const int steps = pad_feel::repeat_tick(stick_nav_repeat_, elapsed_ms);
+    for (int i = 0; i < steps && stick_navigates(); ++i) {
+        apply_pad_direction(button_for(dir));
+    }
+}
+
 bool Shell::map_dpad_repeating() const
 {
     return nav_repeat_.held && dialog_ == Dialog::None && !menu_.open() && !pad_dragging_;
@@ -1343,6 +1402,7 @@ void Shell::service_gamepad(int elapsed_ms)
         pad_held_dy_ = 0;
         pad_feel::repeat_clear(drag_repeat_);
     }
+    service_stick_nav(elapsed_ms);
     if (!pad_dragging_ && nav_repeat_.held && pad_ != nullptr &&
         nav_repeat_button_ != SDL_GAMEPAD_BUTTON_INVALID) {
         if (!SDL_GetGamepadButton(pad_, nav_repeat_button_)) {
