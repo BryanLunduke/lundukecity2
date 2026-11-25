@@ -134,7 +134,8 @@ inline const char *hint(int step)
                "roads, police and fire. If the yearly cash flow is red, raise "
                "the tax rate a point or two; more people also bring in more tax.";
     case Population:
-        return "Keep zoning and connecting power. Reach 2,000 people and you "
+        return "Press Space (or click the play button) to run time if the city is paused. "
+               "Keep zoning and connecting power. Reach 2,000 people and you "
                "have learned the basics — the city is yours.";
     default:
         return "";
