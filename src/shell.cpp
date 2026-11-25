@@ -282,6 +282,7 @@ int Shell::run(int argc, char **argv)
     started_ = std::chrono::steady_clock::now();
     schedule_autosave();
     layout();
+    map_.set_tile_size(opening_map_tile(handheld_, map_.tile_size()));
     center_on_fraction(0.5, 0.5);
     // Command-line opens happen before the first tick, so a brand-new city
     // has not yet become unsaved work and the file replaces it directly.
@@ -2217,16 +2218,20 @@ void Shell::loop()
                 close_dialog();
                 goal_dismissed_ = false;
                 goal_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+                // Set the capture zoom first so the view centers at that zoom
+                // (the handheld layout now opens at 32 px tiles).
+                if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
+                    map_.set_tile_size(std::atoi(zoom));
+                } else {
+                    map_.set_tile_size(16);
+                }
+                map_ox_ = map_letterbox_x();
+                map_oy_ = map_letterbox_y();
                 if (demo_ == "learn_win") {
                     center_on_fraction((tutorial::kWinViewX + 0.5) / CitySession::kWorldW,
                                        (tutorial::kWinViewY + 0.5) / CitySession::kWorldH);
                 } else {
                     center_on_learn_field();
-                }
-                if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
-                    map_.set_tile_size(std::atoi(zoom));
-                } else {
-                    map_.set_tile_size(16);
                 }
                 toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(),
                                              [](const Toast &t) { return notice_is_tool_feedback(t.text); }),
@@ -2332,6 +2337,13 @@ void Shell::handle_event(const SDL_Event &event)
                                                                 pw, ph, normal_w_, normal_h_, windowed_density_);
         pointer_x_ = motion_point.x;
         pointer_y_ = motion_point.y;
+        // The controller cursor follows the pointer. On a Steam Deck the
+        // right trackpad is a mouse; A after pointing with it must act where
+        // the pointer is, not where the stick last left the cursor.
+        if (!pad_dragging_) {
+            cursor_x_ = static_cast<float>(pointer_x_);
+            cursor_y_ = static_cast<float>(pointer_y_);
+        }
         hover_id_ = hit(pointer_x_, pointer_y_);
         // The toolbar hover feeds the status line's name, price and lock
         // reason. It ends as soon as the pointer is anywhere else.
@@ -3228,8 +3240,33 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
-        open_gamepad_id(event.gaxis.which, true);
         const float norm = std::max(-1.0f, std::min(1.0f, event.gaxis.value / 32767.0f));
+        {
+            // Only a real push takes over from the mouse or trackpad. Noise
+            // under the dead zone, or a light trigger touch, used to hide the
+            // pointer and move the hover to the pad cursor (Deck review #5).
+            const SDL_GamepadAxis axis = static_cast<SDL_GamepadAxis>(event.gaxis.axis);
+            const bool trigger = axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;
+            const bool active = pad_ != nullptr && SDL_GetGamepadID(pad_) == event.gaxis.which;
+            float pair = 0.0f;
+            if (active) {
+                if (axis == SDL_GAMEPAD_AXIS_LEFTX) {
+                    pair = raw_ly_;
+                } else if (axis == SDL_GAMEPAD_AXIS_LEFTY) {
+                    pair = raw_lx_;
+                } else if (axis == SDL_GAMEPAD_AXIS_RIGHTX) {
+                    pair = raw_ry_;
+                } else if (axis == SDL_GAMEPAD_AXIS_RIGHTY) {
+                    pair = raw_rx_;
+                }
+            }
+            const bool wakes = pad_feel::axis_wakes(trigger, norm, pair);
+            open_gamepad_id(event.gaxis.which, wakes);
+            if (!wakes && !active) {
+                // Another pad's resting noise must not move this one's values.
+                break;
+            }
+        }
         if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX) {
             raw_lx_ = norm;
         } else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY) {

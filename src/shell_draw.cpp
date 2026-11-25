@@ -29,6 +29,7 @@
 #include "notice_bar.hpp"
 #include "present.hpp"
 #include "osk_layout.hpp"
+#include "pad_glyphs.hpp"
 #include "redraw.hpp"
 #include "text_paint.hpp"
 #include "theme.hpp"
@@ -90,6 +91,19 @@ std::string hint_button(const std::string &glyph, const char *words)
         return {};
     }
     return glyph + " " + words;
+}
+
+// "A or B closes" when both buttons do the same thing; one name if the
+// other is unbound (Deck review #18: the header read "A closes. B closes").
+std::string hint_either(const std::string &first, const std::string &second, const char *words)
+{
+    if (first.empty()) {
+        return hint_button(second, words);
+    }
+    if (second.empty()) {
+        return hint_button(first, words);
+    }
+    return first + " or " + second + " " + words;
 }
 
 std::string hint_pair(const std::string &left, const std::string &right, const char *words)
@@ -1356,12 +1370,15 @@ void Shell::draw_dialog(cairo_t *cr)
         const double plaque_w = std::min(static_cast<double>(card_h > 0 ? dp(480) : dp(420)),
                                          std::max(1.0, win_w_ - static_cast<double>(dp(48))));
         const double px = std::max(0.0, (win_w_ - plaque_w) / 2.0);
-        double py = win_h_ - plaque_h - dp(22);
+        // On a Deck or with a controller a button legend runs along the
+        // bottom edge, under the choices (Deck review #13). The art is unchanged.
+        const double legend_h = (deck_ || gamepad_nav_) ? static_cast<double>(dp(28)) : 0.0;
+        double py = win_h_ - plaque_h - dp(22) - legend_h;
         // The title and the downtown towers live in the upper part of the art.
         // Keep the choices over the neighborhoods along the bottom.
         const double lowest_top = win_h_ * 0.56;
         if (py < lowest_top) {
-            py = std::max(win_h_ * 0.40, win_h_ - plaque_h - dp(8));
+            py = std::max(win_h_ * 0.40, win_h_ - plaque_h - dp(8) - legend_h);
         }
         const double radius = dp(12);
         auto round_box = [&](double x, double y, double w, double h, double r) {
@@ -1511,6 +1528,9 @@ void Shell::draw_dialog(cairo_t *cr)
                                menu_.alt_shown, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
             }
             by += bh + gap;
+        }
+        if (legend_h > 0) {
+            draw_pad_legend(cr, win_h_ - legend_h, legend_h);
         }
         return;
     }
@@ -2457,7 +2477,9 @@ void Shell::draw_dialog(cairo_t *cr)
     if (dialog_ == Dialog::HowToPlay) {
         // A heading in the title colour over each topic, the same rule the
         // Controls window uses, so the two help windows read as a pair.
-        const std::vector<HowToPlaySection> sections = how_to_play_sections();
+        // A Deck or controller player gets button words and a Controller topic.
+        const ControlsPadNames pad_names = controls_pad_names();
+        const std::vector<HowToPlaySection> sections = how_to_play_sections(deck_ || gamepad_nav_ ? &pad_names : nullptr);
         const double width = message_width(win_w_, margin, dp(400), std::max(static_cast<double>(dp(880)), win_w_ - 2 * margin));
         const double inner = width - 2 * margin;
         const double head_gap = dp(4);
@@ -2955,18 +2977,7 @@ void Shell::draw_dialog(cairo_t *cr)
     }
     if (dialog_ == Dialog::Controls) {
         const std::string heading = controls_page_title(controls_page_, deck_);
-        ControlsPadNames pad_names;
-        auto named = [](const char *glyph) { return glyph != nullptr && glyph[0] != '\0' ? glyph : "None"; };
-        pad_names.confirm = named(glyph_for(PadConfirm));
-        pad_names.cancel = named(glyph_for(PadCancel));
-        pad_names.west = named(glyph_for(PadQuery));
-        pad_names.north = named(glyph_for(PadPause));
-        pad_names.left = named(glyph_for(PadPrevTool));
-        pad_names.right = named(glyph_for(PadNextTool));
-        pad_names.menu = named(glyph_for(PadMenu));
-        pad_names.view = named(glyph_for(PadBack));
-        pad_names.l3 = named(glyph_for(PadOverlay));
-        pad_names.r3 = named(glyph_for(PadCenter));
+        const ControlsPadNames pad_names = controls_pad_names();
         const ControlsKeyText key_text = controls_keys();
         const double width = message_width(win_w_, margin, dp(520), dp(1000));
         const double inner = width - 2 * margin;
@@ -3196,7 +3207,16 @@ void Shell::draw_dialog(cairo_t *cr)
         const int need_col = std::max(std::max(unwrapped(copy.taxes), unwrapped(copy.previous_funds)),
                                       std::max(unwrapped(copy.cash_flow), unwrapped(copy.current_funds))) +
                              dp(8);
-        const double want = std::max(static_cast<double>(dp(680)), 2.0 * margin + col_gap + 2.0 * static_cast<double>(need_col));
+        // Handheld: wide enough that the tax warning is one line, so the room
+        // held for it under the tax bar is not an empty band (Deck review #17).
+        // It stays clear of the minimap too: a centered window no wider than
+        // the space left of it, but never narrower than the desktop's.
+        double base_w = static_cast<double>(dp(680));
+        if (handheld_) {
+            const double clear_w = 2.0 * static_cast<double>(mini_x_ - dp(12)) - static_cast<double>(win_w_);
+            base_w = std::max(base_w, std::min(static_cast<double>(dp(880)), clear_w));
+        }
+        const double want = std::max(base_w, 2.0 * margin + col_gap + 2.0 * static_cast<double>(need_col));
         const double width = std::min(want, std::max(1.0, win_w_ - 2.0 * margin));
         const double inner = width - 2.0 * margin;
         const double col_w = std::max(1.0, (inner - col_gap) / 2.0);
@@ -3223,7 +3243,7 @@ void Shell::draw_dialog(cairo_t *cr)
             h += tail + static_cast<double>(dp(16)) + tail;
             return h;
         };
-        double fund_gap = static_cast<double>(dp(14));
+        double fund_gap = static_cast<double>(handheld_ ? dp(8) : dp(14));
         // The tax slider warns before the cliff (dialog_copy.hpp tax_warning).
         const TaxWarning tax_warn = tax_warning(tax_, session_.difficulty());
         // The warning sits under the tax bar in room kept for the longest
@@ -3392,7 +3412,13 @@ void Shell::draw_dialog(cairo_t *cr)
                 cursor += tax_note_room;
             }
         };
-        slider(1, copy.tax_title, copy.tax_value, tax_warn.note, tax_, 0, 20);
+        // Handheld: the line kept for the warning says where growth slows
+        // while the rate is fine, instead of sitting empty (Deck review #17).
+        std::string tax_line = tax_warn.note;
+        if (tax_line.empty() && handheld_ && tax_warn.slows_from <= 20) {
+            tax_line = "Growth starts to slow at " + std::to_string(tax_warn.slows_from) + "%.";
+        }
+        slider(1, copy.tax_title, copy.tax_value, tax_line, tax_, 0, 20);
         cursor += fund_gap;
         auto funded = [](int percent, std::int64_t need) {
             return std::to_string(percent) + "%  " + graph_money(need * percent / 100);
@@ -4230,6 +4256,12 @@ void Shell::draw(cairo_t *cr)
                         theme::kMenuFrameB);
         }
     }
+    if (handheld_) {
+        // Handheld: past the map's edge (the overscroll that brings tiles out
+        // from under the minimap and the quick bar) is the deep slate of the
+        // HUD, not the light window grey that read as a rendering fault.
+        fill(cr, view_x_, view_y_, view_w_, view_h_, 0x15 / 255.0, 0x1B / 255.0, 0x23 / 255.0);
+    }
     cairo_save(cr);
     cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
     cairo_clip(cr);
@@ -4262,6 +4294,10 @@ void Shell::draw(cairo_t *cr)
             const bool learn_shot = demo_ == "learn" || demo_ == "learn_mid" || demo_ == "learn_win" ||
                                     demo_ == "learn_picker";
             if (learn_shot) {
+                map_.clear_hover();
+            } else if (gamepad_nav_ && !pad_dragging_ && handheld_ && hit(cursor_x_, cursor_y_) != kMapId) {
+                // Handheld: the cursor is on the quick bar or another control,
+                // not over the map, so no tile preview under it.
                 map_.clear_hover();
             } else if (gamepad_nav_ && !pad_dragging_) {
                 map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
@@ -4355,7 +4391,9 @@ void Shell::draw(cairo_t *cr)
         paint_dim_plate(cr, view_x_ + view_w_ - edge, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
     }
     draw_city_reveal(cr);
-    push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
+    // Handheld: the strip under the quick bar is not map. A press there
+    // would build on tiles the bar hides.
+    push_hot(view_x_, view_y_, view_w_, std::max(0, view_h_ - map_reserve_y()), kMapId);
     if (handheld_) {
         draw_handheld_hud(cr);
     } else {
@@ -4418,7 +4456,7 @@ void Shell::draw(cairo_t *cr)
         push_hot(card_x + card_w - dp(22), card_y + 4, dp(18), dp(18), kCardDismiss);
     }
     const double max_x = scroll_max_x();
-    const double max_y = std::max(0, map_.pixel_height() - view_h_);
+    const double max_y = scroll_max_y();
     if (max_x > 0 && !handheld_) {
         const double span_x = static_cast<double>(view_w_) + max_x;
         const double bw = std::max(20.0, view_w_ * (view_w_ / span_x));
@@ -4442,7 +4480,7 @@ void Shell::draw(cairo_t *cr)
     }
     if (notice.show_notice && !session_.message().empty()) {
         shown_message_serial_ = session_.message_serial();
-        shown_message_ = session_.message();
+        shown_message_ = pad_wording(session_.message());
         hint_until_ = now + std::chrono::milliseconds(kToastMs);
         query_pinned_ = false;
     }
@@ -4588,7 +4626,7 @@ void Shell::draw(cairo_t *cr)
     theme::banner_fill(look_r, look_g, look_b);
     theme::banner_ink(look_ink_r, look_ink_g, look_ink_b);
     const BannerColors goal_bar = goal_banner_colors(BannerColors{look_r, look_g, look_b, look_ink_r, look_ink_g, look_ink_b});
-    const std::string goal = session_.scenario_progress();
+    const std::string goal = pad_wording(session_.scenario_progress());
     if (session_.scenario_id() != goal_scenario_ ||
         (session_.scenario_id() == SC_LEARN_TO_PLAY && session_.tutorial_step() != goal_tutorial_step_)) {
         goal_scenario_ = session_.scenario_id();
@@ -4809,6 +4847,57 @@ void Shell::draw(cairo_t *cr)
     draw_menu_dropdown(cr);
 }
 
+bool Shell::dialog_only_closes() const
+{
+    return dialog_ == Dialog::Graphs || dialog_ == Dialog::Evaluation || dialog_ == Dialog::Query ||
+           dialog_ == Dialog::About || dialog_ == Dialog::Info || dialog_ == Dialog::LoadError ||
+           dialog_ == Dialog::SaveError || dialog_ == Dialog::HowToPlay;
+}
+
+bool Shell::focus_is_slider() const
+{
+    for (const SliderGeom &slider : sliders_) {
+        if (slider.id == focus_id_) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// What the menu button does in the open window (activate_dialog_start), as
+// one word for the pad legend. Empty when it does nothing there.
+const char *Shell::dialog_accept_verb() const
+{
+    switch (dialog_accept_id()) {
+    case 0:
+        return "";
+    case kCollect:
+        return "Collect";
+    case kNext:
+        return "Next";
+    case kGenerate:
+        return "Generate";
+    case kRename:
+        return "Rename";
+    case kSave:
+        return "Save";
+    case kWelcomeNew:
+        return "New city";
+    case kWelcomeContinue:
+        return "Continue";
+    case kPlay:
+        return "Play";
+    case kKeep:
+        return "Keep";
+    case kRecover:
+        return "Recover";
+    case kYearBudget:
+        return "Budget";
+    default:
+        return dialog_ == Dialog::Files ? "Open" : "OK";
+    }
+}
+
 std::string Shell::dialog_title_hint() const
 {
     const bool pad = gamepad_nav_ || deck_ || touch_used_;
@@ -4868,7 +4957,7 @@ std::string Shell::dialog_title_hint() const
                    : std::string("Enter ") + verb + ". Esc keeps editing";
     }
     if (dialog_ == Dialog::Messages && session_.notices().empty()) {
-        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
+        return pad ? hint_either(a, b, "closes") : "Enter closes. Esc closes";
     }
     if (dialog_ == Dialog::License) {
         const std::string left = glyph_for(PadPrevTool);
@@ -4905,7 +4994,7 @@ std::string Shell::dialog_title_hint() const
                    : "Enter opens. Esc closes";
     }
     if (dialog_ == Dialog::Controls) {
-        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes"), "D-pad pages"})
+        return pad ? hint_join({hint_either(a, b, "closes"), "D-pad pages"})
                    : "Enter closes. Left and right change page";
     }
     if (dialog_ == Dialog::Graphs && focus_id_ == kGraphPlot) {
@@ -4937,11 +5026,8 @@ std::string Shell::dialog_title_hint() const
     }
     // Graphs, Evaluation, Query, About, and the one-button notices have
     // nothing to confirm. Enter dismisses them. B always has a way out.
-    const bool closes = dialog_ == Dialog::Graphs || dialog_ == Dialog::Evaluation || dialog_ == Dialog::Query ||
-                        dialog_ == Dialog::About || dialog_ == Dialog::Info || dialog_ == Dialog::LoadError ||
-                        dialog_ == Dialog::SaveError || dialog_ == Dialog::HowToPlay;
-    if (closes) {
-        return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
+    if (dialog_only_closes()) {
+        return pad ? hint_either(a, b, "closes") : "Enter closes. Esc closes";
     }
     if (focus_id_ == kCancel) {
         return pad ? hint_join({hint_button(a, "cancels"), hint_button(b, "closes")}) : "Enter cancels. Esc closes";
@@ -5110,7 +5196,7 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
     const std::string tutorial_banner =
         (goal_banner_allowed() && dialog_ == Dialog::None && !terrain_edit_ && !goal_dismissed_ && now < goal_until_ &&
          session_.scenario_id() == SC_LEARN_TO_PLAY)
-            ? session_.scenario_progress()
+            ? pad_wording(session_.scenario_progress())
             : std::string();
     const std::vector<std::size_t> order = toast_draw_order(toasts_);
     for (std::size_t slot : order) {
@@ -5952,6 +6038,11 @@ void Shell::render()
         return;
     }
     blink_drew_ = false;
+    // Only a frame that paints the Welcome art keeps its life animating.
+    // The flag used to outlive the Welcome screen, so a paused city started
+    // from it repainted on every idle wake, about twice a second (Deck
+    // review #16).
+    welcome_live_ = false;
     if (frame_surface_ == nullptr || cairo_image_surface_get_width(frame_surface_) != win_w_ ||
         cairo_image_surface_get_height(frame_surface_) != win_h_) {
         if (frame_surface_ != nullptr) {
@@ -6159,9 +6250,13 @@ const char *month_short(int month)
 
 const char *Shell::tag_font() const
 {
-    if (std::fabs(font_tag_scale_ - ui_scale_) > 0.001f || font_tag_.empty()) {
-        font_tag_ = ui_scale::scaled_font("Sans Bold", 9, ui_scale_);
+    // Kickers, R/C/I labels and button badges: 9 pt on a desktop, 11 pt in
+    // the handheld layout, where 9 pt is at the edge of legible on 7 inches.
+    const int pt = handheld_ ? ui_scale::kHandheldTagPt : 9;
+    if (std::fabs(font_tag_scale_ - ui_scale_) > 0.001f || font_tag_.empty() || font_tag_pt_ != pt) {
+        font_tag_ = ui_scale::scaled_font("Sans Bold", pt, ui_scale_);
         font_tag_scale_ = ui_scale_;
+        font_tag_pt_ = pt;
     }
     return font_tag_.c_str();
 }
@@ -7205,6 +7300,10 @@ void Shell::draw_handheld_hud(cairo_t *cr)
     if (!menu_.open()) {
         const int count = kToolCount;
         int shown_tool = palette_.focus() >= 0 ? palette_.focus() : tool_index_;
+        const bool finger_bar = touch_used_ && !gamepad_nav_;
+        if (finger_bar && palette_.focus() < 0 && touch_quick_shown_ >= 0) {
+            shown_tool = touch_quick_shown_;
+        }
         if (shoulder_hold_dir_ != 0 && shoulder_preview_ >= 0 && shoulder_preview_ < count) {
             shown_tool = shoulder_preview_;
         }
@@ -7217,8 +7316,9 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         double xs[kToolCount] = {};
         double ws[kToolCount] = {};
         const double big = static_cast<double>(quick_h_);
-        // The L1/R1 glyph chips sit outside the bar on both ends.
-        const double room = win_w_ - dp(96);
+        // The L1/R1 glyph chips sit outside the bar on both ends. Touch
+        // hides them and gives the bar their width (Deck review #19).
+        const double room = finger_bar ? win_w_ - dp(24) : win_w_ - dp(96);
         const tool_groups::QuickBarLayout bar = tool_groups::quick_bar_layout(count, shown_tool, big, room);
         const double bar_w = bar.total + dp(16);
         const double bar_x = (win_w_ - bar_w) / 2.0;
@@ -7322,8 +7422,8 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             push_hot(sx, quick_y_ - lift, slot, quick_h_ + lift + dp(4), kQuickTool + i);
         }
         // L1/R1 glyphs at the bar ends.
-        const std::string prev = glyph_for(PadPrevTool);
-        const std::string next = glyph_for(PadNextTool);
+        const std::string prev = finger_bar ? std::string() : glyph_for(PadPrevTool);
+        const std::string next = finger_bar ? std::string() : glyph_for(PadNextTool);
         if (!prev.empty()) {
             const TextMetrics m = measure_text(cr, tag_font(), prev, -1);
             const double kw = m.width + dp(12);
@@ -7382,6 +7482,12 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
+            // An edge line keeps the card readable where it sits on the deep
+            // slate past the map edge, the same color as its fill.
+            round_dialog_rect(cr, cx + 0.5, cy + 0.5, cw - 1.0, ch - 1.0, dp(6));
+            cairo_set_source_rgb(cr, kSlateEdge.r, kSlateEdge.g, kSlateEdge.b);
+            cairo_set_line_width(cr, std::max(1.0, static_cast<double>(dp(1))));
+            cairo_stroke(cr);
             double text_y = cy + dp(4);
             if (show_section) {
                 slate_text(cr, tag_font(), section, cx + dp(8), text_y, kSlateGoldDim);
@@ -7395,26 +7501,78 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         }
     }
     // Button hints along the bottom edge.
-    {
-        const double y = win_h_ - hint_h_;
-        slate_fill(cr, 0, y, win_w_, hint_h_, kSlateDeep, 0.88);
-        const ToolDef *tool = tool_by_index(tool_index_);
-        const bool inspecting = tool_index_ == kToolCount - 1;
-        std::vector<std::pair<std::string, std::string>> hints;
-        if (menu_.open()) {
-            hints = {{glyph_for(PadConfirm), "Choose"}, {glyph_for(PadCancel), "Close"}};
-        } else {
-            hints = {{glyph_for(PadConfirm), inspecting ? "Inspect" : (tool != nullptr ? "Build" : "Use")},
-                     {glyph_for(PadCancel), "Back"},
-                     {inspecting ? std::string() : glyph_for(PadQuery), "Inspect"},
-                     {glyph_for(PadPause), speed_ <= 0 ? "Resume" : "Pause"},
-                     {glyph_for(PadOverlay), "Data map"},
-                     {glyph_for(PadMenu), "Menu"}};
+    draw_pad_legend(cr, win_h_ - hint_h_, hint_h_);
+}
+
+std::vector<std::pair<std::string, std::string>> Shell::pad_legend() const
+{
+    const std::string a = glyph_for(PadConfirm);
+    const std::string b = glyph_for(PadCancel);
+    const std::string menu = glyph_for(PadMenu);
+    if (menu_.open()) {
+        return {{a, "Choose"}, {b, "Close"}};
+    }
+    if (dialog_ != Dialog::None) {
+        // A window is open: its own actions, not the map's (Deck review #12).
+        const bool typing = focus_id_ == kFieldName || focus_id_ == kFieldSeed || (focus_id_ >= kOsk && focus_id_ < kOsk + 64);
+        // Same words as the window's header hint, so the legend and the
+        // header never say two things (Deck review tidy b).
+        if (dialog_ != Dialog::Welcome) {
+            const std::string hint = dialog_title_hint();
+            const std::string a_words = legend_words_from_hint(hint, a);
+            const std::string b_words = legend_words_from_hint(hint, b);
+            if (!a_words.empty() || !b_words.empty()) {
+                std::vector<std::pair<std::string, std::string>> hints = {{a, a_words}, {b, b_words}};
+                if (focus_is_slider()) {
+                    hints.push_back({glyph_for(PadPrevTool), "Less"});
+                    hints.push_back({glyph_for(PadNextTool), "More"});
+                }
+                const std::string menu_words = legend_words_from_hint(hint, menu);
+                const char *verb = dialog_only_closes() ? "" : dialog_accept_verb();
+                if (!menu_words.empty()) {
+                    hints.push_back({menu, menu_words});
+                } else if (verb[0] != '\0') {
+                    hints.push_back({menu, verb});
+                }
+                return hints;
+            }
         }
+        if (typing) {
+            return {{a, "Type"}, {b, "Delete"}, {menu, "Done"}};
+        }
+        if (dialog_only_closes()) {
+            return {{a, "Close"}, {b, "Close"}};
+        }
+        std::vector<std::pair<std::string, std::string>> hints = {{a, "Select"}, {b, dialog_ == Dialog::Welcome ? "" : "Close"}};
+        if (focus_is_slider()) {
+            hints.push_back({glyph_for(PadPrevTool), "Less"});
+            hints.push_back({glyph_for(PadNextTool), "More"});
+        }
+        const char *verb = dialog_accept_verb();
+        if (verb[0] != '\0') {
+            hints.push_back({menu, verb});
+        }
+        return hints;
+    }
+    const ToolDef *tool = tool_by_index(tool_index_);
+    const bool inspecting = tool_index_ == kToolCount - 1;
+    return {{a, inspecting ? "Inspect" : (tool != nullptr ? "Build" : "Use")},
+            {b, "Back"},
+            {inspecting ? std::string() : glyph_for(PadQuery), "Inspect"},
+            {glyph_for(PadPause), speed_ <= 0 ? "Resume" : "Pause"},
+            {glyph_for(PadOverlay), "Data map"},
+            {menu, "Menu"}};
+}
+
+void Shell::draw_pad_legend(cairo_t *cr, double y, double strip_h)
+{
+    {
+        slate_fill(cr, 0, y, win_w_, strip_h, kSlateDeep, 0.88);
+        const std::vector<std::pair<std::string, std::string>> hints = pad_legend();
         double hx = dp(12);
         const double cap_h = measure_text(cr, tag_font(), "Ag", -1).height + dp(4);
         for (const auto &hint : hints) {
-            if (hint.first.empty()) {
+            if (hint.first.empty() || hint.second.empty()) {
                 continue;
             }
             const TextMetrics key = measure_text(cr, tag_font(), hint.first, -1);
@@ -7423,10 +7581,10 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             if (hx + kw + dp(6) + words.width > win_w_ - dp(12)) {
                 break;
             }
-            const double ky = y + (hint_h_ - cap_h) / 2.0;
+            const double ky = y + (strip_h - cap_h) / 2.0;
             slate_round(cr, hx, ky, kw, cap_h, cap_h / 2.0, kSlateInk);
             slate_text(cr, tag_font(), hint.first, hx + (kw - key.width) / 2.0, ky + dp(2), kSlateDeep);
-            slate_text(cr, ui_font(), hint.second, hx + kw + dp(6), y + (hint_h_ - words.height) / 2.0, kSlateDim);
+            slate_text(cr, ui_font(), hint.second, hx + kw + dp(6), y + (strip_h - words.height) / 2.0, kSlateDim);
             hx += kw + dp(6) + words.width + dp(18);
         }
     }

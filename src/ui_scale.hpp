@@ -13,6 +13,10 @@
 
 namespace ui_scale {
 
+// Tag text (kickers, R/C/I labels, button badges) in the handheld layout.
+// The desktop uses 9 pt; 11 pt reads better on a 7-inch Deck screen.
+inline constexpr int kHandheldTagPt = 11;
+
 struct Placement {
     int x = 0;
     int y = 0;

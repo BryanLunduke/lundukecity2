@@ -134,6 +134,11 @@ private:
     void draw_funds_floats(cairo_t *cr);
     void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
     void draw_handheld_hud(cairo_t *cr);
+    std::vector<std::pair<std::string, std::string>> pad_legend() const;
+    void draw_pad_legend(cairo_t *cr, double y, double strip_h);
+    bool dialog_only_closes() const;
+    bool focus_is_slider() const;
+    const char *dialog_accept_verb() const;
     void draw_minimap_overlay(cairo_t *cr);
     void draw_slate_milestone(cairo_t *cr, double x, double y, double w, double h);
     double minimap_clearance() const;
@@ -296,6 +301,9 @@ private:
     int minimap_reserve_x() const;
     int map_letterbox_x() const;
     double scroll_max_x() const;
+    int map_reserve_y() const;
+    int map_letterbox_y() const;
+    double scroll_max_y() const;
     void demo_place_gifts(bool query_one);
     void sync_title();
     void note_message();
@@ -361,6 +369,7 @@ private:
     bool return_from_overlay();
     const char *glyph(SDL_GamepadButton button) const;
     const char *glyph_for(int pad_act) const;
+    std::string pad_wording(const std::string &text) const;
     bool take_bound_key(SDL_Keycode key, int mods);
     void apply_key_act(int act);
     void sync_pointer_cursor();
@@ -375,6 +384,7 @@ private:
     bool file_row_selected() const;
     std::string chord_token(SDL_Keycode key, int mods) const;
     ControlsKeyText controls_keys() const;
+    ControlsPadNames controls_pad_names() const;
     void schedule_autosave();
     bool adjust_focused_slider(int direction, int coarse = 1);
     bool nudge_file_list(int delta, bool page, bool force);
@@ -522,6 +532,9 @@ private:
     int quick_y_ = 0;
     double quick_x_ = 0;
     double quick_slot_ = 0;
+    // Touch on the handheld quick bar: a tap on a narrow slot opens its
+    // section at full size first, and a tap on a full-size slot chooses.
+    int touch_quick_shown_ = -1;
     int quick_h_ = 0;
     int hint_h_ = 0;
     // Continue card on the title screen: the last city's glance, cached.
@@ -539,6 +552,7 @@ private:
     mutable std::string locked_mask_key_;
     mutable unsigned locked_mask_ = 0;
     mutable float font_tag_scale_ = -1.0f;
+    mutable int font_tag_pt_ = 0;
 
     double scroll_x_ = 0;
     double scroll_y_ = 0;

@@ -57,6 +57,21 @@ inline int repeat_tick(RepeatClock &clock, int elapsed_ms)
     return steps;
 }
 
+// A trigger has to be pulled at least this much before it takes over from the mouse
+// or trackpad.
+inline constexpr float kTriggerWake = 0.5f;
+
+// Whether an axis event may switch the game to the controller: a stick
+// pair past the dead zone, or a trigger past kTriggerWake. Noise from a
+// resting stick, a light touch or a drifting pad does not hide the pointer.
+inline bool axis_wakes(bool trigger, float value, float pair)
+{
+    if (trigger) {
+        return value >= kTriggerWake;
+    }
+    return std::sqrt(value * value + pair * pair) > kStickDead;
+}
+
 // Radial dead zone, rescaled to 0..1, then squared so the centre is fine
 // and full deflection is still full speed.
 inline void stick_axes(float x, float y, float &out_x, float &out_y)

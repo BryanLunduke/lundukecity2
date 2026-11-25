@@ -239,3 +239,12 @@ inline void clamp_viewport_span(double &origin, double &span)
         span = 1 - origin;
     }
 }
+
+// The handheld layout opens a city at 32 px tiles: 16 px is about 1.9 mm
+// on a Steam Deck's 7-inch screen. A closer saved zoom is kept.
+inline constexpr int kHandheldOpeningTile = 32;
+
+inline int opening_map_tile(bool handheld, int tile)
+{
+    return handheld ? std::max(tile, kHandheldOpeningTile) : tile;
+}
