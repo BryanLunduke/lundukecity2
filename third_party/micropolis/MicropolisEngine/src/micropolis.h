@@ -1663,6 +1663,9 @@ public:
     //@{
 
     MapByte2 populationDensityMap; ///< Population density map.
+    /// The part of populationDensityMap that powered Data Centers add
+    /// (City 2). Crime leaves it out; residential growth keeps it.
+    MapByte2 datacenterDensityMap;
     MapByte2 trafficDensityMap; ///< Traffic density map.
     MapByte2 pollutionDensityMap; ///< Pollution density map.
     MapByte2 landValueMap; ///< Land value map.
@@ -2902,6 +2905,9 @@ private:
     void populationDensityScan();
 
     int getPopulationDensity(const Position &pos, MapTile tile);
+
+    /// Fill datacenterDensityMap from the tile map and populationDensityMap.
+    void computeDatacenterDensity();
 
     void pollutionTerrainLandValueScan();
 

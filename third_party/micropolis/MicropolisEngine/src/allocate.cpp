@@ -132,6 +132,7 @@ void Micropolis::destroyMapArrays()
     memset(map, 0, sizeof(short *) * WORLD_W);
 
     populationDensityMap.clear();
+    datacenterDensityMap.clear();
     trafficDensityMap.clear();
     pollutionDensityMap.clear();
     landValueMap.clear();

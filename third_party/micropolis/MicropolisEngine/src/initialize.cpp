@@ -97,6 +97,7 @@ void Micropolis::initWillStuff()
     taxFlag = false;
 
     populationDensityMap.clear();
+    datacenterDensityMap.clear();
     trafficDensityMap.clear();
     pollutionDensityMap.clear();
     landValueMap.clear();

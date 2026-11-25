@@ -285,6 +285,10 @@ struct SimulatorProbe {
     static void fire_zone(Micropolis &sim, int x, int y, int tile) { sim.fireZone(Position(x, y), tile); }
 
     static void fire_in_zone(Micropolis &sim, int x, int y, int tile) { sim.startFireInZone(x, y, tile); }
+
+    static void density_scan(Micropolis &sim) { sim.populationDensityScan(); }
+
+    static void crime_scan(Micropolis &sim) { sim.crimeScan(); }
 };
 
 void fill_dirt(Micropolis &sim)
@@ -468,6 +472,90 @@ int lunduke_city_test_church_fire_footprint()
     return 0;
 }
 
+// Review nov25 #15: a powered Data Center counts as light jobs in the
+// population density (houses beside it can grow, PR #65), but crime leaves
+// its share out. With no powered Data Center crime is unchanged.
+void place_datacenter(Micropolis &sim, int cx, int cy, bool powered)
+{
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            sim.map[cx + dx][cy + dy] = SPECIAL_BODY | (powered ? PWRBIT : 0);
+        }
+    }
+    sim.map[cx][cy] = SPECIAL_DATACENTER | ZONEBIT | (powered ? PWRBIT : 0);
+}
+
+void place_houses(Micropolis &sim, int cx, int cy)
+{
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            sim.map[cx + dx][cy + dy] = (unsigned short)(LHTHR + 1) | PWRBIT;
+        }
+    }
+    sim.map[cx][cy] = FREEZ | ZONEBIT | PWRBIT;
+}
+
+int crime_for(Micropolis &sim, int x, int y, bool leave_out_datacenters)
+{
+    int z = 128 - sim.landValueMap.worldGet(x, y);
+    z += sim.populationDensityMap.worldGet(x, y) -
+         (leave_out_datacenters ? sim.datacenterDensityMap.worldGet(x, y) : 0);
+    z = z < 300 ? z : 300;
+    z -= sim.policeStationMap.worldGet(x, y);
+    return z < 0 ? 0 : (z > 250 ? 250 : z);
+}
+
+int lunduke_city_test_datacenter_crime()
+{
+    for (int round = 0; round < 3; ++round) {
+        // 0: powered Data Centers beside houses, 1: the same unpowered,
+        // 2: houses alone.
+        Micropolis sim;
+        fill_dirt(sim);
+        place_houses(sim, 30, 30);
+        // Some ordinary density nearby so the map is not empty.
+        sim.map[30][34] = (unsigned short)(COMBASE + 1) | ZONEBIT | PWRBIT;
+        if (round < 2) {
+            place_datacenter(sim, 27, 30, round == 0);
+            place_datacenter(sim, 33, 30, round == 0);
+        }
+        for (int x = 0; x < WORLD_W; x += 2) {
+            for (int y = 0; y < WORLD_H; y += 2) {
+                sim.landValueMap.worldSet(x, y, 60);
+            }
+        }
+        SimulatorProbe::density_scan(sim);
+        int share = 0;
+        for (int x = 0; x < WORLD_W; x += 2) {
+            for (int y = 0; y < WORLD_H; y += 2) {
+                share += sim.datacenterDensityMap.worldGet(x, y);
+            }
+        }
+        const int house_density = sim.populationDensityMap.worldGet(30, 30);
+        const int house_share = sim.datacenterDensityMap.worldGet(30, 30);
+        if (round == 0 && (house_share <= 0 || house_density <= house_share)) {
+            std::fprintf(stderr, "density %d, Data Center share %d\n", house_density, house_share);
+            return fail(30, "powered Data Centers left no share of the density beside them");
+        }
+        if (round != 0 && share != 0) {
+            return fail(31, "unpowered or missing Data Centers still have a density share");
+        }
+        SimulatorProbe::crime_scan(sim);
+        const int crime = sim.crimeRateMap.worldGet(30, 30);
+        if (crime != crime_for(sim, 30, 30, true)) {
+            std::fprintf(stderr, "crime %d, wanted %d\n", crime, crime_for(sim, 30, 30, true));
+            return fail(32, "crime did not leave the Data Centers' share out");
+        }
+        if (round == 0 && crime >= crime_for(sim, 30, 30, false)) {
+            return fail(33, "the Data Centers' share still raises crime beside them");
+        }
+        if (round != 0 && crime != crime_for(sim, 30, 30, false)) {
+            return fail(34, "crime changed in a city with no powered Data Center");
+        }
+    }
+    return 0;
+}
+
 int main()
 {
     if (const int code = lunduke_city_test_vote_problems()) {
@@ -495,6 +583,9 @@ int main()
         return code;
     }
     if (const int code = lunduke_city_test_church_fire_footprint()) {
+        return code;
+    }
+    if (const int code = lunduke_city_test_datacenter_crime()) {
         return code;
     }
     return 0;
