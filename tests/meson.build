@@ -1433,3 +1433,36 @@ deck_hw_nov25 = executable(
   dependencies: [micropolis_dep, sdl3_dep],
 )
 test('deck_hw_nov25', deck_hw_nov25)
+
+# Deck hardware notes nov25 #4: a Data Center's tiles read no pollution.
+deck_hw_nov25_city = executable(
+  'deck_hw_nov25_city',
+  'deck_hw_nov25_city.cpp',
+  '../src/assets.cpp',
+  '../src/city_glance.cpp',
+  '../src/city_session.cpp',
+  '../src/city_events.cpp',
+  '../src/placement_hint.cpp',
+  '../src/messages.cpp',
+  '../src/overlay_map.cpp',
+  '../src/sound_player.cpp',
+  '../src/special_buildings.cpp',
+  '../src/sprite_art.cpp',
+  '../src/tools.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep, thread_dep, sdl3_dep, cairo_dep],
+  cpp_args: [
+    '-DLUNDUKE_CITY_ASSET_DIR="' + lunduke_asset_dir + '"',
+    '-DLUNDUKE_CITY_PACKAGE_VERSION="' + lunduke_package_version + '"',
+  ],
+)
+
+test(
+  'deck_hw_nov25_city',
+  deck_hw_nov25_city,
+  env: [
+    'SDL_AUDIODRIVER=dummy',
+    'SDL_AUDIO_DRIVER=dummy',
+  ],
+  timeout: 120,
+)

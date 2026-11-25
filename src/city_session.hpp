@@ -638,6 +638,9 @@ public:
     // Raw map word (tile character in the low bits, flags above).
     int map_value(int x, int y) const;
     int layer_value(MapLayer layer, int x, int y) const;
+    // A Data Center's own tile: it reads clean on the Pollution map, and
+    // the smooth heat picture keeps its footprint clear (Deck notes, Nov 25).
+    bool datacenter_tile(int x, int y) const;
     // The busiest traffic-map cell (read-only). False when every cell is quiet.
     bool worst_traffic(int &x, int &y, int &value) const;
     // NEWS line for a traffic spike, with a place the mayor can jump to.
