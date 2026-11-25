@@ -3100,6 +3100,13 @@ void Shell::handle_event(const SDL_Event &event)
                 escape_to_inspect();
             } else if (pad_dragging_ || pointer_on_map_) {
                 release_pad_drag();
+            } else if (tool_index_ != kToolCount - 1) {
+                // B puts the build tool away, as Escape and right-click do
+                // (Deck hardware notes, Nov 25). A stroke in progress ends
+                // first, so the tiles already laid stay.
+                shoulder_hold_dir_ = 0;
+                shoulder_preview_ = -1;
+                escape_to_inspect();
             }
             break;
         }

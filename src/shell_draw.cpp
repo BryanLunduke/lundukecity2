@@ -7557,7 +7557,7 @@ std::vector<std::pair<std::string, std::string>> Shell::pad_legend() const
     const ToolDef *tool = tool_by_index(tool_index_);
     const bool inspecting = tool_index_ == kToolCount - 1;
     return {{a, inspecting ? "Inspect" : (tool != nullptr ? "Build" : "Use")},
-            {b, "Back"},
+            {b, inspecting ? "Back" : "Cancel tool"},
             {inspecting ? std::string() : glyph_for(PadQuery), "Inspect"},
             {glyph_for(PadPause), speed_ <= 0 ? "Resume" : "Pause"},
             {glyph_for(PadOverlay), "Data map"},

@@ -1093,6 +1093,17 @@ void Shell::drive_ui_test()
             fail("holding A and moving did not drag-build (" + std::to_string(changed) + " tiles)");
             return;
         }
+        // B puts the build tool away (Deck hardware notes, Nov 25): a
+        // stroke in progress ends first, the next B switches to Inspect.
+        if (tool_index_ == kToolCount - 1) {
+            fail("the drag-build test was not using a build tool");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return tool_index_ != kToolCount - 1; });
+        if (tool_index_ != kToolCount - 1) {
+            fail("B did not cancel the build tool");
+            return;
+        }
         ui_step_ = 19;
         return;
     }
@@ -1749,7 +1760,7 @@ void Shell::drive_ui_test()
         }
         // Escape's last step (after rebind, dialog, menu, overlay, sticky
         // notice, keyboard cursor) drops the tool to Inspect, like a
-        // right-click; gamepad Back does the same. B alone does not.
+        // right-click; gamepad Back and B do the same (Deck notes, Nov 25).
         {
             const int inspect = kToolCount - 1;
             const int build_tool = 1;
@@ -1822,10 +1833,12 @@ void Shell::drive_ui_test()
                 b.gbutton.button = SDL_GAMEPAD_BUTTON_EAST;
                 b.gbutton.down = true;
                 handle_event(b);
-                if (tool_index_ != build_tool) {
-                    fail("B on the map changed the tool");
+                // The editor's Deck notes (Nov 25): B cancels the build tool.
+                if (tool_index_ != inspect) {
+                    fail("B on the map did not cancel the build tool");
                     return;
                 }
+                select_tool(build_tool);
                 SDL_Event back{};
                 back.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
                 back.gbutton.button = SDL_GAMEPAD_BUTTON_BACK;
