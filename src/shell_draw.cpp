@@ -6545,8 +6545,6 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     const double tag_w = tag.width + dp(14);
     const double tag_h = tag.height + dp(6);
     const double tag_y = y + (status_h_ - tag_h) / 2.0;
-    slate_round(cr, dp(10), tag_y, tag_w, tag_h, dp(4), kSlateGold);
-    slate_text(cr, tag_font(), "NEWS", dp(10) + dp(7), tag_y + dp(3), kSlateDeep);
     const double news_x = dp(10) + tag_w + dp(10);
     std::string news = "No news yet.";
     const auto &notices = session_.notices();
@@ -6559,6 +6557,7 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
         news = staleness >= 2 ? std::string()
                               : latest.text + "   " + month_short(latest.month) + " " + std::to_string(latest.year);
     }
+    bool tip = false;
     if (notices.empty() || news.empty()) {
         static const char *tips[] = {
             "Tip: Space runs the city. Press it again to pause.",
@@ -6571,16 +6570,32 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
         const int tick = static_cast<int>(SDL_GetTicks() / 8000) + session_.game_month_index();
         news = tips[((tick % n) + n) % n];
         staleness = 1;
+        tip = true;
+    }
+    // Release nov24 #14: a tool hint wins over a tip. With a tool hint
+    // showing, the tip (and its NEWS tag) step aside, and real news keeps
+    // only a short lead, so the hint is not cut off at the default window.
+    const bool has_hint = !hint.empty();
+    if (tip && has_hint) {
+        news.clear();
+    }
+    if (!news.empty()) {
+        slate_round(cr, dp(10), tag_y, tag_w, tag_h, dp(4), kSlateGold);
+        slate_text(cr, tag_font(), "NEWS", dp(10) + dp(7), tag_y + dp(3), kSlateDeep);
     }
     std::string hint_line = hint;
-    const int news_w = measure_text(cr, ui_font(), news, -1).width;
-    const int hint_room = static_cast<int>(right - (news_x + std::min(news_w, dp(360)) + dp(24)));
+    const int news_w = news.empty() ? 0 : measure_text(cr, ui_font(), news, -1).width;
+    const double hint_left = news.empty() ? dp(10) : news_x + std::min(news_w, dp(160)) + dp(24);
+    const int hint_room = static_cast<int>(right - hint_left);
     hint_line = hint_room < dp(120) ? std::string() : fit_text(cr, ui_font(), hint_line, hint_room);
     if (!hint_line.empty()) {
         const int w = measure_text(cr, ui_font(), hint_line, -1).width;
         right -= w;
         slate_text(cr, ui_font(), hint_line, right, text_y, kSlateDim);
         right -= dp(24);
+    }
+    if (news.empty()) {
+        return;
     }
     const std::string shown_news = fit_text(cr, ui_font(), news, static_cast<int>(right - news_x));
     slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() || staleness > 0 ? kSlateDim : kSlateInk);
