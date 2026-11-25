@@ -41,6 +41,14 @@ int main()
         return fail(20, "the tutorial ignored a Micro Nuclear Plant");
     }
 
+    // Release-readiness #2: all three Parks row tools satisfy Parks.
+    for (int park_tile : {WOODS2, FOUNTAIN, SPECIAL_PARK, SPECIAL_FOUNTAIN}) {
+        const auto parks = tutorial::census([&](int, int) { return park_tile; }, 1, 1, 0, false, false);
+        if (!tutorial::step_complete(tutorial::Parks, parks)) {
+            return fail(21, "the tutorial ignored a park or fountain");
+        }
+    }
+
     // #6: grouped digits in every meter form.
     tutorial::Status s;
     s.population = 1440;

@@ -167,7 +167,8 @@ inline bool is_road_tile(MapTile tile)
 
 inline bool is_park_tile(MapTile tile)
 {
-    return tile == FOUNTAIN || (tile >= WOODS2 && tile <= WOODS5);
+    return tile == FOUNTAIN || (tile >= WOODS2 && tile <= WOODS5) ||
+           tile == SPECIAL_PARK || tile == SPECIAL_FOUNTAIN;
 }
 
 inline bool is_power_plant_center(MapTile tile)
