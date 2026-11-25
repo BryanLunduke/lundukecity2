@@ -3095,8 +3095,17 @@ void Shell::draw_dialog(cairo_t *cr)
         const double buttons_h = dp(36);
         const double chrome = dp(40) + margin + footer_h + dp(8) + buttons_h + margin;
         const double max_h = std::max(chrome + dp(48), band_h - 2.0 * margin);
-        const double view_h = std::max(static_cast<double>(dp(48)), std::min(tallest, max_h - chrome));
+        double view_h = std::max(static_cast<double>(dp(48)), std::min(tallest, max_h - chrome));
         const double height = chrome + view_h;
+        // Release nov24 #13: a page that scrolls gives its "More below"
+        // hint a row of its own under the rows, so it never sits on top of
+        // the last visible key.
+        const std::string more = deck_ ? "\u25BC More below" : "\u25BC More below (scroll)";
+        const double hint_h = line_height(bold_font(), more, 4000) + dp(4);
+        const bool scrolls = content_h > view_h + 0.5;
+        if (scrolls && view_h - hint_h >= dp(48)) {
+            view_h -= hint_h;
+        }
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const std::string panel_title = std::string("Controls \u2014 ") + heading;
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, panel_title.c_str());
@@ -3132,10 +3141,9 @@ void Shell::draw_dialog(cairo_t *cr)
             cairo_fill(cr);
             cairo_restore(cr);
             cairo_pattern_destroy(fade);
-            const std::string more = deck_ ? "\u25BC More below" : "\u25BC More below (scroll)";
             const int more_w = measure_text(cr, bold_font(), more, -1).width;
-            paint_text(cr, bold_font(), more, panel.x + (panel.w - more_w) / 2.0,
-                       body_top + view_h - line_height(bold_font(), more, more_w + 4) - dp(2), 0.45, 0.04, 0.02, more_w + 4);
+            paint_text(cr, bold_font(), more, panel.x + (panel.w - more_w) / 2.0, body_top + view_h + dp(2), 0.45, 0.04,
+                       0.02, more_w + 4);
         }
         if (controls_scroll_max_ > 0) {
             const double track_w = std::max(4.0, static_cast<double>(dp(6)));
@@ -3148,20 +3156,27 @@ void Shell::draw_dialog(cairo_t *cr)
                 body_top + travel * (static_cast<double>(controls_scroll_) / static_cast<double>(controls_scroll_max_));
             fill(cr, track_x, thumb_y, track_w, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         }
-        const double footer_y = body_top + view_h + dp(4);
+        const double footer_y = body_top + view_h + (scrolls ? hint_h : 0.0) + dp(4);
         const double dot = dp(14);
         const double dot_gap = dp(8);
         const double dots_w = dot * 3 + dot_gap * 2;
         const double prev_w = dp(88);
         const double next_w = dp(88);
-        button(cr, panel.x + margin, footer_y, prev_w, dp(28), "_Prev", kControlsPrev, false);
+        // Release nov24 #13: no Prev on the first page, no Next on the last.
+        // Left and Right still wrap from the keyboard or pad.
+        const int position = ((controls_page_ % 3) + 3) % 3;
+        if (position > 0) {
+            button(cr, panel.x + margin, footer_y, prev_w, dp(28), "_Prev", kControlsPrev, false);
+        }
         const double dots_x = panel.x + (panel.w - dots_w) / 2.0;
         for (int page = 0; page < 3; ++page) {
             const int id = page == 0 ? kPageDot0 : page == 1 ? kPageDot1 : kPageDot2;
             const bool here = controls_page_index(controls_page_, deck_) == page;
             button(cr, dots_x + page * (dot + dot_gap), footer_y + dp(6), dot, dot, "", id, false, here);
         }
-        button(cr, panel.x + panel.w - margin - next_w, footer_y, next_w, dp(28), "_Next", kControlsNext, false);
+        if (position < 2) {
+            button(cr, panel.x + panel.w - margin - next_w, footer_y, next_w, dp(28), "_Next", kControlsNext, false);
+        }
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - buttons_h, {{"_Remap", kRemap}, {"_Close", kCancel}});
         return;
     }
