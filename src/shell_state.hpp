@@ -244,6 +244,12 @@ private:
     // and what it does) when [left, right) overlaps it (review nov25 #2).
     // Window rectangle of the building the Inspect card describes.
     bool query_screen_box(double &left, double &top, double &right, double &bottom);
+    // Keyboard mnemonic underlines help only a player with a keyboard: not
+    // on a pad, and on a Deck only once a key has been pressed (review
+    // nov25 #21).
+    bool mnemonics_allowed() const { return !gamepad_nav_ && (!deck_ || keyboard_seen_); }
+    bool mnemonics_on() const { return menu_.alt_shown && mnemonics_allowed(); }
+    bool title_mnemonics_on() const { return mnemonics_allowed() && (menu_.alt_shown || menu_.open()); }
     double clear_of_tool_card(double bottom, double left, double right) const;
     void toggle_fullscreen();
     void settle_windowed_frame();
@@ -1031,6 +1037,7 @@ private:
     // click). A click on that title then keeps it open instead of closing
     // it (review nov25 #11).
     bool menu_slid_open_ = false;
+    bool keyboard_seen_ = false;
     // The handheld tool card above the raised quick-bar slot, this frame.
     bool tool_card_on_ = false;
     double tool_card_x_ = 0;

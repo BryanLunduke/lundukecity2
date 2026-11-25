@@ -723,6 +723,7 @@ void Shell::note_keyboard_input()
 {
     gamepad_nav_ = false;
     touch_used_ = false;
+    keyboard_seen_ = true;
     sync_pointer_cursor();
 }
 

@@ -480,11 +480,11 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
         }
         const double ty = y + (h - metrics.height) / 2.0;
         if (!enabled) {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.45, 0.42, 0.38);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), 0.45, 0.42, 0.38);
         } else if (primary && !selected) {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), 1, 1, 1);
         } else {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 0.12, 0.09, 0.06);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), 0.12, 0.09, 0.06);
         }
         return;
     }
@@ -519,7 +519,7 @@ void Shell::button(cairo_t *cr, double x, double y, double w, double h, const ch
     const double tx = x + (w - metrics.width) / 2.0;
     const double ty = y + (h - metrics.height) / 2.0;
     const bool light = primary;
-    paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, light ? 1 : theme::kTextR, light ? 1 : theme::kTextG,
+    paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), light ? 1 : theme::kTextR, light ? 1 : theme::kTextG,
                    light ? 1 : theme::kTextB);
 }
 
@@ -715,7 +715,7 @@ void Shell::draw_menubar(cairo_t *cr)
             fill(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
             stroke_rect(cr, x, 3, w, menu_h_ - 6, theme::chrome_select_edge_r(), theme::chrome_select_edge_g(), theme::chrome_select_edge_b());
         }
-        paint_mnemonic(cr, menu_font(), title, x + 10, 9, menu_.alt_shown || menu_.open(), lit && !dark ? 1 : ink_r,
+        paint_mnemonic(cr, menu_font(), title, x + 10, 9, title_mnemonics_on(), lit && !dark ? 1 : ink_r,
                        lit && !dark ? 1 : ink_g, lit && !dark ? 1 : ink_b);
         x += w + 2;
     }
@@ -995,10 +995,10 @@ void Shell::draw_menu_dropdown(cairo_t *cr)
                   .empty()) ||
             (item.action == Action::Meltdown && !session_.meltdown_unavailable().empty());
         if (greyed) {
-            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, ink_accel.r, ink_accel.g,
+            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, mnemonics_on(), ink_accel.r, ink_accel.g,
                            ink_accel.b);
         } else {
-            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, menu_.alt_shown, ink_text.r, ink_text.g,
+            paint_mnemonic(cr, menu_font(), item.label, text_x, text_y, mnemonics_on(), ink_text.r, ink_text.g,
                            ink_text.b);
         }
         if (item.kind == ItemKind::Submenu) {
@@ -1535,7 +1535,7 @@ void Shell::draw_dialog(cairo_t *cr)
                 cairo_stroke(cr);
                 const TextMetrics m = measure_text(cr, ui_font(), strip_mnemonic(cell.label), -1);
                 paint_mnemonic(cr, ui_font(), cell.label, cx + (cw - m.width) / 2.0, by + (bh - m.height) / 2.0,
-                               menu_.alt_shown, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
+                               mnemonics_on(), 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
             }
             by += bh + gap;
         }
@@ -6077,9 +6077,9 @@ void Shell::draw_year_cover(cairo_t *cr, double margin, double band_h)
         const double tx = x + (w - metrics.width) / 2.0;
         const double ty = y + (h - metrics.height) / 2.0;
         if (primary) {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, 1, 1, 1);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), 1, 1, 1);
         } else {
-            paint_mnemonic(cr, ui_font(), label, tx, ty, menu_.alt_shown, body_r, body_g, body_b);
+            paint_mnemonic(cr, ui_font(), label, tx, ty, mnemonics_on(), body_r, body_g, body_b);
         }
     };
 
