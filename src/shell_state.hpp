@@ -364,6 +364,7 @@ private:
     bool return_from_overlay();
     const char *glyph(SDL_GamepadButton button) const;
     const char *glyph_for(int pad_act) const;
+    std::string pad_wording(const std::string &text) const;
     bool take_bound_key(SDL_Keycode key, int mods);
     void apply_key_act(int act);
     void sync_pointer_cursor();

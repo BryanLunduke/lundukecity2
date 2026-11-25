@@ -4985,6 +4985,23 @@ const char *Shell::glyph_for(int pad_act) const
     return glyph(static_cast<SDL_GamepadButton>(binds_.pad[pad_act]));
 }
 
+std::string Shell::pad_wording(const std::string &text) const
+{
+    // Learn to Play names keys and clicks. A Deck or controller player gets
+    // the same step in button words.
+    if (!(deck_ || gamepad_nav_) || text.empty()) {
+        return text;
+    }
+    tutorial::PadWords words;
+    words.confirm = glyph_for(PadConfirm);
+    words.query = glyph_for(PadQuery);
+    words.pause = glyph_for(PadPause);
+    words.prev = glyph_for(PadPrevTool);
+    words.next = glyph_for(PadNextTool);
+    words.menu = glyph_for(PadMenu);
+    return tutorial::pad_text(text, words);
+}
+
 void Shell::absorb_placement_note()
 {
     CitySession::PlacementNote note;

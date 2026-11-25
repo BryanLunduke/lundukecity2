@@ -4448,7 +4448,7 @@ void Shell::draw(cairo_t *cr)
     }
     if (notice.show_notice && !session_.message().empty()) {
         shown_message_serial_ = session_.message_serial();
-        shown_message_ = session_.message();
+        shown_message_ = pad_wording(session_.message());
         hint_until_ = now + std::chrono::milliseconds(kToastMs);
         query_pinned_ = false;
     }
@@ -4594,7 +4594,7 @@ void Shell::draw(cairo_t *cr)
     theme::banner_fill(look_r, look_g, look_b);
     theme::banner_ink(look_ink_r, look_ink_g, look_ink_b);
     const BannerColors goal_bar = goal_banner_colors(BannerColors{look_r, look_g, look_b, look_ink_r, look_ink_g, look_ink_b});
-    const std::string goal = session_.scenario_progress();
+    const std::string goal = pad_wording(session_.scenario_progress());
     if (session_.scenario_id() != goal_scenario_ ||
         (session_.scenario_id() == SC_LEARN_TO_PLAY && session_.tutorial_step() != goal_tutorial_step_)) {
         goal_scenario_ = session_.scenario_id();
@@ -5116,7 +5116,7 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
     const std::string tutorial_banner =
         (goal_banner_allowed() && dialog_ == Dialog::None && !terrain_edit_ && !goal_dismissed_ && now < goal_until_ &&
          session_.scenario_id() == SC_LEARN_TO_PLAY)
-            ? session_.scenario_progress()
+            ? pad_wording(session_.scenario_progress())
             : std::string();
     const std::vector<std::size_t> order = toast_draw_order(toasts_);
     for (std::size_t slot : order) {

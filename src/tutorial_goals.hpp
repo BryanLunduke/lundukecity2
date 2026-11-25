@@ -142,6 +142,73 @@ inline const char *hint(int step)
     }
 }
 
+// The words a controller player needs instead of keys and clicks. Each is
+// the button's label from glyph_for(); an empty one means it is unbound.
+struct PadWords {
+    std::string confirm;  // A
+    std::string query;    // X: Inspect
+    std::string pause;    // Y: run / pause
+    std::string prev;     // L1
+    std::string next;     // R1
+    std::string menu;     // the menu button
+};
+
+// Controller wording for the steps whose desktop text names keys or
+// clicks (Roads, Inspect and Budget, 2,000 people). Empty for a step that
+// reads the same with a controller, or when a needed button is unbound.
+inline std::string pad_hint(int step, const PadWords &w)
+{
+    switch (step) {
+    case Roads:
+        if (w.next.empty() || w.confirm.empty()) {
+            return {};
+        }
+        return "Press " + w.next + (w.prev.empty() ? std::string() : " or " + w.prev) +
+               " until the Road tool is chosen, then hold " + w.confirm +
+               " and move the cursor to draw a road at least 12 tiles long "
+               "across the open field. People need roads to reach their homes and jobs.";
+    case InspectBudget:
+        if (w.query.empty() || w.confirm.empty()) {
+            return {};
+        }
+        return "Press " + w.query + " for Inspect (the magnifier on the toolbar), then point at a zone or "
+               "building and press " + w.confirm + " to see how it is doing. Open Budget (" +
+               (w.menu.empty() ? std::string("Menu") : w.menu) +
+               ", then Analysis) to see taxes and funding for roads, police and fire. If the yearly cash "
+               "flow is red, raise the tax rate a point or two; more people also bring in more tax.";
+    case Population:
+        if (w.pause.empty()) {
+            return {};
+        }
+        return "Press " + w.pause + " to run time if the city is paused. "
+               "Keep zoning and connecting power. Reach 2,000 people and you "
+               "have learned the basics — the city is yours.";
+    default:
+        return {};
+    }
+}
+
+// Swaps each step's desktop hint inside `text` (a banner or message that
+// quotes it) for the controller wording.
+inline std::string pad_text(std::string text, const PadWords &w)
+{
+    for (int step = 0; step < kStepCount; ++step) {
+        const std::string desk = hint(step);
+        if (desk.empty()) {
+            continue;
+        }
+        const std::size_t at = text.find(desk);
+        if (at == std::string::npos) {
+            continue;
+        }
+        const std::string pad = pad_hint(step, w);
+        if (!pad.empty()) {
+            text.replace(at, desk.size(), pad);
+        }
+    }
+    return text;
+}
+
 inline const char *done_toast(int step)
 {
     switch (step) {
