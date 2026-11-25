@@ -127,6 +127,8 @@ enum HotspotId : int {
     // Terrain editor top bar and toolbar. Not dialog controls.
     kTerrainComplete = 9520,
     kTerrainCancel = 9521,
+    kTerrainUndo = 9522,
+    kTerrainRedo = 9523,
     kTerrainBrush = 9530, // + 0 (1x1) or 1 (3x3)
     kTerrainPiece = 9540, // + terrain_paint::Piece (0..3)
     kQuickTool = 9600, // + tool index 0..26 (26 = Inspect)

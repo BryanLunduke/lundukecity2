@@ -7589,11 +7589,13 @@ std::vector<std::pair<std::string, std::string>> Shell::pad_legend() const
     }
     if (terrain_edit_) {
         // The editor's own buttons (shell.cpp): A paints, B leaves like
-        // Cancel, L1/R1 step the pieces, Y the brush, Start is Map Complete.
+        // Cancel, L1/R1 step the pieces, Y the brush, X undoes a stroke,
+        // Start is Map Complete. (L3 redoes; the Redo chip shows it.)
         return {{a, "Paint"},
                 {b, "Leave"},
                 {std::string(glyph_for(PadPrevTool)) + "/" + glyph_for(PadNextTool), "Terrain"},
                 {glyph_for(PadPause), "Brush"},
+                {glyph_for(PadQuery), "Undo"},
                 {menu, "Map Complete"}};
     }
     const ToolDef *tool = tool_by_index(tool_index_);

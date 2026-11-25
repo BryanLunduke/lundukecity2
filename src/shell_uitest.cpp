@@ -2069,11 +2069,43 @@ void Shell::drive_ui_test()
             pad(SDL_GAMEPAD_BUTTON_NORTH);
             const int brush_pad = terrain_brush_;
             pad(SDL_GAMEPAD_BUTTON_NORTH);
-            pad(SDL_GAMEPAD_BUTTON_WEST);
             if (piece_next != (piece_was + 1) % terrain_paint::kPieceCount || terrain_piece_ != piece_was ||
                 brush_pad != terrain_paint::kBrushLarge || terrain_brush_ != terrain_paint::kBrushSmall ||
                 !terrain_edit_ || dialog_ != Dialog::None) {
                 fail("the gamepad did not cycle terrain and flip the brush");
+                return;
+            }
+            // Review nov25 #12: X (Inspect elsewhere) takes the last stroke
+            // back and L3 lays it again, so a Deck can undo without a
+            // keyboard. The Undo / Redo chips do the same.
+            const std::vector<unsigned short> wet_again = terrain_work_;
+            pad(SDL_GAMEPAD_BUTTON_WEST);
+            if (terrain_work_ != before || !terrain_edit_ || dialog_ != Dialog::None) {
+                fail("X did not undo the last brush stroke in the editor");
+                return;
+            }
+            pad(SDL_GAMEPAD_BUTTON_LEFT_STICK);
+            if (terrain_work_ != wet_again) {
+                fail("L3 did not redo the brush stroke in the editor");
+                return;
+            }
+            render();
+            const Hotspot *undo_chip = find_hot(hot_, kTerrainUndo, 0);
+            const Hotspot *redo_chip = find_hot(hot_, kTerrainRedo, 0);
+            if (undo_chip == nullptr || redo_chip == nullptr) {
+                fail("the editor has no Undo / Redo buttons");
+                return;
+            }
+            click_at(undo_chip->x + undo_chip->w * 0.5, undo_chip->y + undo_chip->h * 0.5);
+            if (terrain_work_ != before) {
+                fail("the Undo button did not undo the stroke");
+                return;
+            }
+            render();
+            redo_chip = find_hot(hot_, kTerrainRedo, 0);
+            click_at(redo_chip->x + redo_chip->w * 0.5, redo_chip->y + redo_chip->h * 0.5);
+            if (terrain_work_ != wet_again) {
+                fail("the Redo button did not redo the stroke");
                 return;
             }
             gamepad_nav_ = false;

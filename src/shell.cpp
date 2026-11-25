@@ -3142,7 +3142,11 @@ void Shell::handle_event(const SDL_Event &event)
             } else if (dialog_ == Dialog::Bindings && focus_id_ >= kListItem && focus_id_ < kListItem + 64) {
                 clear_bind_row(true);
             } else if (terrain_edit_) {
-                // There is no Inspect in the editor.
+                // No Inspect in the editor: X takes back the last stroke
+                // (review nov25 #12; undo used to be keyboard-only).
+                if (dialog_ == Dialog::None && !menu_.open() && !pad_dragging_) {
+                    step_terrain_history(false);
+                }
             } else if (dialog_ == Dialog::None && !menu_.open()) {
                 select_tool(kToolCount - 1);
             }
@@ -3165,6 +3169,13 @@ void Shell::handle_event(const SDL_Event &event)
                 y_hold_fresh_ = true;
                 y_hold_ms_ = 0;
                 y_hold_fired_ = false;
+            }
+            break;
+        }
+        if (pact == PadOverlay && dialog_ == Dialog::None && !menu_.open() && terrain_edit_) {
+            // No data map in the editor: L3 puts back a stroke X took away.
+            if (!pad_dragging_) {
+                step_terrain_history(true);
             }
             break;
         }
