@@ -778,3 +778,190 @@ void Shell::draw_terrain_status(cairo_t *cr, const std::string &hint)
     }
     text(cr, ui_font(), fit(cr, ui_font(), left, static_cast<int>(right - x)), x, text_y, slate_ ? kSlateInk : kClassicInk);
 }
+
+void Shell::draw_terrain_hud(cairo_t *cr)
+{
+    // The Map editor on a handheld (Deck hardware notes, Nov 25): the same
+    // pieces as the city HUD. The minimap and the zoom buttons as in play,
+    // a title chip and the Cancel / Map Complete chips along the top, and
+    // the terrain pieces and brush sizes in the quick bar at the bottom.
+    draw_minimap_overlay(cr);
+    const int under = gamepad_nav_ ? hit(cursor_x_, cursor_y_) : hover_id_;
+    const bool live = dialog_ == Dialog::None;
+    const double top = dp(10);
+    const double chip_h = dp(52);
+    const double right_limit = mini_x_ - dp(16);
+    const std::string piece = terrain_paint::piece_name(static_cast<terrain_paint::Piece>(terrain_piece_));
+    const std::string brush = std::string(terrain_brush_ >= terrain_paint::kBrushLarge ? "3x3" : "1x1") + " brush";
+    const char *labels[2] = {"Cancel", "Map Complete"};
+    const int ids[2] = {kTerrainCancel, kTerrainComplete};
+    double button_w[2] = {};
+    for (int i = 0; i < 2; ++i) {
+        button_w[i] = measure_text(cr, bold_font(), labels[i], -1).width + dp(32);
+    }
+    // Title chip: a TERRAIN tag, the piece being painted, the brush, and
+    // the city's name when there is room for it.
+    const TextMetrics tag = measure_text(cr, tag_font(), "TERRAIN", -1);
+    const double tag_w = tag.width + dp(14);
+    const double tag_h = tag.height + dp(6);
+    const double pad = dp(12);
+    const double sep = dp(12);
+    const double piece_w = measure_text(cr, bold_font(), piece, -1).width;
+    const double brush_w = measure_text(cr, ui_font(), brush, -1).width;
+    const double buttons = button_w[0] + dp(8) + button_w[1];
+    double x = dp(10);
+    double title_w = pad + tag_w + sep + piece_w + sep + brush_w + pad;
+    std::string city = field_a_;
+    double city_w = city.empty() ? 0.0 : measure_text(cr, ui_font(), city, -1).width;
+    const double city_room = right_limit - x - buttons - dp(16) - title_w - sep;
+    if (city_w > 0.0 && city_room >= dp(60)) {
+        if (city_w > city_room) {
+            city = fit(cr, ui_font(), city, static_cast<int>(city_room));
+            city_w = measure_text(cr, ui_font(), city, -1).width;
+        }
+        title_w += sep + city_w;
+    } else {
+        city.clear();
+    }
+    rounded_path(cr, x, top, title_w, chip_h, dp(10));
+    cairo_set_source_rgba(cr, kSlateBand.r, kSlateBand.g, kSlateBand.b, 0.94);
+    cairo_fill(cr);
+    {
+        double cx = x + pad;
+        const double tag_y = top + (chip_h - tag_h) / 2.0;
+        rounded_path(cr, cx, tag_y, tag_w, tag_h, dp(4));
+        cairo_set_source_rgb(cr, kSlateGold.r, kSlateGold.g, kSlateGold.b);
+        cairo_fill(cr);
+        text(cr, tag_font(), "TERRAIN", cx + dp(7), tag_y + dp(3), kSlateDeep);
+        cx += tag_w + sep;
+        const double ty = top + (chip_h - measure_text(cr, bold_font(), "Ag", -1).height) / 2.0;
+        text(cr, bold_font(), piece, cx, ty, kSlateGold);
+        cx += piece_w + sep;
+        text(cr, ui_font(), brush, cx, ty + dp(1), kSlateInk);
+        cx += brush_w + sep;
+        if (!city.empty()) {
+            text(cr, ui_font(), city, cx, ty + dp(1), kSlateDim);
+        }
+    }
+    x += title_w + dp(8);
+    for (int i = 0; i < 2; ++i) {
+        const int id = ids[i];
+        const bool primary = id == kTerrainComplete;
+        const bool hot = live && under == id;
+        const bool down = hot && pointer_down_ && hover_id_ == id;
+        rounded_path(cr, x, top, button_w[i], chip_h, dp(10));
+        const Ink face = primary ? (down ? kSlateGoldDim : kSlateGold) : (hot ? kSlateEdge : kSlateBand);
+        cairo_set_source_rgba(cr, face.r, face.g, face.b, primary ? 1.0 : 0.94);
+        cairo_fill_preserve(cr);
+        const Ink edge = hot ? kSlateInk : (primary ? kSlateGoldDim : kSlateEdge);
+        cairo_set_source_rgb(cr, edge.r, edge.g, edge.b);
+        cairo_set_line_width(cr, hot ? 2.0 : 1.0);
+        cairo_stroke(cr);
+        const TextMetrics m = measure_text(cr, bold_font(), labels[i], -1);
+        text(cr, bold_font(), labels[i], x + (button_w[i] - m.width) / 2.0, top + (chip_h - m.height) / 2.0,
+             primary ? kSlateDeep : kSlateInk);
+        push_hot(x, top, button_w[i], chip_h, id);
+        x += button_w[i] + dp(8);
+    }
+    draw_hud_zoom_buttons(cr);
+    // Quick bar: the terrain pieces, a rule, then the two brush sizes. The
+    // chosen piece and the chosen brush are raised with a gold edge.
+    const double slot = static_cast<double>(quick_h_);
+    const double lift = dp(8);
+    const double gap = dp(16);
+    const int count = terrain_paint::kPieceCount + 2;
+    const double bar_w = count * slot + gap + dp(16);
+    const double bar_x = std::round((win_w_ - bar_w) / 2.0);
+    rounded_path(cr, bar_x, quick_y_, bar_w, quick_h_ + dp(4), dp(12));
+    cairo_set_source_rgba(cr, kSlateBand.r, kSlateBand.g, kSlateBand.b, 0.94);
+    cairo_fill(cr);
+    double sx = bar_x + dp(8);
+    double chosen_x = -1.0;
+    for (int i = 0; i < count; ++i) {
+        const bool is_piece = i < terrain_paint::kPieceCount;
+        if (i == terrain_paint::kPieceCount) {
+            const double rx = std::round(sx + gap / 2.0) - 0.5;
+            cairo_set_source_rgba(cr, kSlateDim.r, kSlateDim.g, kSlateDim.b, 0.55);
+            cairo_set_line_width(cr, 1.0);
+            cairo_move_to(cr, rx, quick_y_ + dp(8));
+            cairo_line_to(cr, rx, quick_y_ + quick_h_ - dp(4));
+            cairo_stroke(cr);
+            sx += gap;
+        }
+        const int b = i - terrain_paint::kPieceCount;
+        const int size = b == 0 ? terrain_paint::kBrushSmall : terrain_paint::kBrushLarge;
+        const int id = is_piece ? kTerrainPiece + i : kTerrainBrush + b;
+        const bool chosen = is_piece ? terrain_piece_ == i : terrain_brush_ == size;
+        const bool hot = live && under == id;
+        const double sy = quick_y_ + dp(4) - (chosen ? lift : 0);
+        if (chosen) {
+            rounded_path(cr, sx + 1, sy, slot - 2, slot - 2, dp(8));
+            cairo_set_source_rgb(cr, kSlatePanel.r, kSlatePanel.g, kSlatePanel.b);
+            cairo_fill_preserve(cr);
+            cairo_set_source_rgb(cr, kSlateGold.r, kSlateGold.g, kSlateGold.b);
+            cairo_set_line_width(cr, 2.0);
+            cairo_stroke(cr);
+            if (is_piece) {
+                chosen_x = sx + slot / 2.0;
+            }
+        } else if (hot) {
+            rounded_path(cr, sx + 1, sy, slot - 2, slot - 2, dp(8));
+            cairo_set_source_rgb(cr, kSlateEdge.r, kSlateEdge.g, kSlateEdge.b);
+            cairo_fill(cr);
+        }
+        const double icon = std::floor(std::max(16.0, slot - dp(16)));
+        const double ix = std::floor(sx + (slot - icon) / 2.0);
+        const double iy = std::floor(sy + (slot - 2 - icon) / 2.0);
+        cairo_save(cr);
+        cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+        if (is_piece) {
+            paint_piece_icon(cr, i, ix, iy, icon);
+        } else {
+            paint_brush_icon(cr, size, ix, iy, icon, kSlateInk);
+        }
+        cairo_restore(cr);
+        if (hot && chosen) {
+            rounded_path(cr, sx + 3, sy + 2, slot - 6, slot - 6, dp(6));
+            cairo_set_source_rgb(cr, kSlateInk.r, kSlateInk.g, kSlateInk.b);
+            cairo_set_line_width(cr, 2.0);
+            cairo_stroke(cr);
+        }
+        push_hot(sx, quick_y_ - lift, slot, quick_h_ + lift + dp(4), id);
+        sx += slot;
+    }
+    // L1/R1 step the pieces: their glyphs at the bar's ends.
+    const std::string prev = glyph_for(PadPrevTool);
+    const std::string next = glyph_for(PadNextTool);
+    if (gamepad_nav_ || deck_) {
+        const std::string glyphs[2] = {prev, next};
+        for (int k = 0; k < 2; ++k) {
+            if (glyphs[k].empty()) {
+                continue;
+            }
+            const TextMetrics m = measure_text(cr, tag_font(), glyphs[k], -1);
+            const double kw = m.width + dp(12);
+            const double ky = quick_y_ + (quick_h_ - m.height - dp(6)) / 2.0;
+            const double kx = k == 0 ? bar_x - kw - dp(8) : bar_x + bar_w + dp(8);
+            rounded_path(cr, kx, ky, kw, m.height + dp(6), dp(4));
+            cairo_set_source_rgba(cr, kSlatePanel.r, kSlatePanel.g, kSlatePanel.b, 0.95);
+            cairo_fill(cr);
+            text(cr, tag_font(), glyphs[k], kx + dp(6), ky + dp(3), kSlateInk);
+        }
+    }
+    // The chosen piece's name above its raised slot, like a tool's.
+    if (chosen_x >= 0.0 && live) {
+        const TextMetrics m = measure_text(cr, bold_font(), piece, -1);
+        const double cw = m.width + dp(16);
+        const double ch = m.height + dp(8);
+        const double cx = std::max(static_cast<double>(dp(8)), std::min(chosen_x - cw / 2.0, win_w_ - cw - dp(8)));
+        const double cy = quick_y_ - lift - ch - dp(6);
+        rounded_path(cr, cx, cy, cw, ch, dp(6));
+        cairo_set_source_rgba(cr, kSlateDeep.r, kSlateDeep.g, kSlateDeep.b, 0.92);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgb(cr, kSlateEdge.r, kSlateEdge.g, kSlateEdge.b);
+        cairo_set_line_width(cr, 1.0);
+        cairo_stroke(cr);
+        text(cr, bold_font(), piece, cx + dp(8), cy + dp(4), kSlateGold);
+    }
+    draw_pad_legend(cr, win_h_ - hint_h_, hint_h_);
+}

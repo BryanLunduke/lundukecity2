@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "layout_mode.hpp"
 
 #include "osk_layout.hpp"
 #include "special_buildings.hpp"
@@ -1952,6 +1953,42 @@ void Shell::drive_ui_test()
             find_hot(hot_, kTerrainCancel, 0) == nullptr) {
             fail("the editor toolbar or top bar is wrong");
             return;
+        }
+        // On a handheld the editor uses the handheld HUD (Deck hardware
+        // notes, Nov 25): pieces and brushes in the bottom quick bar,
+        // Cancel and Map Complete in the top chips, no left tray.
+        {
+            const int pref = layout_pref_;
+            layout_pref_ = layout_mode::Handheld;
+            layout();
+            render();
+            const Hotspot *trees = find_hot(hot_, kTerrainPiece + 3, 0);
+            const Hotspot *small = find_hot(hot_, kTerrainBrush, 0);
+            const Hotspot *cancel = find_hot(hot_, kTerrainCancel, 0);
+            const Hotspot *done = find_hot(hot_, kTerrainComplete, 0);
+            if (!handheld_ || find_hot(hot_, kPaletteId, 0) != nullptr || trees == nullptr || small == nullptr ||
+                cancel == nullptr || done == nullptr || trees->y + trees->h < quick_y_ || small->y + small->h < quick_y_ ||
+                cancel->y > dp(80) || done->y > dp(80)) {
+                fail("the handheld Map editor is not laid out with the quick bar and top chips");
+                return;
+            }
+            const auto legend = pad_legend();
+            if (legend.empty() || legend[0].second != "Paint") {
+                fail("the handheld Map editor's button legend is not the editor's");
+                return;
+            }
+            click_at(trees->x + trees->w * 0.5, trees->y + trees->h * 0.5 + 4);
+            if (terrain_piece_ != 3 || !terrain_edit_) {
+                fail("the handheld quick bar did not pick Trees");
+                return;
+            }
+            layout_pref_ = pref;
+            layout();
+            render();
+            if (handheld_ || find_hot(hot_, kTerrainPiece + 1, 0) == nullptr) {
+                fail("the desktop Map editor lost its left toolbar");
+                return;
+            }
         }
         const Hotspot *water = find_hot(hot_, kTerrainPiece + 1, 0);
         click_at(water->x + water->w * 0.5, water->y + water->h * 0.5);

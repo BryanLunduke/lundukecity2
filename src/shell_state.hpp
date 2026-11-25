@@ -135,6 +135,8 @@ private:
     void draw_funds_floats(cairo_t *cr);
     void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
     void draw_handheld_hud(cairo_t *cr);
+    void draw_hud_zoom_buttons(cairo_t *cr);
+    void draw_terrain_hud(cairo_t *cr);
     std::vector<std::pair<std::string, std::string>> pad_legend() const;
     void draw_pad_legend(cairo_t *cr, double y, double strip_h);
     bool dialog_only_closes() const;
