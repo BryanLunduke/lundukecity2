@@ -1139,15 +1139,32 @@ void Shell::drive_ui_test()
                 return;
             }
         }
+        // The buttons are a grid (Deck hardware notes, Nov 25): Left and
+        // Right move along a row, Up and Down between rows.
+        tap(SDL_GAMEPAD_BUTTON_DPAD_LEFT, [&] { return focus_id_ == kWelcomeNew; });
+        if (focus_id_ != kWelcomeNew) {
+            fail("D-pad Left moved off Start a new city");
+            return;
+        }
         // Release nov24 #7: Learn to Play sits beside Start a new city.
-        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeNew; });
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeNew; });
         if (focus_id_ != kWelcomeLearn) {
-            fail("D-pad Down did not move to Learn to Play");
+            fail("D-pad Right did not move to Learn to Play");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeLearn; });
+        if (focus_id_ != kWelcomeLearn) {
+            fail("D-pad Right moved off the end of the first row");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeLearn; });
         if (focus_id_ != kWelcomeLoad) {
             fail("D-pad Down did not move to Load a Saved City");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeLoad; });
+        if (focus_id_ != kWelcomeLoad) {
+            fail("D-pad Right left the one-button Load row");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeLoad; });
@@ -1161,9 +1178,9 @@ void Shell::drive_ui_test()
             return;
         }
         // Release nov24 #16: Settings sits beside How to play.
-        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeHowTo; });
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeHowTo; });
         if (focus_id_ != kWelcomeSettings) {
-            fail("D-pad Down did not move to Settings");
+            fail("D-pad Right did not move to Settings");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeSettings; });
@@ -1172,13 +1189,14 @@ void Shell::drive_ui_test()
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeQuit; });
-        if (focus_id_ != kWelcomeSettings) {
-            fail("D-pad Up did not return to Settings");
-            return;
-        }
-        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeSettings; });
         if (focus_id_ != kWelcomeHowTo) {
             fail("D-pad Up did not return to How to play");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeHowTo; });
+        tap(SDL_GAMEPAD_BUTTON_DPAD_LEFT, [&] { return focus_id_ == kWelcomeSettings; });
+        if (focus_id_ != kWelcomeHowTo) {
+            fail("D-pad Left did not return to How to play");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeHowTo; });

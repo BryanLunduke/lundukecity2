@@ -27,6 +27,7 @@
 #include "placement_hint.hpp"
 #include "tools.hpp"
 #include "tool_groups.hpp"
+#include "welcome_rows.hpp"
 #include "version.hpp"
 #include "view_math.hpp"
 
@@ -1109,7 +1110,7 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
         }
         const int delta = dir == AccelKey::Up || dir == AccelKey::Left ? -1 : 1;
         if (dialog_ == Dialog::Welcome) {
-            move_focus(delta, false);
+            step_welcome_focus(dir);
             return;
         }
         if (focus_is_flat_buttons()) {
@@ -1156,6 +1157,24 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
         return;
     }
     step_cursor_on_map(dx, dy);
+}
+
+void Shell::step_welcome_focus(AccelKey dir)
+{
+    // The Welcome buttons are a grid: Left and Right move along a row, Up
+    // and Down between rows (Deck hardware notes, Nov 25).
+    const int dx = dir == AccelKey::Left ? -1 : (dir == AccelKey::Right ? 1 : 0);
+    const int dy = dir == AccelKey::Up ? -1 : (dir == AccelKey::Down ? 1 : 0);
+    const bool has_continue = std::find(focus_order_.begin(), focus_order_.end(), kWelcomeContinue) != focus_order_.end();
+    const bool known = std::find(focus_order_.begin(), focus_order_.end(), focus_id_) != focus_order_.end();
+    if (!known) {
+        move_focus(dx + dy, false);
+        return;
+    }
+    const int next = welcome_step(focus_id_, dx, dy, has_continue);
+    if (next != focus_id_ && std::find(focus_order_.begin(), focus_order_.end(), next) != focus_order_.end()) {
+        focus_id_ = next;
+    }
 }
 
 bool Shell::stick_navigates() const

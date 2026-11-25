@@ -330,6 +330,7 @@ private:
     void advance_pad_drag(int dx, int dy, int elapsed_ms);
     void apply_pad_direction(SDL_GamepadButton button);
     bool stick_navigates() const;
+    void step_welcome_focus(AccelKey dir);
     void service_stick_nav(int elapsed_ms);
     // One tile toward the map edge, when that tile is still on screen.
     void step_cursor_on_map(int dx, int dy);

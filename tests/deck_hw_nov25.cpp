@@ -6,6 +6,7 @@
 // that are pure functions. The live checks are in the ui_input test.
 
 #include "pad_feel.hpp"
+#include "welcome_rows.hpp"
 
 #include <cstdio>
 #include <string>
@@ -41,11 +42,33 @@ void stick_as_dpad()
     check(stick_nav_dir(0.8f, 0.4f, StickDir::Down) == StickDir::Right, "a turn to another axis is a new press");
 }
 
+// #2: the Welcome buttons are a grid. Left and Right stay in the row.
+void welcome_grid()
+{
+    check(welcome_step(kWelcomeNew, 1, 0, false) == kWelcomeLearn, "Right from New city is Learn to Play");
+    check(welcome_step(kWelcomeLearn, -1, 0, false) == kWelcomeNew, "Left from Learn to Play is New city");
+    check(welcome_step(kWelcomeNew, -1, 0, false) == kWelcomeNew, "Left at the row's start stays");
+    check(welcome_step(kWelcomeLearn, 1, 0, false) == kWelcomeLearn, "Right at the row's end stays");
+    check(welcome_step(kWelcomeLoad, 1, 0, false) == kWelcomeLoad, "Right on a one-button row stays");
+    check(welcome_step(kWelcomeLoad, -1, 0, false) == kWelcomeLoad, "Left on a one-button row stays");
+    check(welcome_step(kWelcomeNew, 0, 1, false) == kWelcomeLoad, "Down from New city is Load");
+    check(welcome_step(kWelcomeLearn, 0, 1, false) == kWelcomeLoad, "Down from Learn to Play is Load");
+    check(welcome_step(kWelcomeScenario, 0, 1, false) == kWelcomeHowTo, "Down into a two-button row lands left");
+    check(welcome_step(kWelcomeHowTo, 1, 0, false) == kWelcomeSettings, "Right from How to play is Settings");
+    check(welcome_step(kWelcomeSettings, 0, 1, false) == kWelcomeQuit, "Down from Settings is Quit");
+    check(welcome_step(kWelcomeQuit, 0, 1, false) == kWelcomeQuit, "Down at the bottom stays");
+    check(welcome_step(kWelcomeNew, 0, -1, false) == kWelcomeNew, "Up at the top stays without Continue");
+    check(welcome_step(kWelcomeLearn, 0, -1, true) == kWelcomeContinue, "Up from the first row is Continue");
+    check(welcome_step(kWelcomeContinue, 0, 1, true) == kWelcomeNew, "Down from Continue is New city");
+    check(welcome_step(kWelcomeContinue, 1, 0, true) == kWelcomeContinue, "Right on Continue stays");
+}
+
 } // namespace
 
 int main()
 {
     stick_as_dpad();
+    welcome_grid();
     if (failures != 0) {
         std::fprintf(stderr, "deck_hw_nov25: %d failure(s)\n", failures);
         return 1;

@@ -2768,7 +2768,11 @@ void Shell::handle_event(const SDL_Event &event)
                     controls_scroll_ = 0;
                     break;
                 }
-                if (dialog_ == Dialog::Welcome || focus_is_flat_buttons()) {
+                if (dialog_ == Dialog::Welcome) {
+                    step_welcome_focus(accel);
+                    break;
+                }
+                if (focus_is_flat_buttons()) {
                     move_focus(direction, false);
                     break;
                 }
@@ -2785,7 +2789,7 @@ void Shell::handle_event(const SDL_Event &event)
                     break;
                 }
                 if (dialog_ == Dialog::Welcome) {
-                    move_focus(-1, false);
+                    step_welcome_focus(accel);
                     break;
                 }
                 if (focus_is_flat_buttons()) {
@@ -2800,7 +2804,7 @@ void Shell::handle_event(const SDL_Event &event)
                     break;
                 }
                 if (dialog_ == Dialog::Welcome) {
-                    move_focus(1, false);
+                    step_welcome_focus(accel);
                     break;
                 }
                 if (focus_is_flat_buttons()) {
