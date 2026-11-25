@@ -1415,3 +1415,12 @@ test(
 # Release nov24 #19: --version and --help print and exit without a window.
 test('cli_version', lunduke_city_exe, args: ['--version'])
 test('cli_help', lunduke_city_exe, args: ['--help'])
+
+# Deck nov24: Steam Deck review fixes (pure functions).
+deck_nov24 = executable(
+  'deck_nov24',
+  'deck_nov24.cpp',
+  include_directories: include_directories('../src'),
+  dependencies: [micropolis_dep],
+)
+test('deck_nov24', deck_nov24)

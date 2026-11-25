@@ -270,9 +270,9 @@ void Shell::begin_event_pan(int tile_x, int tile_y)
     const double ax = view_x_ + view_w_ * 0.5;
     const double ay = view_y_ + view_h_ * 0.5;
     double target_x = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
-    double target_y = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
+    double target_y = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox_y(), map_.pixel_height());
     const double max_x = scroll_max_x();
-    const double max_y = std::max(0.0, static_cast<double>(map_.pixel_height() - view_h_));
+    const double max_y = scroll_max_y();
     target_x = std::max(0.0, std::min(max_x, target_x));
     target_y = std::max(0.0, std::min(max_y, target_y));
     marker_on_ = true;
@@ -841,10 +841,31 @@ double Shell::scroll_max_x() const
     return map_scroll_limit(view_w_, map_.pixel_width(), map_letterbox_x(), minimap_reserve_x());
 }
 
+int Shell::map_reserve_y() const
+{
+    // Handheld: the quick bar and hint strip float over the bottom of the
+    // map. The view may scroll past the bottom edge by their height so the
+    // last rows can be brought up above them.
+    if (!handheld_ || quick_h_ <= 0) {
+        return 0;
+    }
+    return std::max(0, view_y_ + view_h_ - quick_y_);
+}
+
+int Shell::map_letterbox_y() const
+{
+    return map_letterbox_clear(view_h_, map_.pixel_height(), map_reserve_y());
+}
+
+double Shell::scroll_max_y() const
+{
+    return map_scroll_limit(view_h_, map_.pixel_height(), map_letterbox_y(), map_reserve_y());
+}
+
 void Shell::clamp_scroll()
 {
     const double max_x = scroll_max_x();
-    const double max_y = std::max(0, map_.pixel_height() - view_h_);
+    const double max_y = scroll_max_y();
     scroll_x_ = std::max(0.0, std::min(max_x, scroll_x_));
     scroll_y_ = std::max(0.0, std::min(max_y, scroll_y_));
 }
@@ -865,11 +886,11 @@ void Shell::fit_map_to_view()
         const double fy = map_point_fraction(ay, view_y_, map_oy_, scroll_y_, map_.pixel_height());
         map_.set_tile_size(cover);
         scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
-        scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
+        scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox_y(), map_.pixel_height());
         clamp_scroll();
     }
     map_ox_ = map_letterbox_x();
-    map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+    map_oy_ = map_letterbox_y();
     clamp_scroll();
 }
 
@@ -891,7 +912,7 @@ void Shell::center_on_fraction(double fx, double fy)
     const double ax = view_x_ + view_w_ * 0.5;
     const double ay = view_y_ + view_h_ * 0.5;
     scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
-    scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
+    scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox_y(), map_.pixel_height());
     clamp_scroll();
 }
 
@@ -963,7 +984,7 @@ void Shell::restore_loaded_view()
     // Same steps the Recover path uses for the autosave's view.
     map_.set_tile_size(view.tile_size);
     map_ox_ = map_letterbox_x();
-    map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+    map_oy_ = map_letterbox_y();
     center_on_fraction(view.center_x, view.center_y);
 }
 
@@ -985,7 +1006,7 @@ void Shell::zoom_by(int delta, double anchor_x, double anchor_y)
         return;
     }
     const int ox = map_letterbox_x();
-    const int oy = map_letterbox(view_h_, map_.pixel_height());
+    const int oy = map_letterbox_y();
     scroll_x_ = scroll_for_map_fraction(fx, anchor_x, view_x_, ox, map_.pixel_width());
     scroll_y_ = scroll_for_map_fraction(fy, anchor_y, view_y_, oy, map_.pixel_height());
     clamp_scroll();
@@ -1025,6 +1046,18 @@ void Shell::clamp_gamepad_cursor(float push_x, float push_y)
     // The visible map is the limit at every zoom, including the 8px overview.
     if (x >= static_cast<double>(view_x_) && y >= vis_bottom && vis_bottom > vis_top) {
         y = vis_bottom - 1.0;
+    }
+    // Handheld: the quick bar and hint strip cover the bottom of the map.
+    // The cursor may rest on the bar to pick a tool but not on the strip
+    // below it, and a drag stops at the bar's top edge so it never lays
+    // tiles out of sight. The last rows scroll up above the bar instead.
+    const int reserve = map_reserve_y();
+    if (reserve > 0) {
+        const double bar_bottom = static_cast<double>(quick_y_ + quick_h_ + dp(4));
+        const double limit = pad_dragging_ ? static_cast<double>(view_b - reserve) : bar_bottom;
+        if (y >= limit) {
+            y = limit - 1.0;
+        }
     }
     cursor_x_ = static_cast<float>(x);
     cursor_y_ = static_cast<float>(y);
@@ -2047,7 +2080,7 @@ void Shell::proceed(AfterSave next)
             if (saved.tile_size > 0) {
                 map_.set_tile_size(saved.tile_size);
                 map_ox_ = map_letterbox_x();
-                map_oy_ = map_letterbox(view_h_, map_.pixel_height());
+                map_oy_ = map_letterbox_y();
                 center_on_fraction(saved.center_x, saved.center_y);
             } else {
                 center_on_fraction(0.5, 0.5);

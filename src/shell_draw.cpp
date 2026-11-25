@@ -4263,6 +4263,10 @@ void Shell::draw(cairo_t *cr)
                                     demo_ == "learn_picker";
             if (learn_shot) {
                 map_.clear_hover();
+            } else if (gamepad_nav_ && !pad_dragging_ && handheld_ && hit(cursor_x_, cursor_y_) != kMapId) {
+                // Handheld: the cursor is on the quick bar or another control,
+                // not over the map, so no tile preview under it.
+                map_.clear_hover();
             } else if (gamepad_nav_ && !pad_dragging_) {
                 map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
             } else if (!gamepad_nav_ && !pointer_down_ && pointer_x_ >= view_x_ &&
@@ -4355,7 +4359,9 @@ void Shell::draw(cairo_t *cr)
         paint_dim_plate(cr, view_x_ + view_w_ - edge, view_y_, edge, view_h_, 0.75, 0.05, 0.04);
     }
     draw_city_reveal(cr);
-    push_hot(view_x_, view_y_, view_w_, view_h_, kMapId);
+    // Handheld: the strip under the quick bar is not map. A press there
+    // would build on tiles the bar hides.
+    push_hot(view_x_, view_y_, view_w_, std::max(0, view_h_ - map_reserve_y()), kMapId);
     if (handheld_) {
         draw_handheld_hud(cr);
     } else {
@@ -4418,7 +4424,7 @@ void Shell::draw(cairo_t *cr)
         push_hot(card_x + card_w - dp(22), card_y + 4, dp(18), dp(18), kCardDismiss);
     }
     const double max_x = scroll_max_x();
-    const double max_y = std::max(0, map_.pixel_height() - view_h_);
+    const double max_y = scroll_max_y();
     if (max_x > 0 && !handheld_) {
         const double span_x = static_cast<double>(view_w_) + max_x;
         const double bw = std::max(20.0, view_w_ * (view_w_ / span_x));

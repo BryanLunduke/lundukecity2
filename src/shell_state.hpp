@@ -296,6 +296,9 @@ private:
     int minimap_reserve_x() const;
     int map_letterbox_x() const;
     double scroll_max_x() const;
+    int map_reserve_y() const;
+    int map_letterbox_y() const;
+    double scroll_max_y() const;
     void demo_place_gifts(bool query_one);
     void sync_title();
     void note_message();
