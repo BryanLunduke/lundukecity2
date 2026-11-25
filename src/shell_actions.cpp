@@ -4646,7 +4646,7 @@ void SDLCALL Shell::file_callback(void *userdata, const char *const *filelist, i
     static_cast<Shell *>(userdata)->on_file_result(filelist);
 }
 
-const char *Shell::glyph(SDL_GamepadButton button) const
+FaceGlyphs Shell::face_glyph_set() const
 {
     int type = SDL_GAMEPAD_TYPE_UNKNOWN;
     int south = SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN;
@@ -4664,7 +4664,12 @@ const char *Shell::glyph(SDL_GamepadButton button) const
         deck_names = pad_uses_deck_names(true, true, SDL_GetGamepadVendor(pad_), SDL_GetGamepadProduct(pad_), type,
                                          SDL_GetGamepadName(pad_), others);
     }
-    const FaceGlyphs glyphs = face_glyphs(playstation, deck_names, type);
+    return face_glyphs(playstation, deck_names, type);
+}
+
+const char *Shell::glyph(SDL_GamepadButton button) const
+{
+    const FaceGlyphs glyphs = face_glyph_set();
     switch (button) {
     case SDL_GAMEPAD_BUTTON_SOUTH:
         return glyphs.south;
@@ -5099,6 +5104,10 @@ ControlsPadNames Shell::controls_pad_names() const
     names.view = named(glyph_for(PadBack));
     names.l3 = named(glyph_for(PadOverlay));
     names.r3 = named(glyph_for(PadCenter));
+    // The triggers are not remappable; name them for the pad in hand.
+    const FaceGlyphs glyphs = face_glyph_set();
+    names.l2 = glyphs.l2;
+    names.r2 = glyphs.r2;
     return names;
 }
 

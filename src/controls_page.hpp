@@ -60,6 +60,8 @@ struct ControlsPadNames {
     const char *view = "Back";
     const char *l3 = "LS";
     const char *r3 = "RS";
+    const char *l2 = "LT";
+    const char *r2 = "RT";
 };
 
 struct HowToPlaySection {
@@ -262,10 +264,11 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                             }, 0});
         sections.push_back({"Moving around",
                             {
-                                {"Left stick", "Move the cursor"},
+                                {"Left stick", "Move the cursor. In a window or menu, move the highlight"},
                                 {"D-pad", "Step and repeat: scroll a list, adjust a slider, or pan"},
                                 {"Right stick", "Pan the map"},
-                                {"Triggers", "Zoom one step per press"},
+                                {pad.r2, "Zoom in one step per press"},
+                                {pad.l2, "Zoom out one step per press"},
                                 {"Hold " + a + " and move", "Drag a line with the current tool"},
                             }, 1});
         sections.push_back({"New City window",

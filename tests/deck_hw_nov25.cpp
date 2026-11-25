@@ -7,6 +7,8 @@
 
 #include "pad_feel.hpp"
 #include "welcome_rows.hpp"
+#include "controls_page.hpp"
+#include "pad_glyphs.hpp"
 
 #include <cstdio>
 #include <string>
@@ -63,12 +65,44 @@ void welcome_grid()
     check(welcome_step(kWelcomeContinue, 1, 0, true) == kWelcomeContinue, "Right on Continue stays");
 }
 
+// Item 6: the gamepad Controls page names the zoom triggers per pad.
+bool lists(const std::vector<ControlsSection> &sections, const std::string &key, const std::string &action)
+{
+    for (const ControlsSection &section : sections) {
+        for (const ControlsRow &row : section.rows) {
+            if (row.key == key && row.action.find(action) != std::string::npos) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void controls_triggers()
+{
+    for (int kind = 0; kind < 3; ++kind) {
+        const bool playstation = kind == 1;
+        const bool deck = kind == 2;
+        const FaceGlyphs glyphs = face_glyphs(playstation, deck, SDL_GAMEPAD_TYPE_UNKNOWN);
+        ControlsPadNames pad;
+        pad.l2 = glyphs.l2;
+        pad.r2 = glyphs.r2;
+        const auto sections = controls_page_sections(0, true, pad);
+        const std::string l2 = kind == 0 ? "LT" : "L2";
+        const std::string r2 = kind == 0 ? "RT" : "R2";
+        check(lists(sections, r2, "Zoom in"), "Controls lists R2 zoom in");
+        check(lists(sections, l2, "Zoom out"), "Controls lists L2 zoom out");
+        check(!lists(sections, "Triggers", ""), "Controls no longer says only Triggers");
+    }
+}
+
 } // namespace
 
 int main()
 {
     stick_as_dpad();
     welcome_grid();
+    controls_triggers();
     if (failures != 0) {
         std::fprintf(stderr, "deck_hw_nov25: %d failure(s)\n", failures);
         return 1;

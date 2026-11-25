@@ -25,6 +25,7 @@
 #include "tool_palette.hpp"
 #include "bindings.hpp"
 #include "controls_page.hpp"
+#include "pad_glyphs.hpp"
 #include "ui_scale.hpp"
 
 #include <SDL3/SDL.h>
@@ -371,6 +372,7 @@ private:
     void maybe_mayor_note();
     bool return_from_overlay();
     const char *glyph(SDL_GamepadButton button) const;
+    FaceGlyphs face_glyph_set() const;
     const char *glyph_for(int pad_act) const;
     std::string pad_wording(const std::string &text) const;
     bool take_bound_key(SDL_Keycode key, int mods);
