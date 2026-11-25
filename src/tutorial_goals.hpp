@@ -126,7 +126,8 @@ inline const char *hint(int step)
         return "Add a park near the homes. Parks raise land value and keep "
                "people happier.";
     case InspectBudget:
-        return "Click Inspect, then click a zone or building to see how it is "
+        return "Pick Inspect (the magnifier at the bottom of the toolbar, or "
+               "press Q), then click a zone or building to see how it is "
                "doing. Open Budget (in the Analysis menu) to see taxes and funding for "
                "roads, police and fire. If the yearly cash flow is red, raise "
                "the tax rate a point or two; more people also bring in more tax.";

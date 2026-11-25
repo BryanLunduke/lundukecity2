@@ -49,7 +49,7 @@ const char *tool_icon_stem(int index)
         "bulldozer", "road",    "rail",         "wire",    "residential", "commercial", "industrial",
         "datacenter", "park",   "bigpark",      "fountain", "fire",       "police",     "prison",
         "coal",      "nuclear", "micronuclear", "zoo",     "amusement",   "casino",     "stadium",
-        "marina",    "library", "mayor",        "airport", "seaport",
+        "marina",    "library", "mayor",        "airport", "seaport",     "inspect",
     };
     if (index < 0 || index >= kToolIconCount) {
         return "";
@@ -436,7 +436,7 @@ void ToolPalette::draw_slate(cairo_t *cr) const
         const double font = std::max(8.0, std::min(header_ * 0.58, cell_ * 0.26));
         cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, font);
-        for (int g = 0; g < tool_groups::kGroupCount; ++g) {
+        for (int g = 0; g < tool_groups::kGridGroupCount; ++g) {
             const double top = kPad + tool_groups::group_top(g, columns_, cell_, header_);
             const char *title = tool_groups::groups()[g].title;
             cairo_text_extents_t extents;

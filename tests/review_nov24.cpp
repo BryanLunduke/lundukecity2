@@ -8,6 +8,8 @@
 
 #include "city_session.hpp"
 #include "micropolis.h"
+#include "tool_groups.hpp"
+#include "tools.hpp"
 #include "tutorial_goals.hpp"
 
 #include <cstdio>
@@ -46,6 +48,29 @@ int main()
         const auto parks = tutorial::census([&](int, int) { return park_tile; }, 1, 1, 0, false, false);
         if (!tutorial::step_complete(tutorial::Parks, parks)) {
             return fail(21, "the tutorial ignored a park or fountain");
+        }
+    }
+    // Release-readiness #3: Inspect has a desktop toolbar button, and Step 6 says where.
+    {
+        if (kPaletteToolCount != kToolCount || tool_by_index(kToolCount - 1)->engine_id != TOOL_QUERY) {
+            return fail(22, "Inspect is not on the desktop toolbar");
+        }
+        for (int columns = 2; columns <= 4; ++columns) {
+            int x = 0;
+            int y = 0;
+            if (!tool_groups::slot(kToolCount - 1, columns, 40, 18, x, y) ||
+                tool_groups::index_at(x + 20, y + 20, columns, 40, 18) != kToolCount - 1 ||
+                y + 40 > tool_groups::grid_height(columns, 40, 18)) {
+                return fail(23, "the Inspect button has no slot in the grid");
+            }
+        }
+        if (tool_groups::group_of(kToolCount - 1) != -1 ||
+            tool_groups::section_jump(tool_groups::groups()[6].first, 1, kToolCount) != kToolCount - 1) {
+            return fail(24, "the handheld section jumps changed");
+        }
+        const std::string step6 = tutorial::hint(tutorial::InspectBudget);
+        if (step6.find("magnifier") == std::string::npos || step6.find("press Q") == std::string::npos) {
+            return fail(25, "Step 6 does not say where Inspect is");
         }
     }
 

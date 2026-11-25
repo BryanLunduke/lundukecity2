@@ -88,6 +88,7 @@ install_data(
     'data/tool-icons/fountain.png',
     'data/tool-icons/datacenter.png',
     'data/tool-icons/micronuclear.png',
+    'data/tool-icons/inspect.png',
   ],
   install_dir: get_option('datadir') / 'lunduke-city-2' / 'tool-icons',
 )
