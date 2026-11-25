@@ -6716,7 +6716,6 @@ void Shell::draw_weather(cairo_t *cr)
         weather_kind_ = next;
         weather_stamp_ = stamp;
     }
-    map_.set_wind(weather_kind_ == effects_fx::Storm ? 1.7 : 1.0);
     if (!look_fx::ambient_allowed(map_.effects()) || terrain_edit_ || overlay_on_ || view_w_ < 8 || view_h_ < 8) {
         return;
     }
