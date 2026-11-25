@@ -7,6 +7,7 @@
 // and the scenario-local budget tweaks (#12/#13).
 
 #include "city_session.hpp"
+#include "civic.hpp"
 #include "micropolis.h"
 #include "tool_groups.hpp"
 #include "tools.hpp"
@@ -109,6 +110,33 @@ int main()
         }
         if (!learn || !is_dialog_button(kWelcomeLearn)) {
             return fail(29, "Welcome has no Learn to Play button");
+        }
+    }
+    // Release-readiness #9: City 2's bad news goes under Challenges.
+    {
+        static const char *bad[] = {
+            "A lion has escaped from the zoo!", "The lion is eating residents! Send the police.",
+            "An Autonomous Zone has formed!", "The Autonomous Zone has grown. Police coverage there is too low.",
+            "Prison break! Escaped inmates are setting fires.", "Fire spreading. Send help.",
+            "Traffic is getting worse.",
+        };
+        static const char *good[] = {
+            "Police caught the lion and returned it to the zoo.", "Zookeepers caught the lion and took it home.",
+            "The Autonomous Zone has ended. Police have restored order.",
+            "The Autonomous Zone is shrinking under police pressure.", "The escaped inmates are back behind bars.",
+            "Population reached 10,000.",
+        };
+        for (const char *line : bad) {
+            if (!civic::digest_line_is_bad(line)) {
+                std::fprintf(stderr, "not bad: %s\n", line);
+                return fail(30, "bad news shows under Highlights");
+            }
+        }
+        for (const char *line : good) {
+            if (civic::digest_line_is_bad(line)) {
+                std::fprintf(stderr, "bad: %s\n", line);
+                return fail(31, "good news shows under Challenges");
+            }
         }
     }
 
