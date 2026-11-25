@@ -282,6 +282,7 @@ int Shell::run(int argc, char **argv)
     started_ = std::chrono::steady_clock::now();
     schedule_autosave();
     layout();
+    map_.set_tile_size(opening_map_tile(handheld_, map_.tile_size()));
     center_on_fraction(0.5, 0.5);
     // Command-line opens happen before the first tick, so a brand-new city
     // has not yet become unsaved work and the file replaces it directly.
@@ -2217,16 +2218,20 @@ void Shell::loop()
                 close_dialog();
                 goal_dismissed_ = false;
                 goal_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+                // Set the capture zoom first so the view centers at that zoom
+                // (the handheld layout now opens at 32 px tiles).
+                if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
+                    map_.set_tile_size(std::atoi(zoom));
+                } else {
+                    map_.set_tile_size(16);
+                }
+                map_ox_ = map_letterbox_x();
+                map_oy_ = map_letterbox_y();
                 if (demo_ == "learn_win") {
                     center_on_fraction((tutorial::kWinViewX + 0.5) / CitySession::kWorldW,
                                        (tutorial::kWinViewY + 0.5) / CitySession::kWorldH);
                 } else {
                     center_on_learn_field();
-                }
-                if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
-                    map_.set_tile_size(std::atoi(zoom));
-                } else {
-                    map_.set_tile_size(16);
                 }
                 toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(),
                                              [](const Toast &t) { return notice_is_tool_feedback(t.text); }),

@@ -982,7 +982,7 @@ void Shell::restore_loaded_view()
         return;
     }
     // Same steps the Recover path uses for the autosave's view.
-    map_.set_tile_size(view.tile_size);
+    map_.set_tile_size(opening_map_tile(handheld_, view.tile_size));
     map_ox_ = map_letterbox_x();
     map_oy_ = map_letterbox_y();
     center_on_fraction(view.center_x, view.center_y);
@@ -2078,7 +2078,7 @@ void Shell::proceed(AfterSave next)
                 session_.restore_notices(std::move(merged));
             }
             if (saved.tile_size > 0) {
-                map_.set_tile_size(saved.tile_size);
+                map_.set_tile_size(opening_map_tile(handheld_, saved.tile_size));
                 map_ox_ = map_letterbox_x();
                 map_oy_ = map_letterbox_y();
                 center_on_fraction(saved.center_x, saved.center_y);

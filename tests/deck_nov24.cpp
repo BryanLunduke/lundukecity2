@@ -122,6 +122,14 @@ void deck_names()
     check(std::string(xbox.left) == "LB" && std::string(xbox.menu) == "Start", "Xbox names are LB and Start");
 }
 
+// #6: the handheld layout opens cities at 32 px tiles.
+void opening_zoom()
+{
+    check(opening_map_tile(true, 16) == 32, "a Deck opens a 16 px save at 32 px");
+    check(opening_map_tile(true, 48) == 48, "a closer saved zoom is kept");
+    check(opening_map_tile(false, 16) == 16, "the desktop keeps 16 px");
+}
+
 } // namespace
 
 int main()
@@ -131,6 +139,7 @@ int main()
     how_to_play_pad();
     axis_noise();
     deck_names();
+    opening_zoom();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

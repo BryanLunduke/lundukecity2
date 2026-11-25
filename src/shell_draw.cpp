@@ -6156,9 +6156,13 @@ const char *month_short(int month)
 
 const char *Shell::tag_font() const
 {
-    if (std::fabs(font_tag_scale_ - ui_scale_) > 0.001f || font_tag_.empty()) {
-        font_tag_ = ui_scale::scaled_font("Sans Bold", 9, ui_scale_);
+    // Kickers, R/C/I labels and button badges: 9 pt on a desktop, 11 pt in
+    // the handheld layout, where 9 pt is at the edge of legible on 7 inches.
+    const int pt = handheld_ ? ui_scale::kHandheldTagPt : 9;
+    if (std::fabs(font_tag_scale_ - ui_scale_) > 0.001f || font_tag_.empty() || font_tag_pt_ != pt) {
+        font_tag_ = ui_scale::scaled_font("Sans Bold", pt, ui_scale_);
         font_tag_scale_ = ui_scale_;
+        font_tag_pt_ = pt;
     }
     return font_tag_.c_str();
 }

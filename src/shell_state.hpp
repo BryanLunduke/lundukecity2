@@ -544,6 +544,7 @@ private:
     mutable std::string locked_mask_key_;
     mutable unsigned locked_mask_ = 0;
     mutable float font_tag_scale_ = -1.0f;
+    mutable int font_tag_pt_ = 0;
 
     double scroll_x_ = 0;
     double scroll_y_ = 0;
