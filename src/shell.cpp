@@ -2219,8 +2219,7 @@ void Shell::loop()
                     center_on_fraction((tutorial::kWinViewX + 0.5) / CitySession::kWorldW,
                                        (tutorial::kWinViewY + 0.5) / CitySession::kWorldH);
                 } else {
-                    center_on_fraction((tutorial::kFieldX + 0.5) / CitySession::kWorldW,
-                                       (tutorial::kFieldY + 0.5) / CitySession::kWorldH);
+                    center_on_learn_field();
                 }
                 if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
                     map_.set_tile_size(std::atoi(zoom));

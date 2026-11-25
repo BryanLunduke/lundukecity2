@@ -31,6 +31,7 @@
 #include "view_math.hpp"
 
 #include "micropolis.h"
+#include "tutorial_goals.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -892,6 +893,29 @@ void Shell::center_on_fraction(double fx, double fy)
     scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
     scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
     clamp_scroll();
+}
+
+void Shell::center_on_learn_field()
+{
+    // The desktop hint is pinned over the top of the map (about three
+    // lines at the default 1011x601 window). Put the pad's first teaching
+    // rows (the park at kParkY) just below it, and keep as much of the pad
+    // in view as the window allows. The Deck's hint is a short chip, so it
+    // keeps the plain field centre.
+    double cy = tutorial::kFieldY + 0.5;
+    const int tile = std::max(1, map_.tile_size());
+    if (!handheld_ && view_h_ > 0) {
+        const double rows = static_cast<double>(view_h_) / tile;
+        const double hint_rows = static_cast<double>(hud_top_ + dp(104)) / tile;
+        double top = tutorial::kParkY - 1 - hint_rows;
+        // A tall window has room to spare: do not push the pad lower than
+        // the plain centre would.
+        top = std::min(top, cy - rows / 2.0);
+        // A short window: keep the plant row in view before the pad margin.
+        top = std::max(top, tutorial::kPlantY + 2 - rows);
+        cy = top + rows / 2.0;
+    }
+    center_on_fraction((tutorial::kFieldX + 0.5) / CitySession::kWorldW, cy / CitySession::kWorldH);
 }
 
 void Shell::note_view_for_save()
@@ -2754,7 +2778,11 @@ void Shell::on_dialog_button(int id)
                     welcome_gate_ = false;
                     city_chosen_ = true;
                     adopt_loaded_speed(session_.speed());
-                    center_on_fraction(0.5, 0.5);
+                    if (id_num == SC_LEARN_TO_PLAY) {
+                        center_on_learn_field();
+                    } else {
+                        center_on_fraction(0.5, 0.5);
+                    }
                     sync_title();
                     begin_city_reveal();
                 }
