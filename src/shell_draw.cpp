@@ -29,6 +29,7 @@
 #include "notice_bar.hpp"
 #include "present.hpp"
 #include "osk_layout.hpp"
+#include "pad_glyphs.hpp"
 #include "redraw.hpp"
 #include "text_paint.hpp"
 #include "theme.hpp"
@@ -7508,11 +7509,33 @@ std::vector<std::pair<std::string, std::string>> Shell::pad_legend() const
     if (dialog_ != Dialog::None) {
         // A window is open: its own actions, not the map's (Deck review #12).
         const bool typing = focus_id_ == kFieldName || focus_id_ == kFieldSeed || (focus_id_ >= kOsk && focus_id_ < kOsk + 64);
+        // Same words as the window's header hint, so the legend and the
+        // header never say two things (Deck review tidy b).
+        if (dialog_ != Dialog::Welcome) {
+            const std::string hint = dialog_title_hint();
+            const std::string a_words = legend_words_from_hint(hint, a);
+            const std::string b_words = legend_words_from_hint(hint, b);
+            if (!a_words.empty() || !b_words.empty()) {
+                std::vector<std::pair<std::string, std::string>> hints = {{a, a_words}, {b, b_words}};
+                if (focus_is_slider()) {
+                    hints.push_back({glyph_for(PadPrevTool), "Less"});
+                    hints.push_back({glyph_for(PadNextTool), "More"});
+                }
+                const std::string menu_words = legend_words_from_hint(hint, menu);
+                const char *verb = dialog_only_closes() ? "" : dialog_accept_verb();
+                if (!menu_words.empty()) {
+                    hints.push_back({menu, menu_words});
+                } else if (verb[0] != '\0') {
+                    hints.push_back({menu, verb});
+                }
+                return hints;
+            }
+        }
         if (typing) {
             return {{a, "Type"}, {b, "Delete"}, {menu, "Done"}};
         }
         if (dialog_only_closes()) {
-            return {{a, "OK"}, {b, "Close"}};
+            return {{a, "Close"}, {b, "Close"}};
         }
         std::vector<std::pair<std::string, std::string>> hints = {{a, "Select"}, {b, dialog_ == Dialog::Welcome ? "" : "Close"}};
         if (focus_is_slider()) {

@@ -145,6 +145,20 @@ void quick_sections()
     check(touch.big >= 56.0, "the open section gets full-size 56 px slots");
 }
 
+void legend_words()
+{
+    check(legend_words_from_hint("A or B closes", "A") == "Close", "A or B closes gives A Close");
+    check(legend_words_from_hint("A or B closes", "B") == "Close", "A or B closes gives B Close");
+    const std::string slider = "D-pad adjusts. L1/R1 step. A confirms. B closes";
+    check(legend_words_from_hint(slider, "A") == "Confirm", "A confirms gives Confirm");
+    check(legend_words_from_hint(slider, "B") == "Close", "B closes gives Close");
+    check(legend_words_from_hint(slider, "\u2630").empty(), "an unnamed button has no words");
+    const std::string typing = "A types. B deletes. \u2630 confirms";
+    check(legend_words_from_hint(typing, "\u2630") == "Confirm", "the menu button reads its header words");
+    check(legend_words_from_hint("A confirms. B goes back", "B") == "Go back", "goes back gives Go back");
+    check(legend_words_from_hint("LB or RB closes", "B").empty(), "a glyph inside another glyph does not match");
+}
+
 } // namespace
 
 int main()
@@ -156,6 +170,7 @@ int main()
     deck_names();
     opening_zoom();
     quick_sections();
+    legend_words();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;
