@@ -259,7 +259,7 @@ inline std::vector<ControlsSection> controls_page_sections(int page, bool deck, 
                                 {pad.north, "Pause or resume. Hold to cycle slow, medium, and fast"},
                                 {pad.menu, "Open the menu. In a window, press OK"},
                                 {std::string(pad.left) + " / " + pad.right, "Previous or next tool. Hold to jump a section. A bigger slider step"},
-                                {pad.l3, "Show or hide the map overlay"},
+                                {pad.l3, "Show or hide the data map"},
                                 {pad.r3, "Center the view on the cursor"},
                             }, 0});
         sections.push_back({"Moving around",
