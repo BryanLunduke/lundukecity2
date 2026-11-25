@@ -2723,6 +2723,27 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
         }
+        if (dialog_ != Dialog::None && !chord.empty()) {
+            // Release nov24 #10: Quit and Save reach through a read-only card
+            // (Year in Review, Budget, graphs, help pages). The card closes
+            // as Escape would close it, then the command runs. Dialogs with
+            // a text field or their own question keep the key.
+            const int act = key_act_for_token(binds_, chord);
+            const bool card = dialog_ == Dialog::Budget || dialog_ == Dialog::Graphs ||
+                              dialog_ == Dialog::Evaluation || dialog_ == Dialog::Info || dialog_ == Dialog::Outcome ||
+                              dialog_ == Dialog::Messages || dialog_ == Dialog::Ledger || dialog_ == Dialog::Query ||
+                              dialog_ == Dialog::HowToPlay || dialog_ == Dialog::About || dialog_ == Dialog::Controls ||
+                              dialog_ == Dialog::Settings || dialog_ == Dialog::License || dialog_ == Dialog::Overlay;
+            if (card && !welcome_gate_ && (act == KeyQuit || act == KeySave)) {
+                for (int guard = 0; guard < 4 && dialog_ != Dialog::None; ++guard) {
+                    cancel_dialog();
+                }
+                if (dialog_ == Dialog::None) {
+                    apply_key_act(act);
+                }
+                break;
+            }
+        }
         if (dialog_ != Dialog::None) {
             if (accel == AccelKey::Escape) {
                 cancel_dialog();
