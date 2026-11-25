@@ -1179,9 +1179,10 @@ void Shell::step_welcome_focus(AccelKey dir)
 
 bool Shell::stick_navigates() const
 {
-    // Where the left stick steps focus like the D-pad instead of moving
-    // the map cursor (Deck hardware notes, Nov 25).
-    return dialog_ == Dialog::Welcome && !menu_.open();
+    // Where the left stick steps focus like the D-pad (Deck hardware
+    // notes, Nov 25): every window and menu, the on-screen keyboard
+    // included. On the map it moves the cursor.
+    return dialog_ != Dialog::None || menu_.open();
 }
 
 void Shell::service_stick_nav(int elapsed_ms)

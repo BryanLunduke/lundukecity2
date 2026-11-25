@@ -784,6 +784,18 @@ void Shell::drive_ui_test()
             fail("D-pad Up from l went to " + std::to_string(focus_id_) + " instead of p");
             return;
         }
+        // The left stick walks the keyboard like the D-pad (Deck notes, Nov 25).
+        focus_id_ = kOsk;
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTY, 30000);
+        if (focus_id_ != kOsk + 10) {
+            fail("stick Down from q went to " + std::to_string(focus_id_) + " instead of a");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, 30000);
+        if (focus_id_ != kOsk + 11) {
+            fail("stick Right from a went to " + std::to_string(focus_id_) + " instead of s");
+            return;
+        }
         focus_id_ = kOsk;
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kOsk; });
         if (focus_id_ != kFieldName) {
@@ -819,6 +831,17 @@ void Shell::drive_ui_test()
             fail("gamepad could not reach the Analysis menu");
             return;
         }
+        // The left stick moves between menus like the D-pad.
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, -30000);
+        if (menu_.open_menu != 2) {
+            fail("stick Left did not move to the previous menu");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, 30000);
+        if (menu_.open_menu != 3) {
+            fail("stick Right did not come back to the Analysis menu");
+            return;
+        }
         tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return dialog_ == Dialog::None; });
         if (dialog_ != Dialog::Budget) {
             fail("gamepad did not activate Budget");
@@ -842,6 +865,16 @@ void Shell::drive_ui_test()
         key_down(SDLK_LEFT);
         if (tax_ != tax0 || focus_id_ != kSlider + 1) {
             fail("keyboard Left did not adjust the focused slider");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, 30000);
+        if (tax_ != tax0 + 1 || focus_id_ != kSlider + 1) {
+            fail("stick Right did not adjust the focused slider");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, -30000);
+        if (tax_ != tax0) {
+            fail("stick Left did not adjust the focused slider back");
             return;
         }
         key_down(SDLK_DOWN);
