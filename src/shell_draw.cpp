@@ -4221,6 +4221,12 @@ void Shell::draw(cairo_t *cr)
                         theme::kMenuFrameB);
         }
     }
+    if (handheld_) {
+        // Handheld: past the map's edge (the overscroll that brings tiles out
+        // from under the minimap and the quick bar) is the deep slate of the
+        // HUD, not the light window grey that read as a rendering fault.
+        fill(cr, view_x_, view_y_, view_w_, view_h_, 0x15 / 255.0, 0x1B / 255.0, 0x23 / 255.0);
+    }
     cairo_save(cr);
     cairo_rectangle(cr, view_x_, view_y_, view_w_, view_h_);
     cairo_clip(cr);
