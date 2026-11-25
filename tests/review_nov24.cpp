@@ -35,6 +35,12 @@ const char *tmp_base()
 
 int main()
 {
+    // Release-readiness #1: the third power plant satisfies Power too.
+    const auto micro = tutorial::census([](int, int) { return SPECIAL_MICRONUKE; }, 1, 1, 0, false, false);
+    if (micro.power_plants != 1) {
+        return fail(20, "the tutorial ignored a Micro Nuclear Plant");
+    }
+
     // #6: grouped digits in every meter form.
     tutorial::Status s;
     s.population = 1440;

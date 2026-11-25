@@ -172,7 +172,7 @@ inline bool is_park_tile(MapTile tile)
 
 inline bool is_power_plant_center(MapTile tile)
 {
-    return tile == POWERPLANT || tile == NUCLEAR;
+    return tile == POWERPLANT || tile == NUCLEAR || tile == SPECIAL_MICRONUKE;
 }
 
 inline bool is_zone_center(MapTile tile, MapTile lo, MapTile hi, MapTile center)
@@ -324,7 +324,8 @@ inline Status census(const TileAt &tile_at, int width, int height, std::int64_t 
             if (is_park_tile(tile)) {
                 ++s.parks;
             }
-            if (tile == POWERPLANT || tile == NUCLEAR) {
+            // Release nov24 #1: the Micro Nuclear Plant is a plant too.
+            if (is_power_plant_center(tile)) {
                 ++s.power_plants;
             }
             if (tile == POLICESTATION) {
