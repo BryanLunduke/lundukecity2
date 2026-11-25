@@ -242,6 +242,8 @@ private:
     void center_pad_cursor();
     // Moves a bottom edge up clear of the handheld tool card (name, price
     // and what it does) when [left, right) overlaps it (review nov25 #2).
+    // Window rectangle of the building the Inspect card describes.
+    bool query_screen_box(double &left, double &top, double &right, double &bottom);
     double clear_of_tool_card(double bottom, double left, double right) const;
     void toggle_fullscreen();
     void settle_windowed_frame();

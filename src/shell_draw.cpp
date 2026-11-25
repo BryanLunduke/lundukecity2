@@ -3978,7 +3978,13 @@ void Shell::draw_dialog(cairo_t *cr)
             floor_y = static_cast<double>(quick_y_) - margin;
         }
         DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
-        if (query_anchored_) {
+        double box_l = 0;
+        double box_t = 0;
+        double box_r = 0;
+        double box_b = 0;
+        if (query_anchored_ && query_screen_box(box_l, box_t, box_r, box_b)) {
+            panel = place_beside(win_w_, band_h, panel.w, panel.h, box_l, box_t, box_r, box_b, margin);
+        } else if (query_anchored_) {
             panel = place_near(win_w_, band_h, panel.w, panel.h, query_anchor_x_, query_anchor_y_, margin);
         }
         // Stay under the menu bar and the info band (or the handheld chips).
@@ -4102,7 +4108,7 @@ void Shell::draw_dialog(cairo_t *cr)
             widest_label = std::max(widest_label, static_cast<double>(measure_text(cr, ui_font(), "Growth", -1).width));
         }
         double widest_value = 0.0;
-        for (const char *value : {"100%", "Down", "Flat"}) {
+        for (const char *value : {"100%", "Down", "Flat", "Held"}) {
             widest_value = std::max(widest_value, static_cast<double>(measure_text(cr, ui_font(), value, -1).width));
         }
         const inspect_report::BarLayout bar_layout =
@@ -4146,13 +4152,19 @@ void Shell::draw_dialog(cairo_t *cr)
             const double g = std::max(-1.0, std::min(1.0, facts.facts.growth / 200.0));
             // Any change shows at least a sliver, so a slow climb still reads.
             const double reach = std::max(static_cast<double>(dp(4)), bar_w / 2.0 * std::fabs(g));
-            if (g > 0.0) {
+            if (g > 0.0 && report.status == "Stalled") {
+                fill(cr, mid, track_y, reach, dp(8), 0.55, 0.58, 0.62);
+            } else if (g > 0.0) {
                 fill(cr, mid, track_y, reach, dp(8), 0.36, 0.80, 0.45);
             } else if (g < 0.0) {
                 fill(cr, mid - reach, track_y, reach, dp(8), 0.36, 0.55, 0.95);
             }
             fill(cr, mid - 0.5, track_y - dp(2), 1.0, dp(12), ink_r, ink_g, ink_b);
-            const char *trend = g > 0.0 ? "Up" : (g < 0.0 ? "Down" : "Flat");
+            // A zone with no power or road cannot grow, whatever its growth
+            // reading says: the trend matches the "Stalled" pill (review
+            // nov25 #10 showed Stalled beside Growth Up).
+            const bool held = report.status == "Stalled";
+            const char *trend = held ? "Held" : (g > 0.0 ? "Up" : (g < 0.0 ? "Down" : "Flat"));
             const TextMetrics tm = measure_text(cr, ui_font(), trend, -1);
             paint_text(cr, ui_font(), trend, x + panel.w - margin - tm.width, cy + dp(2), ink_r, ink_g, ink_b, -1);
             text_spans_.push_back(TextSpan{x + margin, cy, inner, row_h});
@@ -7136,6 +7148,34 @@ double Shell::minimap_clearance() const
     // Height under the top of the map that the minimap overlay takes, so a
     // card or legend at the top right can sit below it.
     return mini_h_ > 0 ? std::max(0.0, static_cast<double>(mini_bottom() - view_y_)) : 0.0;
+}
+
+bool Shell::query_screen_box(double &left, double &top, double &right, double &bottom)
+{
+    int qx = 0;
+    int qy = 0;
+    if (!session_.query_tile(qx, qy)) {
+        return false;
+    }
+    const CitySession::TileInspect card = session_.inspect_tile(qx, qy);
+    int tl = qx;
+    int tt = qy;
+    int tw = 1;
+    int th = 1;
+    if (card.zone && card.width > 0 && card.height > 0) {
+        tl = card.left;
+        tt = card.top;
+        tw = card.width;
+        th = card.height;
+    }
+    const double ts = std::max(1, map_.tile_size());
+    const double ox = snapped_map_origin(view_x_, map_ox_, scroll_x_) + map_.shake_x();
+    const double oy = snapped_map_origin(view_y_, map_oy_, scroll_y_) + map_.shake_y();
+    left = ox + tl * ts;
+    top = oy + tt * ts;
+    right = left + tw * ts;
+    bottom = top + th * ts;
+    return true;
 }
 
 double Shell::clear_of_tool_card(double bottom, double left, double right) const

@@ -58,6 +58,30 @@ inline DialogRect place_near(double win_w, double win_h, double want_w, double w
     return rect;
 }
 
+// Keep a popup beside a building on the map, never over it: to the right
+// of [left, right) x [top, bottom), else to the left, else below or above.
+// Its top lines up with the building's top (review nov25 #10: the Inspect
+// card sat on the zone it described).
+inline DialogRect place_beside(double win_w, double win_h, double want_w, double want_h, double left, double top,
+                               double right, double bottom, double margin)
+{
+    DialogRect rect = place_dialog(win_w, win_h, want_w, want_h, margin);
+    const double clamp_y = std::max(margin, std::min(top, std::max(margin, win_h - margin - rect.h)));
+    if (right + margin + rect.w <= win_w - margin) {
+        rect.x = right + margin;
+        rect.y = clamp_y;
+        return rect;
+    }
+    if (left - margin - rect.w >= margin) {
+        rect.x = left - margin - rect.w;
+        rect.y = clamp_y;
+        return rect;
+    }
+    rect.x = std::max(margin, std::min(left, std::max(margin, win_w - margin - rect.w)));
+    rect.y = bottom + margin + rect.h <= win_h - margin ? bottom + margin : std::max(margin, top - margin - rect.h);
+    return rect;
+}
+
 // A menu flyout sits beside the row that opened it and grows with its labels.
 // content_w already includes the text and its horizontal padding.
 inline DialogRect place_submenu(double drop_x, double drop_w, double row_y, double row_h, int rows, double content_w,
