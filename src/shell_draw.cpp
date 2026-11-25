@@ -6031,6 +6031,11 @@ void Shell::render()
         return;
     }
     blink_drew_ = false;
+    // Only a frame that paints the Welcome art keeps its life animating.
+    // The flag used to outlive the Welcome screen, so a paused city started
+    // from it repainted on every idle wake, about twice a second (Deck
+    // review #16).
+    welcome_live_ = false;
     if (frame_surface_ == nullptr || cairo_image_surface_get_width(frame_surface_) != win_w_ ||
         cairo_image_surface_get_height(frame_surface_) != win_h_) {
         if (frame_surface_ != nullptr) {
