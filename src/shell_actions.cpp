@@ -3356,10 +3356,16 @@ void Shell::on_hotspot(int id, double x, double y)
     }
     if (id >= kMenuTitle && id < kMenuTitle + 5 && dialog_ == Dialog::None) {
         const int column = id - kMenuTitle;
-        if (menu_.open_menu == column) {
+        if (menu_.open_menu == column && menu_slid_open_) {
+            // The pointer slid onto this title and opened it; the click
+            // that follows means "this one", not "close" (review nov25 #11:
+            // a trackpad click on the next title used to close the menu).
+            menu_slid_open_ = false;
+        } else if (menu_.open_menu == column) {
             menu_.close();
         } else {
             menu_.open_by_pointer(column);
+            menu_slid_open_ = false;
         }
         return;
     }

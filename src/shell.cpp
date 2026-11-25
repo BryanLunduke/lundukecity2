@@ -2381,6 +2381,7 @@ void Shell::handle_event(const SDL_Event &event)
             if (!menu_thumb_drag_ && hover_id_ >= kMenuTitle && hover_id_ < kMenuTitle + menu_table::kColumnCount &&
                 hover_id_ != kMenuTitle + menu_.open_menu) {
                 menu_.open_by_pointer(hover_id_ - kMenuTitle);
+                menu_slid_open_ = true;
             }
             if (menu_thumb_drag_) {
                 scroll_menu_to_pointer(pointer_y_);

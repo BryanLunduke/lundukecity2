@@ -626,10 +626,44 @@ void Shell::drive_ui_test()
         ui_step_ = 2;
         return;
     }
-    case 2:
+    case 2: {
+        // Review nov25 #11: open System with a click, slide onto Options
+        // (it opens by hover), then click Options. The menu stays on
+        // Options; a second click closes it.
+        const Hotspot *first = find_hot(hot_, kMenuTitle, 0);
+        const Hotspot *second = find_hot(hot_, kMenuTitle + 1, 0);
+        if (first == nullptr || second == nullptr) {
+            fail("the menu bar titles have no hotspots");
+            return;
+        }
+        const double fx = first->x + first->w * 0.5;
+        const double fy = first->y + first->h * 0.5;
+        const double sx = second->x + second->w * 0.5;
+        const double sy = second->y + second->h * 0.5;
+        click_at(fx, fy);
+        SDL_Event slide{};
+        slide.type = SDL_EVENT_MOUSE_MOTION;
+        slide.motion.x = static_cast<float>(sx);
+        slide.motion.y = static_cast<float>(sy);
+        handle_event(slide);
+        if (menu_.open_menu != 1) {
+            fail("sliding onto Options did not open it");
+            return;
+        }
+        click_at(sx, sy);
+        if (menu_.open_menu != 1) {
+            fail("a click on the title the pointer slid onto closed the menu");
+            return;
+        }
+        click_at(sx, sy);
+        if (menu_.open()) {
+            fail("a second click on the open title did not close the menu");
+            return;
+        }
         open_column(3);
         ui_step_ = 3;
         return;
+    }
     case 3: {
         const Hotspot *hot = find_hot(hot_, kMenuItem + 3 * 40 + 2, 0);
         if (hot == nullptr) {

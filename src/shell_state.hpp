@@ -1022,6 +1022,10 @@ private:
     bool osk_shift_ = false;
     bool ui_test_ = false;
     bool review_ = false;
+    // The open menu came from sliding the pointer onto its title (not a
+    // click). A click on that title then keeps it open instead of closing
+    // it (review nov25 #11).
+    bool menu_slid_open_ = false;
     // How many pixels a year-card box was shorter than its text. Zero means
     // every measured line was given a box tall enough to hold it.
     double year_box_shortfall_ = 0;
