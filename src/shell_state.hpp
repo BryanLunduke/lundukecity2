@@ -240,6 +240,9 @@ private:
     void map_safe_rect(double &x, double &y, double &w, double &h) const;
     // Puts the gamepad cursor in the middle of that area (a new city).
     void center_pad_cursor();
+    // Moves a bottom edge up clear of the handheld tool card (name, price
+    // and what it does) when [left, right) overlaps it (review nov25 #2).
+    double clear_of_tool_card(double bottom, double left, double right) const;
     void toggle_fullscreen();
     void settle_windowed_frame();
     bool windowed_frame_current() const;
@@ -1026,6 +1029,11 @@ private:
     // click). A click on that title then keeps it open instead of closing
     // it (review nov25 #11).
     bool menu_slid_open_ = false;
+    // The handheld tool card above the raised quick-bar slot, this frame.
+    bool tool_card_on_ = false;
+    double tool_card_x_ = 0;
+    double tool_card_y_ = 0;
+    double tool_card_w_ = 0;
     // How many pixels a year-card box was shorter than its text. Zero means
     // every measured line was given a box tall enough to hold it.
     double year_box_shortfall_ = 0;

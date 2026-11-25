@@ -4468,6 +4468,8 @@ void Shell::draw(cairo_t *cr)
             // above the raised quick-bar slot, the same lift draw_toasts
             // gives the alerts stacked above this card.
             card_y -= dp(44);
+            // A tool card with a line about the tool is taller than that.
+            card_y = clear_of_tool_card(card_y + card_h, card_x, card_x + card_w) - card_h;
         }
         const bool grand = effects_fx::ceremony_for_milestone(card_id_, civic::Town, civic::Megalopolis);
         const int pop_ms = grand && !ceremony_won_ ? ceremony_ms_ : -1;
@@ -5173,6 +5175,11 @@ void Shell::draw_toasts(cairo_t *cr, std::chrono::steady_clock::time_point now)
         // Clear of the chosen tool's name and price, drawn above the raised
         // quick-bar slot.
         bottom -= dp(44);
+        // The tool card grows a line about the tool (and the section while
+        // a shoulder is held), so it can be taller than that lift; alerts
+        // sat on its top corner (review nov25 #2).
+        const double right = view_x_ + view_w_ - edge - hud_right_;
+        bottom = clear_of_tool_card(bottom, right - max_w, right);
     }
     if (card_id_ >= 0 && card_id_ < civic::kMilestones && dialog_ == Dialog::None && !map_.dragging() && !terrain_edit_) {
         bottom -= dp(78) + gap;
@@ -7131,8 +7138,17 @@ double Shell::minimap_clearance() const
     return mini_h_ > 0 ? std::max(0.0, static_cast<double>(mini_bottom() - view_y_)) : 0.0;
 }
 
+double Shell::clear_of_tool_card(double bottom, double left, double right) const
+{
+    if (!handheld_ || !tool_card_on_ || left >= tool_card_x_ + tool_card_w_ || right <= tool_card_x_) {
+        return bottom;
+    }
+    return std::min(bottom, tool_card_y_ - dp(8));
+}
+
 void Shell::draw_handheld_hud(cairo_t *cr)
 {
+    tool_card_on_ = false;
     const bool open_ui = dialog_ != Dialog::None;
     draw_minimap_overlay(cr);
     // Menu chip and the compact info pill, top left. The menu bar replaces
@@ -7492,6 +7508,10 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             double cx = xs[label_tool] + ws[label_tool] / 2.0 - cw / 2.0;
             cx = std::max(dp(8) * 1.0, std::min(cx, win_w_ - cw - dp(8)));
             const double cy = quick_y_ - lift - ch - dp(6);
+            tool_card_on_ = true;
+            tool_card_x_ = cx;
+            tool_card_y_ = cy;
+            tool_card_w_ = cw;
             slate_round(cr, cx, cy, cw, ch, dp(6), kSlateDeep, 0.92);
             // An edge line keeps the card readable where it sits on the deep
             // slate past the map edge, the same color as its fill.
