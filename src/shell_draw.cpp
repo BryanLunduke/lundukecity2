@@ -4812,6 +4812,57 @@ void Shell::draw(cairo_t *cr)
     draw_menu_dropdown(cr);
 }
 
+bool Shell::dialog_only_closes() const
+{
+    return dialog_ == Dialog::Graphs || dialog_ == Dialog::Evaluation || dialog_ == Dialog::Query ||
+           dialog_ == Dialog::About || dialog_ == Dialog::Info || dialog_ == Dialog::LoadError ||
+           dialog_ == Dialog::SaveError || dialog_ == Dialog::HowToPlay;
+}
+
+bool Shell::focus_is_slider() const
+{
+    for (const SliderGeom &slider : sliders_) {
+        if (slider.id == focus_id_) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// What the menu button does in the open window (activate_dialog_start), as
+// one word for the pad legend. Empty when it does nothing there.
+const char *Shell::dialog_accept_verb() const
+{
+    switch (dialog_accept_id()) {
+    case 0:
+        return "";
+    case kCollect:
+        return "Collect";
+    case kNext:
+        return "Next";
+    case kGenerate:
+        return "Generate";
+    case kRename:
+        return "Rename";
+    case kSave:
+        return "Save";
+    case kWelcomeNew:
+        return "New city";
+    case kWelcomeContinue:
+        return "Continue";
+    case kPlay:
+        return "Play";
+    case kKeep:
+        return "Keep";
+    case kRecover:
+        return "Recover";
+    case kYearBudget:
+        return "Budget";
+    default:
+        return dialog_ == Dialog::Files ? "Open" : "OK";
+    }
+}
+
 std::string Shell::dialog_title_hint() const
 {
     const bool pad = gamepad_nav_ || deck_ || touch_used_;
@@ -4940,10 +4991,7 @@ std::string Shell::dialog_title_hint() const
     }
     // Graphs, Evaluation, Query, About, and the one-button notices have
     // nothing to confirm. Enter dismisses them. B always has a way out.
-    const bool closes = dialog_ == Dialog::Graphs || dialog_ == Dialog::Evaluation || dialog_ == Dialog::Query ||
-                        dialog_ == Dialog::About || dialog_ == Dialog::Info || dialog_ == Dialog::LoadError ||
-                        dialog_ == Dialog::SaveError || dialog_ == Dialog::HowToPlay;
-    if (closes) {
+    if (dialog_only_closes()) {
         return pad ? hint_join({hint_button(a, "closes"), hint_button(b, "closes")}) : "Enter closes. Esc closes";
     }
     if (focus_id_ == kCancel) {
@@ -7402,26 +7450,56 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         }
     }
     // Button hints along the bottom edge.
-    {
-        const double y = win_h_ - hint_h_;
-        slate_fill(cr, 0, y, win_w_, hint_h_, kSlateDeep, 0.88);
-        const ToolDef *tool = tool_by_index(tool_index_);
-        const bool inspecting = tool_index_ == kToolCount - 1;
-        std::vector<std::pair<std::string, std::string>> hints;
-        if (menu_.open()) {
-            hints = {{glyph_for(PadConfirm), "Choose"}, {glyph_for(PadCancel), "Close"}};
-        } else {
-            hints = {{glyph_for(PadConfirm), inspecting ? "Inspect" : (tool != nullptr ? "Build" : "Use")},
-                     {glyph_for(PadCancel), "Back"},
-                     {inspecting ? std::string() : glyph_for(PadQuery), "Inspect"},
-                     {glyph_for(PadPause), speed_ <= 0 ? "Resume" : "Pause"},
-                     {glyph_for(PadOverlay), "Data map"},
-                     {glyph_for(PadMenu), "Menu"}};
+    draw_pad_legend(cr, win_h_ - hint_h_, hint_h_);
+}
+
+std::vector<std::pair<std::string, std::string>> Shell::pad_legend() const
+{
+    const std::string a = glyph_for(PadConfirm);
+    const std::string b = glyph_for(PadCancel);
+    const std::string menu = glyph_for(PadMenu);
+    if (menu_.open()) {
+        return {{a, "Choose"}, {b, "Close"}};
+    }
+    if (dialog_ != Dialog::None) {
+        // A window is open: its own actions, not the map's (Deck review #12).
+        const bool typing = focus_id_ == kFieldName || focus_id_ == kFieldSeed || (focus_id_ >= kOsk && focus_id_ < kOsk + 64);
+        if (typing) {
+            return {{a, "Type"}, {b, "Delete"}, {menu, "Done"}};
         }
+        if (dialog_only_closes()) {
+            return {{a, "OK"}, {b, "Close"}};
+        }
+        std::vector<std::pair<std::string, std::string>> hints = {{a, "Select"}, {b, dialog_ == Dialog::Welcome ? "" : "Close"}};
+        if (focus_is_slider()) {
+            hints.push_back({glyph_for(PadPrevTool), "Less"});
+            hints.push_back({glyph_for(PadNextTool), "More"});
+        }
+        const char *verb = dialog_accept_verb();
+        if (verb[0] != '\0') {
+            hints.push_back({menu, verb});
+        }
+        return hints;
+    }
+    const ToolDef *tool = tool_by_index(tool_index_);
+    const bool inspecting = tool_index_ == kToolCount - 1;
+    return {{a, inspecting ? "Inspect" : (tool != nullptr ? "Build" : "Use")},
+            {b, "Back"},
+            {inspecting ? std::string() : glyph_for(PadQuery), "Inspect"},
+            {glyph_for(PadPause), speed_ <= 0 ? "Resume" : "Pause"},
+            {glyph_for(PadOverlay), "Data map"},
+            {menu, "Menu"}};
+}
+
+void Shell::draw_pad_legend(cairo_t *cr, double y, double strip_h)
+{
+    {
+        slate_fill(cr, 0, y, win_w_, strip_h, kSlateDeep, 0.88);
+        const std::vector<std::pair<std::string, std::string>> hints = pad_legend();
         double hx = dp(12);
         const double cap_h = measure_text(cr, tag_font(), "Ag", -1).height + dp(4);
         for (const auto &hint : hints) {
-            if (hint.first.empty()) {
+            if (hint.first.empty() || hint.second.empty()) {
                 continue;
             }
             const TextMetrics key = measure_text(cr, tag_font(), hint.first, -1);
@@ -7430,10 +7508,10 @@ void Shell::draw_handheld_hud(cairo_t *cr)
             if (hx + kw + dp(6) + words.width > win_w_ - dp(12)) {
                 break;
             }
-            const double ky = y + (hint_h_ - cap_h) / 2.0;
+            const double ky = y + (strip_h - cap_h) / 2.0;
             slate_round(cr, hx, ky, kw, cap_h, cap_h / 2.0, kSlateInk);
             slate_text(cr, tag_font(), hint.first, hx + (kw - key.width) / 2.0, ky + dp(2), kSlateDeep);
-            slate_text(cr, ui_font(), hint.second, hx + kw + dp(6), y + (hint_h_ - words.height) / 2.0, kSlateDim);
+            slate_text(cr, ui_font(), hint.second, hx + kw + dp(6), y + (strip_h - words.height) / 2.0, kSlateDim);
             hx += kw + dp(6) + words.width + dp(18);
         }
     }

@@ -134,6 +134,11 @@ private:
     void draw_funds_floats(cairo_t *cr);
     void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
     void draw_handheld_hud(cairo_t *cr);
+    std::vector<std::pair<std::string, std::string>> pad_legend() const;
+    void draw_pad_legend(cairo_t *cr, double y, double strip_h);
+    bool dialog_only_closes() const;
+    bool focus_is_slider() const;
+    const char *dialog_accept_verb() const;
     void draw_minimap_overlay(cairo_t *cr);
     void draw_slate_milestone(cairo_t *cr, double x, double y, double w, double h);
     double minimap_clearance() const;
