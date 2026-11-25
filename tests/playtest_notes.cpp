@@ -173,7 +173,7 @@ int main()
         digest.opening_funds = 19900;
         digest.closing_funds = 18443;
         const civic::ReviewText text = civic::make_review_text(digest, 45, 16, 39, false, "Capital", 305, 31);
-        if (text.funds != "Start of year $19,900\nEnd of year $18,443\nLost $1,457 this year") {
+        if (text.funds != "Start of year $19,900\nEnd of year $18,443\nFunds down $1,457 this year") {
             std::fprintf(stderr, "%s\n", text.funds.c_str());
             return fail(40, "funds should read start, end and the loss");
         }
