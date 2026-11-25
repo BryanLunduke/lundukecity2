@@ -3473,16 +3473,22 @@ void Shell::draw_dialog(cairo_t *cr)
         const double dw = panel.w;
         const double dh = panel.h;
         frame_panel(cr, x, y, dw, dh, "Graphs");
-        button(cr, x + dw - margin - dp(132), y + dp(6), dp(132), dp(30),
-               graph_rolled_ ? "Expand" : "Roll up", kGraphRoll, false);
+        // Roll up / Expand sit in the first row, not the title band: there
+        // the button covered the band's hint ("D-pad reads th…") on a Deck
+        // (review nov25 #3).
         if (graph_rolled_) {
+            const double close_x = x + dw - margin - dp(96);
+            const double roll_x = close_x - dp(8) - dp(132);
             paint_text(cr, ui_font(), "Graphs rolled up — city keeps running", x + margin, y + dp(54),
-                       theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(110)));
-            button(cr, x + dw - margin - dp(96), y + dp(48), dp(96), dp(32), "Close", kClose, false);
+                       theme::kTextR, theme::kTextG, theme::kTextB,
+                       static_cast<int>(std::max(0.0, roll_x - dp(8) - (x + margin))));
+            button(cr, roll_x, y + dp(48), dp(132), dp(32), "Expand", kGraphRoll, false);
+            button(cr, close_x, y + dp(48), dp(96), dp(32), "Close", kClose, false);
             return;
         }
         button(cr, x + margin, y + dp(46), dp(140), dp(32), "10 year", kShortScale, false, !graphs_long_);
         button(cr, x + margin + dp(148), y + dp(46), dp(140), dp(32), "120 year", kLongScale, false, graphs_long_);
+        button(cr, x + dw - margin - dp(132), y + dp(46), dp(132), dp(32), "Roll up", kGraphRoll, false);
         const double legend_row_h = dp(20);
         const double button_top = y + dh - margin - dp(36);
         const double legend_top = button_top - dp(32) - legend_h;
@@ -3546,7 +3552,13 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, ui_font(), "Dashed line: middle of each series", nx + dp(24), note_y, theme::kTextR,
                        theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin - dp(24)));
         }
-        paint_text(cr, ui_font(), "Click a series to solo; click it again for all.", x + margin,
+        // Review nov25 #4: the pad and touch get their own words.
+        const std::string solo_note =
+            (gamepad_nav_ || (deck_ && !touch_used_)) ? std::string(glyph_for(PadConfirm)) + " on a series solos it; " +
+                               glyph_for(PadConfirm) + " again shows all."
+                         : (touch_used_ ? std::string("Tap a series to solo; tap it again for all.")
+                                        : std::string("Click a series to solo; click it again for all."));
+        paint_text(cr, ui_font(), solo_note, x + margin,
                    button_top - dp(20), theme::kTextR, theme::kTextG, theme::kTextB, static_cast<int>(dw - 2 * margin));
         buttons_at(x, dw, button_top, {{"_Close", kClose}});
         return;
