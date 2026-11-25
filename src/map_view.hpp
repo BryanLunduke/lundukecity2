@@ -102,8 +102,6 @@ public:
     double cloud_ms() const { return cloud_ms_; }
     // The ambient clock itself (ms, runs only while the city runs).
     int fx_ms() const { return fx_ms_; }
-    // Storm wind for the swaying park trees (1 is a calm day).
-    void set_wind(double wind) { wind_ = wind; }
     // A quake is shaking for about ms: dust rises from the rubble while it
     // does and for a moment after. Cosmetic only, on the UI clock.
     void set_quake(int ms);
@@ -167,8 +165,8 @@ private:
     // Unpowered buildings: a steady dim, and with Full effects a brief,
     // irregular dip per zone (effects_fx::brownout_dim).
     void draw_brownout(cairo_t *cr, int source, const TileSpan &span);
-    // Parks, fountains and the Marina: canopies sway a pixel in the wind,
-    // the fountain jets spray, and boats bob on their berths. Drawn over
+    // Fountains and the Marina: the fountain jets spray and boats bob on
+    // their berths. Park trees hold still. Drawn over
     // the map from the map's own pixels; the sheets are never changed.
     void draw_living(cairo_t *cr, const TileSpan &span, bool dusk);
     // Table row * 16 + sheet cell + 1 for a landmark cell, 0 elsewhere.
@@ -242,7 +240,6 @@ private:
     bool classic_fx() const;
     int effects_ = 0;
     int fx_ms_ = 0;
-    double wind_ = 1.0;
     bool fx_fast_ = false;
     mutable int fx_fast_drawn_ = -1;
     // Cloud shadow clock: elapsed time times the speed factor, so Fast clouds

@@ -209,6 +209,30 @@ int Micropolis::getPopulationDensity(const Position &pos, MapTile tile)
         return pop;
     }
 
+    if (tile == SPECIAL_DATACENTER) {
+        // A powered, intact Data Center counts like a light commercial
+        // zone of its census weight (DATACENTER_ZONE_DENSITY), so houses
+        // beside it can pass the apartment gate in doResIn the way they
+        // would beside a C or I zone (Deck notes, Nov 25). It still adds
+        // no pollution and no traffic.
+        if ((map[pos.posX][pos.posY] & PWRBIT) == 0) {
+            return 0;
+        }
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dy == 0) {
+                    continue;
+                }
+                const int bx = pos.posX + dx;
+                const int by = pos.posY + dy;
+                if (!testBounds(bx, by) || (map[bx][by] & LOMASK) != SPECIAL_BODY) {
+                    return 0;
+                }
+            }
+        }
+        return DATACENTER_ZONE_DENSITY * 8;
+    }
+
     return 0;
 }
 

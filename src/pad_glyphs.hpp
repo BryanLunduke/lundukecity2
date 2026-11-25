@@ -24,6 +24,8 @@ struct FaceGlyphs {
     const char *view = "Back";
     const char *l3 = "LS";
     const char *r3 = "RS";
+    const char *l2 = "LT";
+    const char *r2 = "RT";
 };
 
 inline bool pad_is_playstation(int gamepad_type, int south_label)
@@ -73,6 +75,8 @@ inline FaceGlyphs face_glyphs(bool playstation, bool deck, int gamepad_type)
     glyphs.right = xbox ? "RB" : "R1";
     glyphs.l3 = xbox ? "LS" : "L3";
     glyphs.r3 = xbox ? "RS" : "R3";
+    glyphs.l2 = xbox ? "LT" : "L2";
+    glyphs.r2 = xbox ? "RT" : "R2";
     if (playstation) {
         glyphs.menu = "Options";
         glyphs.view = gamepad_type == SDL_GAMEPAD_TYPE_PS5 ? "Create" : "Share";

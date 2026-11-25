@@ -2768,7 +2768,11 @@ void Shell::handle_event(const SDL_Event &event)
                     controls_scroll_ = 0;
                     break;
                 }
-                if (dialog_ == Dialog::Welcome || focus_is_flat_buttons()) {
+                if (dialog_ == Dialog::Welcome) {
+                    step_welcome_focus(accel);
+                    break;
+                }
+                if (focus_is_flat_buttons()) {
                     move_focus(direction, false);
                     break;
                 }
@@ -2785,7 +2789,7 @@ void Shell::handle_event(const SDL_Event &event)
                     break;
                 }
                 if (dialog_ == Dialog::Welcome) {
-                    move_focus(-1, false);
+                    step_welcome_focus(accel);
                     break;
                 }
                 if (focus_is_flat_buttons()) {
@@ -2800,7 +2804,7 @@ void Shell::handle_event(const SDL_Event &event)
                     break;
                 }
                 if (dialog_ == Dialog::Welcome) {
-                    move_focus(1, false);
+                    step_welcome_focus(accel);
                     break;
                 }
                 if (focus_is_flat_buttons()) {
@@ -3096,6 +3100,13 @@ void Shell::handle_event(const SDL_Event &event)
                 escape_to_inspect();
             } else if (pad_dragging_ || pointer_on_map_) {
                 release_pad_drag();
+            } else if (tool_index_ != kToolCount - 1) {
+                // B puts the build tool away, as Escape and right-click do
+                // (Deck hardware notes, Nov 25). A stroke in progress ends
+                // first, so the tiles already laid stay.
+                shoulder_hold_dir_ = 0;
+                shoulder_preview_ = -1;
+                escape_to_inspect();
             }
             break;
         }

@@ -4090,6 +4090,21 @@ void CitySession::note_traffic_spike(int tile_x, int tile_y)
     remember_notice("Traffic is getting worse.", tile_x, tile_y, true);
 }
 
+bool CitySession::datacenter_tile(int x, int y) const
+{
+    if (!ready_ || !Micropolis::testBounds(x, y)) {
+        return false;
+    }
+    Micropolis &sim = engine_->sim;
+    const int tile = sim.map[x][y] & LOMASK;
+    if (tile != SPECIAL_DATACENTER && tile != SPECIAL_DATACENTER_LOT && tile != SPECIAL_BODY) {
+        return false;
+    }
+    int index = -1;
+    bool intact = false;
+    return special_at(&sim, x, y, index, intact) && special_is_datacenter(index);
+}
+
 int CitySession::layer_value(MapLayer layer, int x, int y) const
 {
     if (!ready_ || !Micropolis::testBounds(x, y)) {
@@ -4131,6 +4146,13 @@ int CitySession::layer_value(MapLayer layer, int x, int y) const
         }
         return 0;
     case MapLayer::Pollution:
+        // A Data Center makes no pollution (Deck notes, Nov 25), so its own
+        // tiles read clean. What the 2x2 pollution map held there spread
+        // from the roads and plants around it, and nothing on a Data
+        // Center responds to it.
+        if (datacenter_tile(x, y)) {
+            return 0;
+        }
         return sim.getPollutionDensity(x / 2, y / 2);
     case MapLayer::Crime:
         return sim.getCrimeRate(x / 2, y / 2);

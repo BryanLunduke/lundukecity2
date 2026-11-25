@@ -25,6 +25,7 @@
 #include "tool_palette.hpp"
 #include "bindings.hpp"
 #include "controls_page.hpp"
+#include "pad_glyphs.hpp"
 #include "ui_scale.hpp"
 
 #include <SDL3/SDL.h>
@@ -134,6 +135,8 @@ private:
     void draw_funds_floats(cairo_t *cr);
     void draw_news_line(cairo_t *cr, const std::string &tool_text, const std::string &hint);
     void draw_handheld_hud(cairo_t *cr);
+    void draw_hud_zoom_buttons(cairo_t *cr);
+    void draw_terrain_hud(cairo_t *cr);
     std::vector<std::pair<std::string, std::string>> pad_legend() const;
     void draw_pad_legend(cairo_t *cr, double y, double strip_h);
     bool dialog_only_closes() const;
@@ -329,6 +332,9 @@ private:
     void service_gamepad(int elapsed_ms);
     void advance_pad_drag(int dx, int dy, int elapsed_ms);
     void apply_pad_direction(SDL_GamepadButton button);
+    bool stick_navigates() const;
+    void step_welcome_focus(AccelKey dir);
+    void service_stick_nav(int elapsed_ms);
     // One tile toward the map edge, when that tile is still on screen.
     void step_cursor_on_map(int dx, int dy);
     // Held D-pad is panning or walking the cursor, so the loop stays awake.
@@ -368,6 +374,7 @@ private:
     void maybe_mayor_note();
     bool return_from_overlay();
     const char *glyph(SDL_GamepadButton button) const;
+    FaceGlyphs face_glyph_set() const;
     const char *glyph_for(int pad_act) const;
     std::string pad_wording(const std::string &text) const;
     bool take_bound_key(SDL_Keycode key, int mods);
@@ -978,6 +985,10 @@ private:
     int pad_held_dy_ = 0;
     pad_feel::RepeatClock drag_repeat_{};
     pad_feel::RepeatClock nav_repeat_{};
+    // The left stick stepping focus like the D-pad (stick_nav_dir).
+    pad_feel::StickDir stick_nav_held_ = pad_feel::StickDir::None;
+    pad_feel::RepeatClock stick_nav_repeat_{};
+    bool stick_nav_live_ = false;
     SDL_GamepadButton nav_repeat_button_ = SDL_GAMEPAD_BUTTON_INVALID;
     bool y_hold_ = false;
     bool y_hold_fresh_ = false;

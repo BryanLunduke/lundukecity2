@@ -87,3 +87,28 @@ inline DialogRect place_submenu(double drop_x, double drop_w, double row_y, doub
     }
     return rect;
 }
+
+// A dialog's title band: the title on the left and, when there is room, the
+// controller hint on the right. The title only gives up width to the hint
+// when the hint is actually drawn; otherwise a title that fits the band was
+// wrapped onto a second line under the band and over the text below it
+// (Deck hardware notes, Nov 25: "Discard terrain changes?").
+struct TitleBand {
+    int title_wrap = 40;
+    bool show_hint = false;
+};
+
+inline TitleBand title_band(double panel_w, double rim, double title_w, double hint_w, bool has_hint)
+{
+    const double full = std::max(40.0, panel_w - rim * 2 - 16);
+    TitleBand band;
+    band.title_wrap = static_cast<int>(full);
+    if (has_hint && hint_w + 16 < panel_w - title_w - 48) {
+        const double beside = std::max(40.0, full - (hint_w + 16));
+        if (title_w <= beside) {
+            band.title_wrap = static_cast<int>(beside);
+            band.show_hint = true;
+        }
+    }
+    return band;
+}

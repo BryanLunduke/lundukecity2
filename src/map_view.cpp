@@ -1609,31 +1609,15 @@ void MapView::draw_living(cairo_t *cr, const TileSpan &span, bool dusk)
     for (int y = span.y0; y < span.y1; ++y) {
         for (int x = span.x0; x < span.x1; ++x) {
             const std::size_t index = static_cast<std::size_t>(y * CitySession::kWorldW + x);
-            const int raw = cached_raw_[index];
-            const int tile = raw < 0 ? -1 : (raw & LOMASK);
             const int slot = special_slot_[index];
             const int row = slot > 0 ? (slot - 1) / 16 : -1;
             const int cell = slot > 0 ? (slot - 1) % 16 : -1;
             const double ox = x * static_cast<double>(kTile);
             const double oy = y * static_cast<double>(kTile);
-            const bool park_tree = slot == 0 && tile >= WOODS2 && tile <= WOODS5;
-            const bool big_tree = row == park_row && (cell == 0 || cell == 2 || cell == 6 || cell == 8);
-            if (park_tree || big_tree) {
-                // The canopy (top 11 rows) leans a pixel with the gust;
-                // trunks and the ground stay put.
-                const int dx = effects_fx::sway_dx(x, y, ms, wind_);
-                moved = true;
-                if (dx != 0) {
-                    cairo_save(cr);
-                    cairo_rectangle(cr, ox, oy, kTile, 11);
-                    cairo_clip(cr);
-                    cairo_set_source_surface(cr, base, dx, 0);
-                    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-                    cairo_paint(cr);
-                    cairo_restore(cr);
-                }
-                continue;
-            }
+            // Park trees used to lean a pixel with the gust by repainting the
+            // top 11 rows of the tile shifted sideways. On a Deck that read as
+            // the whole park jumping a pixel while time ran (Deck hardware
+            // notes, Nov 25), so park tiles now hold still.
             const bool jet = (row == fountain_row && fountain_row >= 0 && cell == 0) ||
                              (row == park_row && park_row >= 0 && cell == 4);
             if (jet) {

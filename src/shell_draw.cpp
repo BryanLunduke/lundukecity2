@@ -248,9 +248,11 @@ void Shell::layout()
     }
     menu_h_ = dp(36);
     status_h_ = dp(36);
-    // The terrain editor keeps the desktop layout on every device: its
-    // toolbar is the left tray, and the handheld quick bar holds city tools.
-    handheld_ = !terrain_edit_ && layout_mode::use_handheld(layout_pref_, deck_, handheld_device());
+    // The terrain editor follows the device too (Deck hardware notes,
+    // Nov 25): on a handheld its pieces and brushes take the quick bar and
+    // Cancel / Map Complete sit in the top chips (draw_terrain_hud); the
+    // desktop keeps the left tray and the top band.
+    handheld_ = layout_mode::use_handheld(layout_pref_, deck_, handheld_device());
     band_y_ = menu_h_;
     band_h_ = 0;
     hud_top_ = 0;
@@ -580,10 +582,10 @@ void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, con
         const bool title_hint = gamepad_nav_ || deck_ || touch_used_;
         const std::string hint = title_hint ? dialog_title_hint() : std::string();
         const TextMetrics hint_metrics = hint.empty() ? TextMetrics{} : measure_text(cr, ui_font(), hint, -1);
-        const int title_wrap =
-            static_cast<int>(std::max(40.0, w - rim * 2 - 16 - (hint.empty() ? 0 : hint_metrics.width + 16)));
-        paint_text(cr, title_font(), title, x + rim + 8, title_y, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0, title_wrap);
-        if (!hint.empty() && hint_metrics.width + 16 < w - title_metrics.width - 48) {
+        const TitleBand band = title_band(w, rim, title_metrics.width, hint_metrics.width, !hint.empty());
+        paint_text(cr, title_font(), title, x + rim + 8, title_y, 0xF2 / 255.0, 0xC1 / 255.0, 0x4E / 255.0,
+                   band.title_wrap);
+        if (band.show_hint) {
             paint_text(cr, ui_font(), hint, x + w - rim - hint_metrics.width - 8, title_y, 0xA9 / 255.0, 0xB3 / 255.0,
                        0xC2 / 255.0, -1);
         }
@@ -623,9 +625,9 @@ void Shell::frame_panel(cairo_t *cr, double x, double y, double w, double h, con
     const bool title_hint = gamepad_nav_ || deck_ || touch_used_;
     const std::string hint = title_hint ? dialog_title_hint() : std::string();
     const TextMetrics hint_metrics = hint.empty() ? TextMetrics{} : measure_text(cr, ui_font(), hint, -1);
-    const int title_wrap = static_cast<int>(std::max(40.0, w - rim * 2 - 16 - (hint.empty() ? 0 : hint_metrics.width + 16)));
-    paint_text(cr, title_font(), title, x + rim + 8, title_y, title_r, title_g, title_b, title_wrap);
-    if (!hint.empty() && hint_metrics.width + 16 < w - title_metrics.width - 48) {
+    const TitleBand band = title_band(w, rim, title_metrics.width, hint_metrics.width, !hint.empty());
+    paint_text(cr, title_font(), title, x + rim + 8, title_y, title_r, title_g, title_b, band.title_wrap);
+    if (band.show_hint) {
         paint_text(cr, ui_font(), hint, x + w - rim - hint_metrics.width - 8, title_y, 0.28, 0.16, 0.06, -1);
     }
     cairo_set_source_rgb(cr, gold_r, gold_g, gold_b);
@@ -4301,6 +4303,10 @@ void Shell::draw(cairo_t *cr)
                 map_.clear_hover();
             } else if (gamepad_nav_ && !pad_dragging_) {
                 map_.motion(map_local_x(cursor_x_), map_local_y(cursor_y_), false);
+            } else if (!gamepad_nav_ && handheld_ && terrain_edit_ && hit(pointer_x_, pointer_y_) != kMapId) {
+                // The editor's quick bar and chips sit over the map: no
+                // brush footprint under the pointer there.
+                map_.clear_hover();
             } else if (!gamepad_nav_ && !pointer_down_ && pointer_x_ >= view_x_ &&
                        pointer_x_ < view_x_ + view_w_ && pointer_y_ >= view_y_ && pointer_y_ < view_y_ + view_h_) {
                 map_.motion(map_local_x(pointer_x_), map_local_y(pointer_y_), false);
@@ -4394,7 +4400,9 @@ void Shell::draw(cairo_t *cr)
     // Handheld: the strip under the quick bar is not map. A press there
     // would build on tiles the bar hides.
     push_hot(view_x_, view_y_, view_w_, std::max(0, view_h_ - map_reserve_y()), kMapId);
-    if (handheld_) {
+    if (handheld_ && terrain_edit_) {
+        draw_terrain_hud(cr);
+    } else if (handheld_) {
         draw_handheld_hud(cr);
     } else {
         draw_minimap_overlay(cr);
@@ -4514,10 +4522,11 @@ void Shell::draw(cairo_t *cr)
         }
     }
     const int status_y = win_h_ - status_h_;
-    if (terrain_edit_) {
+    if (handheld_) {
+        // The hint strip and the quick bar in the handheld HUD carry these
+        // (the editor's too).
+    } else if (terrain_edit_) {
         draw_terrain_status(cr, hint);
-    } else if (handheld_) {
-        // The hint strip and the quick bar in the handheld HUD carry these.
     } else if (slate_) {
         draw_news_line(cr, tool_text, hint);
     } else {
@@ -6716,7 +6725,6 @@ void Shell::draw_weather(cairo_t *cr)
         weather_kind_ = next;
         weather_stamp_ = stamp;
     }
-    map_.set_wind(weather_kind_ == effects_fx::Storm ? 1.7 : 1.0);
     if (!look_fx::ambient_allowed(map_.effects()) || terrain_edit_ || overlay_on_ || view_w_ < 8 || view_h_ < 8) {
         return;
     }
@@ -7243,55 +7251,7 @@ void Shell::draw_handheld_hud(cairo_t *cr)
         }
     }
     // Touch buttons on the right edge: zoom in, zoom out, centre.
-    {
-        const double size = dp(50);
-        const double bx = win_w_ - size - dp(10);
-        const double span = size * 3 + dp(10) * 2;
-        double by = mini_bottom() + (quick_y_ - mini_bottom() - span) / 2.0;
-        by = std::max(by, static_cast<double>(mini_bottom() + dp(12)));
-        const int ids[3] = {kHudZoomIn, kHudZoomOut, kHudCenter};
-        for (int i = 0; i < 3; ++i) {
-            const double cy = by + i * (size + dp(10));
-            const bool hot = hover_id_ == ids[i];
-            cairo_new_sub_path(cr);
-            cairo_arc(cr, bx + size / 2.0, cy + size / 2.0, size / 2.0, 0, 6.2832);
-            cairo_set_source_rgba(cr, hot ? kSlateEdge.r : kSlateBand.r, hot ? kSlateEdge.g : kSlateBand.g,
-                                  hot ? kSlateEdge.b : kSlateBand.b, 0.92);
-            cairo_fill_preserve(cr);
-            cairo_set_source_rgb(cr, kSlateGoldDim.r, kSlateGoldDim.g, kSlateGoldDim.b);
-            cairo_set_line_width(cr, 1.5);
-            cairo_stroke(cr);
-            cairo_set_source_rgb(cr, kSlateInk.r, kSlateInk.g, kSlateInk.b);
-            cairo_set_line_width(cr, dp(3));
-            const double mx = bx + size / 2.0;
-            const double my = cy + size / 2.0;
-            const double arm = size * 0.22;
-            if (i == 0 || i == 1) {
-                cairo_move_to(cr, mx - arm, my);
-                cairo_line_to(cr, mx + arm, my);
-                if (i == 0) {
-                    cairo_move_to(cr, mx, my - arm);
-                    cairo_line_to(cr, mx, my + arm);
-                }
-                cairo_stroke(cr);
-            } else {
-                cairo_set_line_width(cr, dp(2));
-                cairo_new_sub_path(cr);
-                cairo_arc(cr, mx, my, arm * 0.9, 0, 6.2832);
-                cairo_stroke(cr);
-                cairo_move_to(cr, mx - arm * 1.5, my);
-                cairo_line_to(cr, mx - arm * 0.5, my);
-                cairo_move_to(cr, mx + arm * 0.5, my);
-                cairo_line_to(cr, mx + arm * 1.5, my);
-                cairo_move_to(cr, mx, my - arm * 1.5);
-                cairo_line_to(cr, mx, my - arm * 0.5);
-                cairo_move_to(cr, mx, my + arm * 0.5);
-                cairo_line_to(cr, mx, my + arm * 1.5);
-                cairo_stroke(cr);
-            }
-            push_hot(bx, cy, size, size, ids[i]);
-        }
-    }
+    draw_hud_zoom_buttons(cr);
     // Quick bar: every build tool plus Inspect, the chosen one raised
     // with its price. The section the chosen (or focused) tool is in is drawn
     // with full-size slots, so the tools a player is choosing between are
@@ -7504,6 +7464,58 @@ void Shell::draw_handheld_hud(cairo_t *cr)
     draw_pad_legend(cr, win_h_ - hint_h_, hint_h_);
 }
 
+void Shell::draw_hud_zoom_buttons(cairo_t *cr)
+{
+    // Handheld touch buttons on the right edge: zoom in, zoom out, centre.
+    const double size = dp(50);
+    const double bx = win_w_ - size - dp(10);
+    const double span = size * 3 + dp(10) * 2;
+    double by = mini_bottom() + (quick_y_ - mini_bottom() - span) / 2.0;
+    by = std::max(by, static_cast<double>(mini_bottom() + dp(12)));
+    const int ids[3] = {kHudZoomIn, kHudZoomOut, kHudCenter};
+    for (int i = 0; i < 3; ++i) {
+        const double cy = by + i * (size + dp(10));
+        const bool hot = hover_id_ == ids[i];
+        cairo_new_sub_path(cr);
+        cairo_arc(cr, bx + size / 2.0, cy + size / 2.0, size / 2.0, 0, 6.2832);
+        cairo_set_source_rgba(cr, hot ? kSlateEdge.r : kSlateBand.r, hot ? kSlateEdge.g : kSlateBand.g,
+                              hot ? kSlateEdge.b : kSlateBand.b, 0.92);
+        cairo_fill_preserve(cr);
+        cairo_set_source_rgb(cr, kSlateGoldDim.r, kSlateGoldDim.g, kSlateGoldDim.b);
+        cairo_set_line_width(cr, 1.5);
+        cairo_stroke(cr);
+        cairo_set_source_rgb(cr, kSlateInk.r, kSlateInk.g, kSlateInk.b);
+        cairo_set_line_width(cr, dp(3));
+        const double mx = bx + size / 2.0;
+        const double my = cy + size / 2.0;
+        const double arm = size * 0.22;
+        if (i == 0 || i == 1) {
+            cairo_move_to(cr, mx - arm, my);
+            cairo_line_to(cr, mx + arm, my);
+            if (i == 0) {
+                cairo_move_to(cr, mx, my - arm);
+                cairo_line_to(cr, mx, my + arm);
+            }
+            cairo_stroke(cr);
+        } else {
+            cairo_set_line_width(cr, dp(2));
+            cairo_new_sub_path(cr);
+            cairo_arc(cr, mx, my, arm * 0.9, 0, 6.2832);
+            cairo_stroke(cr);
+            cairo_move_to(cr, mx - arm * 1.5, my);
+            cairo_line_to(cr, mx - arm * 0.5, my);
+            cairo_move_to(cr, mx + arm * 0.5, my);
+            cairo_line_to(cr, mx + arm * 1.5, my);
+            cairo_move_to(cr, mx, my - arm * 1.5);
+            cairo_line_to(cr, mx, my - arm * 0.5);
+            cairo_move_to(cr, mx, my + arm * 0.5);
+            cairo_line_to(cr, mx, my + arm * 1.5);
+            cairo_stroke(cr);
+        }
+        push_hot(bx, cy, size, size, ids[i]);
+    }
+}
+
 std::vector<std::pair<std::string, std::string>> Shell::pad_legend() const
 {
     const std::string a = glyph_for(PadConfirm);
@@ -7554,10 +7566,19 @@ std::vector<std::pair<std::string, std::string>> Shell::pad_legend() const
         }
         return hints;
     }
+    if (terrain_edit_) {
+        // The editor's own buttons (shell.cpp): A paints, B leaves like
+        // Cancel, L1/R1 step the pieces, Y the brush, Start is Map Complete.
+        return {{a, "Paint"},
+                {b, "Leave"},
+                {std::string(glyph_for(PadPrevTool)) + "/" + glyph_for(PadNextTool), "Terrain"},
+                {glyph_for(PadPause), "Brush"},
+                {menu, "Map Complete"}};
+    }
     const ToolDef *tool = tool_by_index(tool_index_);
     const bool inspecting = tool_index_ == kToolCount - 1;
     return {{a, inspecting ? "Inspect" : (tool != nullptr ? "Build" : "Use")},
-            {b, "Back"},
+            {b, inspecting ? "Back" : "Cancel tool"},
             {inspecting ? std::string() : glyph_for(PadQuery), "Inspect"},
             {glyph_for(PadPause), speed_ <= 0 ? "Resume" : "Pause"},
             {glyph_for(PadOverlay), "Data map"},

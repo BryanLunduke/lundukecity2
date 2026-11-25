@@ -233,9 +233,24 @@ void OverlayMap::rebuild_smooth()
         }
     }
     heat_field::blur(field, kW, kH, 1.1);
+    // A Data Center makes no pollution: its footprint stays clear instead
+    // of taking the blur from the land around it, and the contour pass
+    // below outlines it.
+    std::vector<unsigned char> clear;
+    if (layer_ == CitySession::MapLayer::Pollution) {
+        clear.assign(static_cast<std::size_t>(kW * kH), 0);
+        for (int y = 0; y < kH; ++y) {
+            for (int x = 0; x < kW; ++x) {
+                clear[static_cast<std::size_t>(y * kW + x)] = session_->datacenter_tile(x, y) ? 1 : 0;
+            }
+        }
+    }
     std::vector<float> fine(static_cast<std::size_t>(sw * sh), 0.0f);
     for (int py = 0; py < sh; ++py) {
         for (int px = 0; px < sw; ++px) {
+            if (!clear.empty() && clear[static_cast<std::size_t>((py / kSmoothPx) * kW + px / kSmoothPx)] != 0) {
+                continue;
+            }
             fine[static_cast<std::size_t>(py * sw + px)] =
                 heat_field::sample(field, kW, kH, (px + 0.5) / kSmoothPx, (py + 0.5) / kSmoothPx);
         }

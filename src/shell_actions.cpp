@@ -27,6 +27,7 @@
 #include "placement_hint.hpp"
 #include "tools.hpp"
 #include "tool_groups.hpp"
+#include "welcome_rows.hpp"
 #include "version.hpp"
 #include "view_math.hpp"
 
@@ -1109,7 +1110,7 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
         }
         const int delta = dir == AccelKey::Up || dir == AccelKey::Left ? -1 : 1;
         if (dialog_ == Dialog::Welcome) {
-            move_focus(delta, false);
+            step_welcome_focus(dir);
             return;
         }
         if (focus_is_flat_buttons()) {
@@ -1156,6 +1157,84 @@ void Shell::apply_pad_direction(SDL_GamepadButton button)
         return;
     }
     step_cursor_on_map(dx, dy);
+}
+
+void Shell::step_welcome_focus(AccelKey dir)
+{
+    // The Welcome buttons are a grid: Left and Right move along a row, Up
+    // and Down between rows (Deck hardware notes, Nov 25).
+    const int dx = dir == AccelKey::Left ? -1 : (dir == AccelKey::Right ? 1 : 0);
+    const int dy = dir == AccelKey::Up ? -1 : (dir == AccelKey::Down ? 1 : 0);
+    const bool has_continue = std::find(focus_order_.begin(), focus_order_.end(), kWelcomeContinue) != focus_order_.end();
+    const bool known = std::find(focus_order_.begin(), focus_order_.end(), focus_id_) != focus_order_.end();
+    if (!known) {
+        move_focus(dx + dy, false);
+        return;
+    }
+    const int next = welcome_step(focus_id_, dx, dy, has_continue);
+    if (next != focus_id_ && std::find(focus_order_.begin(), focus_order_.end(), next) != focus_order_.end()) {
+        focus_id_ = next;
+    }
+}
+
+bool Shell::stick_navigates() const
+{
+    // Where the left stick steps focus like the D-pad (Deck hardware
+    // notes, Nov 25): every window and menu, the on-screen keyboard
+    // included. On the map it moves the cursor.
+    return dialog_ != Dialog::None || menu_.open();
+}
+
+void Shell::service_stick_nav(int elapsed_ms)
+{
+    using pad_feel::StickDir;
+    const bool live = stick_navigates() && !pad_dragging_;
+    if (!live) {
+        stick_nav_live_ = false;
+        stick_nav_held_ = StickDir::None;
+        pad_feel::repeat_clear(stick_nav_repeat_);
+        return;
+    }
+    const StickDir dir = pad_feel::stick_nav_dir(raw_lx_, raw_ly_, stick_nav_held_);
+    if (!stick_nav_live_) {
+        // A window that opens under a stick already pushed (the player was
+        // moving the map cursor) waits for it to come back first.
+        stick_nav_live_ = true;
+        stick_nav_held_ = dir;
+        pad_feel::repeat_clear(stick_nav_repeat_);
+        return;
+    }
+    auto button_for = [](StickDir d) {
+        switch (d) {
+        case StickDir::Up:
+            return SDL_GAMEPAD_BUTTON_DPAD_UP;
+        case StickDir::Down:
+            return SDL_GAMEPAD_BUTTON_DPAD_DOWN;
+        case StickDir::Left:
+            return SDL_GAMEPAD_BUTTON_DPAD_LEFT;
+        case StickDir::Right:
+            return SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
+        default:
+            return SDL_GAMEPAD_BUTTON_INVALID;
+        }
+    };
+    if (dir != stick_nav_held_) {
+        stick_nav_held_ = dir;
+        pad_feel::repeat_clear(stick_nav_repeat_);
+        if (dir != StickDir::None) {
+            gamepad_nav_ = true;
+            apply_pad_direction(button_for(dir));
+            pad_feel::repeat_arm(stick_nav_repeat_);
+        }
+        return;
+    }
+    if (dir == StickDir::None) {
+        return;
+    }
+    const int steps = pad_feel::repeat_tick(stick_nav_repeat_, elapsed_ms);
+    for (int i = 0; i < steps && stick_navigates(); ++i) {
+        apply_pad_direction(button_for(dir));
+    }
 }
 
 bool Shell::map_dpad_repeating() const
@@ -1343,6 +1422,7 @@ void Shell::service_gamepad(int elapsed_ms)
         pad_held_dy_ = 0;
         pad_feel::repeat_clear(drag_repeat_);
     }
+    service_stick_nav(elapsed_ms);
     if (!pad_dragging_ && nav_repeat_.held && pad_ != nullptr &&
         nav_repeat_button_ != SDL_GAMEPAD_BUTTON_INVALID) {
         if (!SDL_GetGamepadButton(pad_, nav_repeat_button_)) {
@@ -4566,7 +4646,7 @@ void SDLCALL Shell::file_callback(void *userdata, const char *const *filelist, i
     static_cast<Shell *>(userdata)->on_file_result(filelist);
 }
 
-const char *Shell::glyph(SDL_GamepadButton button) const
+FaceGlyphs Shell::face_glyph_set() const
 {
     int type = SDL_GAMEPAD_TYPE_UNKNOWN;
     int south = SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN;
@@ -4584,7 +4664,12 @@ const char *Shell::glyph(SDL_GamepadButton button) const
         deck_names = pad_uses_deck_names(true, true, SDL_GetGamepadVendor(pad_), SDL_GetGamepadProduct(pad_), type,
                                          SDL_GetGamepadName(pad_), others);
     }
-    const FaceGlyphs glyphs = face_glyphs(playstation, deck_names, type);
+    return face_glyphs(playstation, deck_names, type);
+}
+
+const char *Shell::glyph(SDL_GamepadButton button) const
+{
+    const FaceGlyphs glyphs = face_glyph_set();
     switch (button) {
     case SDL_GAMEPAD_BUTTON_SOUTH:
         return glyphs.south;
@@ -5019,6 +5104,10 @@ ControlsPadNames Shell::controls_pad_names() const
     names.view = named(glyph_for(PadBack));
     names.l3 = named(glyph_for(PadOverlay));
     names.r3 = named(glyph_for(PadCenter));
+    // The triggers are not remappable; name them for the pad in hand.
+    const FaceGlyphs glyphs = face_glyph_set();
+    names.l2 = glyphs.l2;
+    names.r2 = glyphs.r2;
     return names;
 }
 

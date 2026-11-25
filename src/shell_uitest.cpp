@@ -3,6 +3,7 @@
 // See COPYING and NOTICE.
 
 #include "shell_state.hpp"
+#include "layout_mode.hpp"
 
 #include "osk_layout.hpp"
 #include "special_buildings.hpp"
@@ -444,6 +445,22 @@ void Shell::drive_ui_test()
             handle_event(up);
         }
     };
+    // Left stick push (Deck hardware notes, Nov 25): one axis event, then
+    // one frame of stick navigation.
+    auto stick = [&](SDL_GamepadAxis axis, int value) {
+        SDL_Event event{};
+        event.type = SDL_EVENT_GAMEPAD_AXIS_MOTION;
+        event.gaxis.which = pad_ != nullptr ? SDL_GetGamepadID(pad_) : 0;
+        event.gaxis.axis = static_cast<Uint8>(axis);
+        event.gaxis.value = static_cast<Sint16>(value);
+        handle_event(event);
+        service_stick_nav(16);
+    };
+    auto stick_tap = [&](SDL_GamepadAxis axis, int value) {
+        service_stick_nav(16);
+        stick(axis, value);
+        stick(axis, 0);
+    };
     auto click_at = [&](double x, double y) {
         int ww = 1;
         int wh = 1;
@@ -768,6 +785,18 @@ void Shell::drive_ui_test()
             fail("D-pad Up from l went to " + std::to_string(focus_id_) + " instead of p");
             return;
         }
+        // The left stick walks the keyboard like the D-pad (Deck notes, Nov 25).
+        focus_id_ = kOsk;
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTY, 30000);
+        if (focus_id_ != kOsk + 10) {
+            fail("stick Down from q went to " + std::to_string(focus_id_) + " instead of a");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, 30000);
+        if (focus_id_ != kOsk + 11) {
+            fail("stick Right from a went to " + std::to_string(focus_id_) + " instead of s");
+            return;
+        }
         focus_id_ = kOsk;
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kOsk; });
         if (focus_id_ != kFieldName) {
@@ -803,6 +832,17 @@ void Shell::drive_ui_test()
             fail("gamepad could not reach the Analysis menu");
             return;
         }
+        // The left stick moves between menus like the D-pad.
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, -30000);
+        if (menu_.open_menu != 2) {
+            fail("stick Left did not move to the previous menu");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, 30000);
+        if (menu_.open_menu != 3) {
+            fail("stick Right did not come back to the Analysis menu");
+            return;
+        }
         tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return dialog_ == Dialog::None; });
         if (dialog_ != Dialog::Budget) {
             fail("gamepad did not activate Budget");
@@ -826,6 +866,16 @@ void Shell::drive_ui_test()
         key_down(SDLK_LEFT);
         if (tax_ != tax0 || focus_id_ != kSlider + 1) {
             fail("keyboard Left did not adjust the focused slider");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, 30000);
+        if (tax_ != tax0 + 1 || focus_id_ != kSlider + 1) {
+            fail("stick Right did not adjust the focused slider");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTX, -30000);
+        if (tax_ != tax0) {
+            fail("stick Left did not adjust the focused slider back");
             return;
         }
         key_down(SDLK_DOWN);
@@ -1077,6 +1127,17 @@ void Shell::drive_ui_test()
             fail("holding A and moving did not drag-build (" + std::to_string(changed) + " tiles)");
             return;
         }
+        // B puts the build tool away (Deck hardware notes, Nov 25): a
+        // stroke in progress ends first, the next B switches to Inspect.
+        if (tool_index_ == kToolCount - 1) {
+            fail("the drag-build test was not using a build tool");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_EAST, [&] { return tool_index_ != kToolCount - 1; });
+        if (tool_index_ != kToolCount - 1) {
+            fail("B did not cancel the build tool");
+            return;
+        }
         ui_step_ = 19;
         return;
     }
@@ -1123,15 +1184,32 @@ void Shell::drive_ui_test()
                 return;
             }
         }
+        // The buttons are a grid (Deck hardware notes, Nov 25): Left and
+        // Right move along a row, Up and Down between rows.
+        tap(SDL_GAMEPAD_BUTTON_DPAD_LEFT, [&] { return focus_id_ == kWelcomeNew; });
+        if (focus_id_ != kWelcomeNew) {
+            fail("D-pad Left moved off Start a new city");
+            return;
+        }
         // Release nov24 #7: Learn to Play sits beside Start a new city.
-        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeNew; });
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeNew; });
         if (focus_id_ != kWelcomeLearn) {
-            fail("D-pad Down did not move to Learn to Play");
+            fail("D-pad Right did not move to Learn to Play");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeLearn; });
+        if (focus_id_ != kWelcomeLearn) {
+            fail("D-pad Right moved off the end of the first row");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeLearn; });
         if (focus_id_ != kWelcomeLoad) {
             fail("D-pad Down did not move to Load a Saved City");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeLoad; });
+        if (focus_id_ != kWelcomeLoad) {
+            fail("D-pad Right left the one-button Load row");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeLoad; });
@@ -1145,9 +1223,9 @@ void Shell::drive_ui_test()
             return;
         }
         // Release nov24 #16: Settings sits beside How to play.
-        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeHowTo; });
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeHowTo; });
         if (focus_id_ != kWelcomeSettings) {
-            fail("D-pad Down did not move to Settings");
+            fail("D-pad Right did not move to Settings");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeSettings; });
@@ -1156,18 +1234,30 @@ void Shell::drive_ui_test()
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeQuit; });
-        if (focus_id_ != kWelcomeSettings) {
-            fail("D-pad Up did not return to Settings");
-            return;
-        }
-        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeSettings; });
         if (focus_id_ != kWelcomeHowTo) {
             fail("D-pad Up did not return to How to play");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, [&] { return focus_id_ == kWelcomeHowTo; });
+        tap(SDL_GAMEPAD_BUTTON_DPAD_LEFT, [&] { return focus_id_ == kWelcomeSettings; });
+        if (focus_id_ != kWelcomeHowTo) {
+            fail("D-pad Left did not return to How to play");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeHowTo; });
         if (focus_id_ != kWelcomeScenario) {
             fail("D-pad Up did not return to Select a Scenario");
+            return;
+        }
+        // The left stick moves the focus like the D-pad (Deck hardware notes).
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTY, 30000);
+        if (focus_id_ != kWelcomeHowTo) {
+            fail("the left stick did not move the Welcome focus down");
+            return;
+        }
+        stick_tap(SDL_GAMEPAD_AXIS_LEFTY, -30000);
+        if (focus_id_ != kWelcomeScenario) {
+            fail("the left stick did not move the Welcome focus up");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_SOUTH, [&] { return dialog_ == Dialog::Welcome; });
@@ -1704,7 +1794,7 @@ void Shell::drive_ui_test()
         }
         // Escape's last step (after rebind, dialog, menu, overlay, sticky
         // notice, keyboard cursor) drops the tool to Inspect, like a
-        // right-click; gamepad Back does the same. B alone does not.
+        // right-click; gamepad Back and B do the same (Deck notes, Nov 25).
         {
             const int inspect = kToolCount - 1;
             const int build_tool = 1;
@@ -1777,10 +1867,12 @@ void Shell::drive_ui_test()
                 b.gbutton.button = SDL_GAMEPAD_BUTTON_EAST;
                 b.gbutton.down = true;
                 handle_event(b);
-                if (tool_index_ != build_tool) {
-                    fail("B on the map changed the tool");
+                // The editor's Deck notes (Nov 25): B cancels the build tool.
+                if (tool_index_ != inspect) {
+                    fail("B on the map did not cancel the build tool");
                     return;
                 }
+                select_tool(build_tool);
                 SDL_Event back{};
                 back.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
                 back.gbutton.button = SDL_GAMEPAD_BUTTON_BACK;
@@ -1861,6 +1953,42 @@ void Shell::drive_ui_test()
             find_hot(hot_, kTerrainCancel, 0) == nullptr) {
             fail("the editor toolbar or top bar is wrong");
             return;
+        }
+        // On a handheld the editor uses the handheld HUD (Deck hardware
+        // notes, Nov 25): pieces and brushes in the bottom quick bar,
+        // Cancel and Map Complete in the top chips, no left tray.
+        {
+            const int pref = layout_pref_;
+            layout_pref_ = layout_mode::Handheld;
+            layout();
+            render();
+            const Hotspot *trees = find_hot(hot_, kTerrainPiece + 3, 0);
+            const Hotspot *small = find_hot(hot_, kTerrainBrush, 0);
+            const Hotspot *cancel = find_hot(hot_, kTerrainCancel, 0);
+            const Hotspot *done = find_hot(hot_, kTerrainComplete, 0);
+            if (!handheld_ || find_hot(hot_, kPaletteId, 0) != nullptr || trees == nullptr || small == nullptr ||
+                cancel == nullptr || done == nullptr || trees->y + trees->h < quick_y_ || small->y + small->h < quick_y_ ||
+                cancel->y > dp(80) || done->y > dp(80)) {
+                fail("the handheld Map editor is not laid out with the quick bar and top chips");
+                return;
+            }
+            const auto legend = pad_legend();
+            if (legend.empty() || legend[0].second != "Paint") {
+                fail("the handheld Map editor's button legend is not the editor's");
+                return;
+            }
+            click_at(trees->x + trees->w * 0.5, trees->y + trees->h * 0.5 + 4);
+            if (terrain_piece_ != 3 || !terrain_edit_) {
+                fail("the handheld quick bar did not pick Trees");
+                return;
+            }
+            layout_pref_ = pref;
+            layout();
+            render();
+            if (handheld_ || find_hot(hot_, kTerrainPiece + 1, 0) == nullptr) {
+                fail("the desktop Map editor lost its left toolbar");
+                return;
+            }
         }
         const Hotspot *water = find_hot(hot_, kTerrainPiece + 1, 0);
         click_at(water->x + water->w * 0.5, water->y + water->h * 0.5);
