@@ -8,6 +8,7 @@
 #include "map_fit.hpp"
 #include "tutorial_goals.hpp"
 #include "controls_page.hpp"
+#include "pad_feel.hpp"
 
 #include <cstdio>
 #include <string>
@@ -91,6 +92,17 @@ void how_to_play_pad()
           "Controller sits before Touch");
 }
 
+// #5: stick or trigger noise does not take over from the trackpad.
+void axis_noise()
+{
+    check(!pad_feel::axis_wakes(false, 1200.0f / 32767.0f, 0.0f), "stick noise does not wake the pad");
+    check(!pad_feel::axis_wakes(false, 0.12f, 0.12f), "a resting pair under the dead zone does not wake");
+    check(pad_feel::axis_wakes(false, 0.5f, 0.0f), "a real push wakes the pad");
+    check(pad_feel::axis_wakes(false, 0.15f, 0.15f), "a diagonal past the dead zone wakes");
+    check(!pad_feel::axis_wakes(true, 0.2f, 0.0f), "a light trigger touch does not wake");
+    check(pad_feel::axis_wakes(true, 0.8f, 0.0f), "a trigger pull wakes");
+}
+
 } // namespace
 
 int main()
@@ -98,6 +110,7 @@ int main()
     bottom_reserve();
     pad_steps();
     how_to_play_pad();
+    axis_noise();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

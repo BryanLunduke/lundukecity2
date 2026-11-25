@@ -3235,8 +3235,33 @@ void Shell::handle_event(const SDL_Event &event)
         break;
     }
     case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
-        open_gamepad_id(event.gaxis.which, true);
         const float norm = std::max(-1.0f, std::min(1.0f, event.gaxis.value / 32767.0f));
+        {
+            // Only a real push takes over from the mouse or trackpad. Noise
+            // under the dead zone, or a light trigger touch, used to hide the
+            // pointer and move the hover to the pad cursor (Deck review #5).
+            const SDL_GamepadAxis axis = static_cast<SDL_GamepadAxis>(event.gaxis.axis);
+            const bool trigger = axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;
+            const bool active = pad_ != nullptr && SDL_GetGamepadID(pad_) == event.gaxis.which;
+            float pair = 0.0f;
+            if (active) {
+                if (axis == SDL_GAMEPAD_AXIS_LEFTX) {
+                    pair = raw_ly_;
+                } else if (axis == SDL_GAMEPAD_AXIS_LEFTY) {
+                    pair = raw_lx_;
+                } else if (axis == SDL_GAMEPAD_AXIS_RIGHTX) {
+                    pair = raw_ry_;
+                } else if (axis == SDL_GAMEPAD_AXIS_RIGHTY) {
+                    pair = raw_rx_;
+                }
+            }
+            const bool wakes = pad_feel::axis_wakes(trigger, norm, pair);
+            open_gamepad_id(event.gaxis.which, wakes);
+            if (!wakes && !active) {
+                // Another pad's resting noise must not move this one's values.
+                break;
+            }
+        }
         if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX) {
             raw_lx_ = norm;
         } else if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY) {
