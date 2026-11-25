@@ -330,27 +330,36 @@ void Micropolis::checkGrowth()
  * @param type Scenario used
  * @note Parameter \a type may not be \c SC_NONE
  */
-void Micropolis::doScenarioScore(Scenario type)
+/**
+ * Whether a scenario's goal holds right now: the same test the deadline
+ * runs (doScenarioScore). Release nov24 #15 uses it for a "goal met, hold
+ * until the deadline" note; the scenario is still judged only at the
+ * deadline.
+ * @param type  Scenario.
+ * @param known Set false for a type with no goal.
+ */
+bool Micropolis::scenarioGoalMet(Scenario type, bool &known)
 {
-    short z = MESSAGE_SCENARIO_LOST;     /* you lose */
+    bool met = false;
+    known = true;
 
     switch (type) {
 
     case SC_DULLSVILLE:
         if (cityClass >= CC_METROPOLIS) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
     case SC_SAN_FRANCISCO:
         if (cityClass >= CC_METROPOLIS) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
     case SC_HAMBURG:
         if (cityClass >= CC_METROPOLIS) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
@@ -364,39 +373,39 @@ void Micropolis::doScenarioScore(Scenario type)
             ? static_cast<Quad>(cityPopulationOf(snapResPop, snapComPop, snapIndPop, snapDataCenterPop))
             : getPopulation();
         if (trafficAverage < BERN_TRAFFIC_GOAL && people >= BERN_POPULATION_GOAL) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
     }
 
     case SC_TOKYO:
         if (cityScore > 500) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
     case SC_DETROIT:
         if (crimeAverage < 60) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
     case SC_BOSTON:
         if (cityScore > 500) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
     case SC_RIO:
         if (cityScore > 500) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
     case SC_SEATTLE:
         // Lunduke City 2: the Autonomous Zone must be gone and crime down.
         if (cityEvents.zoneCount <= 0 && crimeAverage < SEATTLE_CRIME_GOAL) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
@@ -409,7 +418,7 @@ void Micropolis::doScenarioScore(Scenario type)
         const bool police_caught = cityEvents.lionActive == 0 && cityEvents.lionSteps > 0 &&
                                    cityEvents.lionSteps <= SANDIEGO_LION_CATCH_STEPS;
         if (police_caught && people >= SANDIEGO_POPULATION_GOAL) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
     }
@@ -418,14 +427,14 @@ void Micropolis::doScenarioScore(Scenario type)
         // Lunduke City 2: the riot over, every riot fire out, crime down.
         // Ordinary random fires do not count.
         if (cityEvents.riotSteps <= 0 && riotFiresBurning() == 0 && crimeAverage < PORTLAND_CRIME_GOAL) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
     case SC_SAN_FRANCISCO_1962:
         // Lunduke City 2: the escapees rounded up and crime down.
         if (cityEvents.prisonSteps <= 0 && crimeAverage < SF1962_CRIME_GOAL) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
 
@@ -436,18 +445,32 @@ void Micropolis::doScenarioScore(Scenario type)
             ? static_cast<Quad>(cityPopulationOf(snapResPop, snapComPop, snapIndPop, snapDataCenterPop))
             : getPopulation();
         if (people >= LEARN_TO_PLAY_POPULATION_GOAL) {
-            z = MESSAGE_SCENARIO_WON;
+            met = true;
         }
         break;
     }
 
     default:
+        known = false;
+        break;
+
+    }
+
+    return met;
+}
+
+
+void Micropolis::doScenarioScore(Scenario type)
+{
+    bool known = true;
+    const bool met = scenarioGoalMet(type, known);
+    if (!known) {
         NOT_REACHED();
         scoreType = SC_NONE;
         scoreWait = 0;
         return;
-
     }
+    const short z = met ? MESSAGE_SCENARIO_WON : MESSAGE_SCENARIO_LOST;
 
     sendMessage(z, NOWHERE, NOWHERE, true, true);
 

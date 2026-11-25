@@ -296,6 +296,37 @@ int main()
         }
     }
 
+    // Release #15: a met goal says so on every meter, and only then.
+    {
+        int met_count = 0;
+        for (int i = 0; i < CitySession::kScenarioCount; ++i) {
+            const int id = CitySession::scenario_def(i).id;
+            if (id == SC_LEARN_TO_PLAY) {
+                continue;
+            }
+            CitySession s;
+            if (!s.load_scenario(id)) {
+                return fail(37, "a scenario did not load for the goal-met check");
+            }
+            const bool met = s.scenario_goal_met_now();
+            met_count += met ? 1 : 0;
+            const std::string want = (id == SC_TOKYO || id == SC_RIO)
+                                         ? std::string("goal met so far")
+                                         : "goal met, hold until " + std::to_string(s.scenario_deadline_year());
+            const bool long_note = s.scenario_meter().find(want) != std::string::npos;
+            const bool short_note = s.scenario_meter_short().find("goal met, hold") != std::string::npos;
+            if (long_note != met || short_note != met) {
+                return fail(38, "the goal-met note does not match the deadline test");
+            }
+            if ((id == SC_DULLSVILLE || id == SC_BERN) && met) {
+                return fail(39, "Dullsville or Bern (traffic not measured) reads as met at the start");
+            }
+        }
+        if (met_count == 0) {
+            return fail(40, "no scenario read as met (Tokyo and Rio start above 500)");
+        }
+    }
+
     std::printf("review_nov24 ok\n");
     return 0;
 }

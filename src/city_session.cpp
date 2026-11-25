@@ -2931,7 +2931,7 @@ bool CitySession::traffic_measured() const
     return now >= 0 && now / kTaxTicks > traffic_anchor_time_ / kTaxTicks;
 }
 
-std::string CitySession::scenario_meter_short() const
+std::string CitySession::scenario_meter_short_base() const
 {
     const int id = scenario_id();
     if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
@@ -2973,7 +2973,7 @@ std::string CitySession::scenario_meter_short() const
     return grouped_count(people > 0 ? people : 0) + " → 100,000";
 }
 
-std::string CitySession::scenario_meter_compact() const
+std::string CitySession::scenario_meter_compact_base() const
 {
     const int id = scenario_id();
     if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
@@ -3033,7 +3033,7 @@ std::string CitySession::scenario_progress() const
     return time + ". " + def.goal;
 }
 
-std::string CitySession::scenario_meter() const
+std::string CitySession::scenario_meter_base() const
 {
     const int id = scenario_id();
     if (id == 0 || (id != SC_LEARN_TO_PLAY && scenario_years_left() < 0)) {
@@ -3079,6 +3079,64 @@ std::string CitySession::scenario_meter() const
         return "Score " + grouped_count(static_cast<std::int64_t>(sim.cityScore)) + ask + std::to_string(deadline);
     }
     return "Population " + grouped_count(people > 0 ? people : 0) + " → 100,000";
+}
+
+bool CitySession::scenario_goal_met_now() const
+{
+    // Release nov24 #15: the deadline's own test (doScenarioScore), read
+    // early. Nothing is judged here; the scenario still ends at its date.
+    const int id = scenario_id();
+    if (id == 0 || id == SC_LEARN_TO_PLAY || scenario_years_left() < 0 || engine_->sim.scoreWait <= 0) {
+        return false;
+    }
+    if (id == SC_BERN && !traffic_measured()) {
+        // The meter shows traffic as not measured yet (a load reads an
+        // empty traffic map), so do not call it met on that reading.
+        return false;
+    }
+    bool known = false;
+    const bool met = engine_->sim.scenarioGoalMet(static_cast<Scenario>(id), known);
+    return known && met;
+}
+
+int CitySession::scenario_deadline_year() const
+{
+    const int id = scenario_id();
+    if (id == 0 || id == SC_LEARN_TO_PLAY) {
+        return 0;
+    }
+    const ScenarioDef &def = scenario_def(id - SC_DULLSVILLE);
+    return def.year + def.years;
+}
+
+std::string CitySession::scenario_meter() const
+{
+    std::string meter = scenario_meter_base();
+    if (!meter.empty() && scenario_goal_met_now()) {
+        const int id = scenario_id();
+        // Tokyo and Rio already say "keep it above 500 until <year>".
+        meter += (id == SC_TOKYO || id == SC_RIO) ? std::string(" \u2014 goal met so far")
+                                                  : " \u2014 goal met, hold until " + std::to_string(scenario_deadline_year());
+    }
+    return meter;
+}
+
+std::string CitySession::scenario_meter_short() const
+{
+    std::string meter = scenario_meter_short_base();
+    if (!meter.empty() && scenario_goal_met_now()) {
+        meter += " \u00B7 goal met, hold";
+    }
+    return meter;
+}
+
+std::string CitySession::scenario_meter_compact() const
+{
+    std::string meter = scenario_meter_compact_base();
+    if (!meter.empty() && scenario_goal_met_now()) {
+        meter += " met";
+    }
+    return meter;
 }
 
 std::string CitySession::scenario_outcome_text(bool won) const

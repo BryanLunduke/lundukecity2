@@ -545,6 +545,10 @@ public:
     // Tight forms for a 960-pixel band: "18k→100k · 30y".
     std::string scenario_clock_compact() const;
     std::string scenario_meter_compact() const;
+    // Release nov24 #15: the goal's deadline test holds right now. The
+    // meters add "goal met, hold until <year>"; nothing ends early.
+    bool scenario_goal_met_now() const;
+    int scenario_deadline_year() const;
 
     // Learn to Play: the first incomplete teaching step (0..6), or 7 when won.
     int tutorial_step() const;
@@ -703,6 +707,9 @@ private:
     PlacementNote placement_note_;
     civic::Ledger ledger_;
     bool ledger_from_file_ = false;
+    std::string scenario_meter_base() const;
+    std::string scenario_meter_short_base() const;
+    std::string scenario_meter_compact_base() const;
     // Treasury when this city was opened; Budget's Previous funds until a
     // tax year records ledger_.start_funds (release nov24 #12).
     std::int64_t opening_funds_ = -1;
