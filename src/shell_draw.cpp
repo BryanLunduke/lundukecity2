@@ -7009,7 +7009,12 @@ void Shell::draw_hover_card(cairo_t *cr)
         return;
     }
     const CitySession::InspectFacts facts = session_.inspect_facts(hx, hy);
-    const inspect_report::Report report = inspect_report::make(facts.facts);
+    inspect_report::Report report = inspect_report::make(facts.facts);
+    if (report.status == card.name) {
+        // A park's status is its own name: the card read "Park / Park"
+        // (review nov25 #16). The title already says it.
+        report.status.clear();
+    }
     const bool power_line = card.power != "Power: —";
     const std::string next_line = report.next.empty() ? std::string() : "Next: " + report.next;
     std::string pay_line;
@@ -7049,7 +7054,10 @@ void Shell::draw_hover_card(cairo_t *cr)
     if (card.offer_power) {
         body_h += dp(34);
     }
-    const double card_h = std::max(static_cast<double>(dp(72)), body_h + dp(16));
+    // A card with only its title (a park) is not padded out to the usual
+    // height, which left an empty plate under "Park".
+    const bool title_only = body_h <= dp(26);
+    const double card_h = std::max(static_cast<double>(title_only ? dp(42) : dp(72)), body_h + dp(16));
     inspect_card_shown_ = true;
     inspect_card_w_ = card_w;
     inspect_card_h_ = card_h;

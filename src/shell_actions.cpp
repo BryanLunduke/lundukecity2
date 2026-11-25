@@ -4275,6 +4275,11 @@ void Shell::note_controller_connected()
             text += ". ";
             text += pause;
             text += " resumes";
+            // This says how to resume, so the "Game paused. Press ..." alert
+            // it would stack on is dropped (review nov25 #16).
+            toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(),
+                                         [](const Toast &t) { return t.text.compare(0, 12, "Game paused.") == 0; }),
+                          toasts_.end());
         }
     }
     shown_message_ = text;

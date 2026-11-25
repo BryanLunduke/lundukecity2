@@ -1475,7 +1475,17 @@ void Shell::loop()
         }
         poll_file_dialog();
         const bool skip_pause_note = smoke_ || ui_test_ || review_ || (!demo_.empty() && demo_ != "paused");
-        if (!pause_noted_ && !skip_pause_note && dialog_ == Dialog::None && !welcome_gate_ && speed_ == 0 && frame_ > 1) {
+        bool resume_said = false;
+        for (const Toast &toast : toasts_) {
+            // A live "Controller connected. Y resumes" already says how to
+            // run the city; the pause alert would stack on it (review nov25
+            // #16). The pause note waits until it has gone.
+            if (toast.until > wall && toast.text.compare(0, 21, "Controller connected.") == 0) {
+                resume_said = true;
+            }
+        }
+        const bool pause_due = dialog_ == Dialog::None && !welcome_gate_ && speed_ == 0 && frame_ > 1;
+        if (!pause_noted_ && !skip_pause_note && pause_due && !resume_said) {
             pause_noted_ = true;
             if (deck_ || gamepad_nav_ || pad_ != nullptr) {
                 shown_message_ = pause_run_hint(glyph_for(PadPause), glyph_for(PadMenu));
