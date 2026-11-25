@@ -2757,11 +2757,59 @@ CitySession::CrisisReport CitySession::crisis_report() const
         return out;
     }
     const Micropolis &sim = engine_->sim;
+    // A zone's power bit is set by the simulator's next power scan, so a
+    // paused city counted zones that were just wired, or just built beside
+    // a plant, and the plants themselves ("10 unpowered" with 9 zones and
+    // a coal plant, review nov25). Read-only here: zones joined to a plant
+    // through conductive tiles count as powered, unless those tiles exceed
+    // what the plants could carry (700 each, the coal plant's share), when
+    // the power bits are trusted as they are.
+    std::vector<unsigned char> reach(static_cast<std::size_t>(kWorldW * kWorldH), 0);
+    {
+        std::vector<int> stack;
+        int plants = 0;
+        for (int x = 0; x < kWorldW; ++x) {
+            for (int y = 0; y < kWorldH; ++y) {
+                const unsigned short raw = sim.map[x][y];
+                if ((raw & ZONEBIT) != 0 && tile_is_power_plant(raw & LOMASK)) {
+                    ++plants;
+                    reach[static_cast<std::size_t>(x * kWorldH + y)] = 1;
+                    stack.push_back(x * kWorldH + y);
+                }
+            }
+        }
+        long long walked = 0;
+        while (!stack.empty()) {
+            const int at = stack.back();
+            stack.pop_back();
+            ++walked;
+            const int cx = at / kWorldH;
+            const int cy = at % kWorldH;
+            const int dx[4] = {1, -1, 0, 0};
+            const int dy[4] = {0, 0, 1, -1};
+            for (int k = 0; k < 4; ++k) {
+                const int nx = cx + dx[k];
+                const int ny = cy + dy[k];
+                if (nx < 0 || ny < 0 || nx >= kWorldW || ny >= kWorldH) {
+                    continue;
+                }
+                const std::size_t slot = static_cast<std::size_t>(nx * kWorldH + ny);
+                if (reach[slot] == 0 && (sim.map[nx][ny] & CONDBIT) != 0) {
+                    reach[slot] = 1;
+                    stack.push_back(nx * kWorldH + ny);
+                }
+            }
+        }
+        if (walked > static_cast<long long>(plants) * 700) {
+            std::fill(reach.begin(), reach.end(), 0);
+        }
+    }
     for (int x = 0; x < kWorldW; ++x) {
         for (int y = 0; y < kWorldH; ++y) {
             const unsigned short raw = sim.map[x][y];
             const int tile = raw & LOMASK;
-            if ((raw & ZONEBIT) != 0 && (raw & PWRBIT) == 0) {
+            if ((raw & ZONEBIT) != 0 && (raw & PWRBIT) == 0 && !tile_is_power_plant(tile) &&
+                !special_tile_skips_power(tile) && reach[static_cast<std::size_t>(x * kWorldH + y)] == 0) {
                 ++out.unpowered;
                 out.sites.push_back(CrisisSite{x, y});
             } else if (tile >= FIRE && tile <= LASTFIRE) {
