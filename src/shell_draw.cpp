@@ -1356,12 +1356,15 @@ void Shell::draw_dialog(cairo_t *cr)
         const double plaque_w = std::min(static_cast<double>(card_h > 0 ? dp(480) : dp(420)),
                                          std::max(1.0, win_w_ - static_cast<double>(dp(48))));
         const double px = std::max(0.0, (win_w_ - plaque_w) / 2.0);
-        double py = win_h_ - plaque_h - dp(22);
+        // On a Deck or with a controller a button legend runs along the
+        // bottom edge, under the choices (Deck review #13). The art is unchanged.
+        const double legend_h = (deck_ || gamepad_nav_) ? static_cast<double>(dp(28)) : 0.0;
+        double py = win_h_ - plaque_h - dp(22) - legend_h;
         // The title and the downtown towers live in the upper part of the art.
         // Keep the choices over the neighborhoods along the bottom.
         const double lowest_top = win_h_ * 0.56;
         if (py < lowest_top) {
-            py = std::max(win_h_ * 0.40, win_h_ - plaque_h - dp(8));
+            py = std::max(win_h_ * 0.40, win_h_ - plaque_h - dp(8) - legend_h);
         }
         const double radius = dp(12);
         auto round_box = [&](double x, double y, double w, double h, double r) {
@@ -1511,6 +1514,9 @@ void Shell::draw_dialog(cairo_t *cr)
                                menu_.alt_shown, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
             }
             by += bh + gap;
+        }
+        if (legend_h > 0) {
+            draw_pad_legend(cr, win_h_ - legend_h, legend_h);
         }
         return;
     }
