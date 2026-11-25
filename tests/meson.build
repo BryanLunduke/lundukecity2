@@ -1411,3 +1411,7 @@ test(
   ],
   timeout: 300,
 )
+
+# Release nov24 #19: --version and --help print and exit without a window.
+test('cli_version', lunduke_city_exe, args: ['--version'])
+test('cli_help', lunduke_city_exe, args: ['--help'])

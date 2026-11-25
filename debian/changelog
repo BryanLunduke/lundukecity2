@@ -4,8 +4,12 @@ lunduke-city-2 (2.0.0) unstable; urgency=medium
     lunduke-city-2, with its own config directory and desktop id.
     Default window is 1280x800. Menus and dialogs are drawn in the
     window. Gamepad, touch, and the original .cty saves are supported.
+  * Learn to Play tutorial, thirteen scenarios (new Seattle, San
+    Francisco 1962, Portland and San Diego), special buildings, Year in
+    Review, the Inspect tool, and undo for the last build or bulldoze.
+  * lunduke-city-2 --version and --help print to stdout and exit.
 
- -- Phil <phil@brushpad.local>  Tue, 20 Oct 2026 18:00:00 +0000
+ -- Phil <phil@brushpad.local>  Tue, 24 Nov 2026 18:00:00 +0000
 
 lunduke-city (0.9.5-2) unstable; urgency=medium
 

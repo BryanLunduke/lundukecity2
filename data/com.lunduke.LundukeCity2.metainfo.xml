@@ -33,9 +33,16 @@
     <category>Simulation</category>
   </categories>
   <releases>
-    <release version="2.0.0" date="2026-10-20">
+    <release version="2.0.0" date="2026-11-24">
       <description>
-        <p>SDL3 port. Installs beside Lunduke City, with a 1280x800 window, gamepad and touch input, and the same .cty saves.</p>
+        <p>The first release of Lunduke City 2, an SDL3 game that installs beside Lunduke City and opens the same .cty saves.</p>
+        <ul>
+          <li>Learn to Play: a seven-step tutorial city with no deadline</li>
+          <li>Thirteen scenarios, with new Seattle, San Francisco 1962, Portland and San Diego challenges</li>
+          <li>Special buildings: Zoo, Amusement Park, Casino, Stadium, Marina, Library, Mayor's House, Data Center, Prison and Micro Nuclear Plant</li>
+          <li>Year in Review, the Inspect tool, and undo for the last build or bulldoze</li>
+          <li>Steam Deck, gamepad and touch support, remappable keys, autosave and crash recovery</li>
+        </ul>
       </description>
     </release>
   </releases>
