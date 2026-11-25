@@ -26,11 +26,30 @@ inline const Group *groups()
     static const Group table[] = {
         {"BUILD", 0, 4},     {"ZONES", 4, 4},      {"PARKS", 8, 3},  {"SERVICES", 11, 3},
         {"UTILITIES", 14, 3}, {"SPECIAL BUILDINGS", 17, 7}, {"PORTS", 24, 2},
+        // Desktop toolbar only (release nov24 #3): Inspect's own button. The
+        // handheld quick bar and the L1/R1 section jumps keep Inspect as the
+        // separate last stop, so only the grid layout below counts this one.
+        {"INSPECT", 26, 1},
     };
     return table;
 }
 
+// Build sections (the handheld quick bar, section jumps, group_of).
 constexpr int kGroupCount = 7;
+// Sections drawn in the desktop toolbar grid: the build sections + INSPECT.
+constexpr int kGridGroupCount = 8;
+
+// Grid section of a toolbar button, Inspect included; -1 for none.
+inline int grid_group_of(int index)
+{
+    const Group *table = groups();
+    for (int g = 0; g < kGridGroupCount; ++g) {
+        if (index >= table[g].first && index < table[g].first + table[g].count) {
+            return g;
+        }
+    }
+    return -1;
+}
 
 inline int group_of(int index)
 {
@@ -56,7 +75,7 @@ inline int rows_in(int group, int columns)
 inline int group_top(int group, int columns, int cell, int header)
 {
     int y = 0;
-    for (int g = 0; g < group && g < kGroupCount; ++g) {
+    for (int g = 0; g < group && g < kGridGroupCount; ++g) {
         y += header + rows_in(g, columns) * cell;
     }
     return y;
@@ -64,7 +83,7 @@ inline int group_top(int group, int columns, int cell, int header)
 
 inline int grid_height(int columns, int cell, int header)
 {
-    return group_top(kGroupCount, columns, cell, header);
+    return group_top(kGridGroupCount, columns, cell, header);
 }
 
 // Buttons in one row of a group. The rows are balanced so no row is a
@@ -110,7 +129,7 @@ inline int row_offset(int group, int columns, int row, int cell)
 // Cell origin (inside the padding) for a tool. False for an index with no button.
 inline bool slot(int index, int columns, int cell, int header, int &x, int &y)
 {
-    const int g = group_of(index);
+    const int g = grid_group_of(index);
     if (g < 0 || columns < 1) {
         return false;
     }
@@ -133,7 +152,7 @@ inline int index_at(int x, int y, int columns, int cell, int header)
     if (x >= columns * cell) {
         return -1;
     }
-    for (int g = 0; g < kGroupCount; ++g) {
+    for (int g = 0; g < kGridGroupCount; ++g) {
         const int top = group_top(g, columns, cell, header) + header;
         const int rows = rows_in(g, columns);
         if (y >= top && y < top + rows * cell) {

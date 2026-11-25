@@ -7,13 +7,19 @@
 // and the scenario-local budget tweaks (#12/#13).
 
 #include "city_session.hpp"
+#include "civic.hpp"
 #include "micropolis.h"
+#include "tool_groups.hpp"
+#include "tools.hpp"
+#include "welcome_rows.hpp"
 #include "tutorial_goals.hpp"
+#include "inspect_report.hpp"
 
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <vector>
 
 int hostile_review_session_probe(CitySession &session, int op);
 
@@ -35,6 +41,117 @@ const char *tmp_base()
 
 int main()
 {
+    // Release-readiness #1: the third power plant satisfies Power too.
+    const auto micro = tutorial::census([](int, int) { return SPECIAL_MICRONUKE; }, 1, 1, 0, false, false);
+    if (micro.power_plants != 1) {
+        return fail(20, "the tutorial ignored a Micro Nuclear Plant");
+    }
+
+    // Release-readiness #2: all three Parks row tools satisfy Parks.
+    for (int park_tile : {WOODS2, FOUNTAIN, SPECIAL_PARK, SPECIAL_FOUNTAIN}) {
+        const auto parks = tutorial::census([&](int, int) { return park_tile; }, 1, 1, 0, false, false);
+        if (!tutorial::step_complete(tutorial::Parks, parks)) {
+            return fail(21, "the tutorial ignored a park or fountain");
+        }
+    }
+    // Release-readiness #3: Inspect has a desktop toolbar button, and Step 6 says where.
+    {
+        if (kPaletteToolCount != kToolCount || tool_by_index(kToolCount - 1)->engine_id != TOOL_QUERY) {
+            return fail(22, "Inspect is not on the desktop toolbar");
+        }
+        for (int columns = 2; columns <= 4; ++columns) {
+            int x = 0;
+            int y = 0;
+            if (!tool_groups::slot(kToolCount - 1, columns, 40, 18, x, y) ||
+                tool_groups::index_at(x + 20, y + 20, columns, 40, 18) != kToolCount - 1 ||
+                y + 40 > tool_groups::grid_height(columns, 40, 18)) {
+                return fail(23, "the Inspect button has no slot in the grid");
+            }
+        }
+        if (tool_groups::group_of(kToolCount - 1) != -1 ||
+            tool_groups::section_jump(tool_groups::groups()[6].first, 1, kToolCount) != kToolCount - 1) {
+            return fail(24, "the handheld section jumps changed");
+        }
+        const std::string step6 = tutorial::hint(tutorial::InspectBudget);
+        if (step6.find("magnifier") == std::string::npos || step6.find("press Q") == std::string::npos) {
+            return fail(25, "Step 6 does not say where Inspect is");
+        }
+    }
+    // Release-readiness #4: Step 1 says how long, and the meter counts.
+    {
+        tutorial::Status s;
+        s.roads = 8;
+        const std::string line = tutorial::progress_line(tutorial::Roads, &s);
+        if (tutorial::meter(tutorial::Roads, s) != "1/7 · Roads 8/12" ||
+            tutorial::meter_short(tutorial::Roads, s) != "1/7 Roads 8/12" ||
+            tutorial::meter_compact(tutorial::Roads, s) != "1/7 8/12" ||
+            line.find("at least 12 tiles") == std::string::npos || line.find("so far: 8/12") == std::string::npos) {
+            std::fprintf(stderr, "'%s' / '%s'\n", tutorial::meter(tutorial::Roads, s).c_str(), line.c_str());
+            return fail(26, "the road count is not shown");
+        }
+    }
+    // Release-readiness #7: Learn to Play is on Welcome and first in the picker.
+    {
+        if (CitySession::scenario_def(CitySession::picker_scenario(0)).id != SC_LEARN_TO_PLAY ||
+            CitySession::picker_scenario(1) != 0 ||
+            CitySession::picker_scenario(CitySession::kScenarioCount - 1) != CitySession::kScenarioCount - 2) {
+            return fail(27, "Learn to Play is not the first picker row");
+        }
+        bool seen[CitySession::kScenarioCount] = {};
+        for (int row = 0; row < CitySession::kScenarioCount; ++row) {
+            seen[CitySession::picker_scenario(row)] = true;
+        }
+        for (bool hit : seen) {
+            if (!hit) {
+                return fail(28, "the picker order drops a scenario");
+            }
+        }
+        bool learn = false;
+        for (const WelcomeRow &row : welcome_rows()) {
+            learn = learn || row.first.id == kWelcomeLearn || row.second.id == kWelcomeLearn;
+        }
+        if (!learn || !is_dialog_button(kWelcomeLearn)) {
+            return fail(29, "Welcome has no Learn to Play button");
+        }
+        // Release #16: Settings pairs with How to play (title art is untouched).
+        bool settings = false;
+        for (const WelcomeRow &row : welcome_rows()) {
+            if (row.first.id == kWelcomeHowTo && row.second.id == kWelcomeSettings) {
+                settings = true;
+            }
+        }
+        if (!settings || !is_dialog_button(kWelcomeSettings)) {
+            return fail(41, "Welcome has no Settings button beside How to play");
+        }
+    }
+    // Release-readiness #9: City 2's bad news goes under Challenges.
+    {
+        static const char *bad[] = {
+            "A lion has escaped from the zoo!", "The lion is eating residents! Send the police.",
+            "An Autonomous Zone has formed!", "The Autonomous Zone has grown. Police coverage there is too low.",
+            "Prison break! Escaped inmates are setting fires.", "Fire spreading. Send help.",
+            "Traffic is getting worse.",
+        };
+        static const char *good[] = {
+            "Police caught the lion and returned it to the zoo.", "Zookeepers caught the lion and took it home.",
+            "The Autonomous Zone has ended. Police have restored order.",
+            "The Autonomous Zone is shrinking under police pressure.", "The escaped inmates are back behind bars.",
+            "Population reached 10,000.",
+        };
+        for (const char *line : bad) {
+            if (!civic::digest_line_is_bad(line)) {
+                std::fprintf(stderr, "not bad: %s\n", line);
+                return fail(30, "bad news shows under Highlights");
+            }
+        }
+        for (const char *line : good) {
+            if (civic::digest_line_is_bad(line)) {
+                std::fprintf(stderr, "bad: %s\n", line);
+                return fail(31, "good news shows under Challenges");
+            }
+        }
+    }
+
     // #6: grouped digits in every meter form.
     tutorial::Status s;
     s.population = 1440;
@@ -152,6 +269,152 @@ int main()
     CitySession seattle;
     if (!seattle.load_scenario(SC_SEATTLE) || seattle.tax() != 7) {
         return fail(15, "Seattle's start tax changed");
+    }
+
+    // Release #11: Inspect on water and trees says what can be done there.
+    {
+        inspect_report::Facts water;
+        water.kind = inspect_report::Kind::Water;
+        if (inspect_report::make(water).status != "Bridge or power line only") {
+            return fail(32, "Inspect on water does not say bridge or power line only");
+        }
+        inspect_report::Facts trees;
+        trees.kind = inspect_report::Kind::Trees;
+        if (inspect_report::make(trees).status != "Bulldoze to build") {
+            return fail(33, "Inspect on trees does not say bulldoze to build");
+        }
+    }
+
+    // Release #12: mid-year, Previous funds is this year's opening treasury.
+    {
+        CitySession spend;
+        if (!spend.load_scenario(SC_LEARN_TO_PLAY)) {
+            return fail(34, "could not load Brookside for the budget check");
+        }
+        const std::int64_t opening = spend.budget().funds;
+        for (int x = 2; x < 8; ++x) {
+            spend.use_tool(TOOL_ROAD, x, 2);
+            spend.end_tool_stroke();
+        }
+        const CitySession::BudgetBook book = spend.budget();
+        if (book.funds >= opening) {
+            return fail(35, "building road did not spend money");
+        }
+        if (book.previous_funds != opening) {
+            std::fprintf(stderr, "previous %lld current %lld opening %lld\n", (long long)book.previous_funds,
+                         (long long)book.funds, (long long)opening);
+            return fail(36, "Previous funds is not the year's opening treasury");
+        }
+    }
+
+    // Release #15: a met goal says so on every meter, and only then.
+    {
+        int met_count = 0;
+        for (int i = 0; i < CitySession::kScenarioCount; ++i) {
+            const int id = CitySession::scenario_def(i).id;
+            if (id == SC_LEARN_TO_PLAY) {
+                continue;
+            }
+            CitySession s;
+            if (!s.load_scenario(id)) {
+                return fail(37, "a scenario did not load for the goal-met check");
+            }
+            const bool met = s.scenario_goal_met_now();
+            met_count += met ? 1 : 0;
+            const std::string want = (id == SC_TOKYO || id == SC_RIO)
+                                         ? std::string("goal met so far")
+                                         : "goal met, hold until " + std::to_string(s.scenario_deadline_year());
+            const bool long_note = s.scenario_meter().find(want) != std::string::npos;
+            const bool short_note = s.scenario_meter_short().find("goal met, hold") != std::string::npos;
+            if (long_note != met || short_note != met) {
+                return fail(38, "the goal-met note does not match the deadline test");
+            }
+            if ((id == SC_DULLSVILLE || id == SC_BERN) && met) {
+                return fail(39, "Dullsville or Bern (traffic not measured) reads as met at the start");
+            }
+        }
+        if (met_count == 0) {
+            return fail(40, "no scenario read as met (Tokyo and Rio start above 500)");
+        }
+    }
+
+    // Release #18: undo the last stroke. Before the clock moves: tiles back
+    // and the full cost refunded. After the clock moves: tiles back, no refund.
+    {
+        CitySession u;
+        if (!u.load_scenario(SC_LEARN_TO_PLAY)) {
+            return fail(42, "could not load Brookside for undo");
+        }
+        const int y = tutorial::kRoadY;
+        const int x0 = tutorial::kRoadX0;
+        std::vector<int> before;
+        for (int x = x0 - 6; x < x0 + 14; ++x) {
+            for (int yy = y - 6; yy <= y + 6; ++yy) {
+                before.push_back(u.map_value(x, yy));
+            }
+        }
+        auto same_map = [&]() {
+            std::size_t i = 0;
+            for (int x = x0 - 6; x < x0 + 14; ++x) {
+                for (int yy = y - 6; yy <= y + 6; ++yy) {
+                    if (u.map_value(x, yy) != before[i++]) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        const long long f0 = u.funds();
+        u.use_tool(TOOL_ROAD, x0, y);
+        u.drag_tool(TOOL_ROAD, x0, y, x0 + 7, y);
+        u.end_tool_stroke();
+        const long long f1 = u.funds();
+        if (f1 >= f0 || !u.can_undo() || same_map()) {
+            return fail(43, "the road stroke did not build or was not recorded");
+        }
+        const CitySession::UndoResult r = u.undo_last_stroke();
+        if (!r.ok || r.refunded != f0 - f1 || u.funds() != f0 || !same_map() || u.can_undo()) {
+            std::fprintf(stderr, "undo ok=%d refunded=%lld spent=%lld funds %lld->%lld->%lld\n", r.ok ? 1 : 0,
+                         r.refunded, r.spent, f0, f1, u.funds());
+            return fail(44, "undo before the clock moved did not restore tiles and refund the cost");
+        }
+        // Bulldoze is undoable too: build, then bulldoze it, undo the bulldoze.
+        u.drag_tool(TOOL_ROAD, x0, y, x0 + 3, y);
+        u.end_tool_stroke();
+        const long long fb = u.funds();
+        u.use_tool(TOOL_BULLDOZER, x0 + 1, y);
+        u.end_tool_stroke();
+        const int dozed = u.map_value(x0 + 1, y);
+        const CitySession::UndoResult rb = u.undo_last_stroke();
+        if (!rb.ok || u.map_value(x0 + 1, y) == dozed || u.funds() != fb) {
+            return fail(45, "undoing a bulldoze did not put the road back at no net cost");
+        }
+        if (!u.undo_last_stroke().ok || !same_map() || u.funds() != f0) {
+            return fail(46, "the second undo (the stack) did not take the road back");
+        }
+        // After the clock moves: tiles back, no refund.
+        u.drag_tool(TOOL_ROAD, x0, y, x0 + 7, y);
+        u.end_tool_stroke();
+        const long long f2 = u.funds();
+        const long long t0 = u.city_time();
+        u.set_speed(3);
+        for (int i = 0; i < 400 && u.city_time() == t0; ++i) {
+            u.tick();
+        }
+        u.set_speed(0);
+        if (u.city_time() == t0) {
+            return fail(47, "the clock did not move in the undo test");
+        }
+        const long long f3 = u.funds();
+        const CitySession::UndoResult late = u.undo_last_stroke();
+        if (!late.ok || late.refunded != 0 || !late.clock_moved || u.funds() != f3 || !same_map()) {
+            std::fprintf(stderr, "late ok=%d refunded=%lld moved=%d funds %lld %lld %lld '%s'\n", late.ok ? 1 : 0,
+                         late.refunded, late.clock_moved ? 1 : 0, f2, f3, u.funds(), late.message.c_str());
+            return fail(48, "undo after the clock moved refunded money or did not restore tiles");
+        }
+        if (u.undo_last_stroke().ok) {
+            return fail(49, "undo with an empty stack did something");
+        }
     }
 
     std::printf("review_nov24 ok\n");

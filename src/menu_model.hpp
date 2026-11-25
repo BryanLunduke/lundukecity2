@@ -56,6 +56,7 @@ enum class Action {
     PoliceMap, FireMap, Population, Growth, Messages,
     ClassicLook, SvgaLook, SpookyLook,
     NightMode,
+    Undo,
     RecentIndex
 };
 
@@ -116,6 +117,7 @@ inline constexpr MenuEntry kSystem[] = {
      static_cast<int>(AccelMod::Ctrl) | static_cast<int>(AccelMod::Shift), 0},
     {"Play _scenario…", nullptr, ItemKind::Normal, Action::Scenario, AccelKey::None, 0, 0},
     {"Rename cit_y…", nullptr, ItemKind::Normal, Action::Rename, AccelKey::None, 0, 0},
+    {"_Undo last build", "Ctrl+Z", ItemKind::Normal, Action::Undo, AccelKey::None, 0, 0},
     {nullptr, nullptr, ItemKind::Separator, Action::None, AccelKey::None, 0, 0},
     {"_Quit", "Ctrl+Q", ItemKind::Normal, Action::Quit, AccelKey::Q, static_cast<int>(AccelMod::Ctrl), 0},
 };

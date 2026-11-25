@@ -688,6 +688,11 @@ inline bool digest_line_is_bad(const std::string &text)
         "Blackouts",     "Brownouts",     "out of funds", "needed",      "demand",        "too high",
         "deteriorating", "need funding",  "Unemployment", "Traffic jams", "Heavy traffic", "very high",
         "needs a",       "needs an",      "Build a power plant",
+        // Release nov24 #9: City 2's own bad news. The good-news lines
+        // ("caught the lion", "Autonomous Zone has ended", "back behind
+        // bars") must not match.
+        "lion has escaped", "lion is eating", "Autonomous Zone has formed", "Autonomous Zone has grown",
+        "Prison break",     "Fire spreading", "getting worse",
     };
     for (const char *key : keys) {
         if (text.find(key) != std::string::npos) {

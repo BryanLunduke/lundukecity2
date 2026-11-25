@@ -31,6 +31,7 @@
 #include "view_math.hpp"
 
 #include "micropolis.h"
+#include "tutorial_goals.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -892,6 +893,52 @@ void Shell::center_on_fraction(double fx, double fy)
     scroll_x_ = scroll_for_map_fraction(fx, ax, view_x_, map_letterbox_x(), map_.pixel_width());
     scroll_y_ = scroll_for_map_fraction(fy, ay, view_y_, map_letterbox(view_h_, map_.pixel_height()), map_.pixel_height());
     clamp_scroll();
+}
+
+void Shell::start_scenario(int id_num)
+{
+    ++city_generation_;
+    reset_touch_state();
+    clear_transient_message();
+    if (!session_.load_scenario(id_num)) {
+        info_title_ = "Play Scenario";
+        info_body_ = "Could not start that scenario.";
+        open_dialog(Dialog::Info);
+        return;
+    }
+    welcome_gate_ = false;
+    city_chosen_ = true;
+    adopt_loaded_speed(session_.speed());
+    if (id_num == SC_LEARN_TO_PLAY) {
+        center_on_learn_field();
+    } else {
+        center_on_fraction(0.5, 0.5);
+    }
+    sync_title();
+    begin_city_reveal();
+}
+
+void Shell::center_on_learn_field()
+{
+    // The desktop hint is pinned over the top of the map (about three
+    // lines at the default 1011x601 window). Put the pad's first teaching
+    // rows (the park at kParkY) just below it, and keep as much of the pad
+    // in view as the window allows. The Deck's hint is a short chip, so it
+    // keeps the plain field centre.
+    double cy = tutorial::kFieldY + 0.5;
+    const int tile = std::max(1, map_.tile_size());
+    if (!handheld_ && view_h_ > 0) {
+        const double rows = static_cast<double>(view_h_) / tile;
+        const double hint_rows = static_cast<double>(hud_top_ + dp(104)) / tile;
+        double top = tutorial::kParkY - 1 - hint_rows;
+        // A tall window has room to spare: do not push the pad lower than
+        // the plain centre would.
+        top = std::min(top, cy - rows / 2.0);
+        // A short window: keep the plant row in view before the pad margin.
+        top = std::max(top, tutorial::kPlantY + 2 - rows);
+        cy = top + rows / 2.0;
+    }
+    center_on_fraction((tutorial::kFieldX + 0.5) / CitySession::kWorldW, cy / CitySession::kWorldH);
 }
 
 void Shell::note_view_for_save()
@@ -2084,6 +2131,12 @@ void Shell::apply_action(Action action)
     case Action::Rename:
         open_dialog(Dialog::Rename);
         break;
+    case Action::Undo:
+        // Release nov24 #18: the last build or bulldoze stroke.
+        if (!welcome_gate_ && !terrain_edit_) {
+            session_.undo_last_stroke();
+        }
+        break;
     case Action::Quit:
         // A saved city used to leave on one pad press. Ask first. An unsaved
         // city already gets the save prompt, which is the confirmation.
@@ -2399,7 +2452,8 @@ void Shell::on_dialog_button(int id)
                 }
             }
             refresh_ui_scale();
-            close_dialog();
+            // Release nov24 #16: from Welcome, back to Welcome.
+            dismiss_dialog();
             return;
         }
         if (id == kOk || id == kSave) {
@@ -2408,7 +2462,7 @@ void Shell::on_dialog_button(int id)
             refresh_ui_scale();
             schedule_autosave();
             save_window_settings();
-            close_dialog();
+            dismiss_dialog();
             return;
         }
     }
@@ -2538,6 +2592,18 @@ void Shell::on_dialog_button(int id)
         }
         if (id == kWelcomeHowTo) {
             open_dialog(Dialog::HowToPlay);
+            return;
+        }
+        if (id == kWelcomeSettings) {
+            // Release nov24 #16: closing Settings returns to Welcome.
+            open_dialog(Dialog::Settings);
+            return;
+        }
+        if (id == kWelcomeLearn) {
+            // Release nov24 #7: straight into Brookside, as Play does from
+            // the picker's (now first) Learn to Play row.
+            close_dialog();
+            start_scenario(SC_LEARN_TO_PLAY);
             return;
         }
         // Quit, B, and Escape ask first. A second B from New City or the
@@ -2742,22 +2808,7 @@ void Shell::on_dialog_button(int id)
             const int index = scenario_index_;
             close_dialog();
             if (index >= 0 && index < CitySession::kScenarioCount) {
-                const int id_num = CitySession::scenario_def(index).id;
-                ++city_generation_;
-                reset_touch_state();
-                clear_transient_message();
-                if (!session_.load_scenario(id_num)) {
-                    info_title_ = "Play Scenario";
-                    info_body_ = "Could not start that scenario.";
-                    open_dialog(Dialog::Info);
-                } else {
-                    welcome_gate_ = false;
-                    city_chosen_ = true;
-                    adopt_loaded_speed(session_.speed());
-                    center_on_fraction(0.5, 0.5);
-                    sync_title();
-                    begin_city_reveal();
-                }
+                start_scenario(CitySession::scenario_def(CitySession::picker_scenario(index)).id);
             }
             return;
         }

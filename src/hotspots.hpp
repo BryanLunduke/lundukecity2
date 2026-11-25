@@ -95,6 +95,9 @@ enum HotspotId : int {
     // About: opens the License viewer.
     kViewLicense = 163,
     kWelcomeHowTo = 164,
+    // Release nov24 #7 / #16: Learn to Play and Settings on the launch screen.
+    kWelcomeLearn = 165,
+    kWelcomeSettings = 166,
 
     // The history chart. Left and right read a value. It is not a button.
     kGraphPlot = 180,
@@ -132,7 +135,7 @@ enum HotspotId : int {
 
 inline bool is_dialog_button(int id)
 {
-    return id >= kCancel && id <= kWelcomeHowTo;
+    return id >= kCancel && id <= kWelcomeSettings;
 }
 
 // A control that belongs to the open dialog. Everything else is part of the

@@ -44,15 +44,15 @@ inline double icon_fit_scale(int source, int slot, bool &smooth)
     return icon_pixel_scale(source, slot);
 }
 
-// Toolbar buttons with a sprite: every palette entry but Query.
-inline constexpr int kToolIconCount = 26;
+// Toolbar buttons with a sprite: every palette entry, Inspect (Query) last.
+inline constexpr int kToolIconCount = 27;
 
 // Short name drawn when the sprite file is missing, so the button is not blank.
 inline const char *tool_icon_fallback_label(int index)
 {
     static const char *labels[kToolIconCount + 1] = {
         "BD", "RD", "RL", "PW", "R",  "C",  "I",  "DC", "PK", "BP", "FN", "FD", "PO", "PR",
-        "CO", "NU", "MN", "ZO", "AM", "CA", "ST", "MA", "LB", "MH", "AP", "SP", "?",
+        "CO", "NU", "MN", "ZO", "AM", "CA", "ST", "MA", "LB", "MH", "AP", "SP", "IN", "?",
     };
     if (index < 0 || index > kToolIconCount) {
         return "?";
@@ -74,6 +74,7 @@ inline void paint_tool_fallback(cairo_t *cr, int index, double x, double y, doub
         {0.55, 0.45, 0.20}, {0.70, 0.30, 0.45}, {0.60, 0.15, 0.20}, {0.20, 0.55, 0.28},
         {0.25, 0.45, 0.70}, {0.50, 0.32, 0.20}, {0.62, 0.55, 0.40},                     // special
         {0.35, 0.45, 0.62}, {0.12, 0.40, 0.62},                                         // ports
+        {0.62, 0.52, 0.30},                                                             // inspect
         {0.25, 0.25, 0.28},
     };
     const int clamped = std::max(0, std::min(index, kToolIconCount));
@@ -157,7 +158,7 @@ private:
     int hover_ms_ = 0;
 };
 
-// File stem under tool-icons/ for a palette index (Query has none).
+// File stem under tool-icons/ for a palette index (Query is "inspect").
 const char *tool_icon_stem(int index);
 // Toolbar and menu sprites, loaded by file stem under tool-icons/.
 cairo_surface_t *tool_icon_named(const char *stem);

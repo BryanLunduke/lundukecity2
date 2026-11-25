@@ -316,10 +316,14 @@ CityGlance city_glance(const std::string &path)
             break;
         }
     }
+    // Release nov24 #8: the file stores the map column by column (x * 100 + y);
+    // the swatch is row-major (y * 120 + x), as every painter reads it.
     glance.swatch.resize(static_cast<std::size_t>(120 * 100));
-    for (int i = 0; i < 120 * 100; ++i) {
-        const int raw = be_short(data.data() + kMap + i * 2);
-        glance.swatch[static_cast<std::size_t>(i)] = tile_color(raw);
+    for (int x = 0; x < 120; ++x) {
+        for (int y = 0; y < 100; ++y) {
+            const int raw = be_short(data.data() + kMap + (x * 100 + y) * 2);
+            glance.swatch[static_cast<std::size_t>(y * 120 + x)] = tile_color(raw);
+        }
     }
     glance.summary = city_glance_month(glance.month) + std::string(" ") + std::to_string(glance.year) + "   Pop " +
                      grouped(glance.population) + " " + class_name(glance.population) + "   $" + grouped(glance.funds);

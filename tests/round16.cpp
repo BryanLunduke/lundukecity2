@@ -59,8 +59,8 @@ int fail(int code, const char *message)
 
 int main()
 {
-    if (menu_table::actionable_count() != 57) {
-        return fail(1, "the menu does not have 57 actionable rows");
+    if (menu_table::actionable_count() != 58) { // +1: System > Undo last build (release #18)
+        return fail(1, "the menu does not have 58 actionable rows");
     }
     if (kDefaultToolIndex != 26 || kToolCount != 27) {
         return fail(2, "a new city does not start on Query");
@@ -180,6 +180,29 @@ int main()
         if (!glance.ok || glance.swatch.size() != 120u * 100u || glance.summary.find("Pop ") == std::string::npos ||
             glance.summary.find("$") == std::string::npos) {
             return fail(19, "the file list could not read a saved city");
+        }
+        {
+            // Release nov24 #8: the swatch is row-major and matches the map
+            // (it was transposed, so every portrait was scrambled).
+            auto water = [](int raw) {
+                const int t = raw & 0x03ff;
+                return t >= RIVER && t <= WATER_HIGH;
+            };
+            const std::uint32_t water_rgb = 0x0F3DC7u;
+            int agree = 0;
+            int wet = 0;
+            for (int y = 0; y < 100; ++y) {
+                for (int x = 0; x < 120; ++x) {
+                    const bool map_wet = water(loaded.map_value(x, y));
+                    const bool swatch_wet = (glance.swatch[static_cast<std::size_t>(y * 120 + x)] & 0xFFFFFFu) == water_rgb;
+                    agree += map_wet == swatch_wet ? 1 : 0;
+                    wet += map_wet ? 1 : 0;
+                }
+            }
+            if (wet < 200 || agree < 120 * 100 - 2) {
+                std::fprintf(stderr, "swatch agrees on %d of 12000 tiles (%d water)\n", agree, wet);
+                return fail(90, "the saved-city portrait does not match the map");
+            }
         }
         const auto junk_path = dir / "not-a-city.cty";
         {

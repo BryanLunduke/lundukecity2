@@ -2748,6 +2748,8 @@ public:
 
     void doScenarioScore(Scenario type);
 
+    bool scenarioGoalMet(Scenario type, bool &known);
+
     void sendMessage(
         short Mnum,
         short x=NOWHERE, short y=NOWHERE,

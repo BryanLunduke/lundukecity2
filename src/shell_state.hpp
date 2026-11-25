@@ -207,6 +207,10 @@ private:
     void retarget_recent(const std::string &path, const std::string &replacement);
     void load_recent();
     void center_on_fraction(double fx, double fy);
+    // Release nov24 #6: Learn to Play opens with the teaching pad below the pinned hint.
+    void center_on_learn_field();
+    // Load a scenario by id (SC_*) and show it, as Play in the picker does.
+    void start_scenario(int id_num);
     // Hand the current camera to the session so the next save keeps it,
     // and put back the camera a loaded save kept (else the map centre).
     void note_view_for_save();

@@ -13,7 +13,8 @@
 // classic query reports), so it changes nothing about the simulation.
 namespace inspect_report {
 
-enum class Kind { Land, Residential, Commercial, Industrial, Building, Network, Park, Water, Hazard };
+// Trees: release nov24 #11 (they were "Open land", but need bulldozing first).
+enum class Kind { Land, Residential, Commercial, Industrial, Building, Network, Park, Water, Hazard, Trees };
 
 enum class Tone { Good, Neutral, Bad };
 
@@ -224,7 +225,11 @@ inline Report make(const Facts &facts)
                 report.tone = Tone::Good;
                 break;
             case Kind::Water:
-                report.status = "Water";
+                // Release nov24 #11: not "Water" again under the name.
+                report.status = "Bridge or power line only";
+                break;
+            case Kind::Trees:
+                report.status = "Bulldoze to build";
                 break;
             case Kind::Hazard:
                 report.status = "Clear it";

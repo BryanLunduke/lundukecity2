@@ -46,15 +46,17 @@ const ToolDef kTools[] = {
     // Ports
     {TOOL_AIRPORT, "Airport", 10000, "Airport: $10,000"},
     {TOOL_SEAPORT, "Seaport", 3000, "Seaport: $3,000"},
-    {TOOL_QUERY, "Inspect", 0, "Inspect"},
+    {TOOL_QUERY, "Inspect", 0, "Inspect: click any zone or building to see how it is doing. Free"},
 };
 
 const int kToolCount = static_cast<int>(sizeof(kTools) / sizeof(kTools[0]));
 const int kDefaultToolIndex = 26; // Query. A first click reports the tile and does not build.
-// Query has no toolbar button. It is the inspect mode with no build tool
-// picked: the hover card shows what is under the pointer, Q and the pad
-// shoulder buttons still reach it, and nothing is built.
-const int kPaletteToolCount = kToolCount - 1;
+// Query is the inspect mode with no build tool picked: the hover card shows
+// what is under the pointer and nothing is built. Release nov24 #3: it has a
+// toolbar button too (its own INSPECT section, after Ports), so Learn to
+// Play's "Inspect" step names something the player can see. Q and the pad
+// shoulder buttons still reach it.
+const int kPaletteToolCount = kToolCount;
 
 const ToolDef *tool_by_index(int index)
 {

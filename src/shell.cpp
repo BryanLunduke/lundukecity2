@@ -1773,11 +1773,12 @@ void Shell::loop()
                 menu_.alt_shown = true;
                 gamepad_nav_ = deck_;
             } else if (demo_ == "scenario") {
-                scenario_index_ = 2;
-                list_index_ = 2;
+                // Hamburg, as before Learn to Play moved to the top row.
+                scenario_index_ = 3;
+                list_index_ = 3;
                 list_scroll_ = 0;
                 open_dialog(Dialog::Scenario);
-                focus_id_ = kListItem + 2;
+                focus_id_ = kListItem + 3;
                 gamepad_nav_ = deck_;
             } else if (demo_ == "welcome") {
                 apply_look();
@@ -2159,9 +2160,10 @@ void Shell::loop()
                 menu_.open_menu = 4;
                 menu_.cursor = 0;
             } else if (demo_ == "learn_picker") {
-                scenario_index_ = CitySession::kScenarioCount - 1;
+                // Learn to Play is the first picker row (release nov24 #7).
+                scenario_index_ = 0;
                 list_index_ = scenario_index_;
-                list_scroll_ = std::max(0, scenario_index_ - 2);
+                list_scroll_ = 0;
                 open_dialog(Dialog::Scenario);
                 focus_id_ = kListItem + scenario_index_;
                 gamepad_nav_ = deck_;
@@ -2219,8 +2221,7 @@ void Shell::loop()
                     center_on_fraction((tutorial::kWinViewX + 0.5) / CitySession::kWorldW,
                                        (tutorial::kWinViewY + 0.5) / CitySession::kWorldH);
                 } else {
-                    center_on_fraction((tutorial::kFieldX + 0.5) / CitySession::kWorldW,
-                                       (tutorial::kFieldY + 0.5) / CitySession::kWorldH);
+                    center_on_learn_field();
                 }
                 if (const char *zoom = std::getenv("LUNDUKE_CITY2_ZOOM")) {
                     map_.set_tile_size(std::atoi(zoom));
@@ -2722,6 +2723,27 @@ void Shell::handle_event(const SDL_Event &event)
                 break;
             }
         }
+        if (dialog_ != Dialog::None && !chord.empty()) {
+            // Release nov24 #10: Quit and Save reach through a read-only card
+            // (Year in Review, Budget, graphs, help pages). The card closes
+            // as Escape would close it, then the command runs. Dialogs with
+            // a text field or their own question keep the key.
+            const int act = key_act_for_token(binds_, chord);
+            const bool card = dialog_ == Dialog::Budget || dialog_ == Dialog::Graphs ||
+                              dialog_ == Dialog::Evaluation || dialog_ == Dialog::Info || dialog_ == Dialog::Outcome ||
+                              dialog_ == Dialog::Messages || dialog_ == Dialog::Ledger || dialog_ == Dialog::Query ||
+                              dialog_ == Dialog::HowToPlay || dialog_ == Dialog::About || dialog_ == Dialog::Controls ||
+                              dialog_ == Dialog::Settings || dialog_ == Dialog::License || dialog_ == Dialog::Overlay;
+            if (card && !welcome_gate_ && (act == KeyQuit || act == KeySave)) {
+                for (int guard = 0; guard < 4 && dialog_ != Dialog::None; ++guard) {
+                    cancel_dialog();
+                }
+                if (dialog_ == Dialog::None) {
+                    apply_key_act(act);
+                }
+                break;
+            }
+        }
         if (dialog_ != Dialog::None) {
             if (accel == AccelKey::Escape) {
                 cancel_dialog();
@@ -2874,6 +2896,12 @@ void Shell::handle_event(const SDL_Event &event)
             break;
         }
         if (!menu_.open() && take_bound_key(key, mods)) {
+            break;
+        }
+        if (!menu_.open() && dialog_ == Dialog::None && !welcome_gate_ && !chord.empty() && chord == "ctrl+z" &&
+            key_act_for_token(binds_, chord) < 0) {
+            // Release nov24 #18: undo the last build or bulldoze stroke.
+            apply_action(Action::Undo);
             break;
         }
         if (mods == 0 && !menu_.open() && active_field() == nullptr) {

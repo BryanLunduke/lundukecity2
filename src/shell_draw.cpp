@@ -52,6 +52,7 @@
 #include "version.hpp"
 #include "view_math.hpp"
 #include "zoom_keys.hpp"
+#include "welcome_rows.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -1350,7 +1351,7 @@ void Shell::draw_dialog(cairo_t *cr)
         // The last city gets a card with its map, date, people and funds
         // above the five plain choices.
         const double card_h = continued.empty() ? 0.0 : static_cast<double>(dp(92));
-        const int rows = 5;
+        const int rows = kWelcomeRowCount;
         const double plaque_h = dp(16) + (card_h > 0 ? card_h + dp(10) : 0.0) + rows * bh + (rows - 1) * gap + dp(14);
         const double plaque_w = std::min(static_cast<double>(card_h > 0 ? dp(480) : dp(420)),
                                          std::max(1.0, win_w_ - static_cast<double>(dp(48))));
@@ -1472,21 +1473,25 @@ void Shell::draw_dialog(cairo_t *cr)
             paint_text(cr, ui_font(), detail, text_x, ty, 0.30, 0.21, 0.06, -1);
             by += card_h + dp(10);
         }
-        if (dark) {
-            const struct {
-                const char *label;
-                int id;
-            } rows_list[] = {{"_Start a new city", kWelcomeNew},
-                             {"_Load a saved city", kWelcomeLoad},
-                             {"Select a _scenario", kWelcomeScenario},
-                             {"How to _play", kWelcomeHowTo},
-                             {"_Quit", kWelcomeQuit}};
-            for (const auto &row : rows_list) {
-                push_hot(bx, by, bw, bh, row.id);
-                push_focus(row.id);
-                const bool focused = focus_id_ == row.id;
-                const bool lit = focused || hover_id_ == row.id;
-                round_box(bx, by, bw, bh, dp(6));
+        // Five rows; Learn to Play shares the first row with New city
+        // (release nov24 #7), so the plaque keeps its height and the art
+        // stays as it was. Focus order runs left to right, top to bottom.
+        const auto &rows_list = welcome_rows();
+        for (const WelcomeRow &row : rows_list) {
+            const int cells = row.second.id != 0 ? 2 : 1;
+            const double cw = cells == 2 ? (bw - gap) / 2.0 : bw;
+            for (int c = 0; c < cells; ++c) {
+                const WelcomeCell &cell = c == 0 ? row.first : row.second;
+                const double cx = bx + c * (cw + gap);
+                if (!dark) {
+                    button(cr, cx, by, cw, bh, cell.label, cell.id, false);
+                    continue;
+                }
+                push_hot(cx, by, cw, bh, cell.id);
+                push_focus(cell.id);
+                const bool focused = focus_id_ == cell.id;
+                const bool lit = focused || hover_id_ == cell.id;
+                round_box(cx, by, cw, bh, dp(6));
                 if (lit) {
                     cairo_set_source_rgb(cr, 0x3A / 255.0, 0x4B / 255.0, 0x63 / 255.0);
                 } else {
@@ -1501,22 +1506,12 @@ void Shell::draw_dialog(cairo_t *cr)
                     cairo_set_line_width(cr, 1.0);
                 }
                 cairo_stroke(cr);
-                const TextMetrics m = measure_text(cr, ui_font(), strip_mnemonic(row.label), -1);
-                paint_mnemonic(cr, ui_font(), row.label, bx + (bw - m.width) / 2.0, by + (bh - m.height) / 2.0,
+                const TextMetrics m = measure_text(cr, ui_font(), strip_mnemonic(cell.label), -1);
+                paint_mnemonic(cr, ui_font(), cell.label, cx + (cw - m.width) / 2.0, by + (bh - m.height) / 2.0,
                                menu_.alt_shown, 0xEE / 255.0, 0xE8 / 255.0, 0xDA / 255.0);
-                by += bh + gap;
             }
-            return;
+            by += bh + gap;
         }
-        button(cr, bx, by, bw, bh, "_Start a new city", kWelcomeNew, false);
-        by += bh + gap;
-        button(cr, bx, by, bw, bh, "_Load a saved city", kWelcomeLoad, false);
-        by += bh + gap;
-        button(cr, bx, by, bw, bh, "Select a _scenario", kWelcomeScenario, false);
-        by += bh + gap;
-        button(cr, bx, by, bw, bh, "How to _play", kWelcomeHowTo, false);
-        by += bh + gap;
-        button(cr, bx, by, bw, bh, "_Quit", kWelcomeQuit, false);
         return;
     }
     if (dialog_ == Dialog::BulldozeConfirm) {
@@ -2035,7 +2030,9 @@ void Shell::draw_dialog(cairo_t *cr)
             if (i < 0 || i >= count) {
                 break;
             }
-            const CitySession::ScenarioDef &def = CitySession::scenario_def(i);
+            // Release nov24 #7: rows are picker order (Learn to Play first).
+            const int def_index = CitySession::picker_scenario(i);
+            const CitySession::ScenarioDef &def = CitySession::scenario_def(def_index);
             const double ry = list_top + row * row_h;
             const int id = kListItem + row;
             const double row_box_h = std::max(1.0, row_h - dp(4));
@@ -2052,7 +2049,7 @@ void Shell::draw_dialog(cairo_t *cr)
             }
             const double tx = x + dp(12);
             const double ty = ry + std::max(0.0, (row_box_h - preview_h) / 2.0);
-            cairo_surface_t *preview = scenario_preview(i);
+            cairo_surface_t *preview = scenario_preview(def_index);
             if (preview != nullptr) {
                 cairo_save(cr);
                 cairo_rectangle(cr, tx, ty, preview_w, preview_h);
@@ -2109,7 +2106,7 @@ void Shell::draw_dialog(cairo_t *cr)
                        static_cast<int>(text_w));
         }
         {
-            const CitySession::ScenarioDef &chosen = CitySession::scenario_def(scenario_index_);
+            const CitySession::ScenarioDef &chosen = CitySession::scenario_def(CitySession::picker_scenario(scenario_index_));
             const double dy = buttons_y - detail_h;
             // Full goal, always visible: the reserved height is the longest
             // wrapped goal, so this is never folded or cut mid-sentence.
@@ -3098,8 +3095,17 @@ void Shell::draw_dialog(cairo_t *cr)
         const double buttons_h = dp(36);
         const double chrome = dp(40) + margin + footer_h + dp(8) + buttons_h + margin;
         const double max_h = std::max(chrome + dp(48), band_h - 2.0 * margin);
-        const double view_h = std::max(static_cast<double>(dp(48)), std::min(tallest, max_h - chrome));
+        double view_h = std::max(static_cast<double>(dp(48)), std::min(tallest, max_h - chrome));
         const double height = chrome + view_h;
+        // Release nov24 #13: a page that scrolls gives its "More below"
+        // hint a row of its own under the rows, so it never sits on top of
+        // the last visible key.
+        const std::string more = deck_ ? "\u25BC More below" : "\u25BC More below (scroll)";
+        const double hint_h = line_height(bold_font(), more, 4000) + dp(4);
+        const bool scrolls = content_h > view_h + 0.5;
+        if (scrolls && view_h - hint_h >= dp(48)) {
+            view_h -= hint_h;
+        }
         const DialogRect panel = place_dialog(win_w_, band_h, width, height, margin);
         const std::string panel_title = std::string("Controls \u2014 ") + heading;
         frame_panel(cr, panel.x, panel.y, panel.w, panel.h, panel_title.c_str());
@@ -3135,10 +3141,9 @@ void Shell::draw_dialog(cairo_t *cr)
             cairo_fill(cr);
             cairo_restore(cr);
             cairo_pattern_destroy(fade);
-            const std::string more = deck_ ? "\u25BC More below" : "\u25BC More below (scroll)";
             const int more_w = measure_text(cr, bold_font(), more, -1).width;
-            paint_text(cr, bold_font(), more, panel.x + (panel.w - more_w) / 2.0,
-                       body_top + view_h - line_height(bold_font(), more, more_w + 4) - dp(2), 0.45, 0.04, 0.02, more_w + 4);
+            paint_text(cr, bold_font(), more, panel.x + (panel.w - more_w) / 2.0, body_top + view_h + dp(2), 0.45, 0.04,
+                       0.02, more_w + 4);
         }
         if (controls_scroll_max_ > 0) {
             const double track_w = std::max(4.0, static_cast<double>(dp(6)));
@@ -3151,20 +3156,27 @@ void Shell::draw_dialog(cairo_t *cr)
                 body_top + travel * (static_cast<double>(controls_scroll_) / static_cast<double>(controls_scroll_max_));
             fill(cr, track_x, thumb_y, track_w, thumb_h, theme::chrome_select_r(), theme::chrome_select_g(), theme::chrome_select_b());
         }
-        const double footer_y = body_top + view_h + dp(4);
+        const double footer_y = body_top + view_h + (scrolls ? hint_h : 0.0) + dp(4);
         const double dot = dp(14);
         const double dot_gap = dp(8);
         const double dots_w = dot * 3 + dot_gap * 2;
         const double prev_w = dp(88);
         const double next_w = dp(88);
-        button(cr, panel.x + margin, footer_y, prev_w, dp(28), "_Prev", kControlsPrev, false);
+        // Release nov24 #13: no Prev on the first page, no Next on the last.
+        // Left and Right still wrap from the keyboard or pad.
+        const int position = ((controls_page_ % 3) + 3) % 3;
+        if (position > 0) {
+            button(cr, panel.x + margin, footer_y, prev_w, dp(28), "_Prev", kControlsPrev, false);
+        }
         const double dots_x = panel.x + (panel.w - dots_w) / 2.0;
         for (int page = 0; page < 3; ++page) {
             const int id = page == 0 ? kPageDot0 : page == 1 ? kPageDot1 : kPageDot2;
             const bool here = controls_page_index(controls_page_, deck_) == page;
             button(cr, dots_x + page * (dot + dot_gap), footer_y + dp(6), dot, dot, "", id, false, here);
         }
-        button(cr, panel.x + panel.w - margin - next_w, footer_y, next_w, dp(28), "_Next", kControlsNext, false);
+        if (position < 2) {
+            button(cr, panel.x + panel.w - margin - next_w, footer_y, next_w, dp(28), "_Next", kControlsNext, false);
+        }
         buttons_at(panel.x, panel.w, panel.y + panel.h - margin - buttons_h, {{"_Remap", kRemap}, {"_Close", kCancel}});
         return;
     }
@@ -6533,8 +6545,6 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
     const double tag_w = tag.width + dp(14);
     const double tag_h = tag.height + dp(6);
     const double tag_y = y + (status_h_ - tag_h) / 2.0;
-    slate_round(cr, dp(10), tag_y, tag_w, tag_h, dp(4), kSlateGold);
-    slate_text(cr, tag_font(), "NEWS", dp(10) + dp(7), tag_y + dp(3), kSlateDeep);
     const double news_x = dp(10) + tag_w + dp(10);
     std::string news = "No news yet.";
     const auto &notices = session_.notices();
@@ -6547,6 +6557,7 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
         news = staleness >= 2 ? std::string()
                               : latest.text + "   " + month_short(latest.month) + " " + std::to_string(latest.year);
     }
+    bool tip = false;
     if (notices.empty() || news.empty()) {
         static const char *tips[] = {
             "Tip: Space runs the city. Press it again to pause.",
@@ -6559,16 +6570,32 @@ void Shell::draw_news_line(cairo_t *cr, const std::string &tool_text, const std:
         const int tick = static_cast<int>(SDL_GetTicks() / 8000) + session_.game_month_index();
         news = tips[((tick % n) + n) % n];
         staleness = 1;
+        tip = true;
+    }
+    // Release nov24 #14: a tool hint wins over a tip. With a tool hint
+    // showing, the tip (and its NEWS tag) step aside, and real news keeps
+    // only a short lead, so the hint is not cut off at the default window.
+    const bool has_hint = !hint.empty();
+    if (tip && has_hint) {
+        news.clear();
+    }
+    if (!news.empty()) {
+        slate_round(cr, dp(10), tag_y, tag_w, tag_h, dp(4), kSlateGold);
+        slate_text(cr, tag_font(), "NEWS", dp(10) + dp(7), tag_y + dp(3), kSlateDeep);
     }
     std::string hint_line = hint;
-    const int news_w = measure_text(cr, ui_font(), news, -1).width;
-    const int hint_room = static_cast<int>(right - (news_x + std::min(news_w, dp(360)) + dp(24)));
+    const int news_w = news.empty() ? 0 : measure_text(cr, ui_font(), news, -1).width;
+    const double hint_left = news.empty() ? dp(10) : news_x + std::min(news_w, dp(160)) + dp(24);
+    const int hint_room = static_cast<int>(right - hint_left);
     hint_line = hint_room < dp(120) ? std::string() : fit_text(cr, ui_font(), hint_line, hint_room);
     if (!hint_line.empty()) {
         const int w = measure_text(cr, ui_font(), hint_line, -1).width;
         right -= w;
         slate_text(cr, ui_font(), hint_line, right, text_y, kSlateDim);
         right -= dp(24);
+    }
+    if (news.empty()) {
+        return;
     }
     const std::string shown_news = fit_text(cr, ui_font(), news, static_cast<int>(right - news_x));
     slate_text(cr, ui_font(), shown_news, news_x, text_y, notices.empty() || staleness > 0 ? kSlateDim : kSlateInk);

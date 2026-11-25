@@ -141,6 +141,15 @@ public:
     static constexpr int kSanDiegoZooLeft = 65;
     static constexpr int kSanDiegoZooTop = 46;
     static const ScenarioDef &scenario_def(int index);
+    // Release nov24 #7: the scenario picker lists Learn to Play (the last
+    // scenario_def) first, then the rest in their usual order. Row -> def index.
+    static int picker_scenario(int row)
+    {
+        if (row <= 0) {
+            return kScenarioCount - 1;
+        }
+        return row - 1 < kScenarioCount - 1 ? row - 1 : kScenarioCount - 1;
+    }
 
     // Difficulty is the engine GameLevel: easy $20,000, medium $12,500,
     // hard $7,500. It also changes the tax and road-cost tables.
@@ -314,6 +323,24 @@ public:
     };
     // One receipt for the stroke that just ended. False when nothing happened.
     bool take_placement_note(PlacementNote &out);
+    // Release nov24 #18: undo the last build or bulldoze stroke (a stack of
+    // up to kUndoDepth). The tiles the stroke changed go back. The money it
+    // cost comes back only while the city clock (cityTime) has not moved
+    // since the stroke began, so a paused city always gets a full refund
+    // and an undo after the sim has stepped restores tiles for free.
+    // Specials (and bulldozing one) are not undoable. A stroke whose tiles
+    // have since changed (growth, fire, a later build) is refused.
+    static constexpr int kUndoDepth = 16;
+    struct UndoResult {
+        bool ok = false;
+        long long refunded = 0;
+        long long spent = 0;
+        bool clock_moved = false;
+        std::string message;
+    };
+    bool can_undo() const { return !undo_stack_.empty(); }
+    int undo_depth() const { return static_cast<int>(undo_stack_.size()); }
+    UndoResult undo_last_stroke();
     int stroke_tiles() const { return stroke_tiles_; }
     long long stroke_spent() const { return stroke_spent_; }
     struct TileInspect {
@@ -536,6 +563,10 @@ public:
     // Tight forms for a 960-pixel band: "18k→100k · 30y".
     std::string scenario_clock_compact() const;
     std::string scenario_meter_compact() const;
+    // Release nov24 #15: the goal's deadline test holds right now. The
+    // meters add "goal met, hold until <year>"; nothing ends early.
+    bool scenario_goal_met_now() const;
+    int scenario_deadline_year() const;
 
     // Learn to Play: the first incomplete teaching step (0..6), or 7 when won.
     int tutorial_step() const;
@@ -685,6 +716,26 @@ private:
     bool dirty_ = false;
     int tool_stroke_placed_ = 0;
     long long stroke_spent_ = 0;
+    struct UndoCell {
+        int index;
+        unsigned short before;
+        unsigned short after;
+    };
+    struct UndoStroke {
+        std::vector<UndoCell> cells;
+        long long spent = 0;
+        long long city_time = 0;
+    };
+    std::vector<UndoStroke> undo_stack_;
+    std::vector<unsigned short> undo_before_;
+    bool undo_open_ = false;
+    bool undo_bad_ = false;
+    long long undo_funds_ = 0;
+    long long undo_time_ = 0;
+    int undo_x0_ = 0, undo_y0_ = 0, undo_x1_ = 0, undo_y1_ = 0;
+    void undo_begin(int x, int y);
+    void undo_finish();
+    void undo_reset();
     int stroke_tiles_ = 0;
     int stroke_tool_ = -1;
     int stroke_x_ = 0;
@@ -694,6 +745,12 @@ private:
     PlacementNote placement_note_;
     civic::Ledger ledger_;
     bool ledger_from_file_ = false;
+    std::string scenario_meter_base() const;
+    std::string scenario_meter_short_base() const;
+    std::string scenario_meter_compact_base() const;
+    // Treasury when this city was opened; Budget's Previous funds until a
+    // tax year records ledger_.start_funds (release nov24 #12).
+    std::int64_t opening_funds_ = -1;
     void finish_stroke_attempt(long long before, int tool, int x, int y);
     void catch_up_ledger(bool announce);
     bool powered_homes() const;
@@ -762,6 +819,8 @@ private:
     std::string tutorial_meter_;
     std::string tutorial_meter_short_;
     std::string tutorial_meter_compact_;
+    // Road tiles at the last refresh, for the Step 1 hint (release nov24 #4).
+    int tutorial_roads_ = 0;
     void reset_tutorial();
 
     bool query_has_tile_ = false;

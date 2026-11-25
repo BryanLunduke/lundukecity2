@@ -907,6 +907,51 @@ def zoo():
     return c
 
 
+def inspect():
+    """Inspect: a brass magnifier held over a little house, seen from above."""
+    c = Canvas()
+    Gd, Gl, Wd, R, W = 'gold', 'glass', 'wood', 'roofs', 'wall'
+    cx, cy = 7.5, 7.5
+    # handle first, so the rim overlaps its top end
+    for y in range(c.n):
+        for x in range(c.n):
+            t = ((x + 0.5 - cx) + (y + 0.5 - cy)) / 2.0  # along the diagonal
+            off = ((x + 0.5 - cx) - (y + 0.5 - cy)) / 1.414  # across it
+            if 5.2 <= t <= 9.6 and abs(off) <= 1.45:
+                s = 1 if off < -0.4 else (2 if off < 0.5 else 3)
+                c.put(x, y, Wd, s)
+    for y in range(c.n):
+        for x in range(c.n):
+            t = ((x + 0.5 - cx) + (y + 0.5 - cy)) / 2.0
+            off = ((x + 0.5 - cx) - (y + 0.5 - cy)) / 1.414
+            if 4.6 <= t <= 5.6 and abs(off) <= 1.7:
+                c.put(x, y, Gd, 2)
+    # lens: glass inside a brass rim lit from the top left
+    for y in range(c.n):
+        for x in range(c.n):
+            dx, dy = x + 0.5 - cx, y + 0.5 - cy
+            d = math.hypot(dx, dy)
+            lit = (-dx - dy) / max(d, 0.01)
+            if 4.4 < d <= 6.6:
+                s = 0 if lit > 0.97 else 1 if lit > -0.2 else 2 if lit > -0.9 else 3
+                if d > 5.6 and s < 3:
+                    s += 1  # the outer edge of the rim turns away from the light
+                c.put(x, y, Gd, s)
+            elif d <= 4.4:
+                c.put(x, y, Gl, 0 if lit > 0.6 and d > 3.2 else 1)
+    # a tiny house seen through the glass: roof ridge, lit and shaded slopes, wall
+    c.rows(5, 5, [
+        "..rs..",
+        ".rRSs.",
+        "rRRSSs",
+        "kwwWWk",
+        ".wDDW.",
+        ".wDDW.",
+    ], {'r': (R, 1), 'R': (R, 2), 's': (R, 2), 'S': (R, 3), 'k': (R, 3),
+        'w': (W, 0), 'W': (W, 1), 'D': ('door', 2)})
+    return c
+
+
 SPRITES = {
     'bulldozer': (bulldozer, 'tool'), 'road': (road, 'transport'), 'rail': (rail, 'transport'),
     'wire': (wire, 'utility'), 'park': (park, 'tool'), 'residential': (residential, 'res'),
@@ -917,9 +962,11 @@ SPRITES = {
     'amusement': (amusement, 'landmark'), 'bigpark': (bigpark, 'landmark'), 'casino': (casino, 'landmark'),
     'fountain': (fountain, 'landmark'), 'library': (library, 'landmark'), 'marina': (marina, 'landmark'),
     'mayor': (mayor, 'landmark'), 'prison': (prison, 'landmark'), 'zoo': (zoo, 'landmark'),
+    'inspect': (inspect, 'tool'),
 }
 TOOLBAR = ['bulldozer', 'road', 'rail', 'wire', 'park', 'residential', 'commercial', 'industrial', 'datacenter',
-           'police', 'fire', 'stadium', 'seaport', 'coal', 'nuclear', 'micronuclear', 'airport', 'special']
+           'police', 'fire', 'stadium', 'seaport', 'coal', 'nuclear', 'micronuclear', 'airport', 'special',
+           'inspect']
 LANDMARKS = ['zoo', 'fountain', 'library', 'mayor', 'casino', 'amusement', 'prison', 'marina', 'bigpark']
 ACCENTS = {
     'bulldozer': {'yellow'}, 'road': {'line', 'cone'}, 'rail': {'cone'}, 'wire': {'gold'},
@@ -929,7 +976,7 @@ ACCENTS = {
     'datacenter': set(), 'micronuclear': {'gold', 'roof'},
     'amusement': {'roof'}, 'bigpark': {'grass'}, 'casino': {'roof'},
     'fountain': {'glass'}, 'library': {'roof'}, 'marina': {'roof'}, 'mayor': {'roof'},
-    'prison': {'yellow'}, 'zoo': {'yellow'},
+    'prison': {'yellow'}, 'zoo': {'yellow'}, 'inspect': {'gold'},
 }
 
 SEPIA = [hx(c) for c in ('#F6EEDC', '#D4C6A8', '#A49274', '#6C5C46')]
