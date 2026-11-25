@@ -112,6 +112,16 @@ int main()
         if (!learn || !is_dialog_button(kWelcomeLearn)) {
             return fail(29, "Welcome has no Learn to Play button");
         }
+        // Release #16: Settings pairs with How to play (title art is untouched).
+        bool settings = false;
+        for (const WelcomeRow &row : welcome_rows()) {
+            if (row.first.id == kWelcomeHowTo && row.second.id == kWelcomeSettings) {
+                settings = true;
+            }
+        }
+        if (!settings || !is_dialog_button(kWelcomeSettings)) {
+            return fail(41, "Welcome has no Settings button beside How to play");
+        }
     }
     // Release-readiness #9: City 2's bad news goes under Challenges.
     {

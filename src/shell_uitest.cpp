@@ -1096,7 +1096,8 @@ void Shell::drive_ui_test()
         }
         if (find_hot(hot_, kWelcomeNew, 0) == nullptr || find_hot(hot_, kWelcomeLoad, 0) == nullptr ||
             find_hot(hot_, kWelcomeScenario, 0) == nullptr || find_hot(hot_, kWelcomeHowTo, 0) == nullptr ||
-            find_hot(hot_, kWelcomeQuit, 0) == nullptr || find_hot(hot_, kWelcomeLearn, 0) == nullptr) {
+            find_hot(hot_, kWelcomeQuit, 0) == nullptr || find_hot(hot_, kWelcomeLearn, 0) == nullptr ||
+            find_hot(hot_, kWelcomeSettings, 0) == nullptr) {
             fail("the welcome screen is missing a button");
             return;
         }
@@ -1143,12 +1144,23 @@ void Shell::drive_ui_test()
             fail("D-pad Down did not move to How to play");
             return;
         }
+        // Release nov24 #16: Settings sits beside How to play.
         tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeHowTo; });
+        if (focus_id_ != kWelcomeSettings) {
+            fail("D-pad Down did not move to Settings");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_DOWN, [&] { return focus_id_ == kWelcomeSettings; });
         if (focus_id_ != kWelcomeQuit) {
             fail("D-pad Down did not move to Quit");
             return;
         }
         tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeQuit; });
+        if (focus_id_ != kWelcomeSettings) {
+            fail("D-pad Up did not return to Settings");
+            return;
+        }
+        tap(SDL_GAMEPAD_BUTTON_DPAD_UP, [&] { return focus_id_ == kWelcomeSettings; });
         if (focus_id_ != kWelcomeHowTo) {
             fail("D-pad Up did not return to How to play");
             return;

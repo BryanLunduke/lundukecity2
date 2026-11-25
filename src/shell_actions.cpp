@@ -2446,7 +2446,8 @@ void Shell::on_dialog_button(int id)
                 }
             }
             refresh_ui_scale();
-            close_dialog();
+            // Release nov24 #16: from Welcome, back to Welcome.
+            dismiss_dialog();
             return;
         }
         if (id == kOk || id == kSave) {
@@ -2455,7 +2456,7 @@ void Shell::on_dialog_button(int id)
             refresh_ui_scale();
             schedule_autosave();
             save_window_settings();
-            close_dialog();
+            dismiss_dialog();
             return;
         }
     }
@@ -2585,6 +2586,11 @@ void Shell::on_dialog_button(int id)
         }
         if (id == kWelcomeHowTo) {
             open_dialog(Dialog::HowToPlay);
+            return;
+        }
+        if (id == kWelcomeSettings) {
+            // Release nov24 #16: closing Settings returns to Welcome.
+            open_dialog(Dialog::Settings);
             return;
         }
         if (id == kWelcomeLearn) {

@@ -7,6 +7,7 @@
 // The launch screen's plain choices (under the Continue card, when there
 // is a last city). Pure data, so a test can check it without SDL.
 // Release nov24 #7: Learn to Play shares the first row with New city.
+// Release nov24 #16: Settings shares the How to play row.
 
 #include "hotspots.hpp"
 
@@ -30,7 +31,7 @@ inline const std::array<WelcomeRow, kWelcomeRowCount> &welcome_rows()
         {{"_Start a new city", kWelcomeNew}, {"Lea_rn to Play", kWelcomeLearn}},
         {{"_Load a saved city", kWelcomeLoad}, {nullptr, 0}},
         {{"Select a _scenario", kWelcomeScenario}, {nullptr, 0}},
-        {{"How to _play", kWelcomeHowTo}, {nullptr, 0}},
+        {{"How to _play", kWelcomeHowTo}, {"Se_ttings", kWelcomeSettings}},
         {{"_Quit", kWelcomeQuit}, {nullptr, 0}},
     }};
     return rows;
