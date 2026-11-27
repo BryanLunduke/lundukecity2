@@ -74,6 +74,7 @@ jobs:
           name: lunduke-city-2-windows-x86_64
           path: build-windows/dist/lunduke-city-2-windows-x86_64.zip
           if-no-files-found: error
+          retention-days: 7
 
   windows-smoke:
     needs: cross
